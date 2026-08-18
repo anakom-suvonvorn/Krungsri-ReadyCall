@@ -1,7 +1,7 @@
 # PROJECT_STATE
 
 _What this project is, what exists, what doesn't, and where everything lives._
-_Last updated: 2026-08-17._
+_Last updated: 2026-08-18._
 
 ---
 
@@ -46,12 +46,14 @@ both get replaced in Phase P0 (`PLAN.md`).
 | API / services | FastAPI + Uvicorn, async-first; **modular monolith, multiple entrypoints** (`D2`) |
 | Data | Postgres 16 (two logical stores: `core` read-only, `readycall` read-write), SQLAlchemy 2.0 + Alembic |
 | State / bus | Redis 7 (presence, queues, cache) + Redis Streams as the event bus (Kafka adapter for scale) |
-| Telephony | Asterisk 20 + ARI + AudioSocket by default, behind a `TelephonyProvider` port (Twilio / LiveKit / simulated adapters) |
-| STT | Thonburian Whisper (`biodatlab/whisper-th-medium-combined`), re-implemented streaming-first (`D9`) |
-| LLM | Claude (`claude-sonnet-5` / `claude-opus-5`) by default, behind an `LlmClient` port (Typhoon / Gemini / Ollama / rule-based) |
+| Telephony | Asterisk 20 + ARI + AudioSocket by default, behind a `TelephonyProvider` port (Twilio / LiveKit / simulated adapters). Demo trick: a softphone on a real mobile pointed at the laptop over local Wi-Fi = a genuine VoIP call with no internet |
+| STT | Thonburian Whisper (`biodatlab/whisper-th-medium-combined`) default, re-implemented streaming-first (`D9`); CTranslate2 build and **Typhoon ASR** benchmarked against it (`D30`) |
+| TTS | Pre-rendered prompt clips built from `voice_prompts.yaml` (`D24`); streaming only for future conversational intake |
+| LLM | `AnthropicAdapter` + `OpenAiCompatibleAdapter` both implemented (`D29`) — the latter covers Typhoon API, OpenAI, vLLM and Ollama by base URL. No LLM framework (`D31`) |
 | Object storage | MinIO (S3 API) for recordings |
-| Agent desktop | React 18 + TypeScript + Vite, WebSocket push |
-| Customer side | React Native app (production) + a web **customer simulator** for dev/demo |
+| Agent desktop | React 18 + TypeScript + Vite, WebSocket push, **in the browser** — no install on the agent's machine |
+| Customer side | Responsive **web customer simulator** with a demo persona picker, calling the same public `/v1/…` API the real Krungsri app would |
+| DB inspection | `pgweb` in compose + our own **Call Explorer** admin page |
 | Observability | OpenTelemetry traces keyed by `call_session_id`, Prometheus + Grafana + Loki |
 
 Full adapter catalogue and library list: `INTEGRATIONS.md`.
@@ -66,11 +68,14 @@ FullProject/
 ├─ uv.lock  .python-version  .env.example  .gitignore
 ├─ README.md
 ├─ docs/                     # ← this documentation system
-├─ config/
+├─ config/                   # ← the entire insurance-specific "domain pack" (D28)
 │  ├─ core_mapping.yaml      # bank-data field mapping (swap target, DATA_MODEL §4)
-│  ├─ routing_weights.yaml   # scoring weights, tunable at runtime
+│  ├─ matching_weights.yaml  # fit + urgency weights, tunable at runtime
 │  ├─ intents.yaml           # closed intent taxonomy + required slots per intent
 │  ├─ skills.yaml            # skill codes, queues, intent→skill mapping
+│  ├─ queue_hours.yaml       # opening hours + holidays per queue
+│  ├─ dids.yaml              # printed phone numbers → product line + queue (D19)
+│  ├─ voice_prompts.yaml     # every spoken line, as Thai text (D24)
 │  └─ playbooks/             # per-intent recommended-action playbooks
 ├─ prompts/                  # versioned prompt files (never inline in code)
 │  └─ th/ intent_classify.v1.md  summarize_intake.v1.md  suggested_opening.v1.md  ...
@@ -92,16 +97,19 @@ FullProject/
 │  │  │               caching.py  null.py  mapping.py   # YAML-driven field mapper
 │  │  ├─ event_bus/  redis_streams.py  kafka.py  memory.py
 │  │  └─ storage/    minio.py  s3.py  localfs.py
-│  ├─ services/
+│  ├─ services/              # NO insurance-specific literals may live here (D28)
 │  │  ├─ call_orchestrator/  machine.py  handlers.py     # single writer of call state
+│  │  ├─ identity/           resolver.py  assurance.py   # L0–L3 ladder (D20)
 │  │  ├─ context/            assembler.py  snapshot.py   # Customer360 + provenance
+│  │  ├─ ivr/                flow.py  prompts.py  dtmf.py  rating.py
 │  │  ├─ intake/             base.py  passive.py  guided.py  conversational.py  slots.py
 │  │  ├─ transcription/      stream_manager.py  vad.py  turns.py  worker.py
 │  │  ├─ analysis/           intent.py  entities.py  summary.py  brief.py
-│  │  │                      nba.py  opening.py  confidence.py  pii.py
-│  │  ├─ routing/            engine.py  scoring.py  queues.py  presence.py
+│  │  │                      nba.py  opening.py  confidence.py  pii.py  progress.py
+│  │  ├─ matching/           engine.py  fit.py  urgency.py  solver.py
+│  │  │                      queues.py  presence.py  defer.py
 │  │  ├─ consent/            service.py  policy.py  retention.py
-│  │  ├─ wrapup/             service.py
+│  │  ├─ wrapup/             service.py  callbacks.py
 │  │  └─ metrics/            rollups.py
 │  ├─ media/                 # the media gateway (audio I/O, resampling, framing, recording)
 │  │  ├─ gateway.py  audiosocket.py  ws_media.py  resample.py  recorder.py
@@ -145,23 +153,30 @@ Nothing is built. Legend: ☐ planned · ◐ in progress · ☑ done.
 + migrations · ☐ mock `core` schema + generator + personas/scenarios · ☐ all ports defined ·
 ☐ fake/null adapters · ☐ contract test harness · ☐ scenario runner skeleton · ☐ CI
 
-**P1 — context-aware calling** ☐ intent API · ☐ session auth · ☐ app context events · ☐ Customer360
-assembler + snapshot + provenance · ☐ caching/circuit breaker · ☐ agent screen v1 (context-only brief)
+**P1 — context-aware calling** ☐ intent API · ☐ session auth · ☐ app context events · ☐ identity
+resolver + assurance ladder · ☐ `dids.yaml` · ☐ Customer360 assembler + snapshot + provenance ·
+☐ caching/circuit breaker · ☐ customer simulator + demo login · ☐ agent screen v1 (context-only brief)
 
-**P2 — routing & agent delivery** ☐ queues · ☐ presence · ☐ scoring engine + persisted rationale ·
-☐ assignment · ☐ agent WebSocket · ☐ agent desktop shell
+**P2 — matching & agent delivery** ☐ queues + hours · ☐ agent state model (auto × manual) ·
+☐ presence heartbeat · ☐ fit + urgency scoring · ☐ Hungarian solver · ☐ anti-hot-spot checks ·
+☐ persisted rationale · ☐ matching simulator · ☐ assignment/re-match · ☐ agent WebSocket ·
+☐ agent desktop shell
 
-**P3 — intake v1 (passive)** ☐ media gateway · ☐ recording + encryption · ☐ VAD endpointing ·
-☐ streaming Thonburian STT worker · ☐ incremental transcript turns · ☐ consent gate
+**P3 — voice, IVR & intake v1** ☐ voice-prompt build pipeline + prompt studio · ☐ IVR flow (menu,
+identify, consent, press-1/2, rating) · ☐ media gateway (per-leg fork) · ☐ recording + encryption ·
+☐ VAD endpointing · ☐ streaming STT worker · ☐ **STT bake-off on the 3050** · ☐ incremental turns ·
+☐ ring-time grace
 
 **P4 — analysis & case brief** ☐ intent taxonomy + classifier · ☐ entity extraction · ☐ rolling
 summary · ☐ brief versioning · ☐ confidence calibration · ☐ NBA playbooks · ☐ suggested opening ·
-☐ golden-set evaluation
+☐ Anthropic adapter · ☐ OpenAI-compatible adapter · ☐ golden-set evaluation · ☐ provider comparison
 
 **P5 — real telephony** ☐ Asterisk + ARI adapter · ☐ WebRTC path · ☐ PSTN/ANI identification ·
-☐ media fork · ☐ bridge/transfer · ☐ Twilio adapter
+☐ product-line DIDs · ☐ media fork · ☐ bridge/transfer · ☐ softphone demo path · ☐ Twilio adapter
 
-**P6 — wrap-up & metrics** ☐ post-call summary · ☐ dispositions · ☐ follow-ups · ☐ feedback loop ·
+**P6 — live transcription, wrap-up & metrics** ☐ both-leg live transcription · ☐ call-progress
+estimation · ☐ deferral enabled · ☐ post-call summary · ☐ dispositions · ☐ follow-ups · ☐ ratings
+(customer + agent) · ☐ after-hours voicemail → briefed callbacks · ☐ Call Explorer ·
 ☐ metrics rollups + dashboard
 
 **P7 — PDPA hardening** ☐ consent flows · ☐ PII masking · ☐ retention/erasure · ☐ RBAC · ☐ audit log
@@ -187,8 +202,11 @@ uv run python scripts/run_scenario.py scenarios/pattheera_ipd.yaml   # full call
 
 ## 7. Known constraints & open risks
 
-- **GPU.** Thonburian medium wants a GPU for the latency budget. CPU-only → distilled model, higher
-  WER, longer turns. Decide the target machine before P3.
+- **GPU is an RTX 3050 laptop (4–6 GB).** Enough — it already ran Thonburian medium for the scam
+  project — but tight. Whisper pads every chunk to 30 s, so `faster-whisper`/CTranslate2 with
+  `int8_float16` is probably required to hit the latency budget. **Do not plan to run a local LLM and
+  Whisper on the same card**: the default split is STT local, LLM via API. Whoever has the strongest
+  GPU should own the demo machine. See `INTEGRATIONS.md` §2.1.
 - **Telephony is the highest-risk dependency** — self-hosted Asterisk is free but fiddly (NAT, codecs,
   WebRTC certs); Twilio is easy but costs money and needs public HTTPS. The simulated adapter exists
   so no other phase is ever blocked on this.
@@ -203,7 +221,18 @@ uv run python scripts/run_scenario.py scenarios/pattheera_ipd.yaml   # full call
 
 ---
 
-## 8. Relationship to the demo project
+## 8. Reuse outside this hackathon
+
+Deliberate design goal (`D28`, `ARCHITECTURE.md` §20): the machinery is a **generic context-aware
+contact-centre AI layer**, and everything insurance-specific lives in `config/`, `prompts/`, the
+`CoreDataProvider` adapter, and the fixtures. Retargeting it to a hospital line, a government service
+desk, a telco or an e-commerce support desk means swapping those files — not touching `services/`.
+The standing rule that makes this true: **no insurance literal may be hardcoded in `services/`**,
+enforced by a lint check.
+
+---
+
+## 9. Relationship to the demo project
 
 `../DemoProject/` will implement a **slice**: most likely the customer simulator + simulated
 telephony + scripted-or-live STT + one persona's full journey + the agent screen. It gets its own

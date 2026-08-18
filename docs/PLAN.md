@@ -1,7 +1,7 @@
 # PLAN
 
 _The master build plan for the full system: what gets built, in what order, and what "done" means for each phase._
-_Last updated: 2026-08-17._
+_Last updated: 2026-08-18._
 
 ---
 
@@ -58,10 +58,16 @@ Two rules that shape the order:
 ---
 
 ## P1 — Context-Aware Calling (no audio at all)
-**Goal:** the pitch's Step 1, complete.
+**Goal:** the pitch's Step 1, complete — **for both the app path and the cold-call path**.
 
 - `POST /v1/calls/intents` (session auth → `customer_id`, correlation token, expiry) and
   `POST /v1/app/context-events`.
+- **Identity Resolver + assurance ladder L0–L3** (`D20`): ANI lookup, pending-intent window, IVR
+  verification stub, `identity_resolutions` audit rows, and disclosure gating in the brief builder.
+- **`config/dids.yaml`** — product-line numbers → `{product_line, default_queue, greeting_prompt}`
+  (`D19`), so a cold call already has a product line before anyone speaks.
+- **Customer simulator** (web) with a demo login / persona picker, talking to the same public `/v1/…`
+  API the real app would use.
 - `CoreDataProvider`: `MockPostgresProvider` + `FixtureFileProvider` + `mapping.py` (YAML field mapper)
   + `CachingProvider` (TTL, stale-while-revalidate, circuit breaker) + `NullProvider`.
 - `ContextAssembler` → `Customer360` (identity, active policies + coverage, holdings, recent
@@ -76,47 +82,65 @@ Two rules that shape the order:
 - Swapping `CORE_DATA_PROVIDER=mock_postgres → fixtures` changes nothing but the env var, and both
   pass the same contract suite.
 - Every field on the screen can name its source and its age.
+- **A scenario with no app and no intent** (DID + ANI only) produces a usable brief at the correct
+  assurance level, with policy details correctly withheld at L1.
 
 ---
 
-## P2 — Routing, queues, and the agent desktop
-**Goal:** the right agent gets the call, and the screen is live.
+## P2 — Matching, queues, agents, and the desktop
+**Goal:** the right agent gets the call, for the right reason, and the screen is live.
 
-- `queues.yaml`/`skills.yaml`, `queues` + `queue_entries`, priority + SLA + overflow.
-- `agent_presence` (Redis-backed heartbeat), capacity, states.
-- `RoutingEngine`: hard filters + weighted score, weights from `config/routing_weights.yaml`,
-  **full candidate breakdown persisted** to `routing_decisions`.
-- Assignment + offer/accept/reject/no-answer re-route (keeping queue position and brief).
-- Agent WebSocket (auth, presence, push of the brief bundle, acks, reconnection with replay).
-- Agent desktop shell in React: incoming-call card, the panel layout from pitch p.7, "why this agent",
-  transcript pane (empty for now).
+- `skills.yaml` / `queues.yaml` / `queue_hours.yaml`; `queues` + `queue_entries`; SLA + overflow.
+- **Agent state model** (`D9` of the architecture): system state (auto) × agent intent (manual,
+  incl. `LAST_CALL` and `DRAINING`), capacity, schedules, Redis heartbeat presence with TTL,
+  `agent_state_log`.
+- **Matching Engine** (`D22`): single waiting pool, fit scoring, urgency (wait / SLA / priority /
+  situational), **global optimal assignment (Hungarian)**, the `MAX_WAIT_BEFORE_ANY_AGENT_S` override,
+  and the anti-hot-spot checks (startup validation that no skill has a single holder; concentration
+  metric). Deferral is **stubbed off** here and switched on in P6 when call-progress data exists.
+- **Full breakdown persisted** to `matching_decisions` — candidates, every term, solver used.
+- **Matching simulator** (`scripts/simulate_matching.py`): replay a day of arrivals against a synthetic
+  pool to tune weights offline in seconds.
+- Assignment + offer/accept/reject/no-answer re-match (keeping waiting credit and brief).
+- Agent WebSocket (auth, presence, brief push, acks, reconnect-with-replay).
+- Agent desktop shell in React: incoming-call card, the panel layout from pitch p.7, assurance badge,
+  "why this agent", transcript pane (empty for now).
 
 **Exit criteria**
-- 20 simulated concurrent calls + 5 agents route deterministically; replaying the same scenario twice
-  yields identical decisions.
+- 20 simulated concurrent callers + 20 agents (3 real browser sessions) match deterministically;
+  replaying the same scenario twice yields identical decisions.
 - The rationale panel explains a real assignment in a sentence a judge understands.
-- Queue pop → brief rendered **< 1 s**.
+- No starvation: with a skewed skill mix, the wait-time p99 stays under the configured ceiling.
+- Match → brief rendered **< 1 s**.
 
 ---
 
-## P3 — AI Pre-Call Intake v1 (passive)
-**Goal:** the pitch's Step 2 — audio in, transcript out, live.
+## P3 — Voice, IVR, and AI Pre-Call Intake v1 (passive)
+**Goal:** the pitch's Step 2 — the line talks, audio goes in, transcript comes out, live.
 
-- Media Gateway: AudioSocket + WebSocket media servers, resampling to 16 kHz mono float32, framing,
-  encrypted recording to MinIO, per-recording key refs.
+- **Voice prompts pipeline** (`D24`): `config/voice_prompts.yaml`, `scripts/build_prompts.py`
+  (hash-cached rendering), the checked-in fallback prompt pack, and the admin **prompt studio** page.
+- **IVR service**: greeting + recording notice, product menu, identification, queue announcements,
+  the press-1/press-2 intake offer, re-offer once, barge-in, post-call rating keypress.
+- Media Gateway: AudioSocket + WebSocket media servers, **per-leg forking**, resampling to 16 kHz mono
+  float32, framing, encrypted recording to MinIO, per-recording key refs.
 - Consent gate (IVR keypress + in-app toggle) writing `consents` before a single frame is analysed.
 - `transcription/`: rolling buffer, Silero VAD endpointing (threshold 0.65 / 500 ms / 100 ms +
   120 ms·60 ms padding, per `D9`), utterance dispatch, repetition guard.
-- `stt_worker`: long-lived, model loaded once, GPU-pinned, batched, health-checked;
-  `ThonburianHfAdapter` first, `ThonburianFasterWhisperAdapter` benchmarked against it.
+- `stt_worker`: long-lived, model loaded once, GPU-pinned, batched, health-checked.
+- **STT bake-off on the real hardware**: Thonburian-HF vs Thonburian-CT2 vs distilled vs Typhoon ASR —
+  WER, p95 utterance latency, VRAM — recorded in `PROJECT_STATE.md` (`D30`, `INTEGRATIONS.md` §2.1).
 - `TranscriptTurn` events + incremental DB writes; live transcript in the agent desktop.
-- `IntakeStrategy` seam with `PassiveRecordIntake`; `finalize(reason)` incl. `queue_pop` → partial.
+- `IntakeStrategy` seam with `PassiveRecordIntake`; `finalize(reason)`; **ring-time grace** (`D21`).
 
 **Exit criteria**
-- Utterance end → turn visible **p95 < 1.5 s** on the target hardware (record the number and the hardware).
+- Utterance end → turn visible **p95 < 1.5 s** on the RTX 3050, with the chosen engine named and the
+  bake-off table recorded.
+- A caller who presses 2, and a caller who consents to nothing, both still reach an agent with a
+  context-only brief.
 - Killing the STT worker mid-call degrades to recording-only; the call is unaffected.
-- Thai WER measured on the scenario audio set and written into `PROJECT_STATE.md`.
 - No audio ever written to local disk unencrypted.
+- Changing a line of Thai in `voice_prompts.yaml` changes what the caller hears after one re-render.
 
 ---
 
@@ -129,15 +153,20 @@ Two rules that shape the order:
 - `confidence.py` — the blend from `ARCHITECTURE.md` §9 + calibration against the golden set + the floor.
 - `brief.py` — versioned brief assembly merging context + speech, `is_partial` handling, `sources_json`.
 - Re-routing when the speech-derived intent disagrees with the tapped product.
+- **Two LLM adapters implemented** (`D29`): `AnthropicAdapter` and `OpenAiCompatibleAdapter` (which
+  covers Typhoon-hosted, OpenAI, vLLM and Ollama by base URL alone). `GeminiAdapter` defined only.
 - `tests/golden/` + `scripts/eval_golden_set.py` reporting intent accuracy / entity F1 / summary
   faithfulness; wired into CI as a gate on prompt changes.
-- `brief_feedback` 👍/👎 in the desktop.
+- **`scripts/compare_llm.py`** — the same golden set through every configured provider, printing
+  accuracy / latency / cost side by side, plus a runtime provider switch for live demos.
+- Brief rating (1–5 + wrong-field tags) in the desktop (`D27`).
 
 **Exit criteria**
 - ≥ 85% intent accuracy on the golden set (or a documented reason why not, with the actual number).
 - **Zero** coverage figures generated by the model — a CI check asserts every numeric traces to a field (`D16`).
 - LLM outage → rule-based brief, verified by killing the provider.
 - Customer stops speaking → final brief **≤ 3 s**.
+- **A Claude-vs-Typhoon comparison table exists**, produced by the harness, not by opinion.
 
 ---
 
@@ -158,15 +187,24 @@ Two rules that shape the order:
 
 ---
 
-## P6 — Wrap-up, feedback, metrics
-- Post-call AI draft (disposition, summary, follow-ups) → **agent edits/confirms** → `call_wrapups`.
-- Follow-up tasks; the loop back into the *next* call's "Recent Context".
-- `metrics_rollups` + a Grafana dashboard: AHT, FCR, time-to-context, brief-ready rate, abandonment,
-  intent accuracy, NPS.
-- A **before/after view**: same scenario with ReadyCall on vs off, timings side by side. This is the
-  Impact evidence.
+## P6 — Live-call transcription, wrap-up, ratings, metrics
+- **Live-call transcription** of both legs (`D26`) behind `LIVE_CALL_TRANSCRIPTION`, feeding:
+- **Call-progress estimation** (elapsed vs expected AHT + transcript wrap-up cues + the agent's own
+  "wrapping up" button) → `call_progress_estimates` → **deferral switched on** in the matcher (`D22`).
+- Post-call AI draft from the real conversation (disposition, summary, follow-ups) → **agent
+  edits/confirms** → `call_wrapups`. Follow-up tasks; the loop back into the next call's Recent Context.
+- **Ratings both sides** (`D27`): customer CSAT/NPS via in-app prompt or IVR keypress (voice comments
+  go through the same transcription pipeline); agent brief rating.
+- **After-hours path** (`D25`): queue hours, voicemail through the full intake pipeline,
+  `callback_tasks` landing pre-briefed in the morning queue.
+- **Call Explorer** admin page: one call's whole story — timeline, identity, provenance, every brief
+  version, the matching breakdown, the wrap-up.
+- `metrics_rollups` + Grafana: AHT, FCR, time-to-context, brief-ready rate, abandonment, intent
+  accuracy, CSAT/NPS, **defer hit rate**, **assignment concentration**.
+- A **before/after view**: same scenario with ReadyCall on vs off, timings side by side.
 
-**Exit criteria:** a measured before/after on the scenario set, with real numbers, not estimates.
+**Exit criteria:** a measured before/after on the scenario set with real numbers; deferral demonstrably
+improves fit without increasing p95 wait; an after-hours call produces a briefed callback task.
 
 ---
 

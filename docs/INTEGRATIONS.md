@@ -1,7 +1,7 @@
 # INTEGRATIONS
 
 _Every external thing the system touches: the port that hides it, the adapters behind it, and the config that selects one._
-_Status: **design only**. Last updated: 2026-08-17._
+_Status: **design only**. Last updated: 2026-08-18._
 
 ---
 
@@ -46,7 +46,7 @@ class TelephonyProvider(Protocol):
 
 **Identity binding.** WebRTC is preferred precisely because the correlation token rides in the
 signalling — identity is bound to the call cryptographically. PSTN falls back to ANI matching +
-pending-intent window + IVR code (see `ARCHITECTURE.md` §4.5).
+pending-intent window + IVR verification — the assurance ladder in `ARCHITECTURE.md` §3.
 
 **Audio fork format.** AudioSocket delivers 8 kHz signed-linear mono over TCP; Twilio delivers 8 kHz
 µ-law base64 over WSS. The Media Gateway normalises everything to **16 kHz mono float32** before
@@ -55,6 +55,34 @@ anything else sees it — every downstream component assumes exactly that.
 Libraries: `aiohttp`/`websockets` (ARI + media WS), `aiortc` (pure-Python WebRTC if needed),
 `pjsua2`/`pysip` only if a softphone is required for testing. Prefer speaking the protocols directly
 over a heavyweight wrapper — fewer surprises, easier to debug.
+
+### 1.1 The telephony options, in detail
+
+| | **Asterisk (self-hosted)** ⭐ | **Twilio (CPaaS)** | **LiveKit** | **Simulated** |
+|---|---|---|---|---|
+| What it is | A full open-source PBX in a container: SIP registration, queues, IVR, DTMF, hold music, bridging, transfers, recording | Cloud telephony. You buy a number; their platform calls your webhooks; `Media Streams` sends you the audio over a WebSocket | A modern WebRTC SFU with an agents framework and a SIP bridge | Pure Python; feeds a WAV file as if it were a live call |
+| How we control it | **ARI** — REST + a WebSocket event stream, driven from Python | Webhooks + TwiML; needs a **public HTTPS URL** (ngrok in dev) | Server SDK; subscribe to audio tracks directly | Function calls |
+| How we get audio | **AudioSocket** (dead-simple TCP, 8 kHz signed-linear) or `externalMedia` (RTP) | WSS, 8 kHz µ-law base64 | Track subscription, no SIP knowledge needed | Straight from disk |
+| Real phone number | Needs a SIP trunk / DID from a provider (paperwork + cost) — **or skip it entirely** and use softphones | Included; **Thai DIDs need regulatory documents**, a US number works for testing | Needs the SIP bridge plus a trunk anyway | No |
+| Cost | Free | **Per minute**, both legs | Free self-hosted / paid cloud | Free |
+| Works offline | **Yes** | No — needs internet, their uptime, and a tunnel | Yes if self-hosted | Yes |
+| Contact-centre realism | High — queues, transfers, DTMF, hold all behave like the real thing | Medium — you build queueing yourself, or learn TaskRouter | Low — it is not a PBX | None |
+| Pain | Steepest curve: `pjsip.conf`/`extensions.conf` are arcane, NAT/ICE, WebRTC certificates, SIP debugging | Easy start, then tunnel flakiness and metered testing | Great for AI voice agents, weak on IVR/queue/DTMF semantics | Not a real call |
+| Time to first working call | 2–5 days | Hours | 1–2 days | Minutes |
+
+**The recommendation, and why:** build against **Simulated** from P0, then **Asterisk** at P5.
+
+The decisive argument is the demo. A stage demo that depends on venue Wi-Fi, a tunnel, and a vendor's
+uptime is a demo that can fail in front of judges. Asterisk runs entirely on the laptop — and here is
+the trick that gets both realism and safety: **install a softphone (Zoiper / Linphone) on a real
+mobile, point it at the laptop's Asterisk over local Wi-Fi, and the demo is a genuine VoIP call from a
+genuine phone, with no internet involved.** That covers "the judges want to see a real call" without
+the network risk.
+
+Twilio stays worth adding *afterwards* as a second adapter if a publicly dialable number would land
+well — the port makes it an evening's work, and the contract tests already exist. LiveKit becomes
+interesting only when `ConversationalAgentIntake` gets built, since its agents framework is built for
+exactly that.
 
 ---
 
@@ -70,11 +98,28 @@ class SttEngine(Protocol):
 
 | Adapter | Model / stack | Notes |
 |---|---|---|
-| **`ThonburianHfAdapter`** ⭐ default | `biodatlab/whisper-th-medium-combined` via `transformers` + `torch` | WER 7.42 on Common Voice 13; the balanced size. Same family the user already ran successfully in the scam project. |
-| `ThonburianFasterWhisperAdapter` | the same checkpoint converted to CTranslate2 (`faster-whisper`) | The latency play — typically several× faster, lower VRAM. **Conversion must be verified before relying on it.** |
-| `ThonburianDistillAdapter` | `biodatlab/distill-whisper-th-medium` / `-large-v3` | CPU-only / laptop-demo fallback |
-| `CloudSttAdapter` | Google STT / Azure Speech / Gemini / Typhoon ASR | Backup when there's no GPU; a bank-data-residency question in production |
-| `ScriptedSttAdapter` | Replays known transcript turns with realistic timings | Tests, scenario runner, and a safe stage demo |
+| **`ThonburianHfAdapter`** ⭐ default | `biodatlab/whisper-th-medium-combined` via `transformers` + `torch` | WER 7.42 on Common Voice 13; the balanced size. Same family the team already ran successfully in the scam project. |
+| **`ThonburianFasterWhisperAdapter`** | the same checkpoint converted to CTranslate2 (`faster-whisper`) | The latency play — several× faster, much lower VRAM. **Likely required on the target hardware** (§2.1). Conversion must be verified. |
+| `ThonburianDistillAdapter` | `biodatlab/distill-whisper-th-medium` / `-large-v3` | Lighter fallback |
+| **`TyphoonAsrAdapter`** | Typhoon's Thai ASR, `mode = api \| local` | First-class alternative to benchmark head-to-head against Thonburian in P3 (`D30`). Model names, licence and pricing to be **re-verified at implementation time**, not trusted from memory. |
+| `CloudSttAdapter` | Google STT / Azure Speech / Gemini | Backup when there's no GPU; a data-residency question in production |
+| `ScriptedSttAdapter` | Replays known transcript turns with realistic timings | Tests, scenario runner, and a stage-safe demo |
+
+### 2.1 The hardware reality (RTX 3050 laptop)
+
+The known dev/demo machine is an **RTX 3050 laptop (4–6 GB VRAM)** — the same one that ran Thonburian
+medium for the scam project, so it works, but the streaming latency budget is tight:
+
+- **Whisper pads every chunk to 30 s.** A 3-second utterance costs roughly what a 30-second one does
+  under the plain HF pipeline. This is the single biggest reason `faster-whisper`/CTranslate2 matters
+  here — it handles short segments far better and `int8_float16` cuts VRAM roughly in half.
+- **Do not run a local LLM and Whisper on the same 4–6 GB card.** They will not both fit with room to
+  work. The default split is **STT local on the GPU, LLM via API**. If a fully local stack is wanted,
+  it needs a bigger card or a second machine.
+- **Benchmark, don't guess.** P3 records real numbers (WER, p95 utterance latency, VRAM) for
+  Thonburian-HF vs Thonburian-CT2 vs distilled vs Typhoon ASR on this exact laptop, and writes them
+  into `PROJECT_STATE.md`. The engine choice follows the table, not the reputation.
+- Whoever on the team has the strongest GPU should own the demo machine.
 
 Model menu (from the upstream repo, WER on Common Voice 13):
 `whisper-th-small-combined` 11.0 · **`whisper-th-medium-combined` 7.42** · `whisper-th-large-combined` 7.69 ·
@@ -115,13 +160,38 @@ class LlmClient(Protocol):
     async def stream_text(self, prompt: PromptRef, vars: dict) -> AsyncIterator[str]: ...
 ```
 
-| Adapter | Model | Notes |
+**Two adapters are implemented from day one; the rest are defined but left as stubs** (`D29`).
+
+| Adapter | Status | Covers |
 |---|---|---|
-| **`AnthropicAdapter`** ⭐ default for build/demo | `claude-opus-5` (quality) / `claude-sonnet-5` (latency+cost) | Strong Thai; structured output via tool-use/JSON schema; prompt caching for the fixed system prompt |
-| `TyphoonAdapter` | SCB10X Typhoon | Thai-native; the credible "can run inside the bank" answer |
-| `GeminiAdapter` | Gemini | Alternative; also a possible audio-native path |
-| `OllamaLocalAdapter` | Typhoon / Qwen locally | Offline demo insurance, data-residency story |
-| `RuleBasedAdapter` | No model at all | The degradation rung: keyword/regex intent + template summary |
+| **`AnthropicAdapter`** ⭐ | **implemented P4** | `claude-opus-5` (quality) / `claude-sonnet-5` (latency+cost). Strong Thai; structured output via tool-use; prompt caching for the fixed system prompt |
+| **`OpenAiCompatibleAdapter`** ⭐ | **implemented P4** | One adapter, parameterised by `base_url` + key — **covers Typhoon's hosted API, OpenAI, self-hosted vLLM, Ollama and LM Studio at once**, because they all speak the OpenAI wire format |
+| `GeminiAdapter` | defined only | Different wire format; add if wanted |
+| `RuleBasedAdapter` | implemented P0 | No model at all — the degradation rung: keyword/regex intent + template summary |
+
+So "run Typhoon" is a config choice, twice over:
+
+```ini
+# Typhoon hosted API
+LLM_PROVIDER=openai_compatible
+LLM_BASE_URL=https://api.opentyphoon.ai/v1
+LLM_MODEL=<typhoon model id>
+
+# Typhoon self-hosted (vLLM or Ollama on your own box)
+LLM_PROVIDER=openai_compatible
+LLM_BASE_URL=http://localhost:8000/v1
+LLM_MODEL=<local model id>
+```
+
+**Provider comparison harness** (`scripts/compare_llm.py`): runs the golden set through every
+configured provider and prints intent accuracy, entity F1, summary faithfulness, p50/p95 latency and
+cost per call side by side, with sample outputs. Plus a runtime switch so a live demo can flip
+providers mid-session. This turns "Claude or Typhoon?" from an argument into a table — and the table
+itself is good competition material.
+
+> Model ids, context windows, licences and pricing for Typhoon (and anything else) must be
+> **re-verified against current documentation when the adapter is written**. Do not hardcode from
+> memory or from this file.
 
 **Tasks and their contracts** (each has a versioned prompt + a Pydantic output schema + a golden set):
 
@@ -150,7 +220,39 @@ Non-negotiables:
 
 ---
 
-## 4. TTS (needed for the future conversational intake)
+### 3.1 Why no LLM framework — the full comparison (`D31`)
+
+This is a real trade-off, not a preference, so here is the honest version.
+
+**What our AI stage actually is:** four to six *independent*, short, structured calls
+(classify → extract → summarise → next-best-action → opening), each with its own Pydantic schema, its
+own timeout, and its own degradation path. Several run in parallel. There is no chain, no retrieval,
+no dynamic tool loop. In plain asyncio that is roughly 150 lines.
+
+| Option | What it gives you | What it costs you | Verdict here |
+|---|---|---|---|
+| **Raw SDK + our ports** ⭐ | Exact control of the request, response, tokens, cost and timing — which we must persist per call (`D18`). Tiny dependency surface. Trivial to trace and to explain to a judge. | You write retry, timeout, fallback and tracing yourself (~150 lines, and it is exactly the code whose behaviour we need to defend). | **Chosen** |
+| **LangChain** | Provider abstraction, prompt templates, output parsers, a huge integration catalogue, LangSmith tracing. | Big, fast-moving transitive dependency tree — a breaking upgrade mid-competition is a lost day. Abstractions sit between you and the exact prompt/token/latency data we are required to store; you get it back through callbacks, i.e. by fighting the framework. Extra layers on a ≤3 s budget. Most of the catalogue (vector stores, loaders, retrievers) we simply do not use. Our ports already do the one thing we would want from it (provider swapping) and do it better, because they also cover STT, TTS and telephony. | Rejected |
+| **LangGraph** | Genuinely good at *dynamic, branching, stateful multi-turn* agent flows with checkpointing. | Solves a problem our fixed pipeline does not have. Same dependency weight. | Rejected **now** — revisit for `ConversationalAgentIntake`, where the control flow really is dynamic. That is a legitimate future fit. |
+| **LlamaIndex** | Excellent document ingestion + retrieval. | We have no corpus in v1 — our "knowledge" is structured rows behind `CoreDataProvider`. | Rejected now — **revisit if** we build Q&A over policy-wording documents, and then only for the ingestion/retrieval half, behind our own port. |
+| **`instructor` / `pydantic-ai`** | Small and focused: schema-validated outputs with automatic re-ask on validation failure. Does not take over your architecture. | One more dependency; Anthropic tool-use + a Pydantic model already gets ~90% of this in ~30 lines. | **Not at first.** Adopt inside the adapter if validation retries get tedious. This is the sanctioned middle ground. |
+| **LiteLLM** | One call signature across ~100 providers, plus cost tracking. | Our `OpenAiCompatibleAdapter` already covers OpenAI + Typhoon + vLLM + Ollama + LM Studio; `AnthropicAdapter` covers the rest of what we care about. | Not needed — reconsider only if the provider list grows a lot. |
+| **DSPy** | Programmatic prompt optimisation against a metric. | Real learning curve; needs a solid golden set first (we will have one — this could become interesting *later*, for tuning the intent classifier). | Not now; genuinely interesting for P4+ tuning. |
+| **Semantic Kernel / Haystack** | Enterprise-ish orchestration / NLP pipelines. | Same objections as LangChain, smaller ecosystems, no advantage for our shape. | Rejected |
+
+**The general principle:** frameworks earn their keep when they absorb *variety* — many providers, many
+document types, many dynamic flows. They cost you when your requirement is *precision* — exactly this
+prompt, exactly this timeout, exactly this recorded cost, degrading exactly this way. Our AI layer is a
+precision problem sitting inside a 3-second budget with an auditability requirement, so the plumbing
+stays ours.
+
+**Two named triggers to revisit**, each requiring a new decision entry: dynamic conversational control
+flow (→ LangGraph), and policy-document retrieval (→ LlamaIndex). Observability, if we ever want more
+than the `analyses` table, would be **Langfuse** (self-hostable) rather than a framework rewrite.
+
+---
+
+## 4. TTS — pre-rendered prompts now, streaming later
 
 ```python
 class TtsEngine(Protocol):
@@ -158,9 +260,26 @@ class TtsEngine(Protocol):
     async def stream(self, text_chunks: AsyncIterator[str], voice: VoiceSpec) -> AsyncIterator[AudioFrame]: ...
 ```
 
-Candidates: Azure Speech (Thai neural, good streaming), Google Cloud TTS, Botnoi Voice (Thai vendor),
-ElevenLabs (quality, cost). Only `PrerecordedPromptAdapter` (fixed WAV prompts) is needed for v1 —
-the port exists now so the conversational strategy is a drop-in later, not a redesign. (`D10`)
+**Every spoken line in the IVR is generated by TTS at build time, not recorded by a human and not
+synthesised during the call** (`D24`):
+
+1. `config/voice_prompts.yaml` maps a prompt id → Thai text + voice + variant.
+2. `scripts/build_prompts.py` renders each to a WAV in object storage, keyed by
+   `hash(text, voice, engine)`; unchanged prompts are skipped.
+3. The call plays the cached file — **zero call-time latency, deterministic, works with no internet**,
+   which is what makes a stage demo safe.
+4. Editing wording is a YAML change plus a re-render; an admin **prompt studio** page lets someone
+   change a sentence and hear it seconds later — ideal for tuning on the day.
+5. **Dynamic sentences** (queue position, wait estimate, the caller's name) are rendered on first use
+   and cached by their rendered text, so they warm up within minutes of a new deployment. The classic
+   fragment-concatenation approach is available as a fallback but sounds worse.
+6. A checked-in **prompt pack** is the offline fallback if the TTS provider is unreachable at build time.
+
+Streaming synthesis is only needed for `GuidedPromptIntake` and `ConversationalAgentIntake` — the same
+port serves both, so the future does not need a redesign (`D10`).
+
+Candidate engines: Azure Speech (Thai neural, good streaming), Google Cloud TTS, Botnoi Voice (Thai
+vendor), ElevenLabs (quality, cost). Choose on a listening test of the actual prompts, not on specs.
 
 ---
 
@@ -195,12 +314,62 @@ LangChain/LlamaIndex are deliberately *not* used; see `D11`).
 **Frontend**
 Agent desktop: React 18 + TypeScript + Vite, TanStack Query, native WebSocket, Tailwind (or plain CSS
 modules), `recharts` only if a chart is actually needed.
-Mobile: React Native (or Flutter) for the real app + a **web "customer simulator"** page for dev and demo.
+Customer side: a responsive **web customer simulator** (§8); React Native/Expo only if a real
+installable app is wanted later.
 
 **Infra / dev**
-Docker + Docker Compose, Postgres 16, Redis 7, MinIO, Asterisk 20, Prometheus + Grafana + Loki,
-GitHub Actions, `ruff`, `mypy`, `pytest` + `pytest-asyncio` + `testcontainers`, `hypothesis` (mapping
-edge cases), `locust`/`k6` (queue load).
+Docker + Docker Compose, Postgres 16, Redis 7, MinIO, Asterisk 20, **pgweb** (DB browser, §9),
+Prometheus + Grafana + Loki, GitHub Actions, `ruff`, `mypy`, `pytest` + `pytest-asyncio` +
+`testcontainers`, `hypothesis` (mapping edge cases), `locust`/`k6` (queue load),
+`scipy`/`munkres` (the Hungarian solver in the matcher — or ~60 lines of our own).
+
+---
+
+## 8. Where the system physically lives (the two front-ends)
+
+### Agent desktop — a **web app in the browser**
+
+| Option | For | Against |
+|---|---|---|
+| **React + Vite SPA** ⭐ | Ten live panels, a WebSocket feed, a live-updating transcript and an animating brief is exactly what a component framework is for. It is the demo's hero screen and deserves good tooling. A WebRTC softphone can live in the same tab, so the agent needs nothing installed. | Node toolchain; someone on the team must know React |
+| Server-rendered Jinja + htmx/vanilla JS + WS | No build step; matches the team's previous project style; fine if nobody wants to write React | A dense realtime dashboard becomes awkward — lots of hand-written DOM patching |
+| Next.js | — | SSR buys us nothing here; extra complexity |
+| Streamlit / Gradio | Fastest to something clickable | Looks like an internal tool, not a product. Wrong for the screen judges will stare at |
+
+**Recommendation: React + Vite.** Browser-based matters beyond convenience — real bank agent desktops
+are locked down, and "no install, just a URL" is the realistic deployment story. Agents each log in on
+their own machine; each session is one authenticated WebSocket with a presence heartbeat.
+
+### Customer side — a **responsive web app that fakes the Krungsri app**
+
+| Option | For | Against |
+|---|---|---|
+| **Web customer simulator** ⭐ | Opens on a real phone's browser during the demo and looks like an app; zero install; instant iteration; can hold a WebRTC call itself | Not literally an app |
+| React Native / Expo | A real installable app; Expo Go makes it plausible | Build/signing overhead; another toolchain for a thing the real system replaces anyway |
+| Flutter | Same as above | Adds a whole language (Dart) for no gain |
+
+**Recommendation: web simulator.** The crucial design rule is that it talks to the **same public
+`/v1/…` API the real Krungsri app would** — so "replace the demo with the real app" means Krungsri's
+app calls those endpoints, and nothing server-side changes. The simulator includes a **demo login /
+persona picker** (choose which mock customer you are) which is explicitly a demo affordance, not part
+of the real system.
+
+---
+
+## 9. Inspecting the databases
+
+- **`pgweb`** as a compose service ⭐ — single Go binary, clean web UI, browse/query both schemas.
+  (`adminer` is an equally fine one-container alternative; **DBeaver** on the desktop for heavier work.)
+- **Drizzle Studio** — what the team used previously, and it does support Postgres, but it needs a
+  Drizzle schema definition that would duplicate the SQLAlchemy models. Not worth the drift.
+- **The Call Explorer** (our own admin page, and the one that actually matters): pick a
+  `call_session_id` and see the whole story — state timeline with timings, identity resolution and
+  assurance level, context snapshot with per-field provenance, every transcript turn, every brief
+  version side by side, the full matching decision with candidate scores, and the wrap-up.
+  Raw table browsing answers "what is in the DB"; this answers "why did the system do that", which is
+  the question actually worth asking. It doubles as demo material — it is the direct descendant of the
+  multi-song debug screen in the team's previous project, which is the pattern that made that project
+  debuggable.
 
 ---
 
@@ -211,25 +380,52 @@ Everything selectable, nothing hardcoded:
 ```ini
 # --- adapter selection ---
 TELEPHONY_PROVIDER=simulated          # asterisk | twilio | livekit | simulated
-STT_ENGINE=thonburian_hf              # thonburian_hf | faster_whisper | distill | cloud | scripted
+STT_ENGINE=thonburian_hf              # thonburian_hf | thonburian_ct2 | distill | typhoon | cloud | scripted
 STT_MODEL=biodatlab/whisper-th-medium-combined
 STT_DEVICE=auto                       # cuda | cpu | auto
-LLM_PROVIDER=anthropic                # anthropic | typhoon | gemini | ollama | rulebased
+STT_COMPUTE_TYPE=int8_float16         # ct2 only
+LLM_PROVIDER=anthropic                # anthropic | openai_compatible | gemini | rulebased
 LLM_MODEL=claude-sonnet-5
+LLM_BASE_URL=                         # set for openai_compatible (Typhoon API, OpenAI, vLLM, Ollama)
+TTS_ENGINE=azure                      # used at BUILD time to render prompts, not during calls
 CORE_DATA_PROVIDER=mock_postgres      # mock_postgres | fixtures | http_api | sql_passthrough | null
 CORE_MAPPING_FILE=config/core_mapping.yaml
 INTAKE_STRATEGY=passive               # passive | guided | conversational
 EVENT_BUS=redis                       # redis | kafka | memory
 BLOB_STORAGE=minio                    # minio | s3 | localfs
 
-# --- behaviour ---
+# --- intake / IVR ---
 INTAKE_MAX_DURATION_S=180
 INTAKE_SILENCE_TIMEOUT_S=6
+INTAKE_REOFFER_AFTER_S=90             # re-offer once to a caller who declined
+IVR_BARGE_IN=true
+VOICE_PROMPTS_FILE=config/voice_prompts.yaml
+DIDS_FILE=config/dids.yaml
+
+# --- analysis ---
 ANALYSIS_DEBOUNCE_S=5
-CONFIDENCE_FLOOR=0.55                 # below this → "intent unclear", no % shown
+CONFIDENCE_FLOOR=0.55                 # below this -> "intent unclear", no % shown
 LLM_TIMEOUT_S=8
-BRIEF_DEADLINE_MS=1000                # queue pop → brief on screen
-ROUTING_WEIGHTS=config/routing_weights.yaml
+BRIEF_DEADLINE_MS=1000                # match -> brief on screen
+LIVE_CALL_TRANSCRIPTION=true
+LIVE_CALL_STT_ENGINE=thonburian_ct2   # latency matters less here; a lighter model is fine
+
+# --- matching ---
+MATCHING_WEIGHTS=config/matching_weights.yaml
+MATCHER_TICK_MS=1000
+MATCHER_SOLVER=hungarian              # hungarian | greedy | fifo
+TARGET_WAIT_S=45
+MAX_WAIT_BEFORE_ANY_AGENT_S=180       # past this, fit is ignored entirely
+DEFER_ENABLED=true
+DEFER_MAX_WAIT_S=60                   # never defer a caller who has waited longer than this
+DEFER_MAX_HOLD_S=25                   # never defer for a longer predicted wait than this
+DEFER_MIN_FIT_GAP=0.25
+
+# --- identity ---
+IDENTITY_PENDING_INTENT_WINDOW_S=900  # ANI + recent intent -> assurance L2
+REQUIRE_L2_FOR_POLICY_DETAILS=true
+
+# --- retention ---
 RECORDING_RETENTION_DAYS=90
 TRANSCRIPT_RETENTION_DAYS=365
 ```

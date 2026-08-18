@@ -1,7 +1,7 @@
 # DECISIONS
 
 _Significant engineering decisions and their rationale. Append new ones at the bottom; never silently reverse one without a new entry explaining why._
-_Last updated: 2026-08-17._
+_Last updated: 2026-08-18._
 
 Format per entry: **Problem → Decision → Reasoning → Alternatives → Tradeoffs → Future.**
 
@@ -50,9 +50,11 @@ Format per entry: **Problem → Decision → Reasoning → Alternatives → Trad
   response carries an opaque, short-lived `correlation_token` that the call must present.
 - **Reasoning:** Phone numbers are spoofable and shared; app sessions are not. WebRTC carries the
   token in signalling, so identity is cryptographically bound to the media session.
-- **Alternatives:** ANI-only identification — kept strictly as the degraded PSTN fallback (ANI +
-  pending-intent window + IVR code), never as the primary.
-- **Tradeoffs:** Non-app callers get a weaker path. Accepted — they're outside the pitched journey.
+- **Alternatives:** ANI-only identification — never treated as verified; it is one rung of the
+  assurance ladder (`D20`).
+- **Tradeoffs:** Non-app callers get a weaker identity signal — but **not** a weaker product.
+  *(Amended by `D19`: the original wording said non-app callers were "outside the pitched journey".
+  That was wrong — the cold call is the base case.)*
 
 ## D5. The bank's data is READ-ONLY; everything we produce goes in our own store
 - **Problem:** A hackathon will hand us an extract or a read endpoint, not write access to core systems.
@@ -86,7 +88,7 @@ Format per entry: **Problem → Decision → Reasoning → Alternatives → Trad
   explicitly forbids decisioning that could become discriminatory.
 - **Decision:** A weighted deterministic scorer over skills, availability, continuity, priority,
   fitness and fairness. The LLM contributes only the *intent label + confidence*. Every candidate's
-  full score breakdown is persisted in `routing_decisions`.
+  full score breakdown is persisted in `matching_decisions` (table renamed with `D22`).
 - **Reasoning:** Explainability, reproducibility, testability, and regulatory defensibility. Also a
   strong answer to a judge asking "why did it choose that agent?"
 - **Alternatives:** LLM-as-router — rejected: unexplainable, non-deterministic, unauditable.
@@ -194,3 +196,153 @@ Format per entry: **Problem → Decision → Reasoning → Alternatives → Trad
 - **Reasoning:** It makes the demo *show* "context was ready in 1.2 s, before the phone rang" instead
   of asserting it — and it's genuinely how you'd debug this in production.
 - **Tradeoffs:** More writes per call. Negligible, and it doubles as the metrics substrate.
+
+---
+
+_`D19`–`D31` added 2026-08-18 after the first design review with the user._
+
+## D19. A plain phone call is the base case; app origin is an enrichment
+- **Problem:** The original design treated the in-app tap as the entry point. But the most compelling
+  insurance call — a motor claim from the roadside, dialled off the windscreen sticker — has no app,
+  no intent record, and possibly no identified customer. A design that assumes the app fails exactly
+  when it matters most.
+- **Decision:** The `CallSession` is primary and `intent_id` is optional. Every stage must work with
+  the enrichments absent: no intent, no identity, no consent, no transcript. Entry channels are
+  in-app, **product-line DID**, general hotline, callback, and transfer.
+- **Reasoning:** Coverage of real behaviour, and it makes the value proposition robust: even a cold
+  call gets caller-ID context, a DID-derived product line, and an optional recorded intake.
+- **Bonus:** A **dedicated number per product line** (the number printed on the sticker/card/policy)
+  supplies the intent for free, with no app and no menu — the cheapest routing signal in the system.
+- **Tradeoffs:** More paths to build and test; identity becomes a spectrum (`D20`).
+
+## D20. Identity is an assurance ladder (L0–L3), and disclosure is gated by it
+- **Problem:** Caller ID is not proof — phones are borrowed, shared, and spoofable. But refusing all
+  context without hard verification throws away the product.
+- **Decision:** Four levels — L0 anonymous, L1 ANI match (probable), L2 ANI + pending app intent
+  (strong), L3 app token or IVR verification (verified). Context is *fetched* as soon as a customer is
+  guessed; what is *displayed* is gated by level. Below L2, no policy numbers and no coverage figures.
+  The level is shown to the agent as a badge.
+- **Reasoning:** Security without losing the "warm start". Also a clean answer to "what if it isn't
+  really them?"
+- **Tradeoffs:** The agent screen needs several disclosure states, and the IVR needs a verification step.
+
+## D21. The agent's ring time is the intake grace period
+- **Problem:** If an agent frees up mid-sentence, cutting the caller off loses the sentence; holding
+  the agent back to let them finish violates `D12`.
+- **Decision:** Match immediately and start ringing the agent. Intake keeps recording and transcribing
+  until the agent actually *answers* (typically 5–15 s). The brief is finalised during the ring and
+  keeps updating in the first seconds of the call.
+- **Reasoning:** Nobody waits longer, no sentence is lost, and the natural dead time of ringing is put
+  to work. Removes an ugly either/or.
+- **Tradeoffs:** The brief may update while the agent is already greeting — so the UI must animate
+  changes rather than swap silently.
+
+## D22. One waiting pool + global optimal matching, with guarded deferral
+- **Problem:** Pure FIFO wastes fit; pure best-fit starves callers and hot-spots one popular agent;
+  per-agent queues cause head-of-line blocking.
+- **Decision:** A single pool per queue group. A matcher runs on every change (and a 1 s tick) and
+  solves a **global optimal assignment** (Hungarian / min-cost max-flow) maximising
+  `fit × (1 + urgency)`, where urgency grows with wait time, SLA risk, customer priority and
+  *situational* urgency from the intake. Past `MAX_WAIT_BEFORE_ANY_AGENT_S` fit is ignored entirely.
+  **Deferral** (holding a caller a few seconds for a soon-free specialist) is allowed only under four
+  simultaneous guards, never leaves an agent idle, and is always logged with its reasoning.
+- **Reasoning:** Global matching beats greedy per-agent picking; the urgency multiplier is the
+  anti-starvation guarantee; deferral captures the user's insight that a nearly-finished call is a
+  cheap way to reach a much better agent.
+- **Alternatives:** Per-agent queues with re-assignment — rejected (fragmentation, blocking, unclear
+  fairness). Pure FIFO — rejected (throws away the whole point). Pure best-fit — rejected (starvation).
+- **Anti-hot-spotting:** load penalty + fairness normalisation, a startup check that **no skill has
+  only one holder**, and a monitored assignment-concentration metric per skill.
+- **Tradeoffs:** More complex than FIFO and needs a simulation harness to tune — which is built (§17).
+
+## D23. Fit is intent-confidence-weighted and continuously recomputed
+- **Problem:** Should a partial transcript change routing? Acting on a half-heard sentence can send
+  someone to the wrong specialist; ignoring speech until the end wastes the whole waiting period.
+- **Decision:** The effective intent is a confidence-weighted blend of the app/DID/DTMF intent and the
+  speech-derived intent. Fit is recomputed on every `analysis.brief.updated` and again at match time.
+  Low confidence keeps the caller pointed at the product-line generalist.
+- **Reasoning:** Continuous improvement without whiplash; the confidence number already exists (`D13`)
+  so this costs nothing extra.
+- **Tradeoffs:** Fit changing under a waiting caller must not reset their waiting credit — it does not.
+
+## D24. IVR prompts are pre-rendered TTS, not recorded audio and not live synthesis
+- **Problem:** Hand-recording Thai prompts makes wording changes expensive; synthesising live adds
+  latency, cost, and a network dependency during a stage demo.
+- **Decision:** `config/voice_prompts.yaml` holds prompt id → Thai text + voice. A build step
+  (`scripts/build_prompts.py`) renders each to a WAV, cached by hash of (text, voice, engine), and
+  regenerates only what changed. The call plays cached files. Dynamic sentences (queue position, name)
+  are rendered on first use and cached by their rendered text, so they are warm within minutes.
+  A checked-in prompt pack is the offline fallback.
+- **Reasoning:** Edit wording in a YAML file, hear it a second later, zero call-time latency, works
+  with no internet. An admin "prompt studio" page makes on-the-day tuning trivial.
+- **Future:** Streaming/live TTS is only needed for `GuidedPromptIntake` and
+  `ConversationalAgentIntake` — the same `TtsEngine` port serves both.
+
+## D25. After-hours voicemail runs the full intake pipeline into a briefed callback
+- **Problem:** Out of hours, or with nobody logged in, the call is currently just lost.
+- **Decision:** Offer to leave a message; run it through the *same* recording → STT → analysis →
+  brief pipeline; create a `callback_task` that appears in the morning queue **already briefed**.
+- **Reasoning:** The machinery already exists, so the feature is nearly free, and it converts a lost
+  call into a prepared one. It is also precisely the slot the future conversational AI agent fills.
+
+## D26. Both call legs are forked separately — no diarisation needed
+- **Problem:** The live agent call has two speakers; separating them with a diarisation model is
+  error-prone and adds latency.
+- **Decision:** Fork each call leg as its own audio stream at the telephony layer; speaker identity is
+  then structural, not inferred.
+- **Reasoning:** Exact labels, no extra model, no speaker-swap bugs. Live-call transcription then feeds
+  wrap-up quality, call-progress estimation (`D22`) and future live assist.
+- **Tradeoffs:** Roughly doubles STT load → a feature flag with its own (smaller) model setting.
+
+## D27. Ratings are collected from both sides
+- **Decision:** Customer CSAT 1–5 (+ optional NPS and a voice comment that goes through the same
+  transcription pipeline) — in-app if the call originated in-app, otherwise post-call IVR keypress.
+  Agent rates the **brief** 1–5 with wrong-field tags, plus a call-difficulty flag.
+- **Reasoning:** The pitch claims "↑ NPS" and brief accuracy; both need a measurement substrate.
+  The agent rating doubles as labelled training/eval data for the AI stages.
+
+## D28. Generic core vs. insurance domain pack — nothing domain-specific in `services/`
+- **Problem:** The user wants to reuse this machinery for other projects.
+- **Decision:** Everything insurance-specific lives in config and prompts (`intents.yaml`,
+  `skills.yaml`, `dids.yaml`, `playbooks/`, `prompts/`, `core_mapping.yaml`, the `Customer360` field
+  set, fixtures). `services/` may not hardcode a product line, an intent, or a policy concept.
+- **Reasoning:** Turns the system into a general "context-aware contact-centre AI layer" reusable for a
+  hospital, a government line, a telco, or an e-commerce desk — at the cost of discipline only.
+- **Enforcement:** A lint rule / test that greps `services/` for domain literals.
+
+## D29. Two LLM adapters implemented from day one (Anthropic + OpenAI-compatible); others defined only
+- **Problem:** The user wants to compare a frontier model against a Thai-native model directly, and
+  not be locked in.
+- **Decision:** Implement `AnthropicAdapter` and **`OpenAiCompatibleAdapter`** (a single adapter
+  parameterised by base URL + key, which covers Typhoon's hosted API, OpenAI, self-hosted vLLM, Ollama
+  and LM Studio at once). Define but leave unimplemented: `GeminiAdapter`. Add
+  `scripts/compare_llm.py` to run the golden set through every configured provider and print
+  accuracy / latency / cost side by side, plus a runtime switch so a live demo can flip providers.
+- **Reasoning:** Two implementations buy five back-ends because so much of the ecosystem speaks the
+  OpenAI wire format. The comparison harness turns "which model?" from an argument into a table.
+
+## D30. Thai STT: Thonburian stays default; Typhoon ASR is a first-class alternative
+- **Problem:** Typhoon also publishes Thai ASR, with both open weights and a hosted API.
+- **Decision:** Keep `ThonburianHfAdapter` as the default (known-good, already proven on this team's
+  hardware). Add `TyphoonAsrAdapter` with `mode = api | local` behind the same `SttEngine` port, and
+  benchmark both on the same audio in P3 — WER, latency, VRAM — recording the numbers in
+  `PROJECT_STATE.md`.
+- **Reasoning:** Same seam, so comparing is cheap; picking on measurements beats picking on reputation.
+- **Note:** Model names, licences and API pricing must be re-verified at implementation time rather
+  than trusted from memory.
+
+## D31. Deliberately no LLM framework — with an explicit trigger to revisit
+- **Problem:** "Why not LangChain?" deserves a real answer rather than a preference.
+- **Decision:** Plain Python + provider SDK + versioned prompt files + Pydantic output schemas. Adopt a
+  *small focused* library (`instructor` / `pydantic-ai`) only if structured-output retries become
+  tedious. Optionally `LiteLLM` if provider count grows beyond what `OpenAiCompatibleAdapter` covers.
+- **Reasoning:** Our AI stage is four short, independent, individually-timed-out, structured calls —
+  roughly 150 lines of asyncio, not a chain. We must persist the exact prompt, exact output, latency,
+  tokens and cost per call (`D18`), which means fighting any layer that hides the request. Frameworks
+  also bring a heavy, fast-moving dependency tree — a breaking upgrade mid-competition is a lost day.
+- **Revisit if:** (a) `ConversationalAgentIntake` needs dynamic branching multi-turn tool control flow
+  → **LangGraph** becomes a genuine fit; (b) we build retrieval over policy-wording documents →
+  **LlamaIndex** for ingestion/retrieval only, behind our own port. Either change gets a new decision
+  entry.
+- **Tradeoffs:** We write our own retry, timeout, fallback and tracing. Small, and it is exactly the
+  code whose behaviour we need to be able to explain.

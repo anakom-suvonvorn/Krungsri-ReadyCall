@@ -1,7 +1,7 @@
 # DATA_MODEL
 
 _The two databases, every table, and — most importantly — how the bank's half gets swapped out for the real thing on hackathon day._
-_Status: **design only**. Last updated: 2026-08-17._
+_Status: **design only**. Last updated: 2026-08-18._
 
 ---
 
@@ -114,22 +114,38 @@ final. The screen renders the latest; the history is what lets us measure how ea
 |---|---|
 | `agents` | `agent_id`, `display_name`, `team`, `level`, `languages`, `licence_flags`, `max_concurrent`, `is_active` |
 | `agent_skills` | `agent_id`, `skill_code` (e.g. `health.ipd`, `motor.claim`), `proficiency` 0–1, `certified_until` |
-| `agent_presence` | `agent_id`, `state` (available/on_call/wrap/away/offline), `since`, `current_load`, `last_assigned_at` |
-| `queues` | `queue_id`, `name`, `required_skill`, `sla_seconds`, `overflow_queue_id`, `priority_rules_json` |
-| `queue_entries` | `id`, `queue_id`, `call_session_id`, `enqueued_at`, `priority`, `position`, `dequeued_at`, `outcome` |
-| `routing_decisions` | `decision_id`, `call_session_id`, `at`, `candidates_json` (every agent + every score term), `chosen_agent_id`, `total_score`, `rationale_th/en`, `weights_version`, `fallback_used` |
+| `agent_presence` | `agent_id`, `system_state` (offline/available/ringing/on_call/wrap_up/acw), `agent_intent` (ready/break/lunch/training/admin/last_call/draining), `since`, `current_load`, `last_assigned_at`, `device_id`, `heartbeat_at` |
+| `agent_state_log` | append-only history of presence changes — who was available when, for post-hoc queue analysis |
+| `agent_schedules` | `agent_id`, weekday/date, shift start/end, `queue_ids` — feeds `within_schedule()` |
+| `queues` | `queue_id`, `name`, `required_skill`, `sla_seconds`, `overflow_queue_id`, `priority_rules_json`, `hours_ref` |
+| `queue_entries` | `id`, `queue_id`, `call_session_id`, `enqueued_at`, `priority`, `waiting_credit_s`, `dequeued_at`, `outcome` |
+| `matching_decisions` | `decision_id`, `call_session_id`, `at`, `kind` (assign/defer/defer_rejected/fallback), `candidates_json` (every agent × every score term: fit parts, urgency parts, total), `chosen_agent_id?`, `deferred_for_agent_id?`, `expected_free_in_s?`, `fit_gap?`, `rationale_th/en`, `weights_version`, `solver` (hungarian/greedy/fifo) |
 | `assignments` | `assignment_id`, `call_session_id`, `agent_id`, `offered_at`, `accepted_at`, `rejected_reason`, `ended_at` |
+| `call_progress_estimates` | `call_session_id`, `at`, `progress` 0–1, `expected_free_in_s`, `source` (elapsed_vs_aht / transcript_cue / agent_manual), `confidence` — feeds deferral (`D22`) |
 
-`routing_decisions.candidates_json` is deliberately fat — "why this agent" must be answerable months
-later, for both the judges and a real auditor.
+`matching_decisions.candidates_json` is deliberately fat — "why this agent, and why did that person
+wait twelve seconds longer" must be answerable months later, for both the judges and a real auditor.
+Deferrals that were *considered and rejected* are logged too, so the guard rails are visible.
 
 ### Post-call
 | Table | Key columns |
 |---|---|
 | `call_wrapups` | `wrapup_id`, `call_session_id`, `agent_id`, `disposition`, `summary_th` (AI draft), `summary_final` (human-confirmed), `was_edited`, `resolved`, `at` |
 | `follow_up_tasks` | `task_id`, `customer_id`, `call_session_id`, `kind`, `due_at`, `assignee`, `status` |
-| `metrics_rollups` | period, queue, agent, `aht_s`, `fcr_rate`, `time_to_context_ms`, `brief_ready_rate`, `abandon_rate`, `intent_accuracy` |
-| `nps_responses` | `call_session_id`, `score`, `comment`, `at` |
+| `callback_tasks` | `task_id`, `customer_id?`, `phone_e164`, `origin` (after_hours / queue_closed / requested / abandoned), `intake_id?`, `brief_id?`, `requested_slot?`, `status`, `attempts`, `assigned_agent_id?` — an after-hours voicemail arrives here **already briefed** (`D25`) |
+| `metrics_rollups` | period, queue, agent, `aht_s`, `fcr_rate`, `time_to_context_ms`, `brief_ready_rate`, `abandon_rate`, `intent_accuracy`, `defer_hit_rate`, `assignment_concentration` |
+| `call_ratings` | `call_session_id`, `source` (customer_ivr / customer_app / agent), `csat` 1–5, `nps` 0–10?, `comment_text?`, `comment_audio_ref?`, `at` (`D27`) |
+
+### Identity & entry
+| Table | Key columns |
+|---|---|
+| `identity_resolutions` | `call_session_id`, `at`, `method` (app_token / ani / pending_intent / ivr_verify / manual), `matched_customer_id?`, `assurance_level` (L0–L3), `evidence_json` — the audit trail for *why* we think we know who this is (`D20`) |
+| `did_hits` | `call_session_id`, `did_e164`, `product_line`, `campaign?` — which printed number was dialled (`D19`) |
+
+### Voice prompt cache
+| Table | Key columns |
+|---|---|
+| `voice_prompt_renders` | `prompt_id`, `text_hash`, `voice`, `engine`, `storage_ref`, `duration_ms`, `rendered_at` — pre-rendered TTS, regenerated only when the text changes (`D24`) |
 
 ### Ops
 `settings` (runtime tunables — routing weights, thresholds, timeouts, model choice), `feature_flags`,
@@ -219,10 +235,26 @@ integration checklist, and it takes minutes instead of an afternoon.
   large group holds one or none → the **coverage/life-stage mismatch** is visible in the data.
 - 12–24 months of interactions, app usage, claims, and life-event signals with plausible temporal
   correlation (mortgage → life insurance interest; new child → health).
+- **Policies spread across every line** — motor, health, life, travel, personal accident, savings —
+  not just health. The demo must be able to show a motor claim and a travel claim, not one product.
 - **~15 hand-authored persona + scenario pairs** used everywhere: demos, tests, golden-set evaluation.
-  Each pairs a customer with a tapped plan, an intake script (Thai text + optional recorded audio),
-  the expected intent, expected routing target, and the expected brief. The pitch's own example —
-  *Khun Pattheera, Health Plan A, hospitalisation tomorrow, room & board question* — is scenario #1.
+  Each pairs a customer with an **entry channel** (in-app tap / product DID / hotline), an intake
+  script (Thai text + optional recorded audio), the expected intent, expected match target, and the
+  expected brief. Scenario #1 is the pitch's own example — *Khun Pattheera, Health Plan A,
+  hospitalisation tomorrow, room & board*. Scenario #2 is the **motor claim from the roadside**: no
+  app, dialled off the windscreen sticker, high situational urgency — the case that exercises the
+  cold-call path (`D19`), the assurance ladder (`D20`) and urgency-driven matching (`D22`) at once.
+
+### Agents and the pool
+
+- **20 mock agents across 6 teams** — motor claims, health IPD/OPD, life & policy servicing, travel,
+  general/billing, and a small senior/escalation group. Several are multi-skilled so matching has
+  something to choose between, and **every skill is held by at least two agents** (a startup check
+  enforces this — see `D22`).
+- Each agent gets a **schedule** (shifts, days off) and **historical outcome stats** per intent, so
+  `historical_fit` and after-hours behaviour are exercised rather than stubbed.
+- For a live demo: **3 of the 20 are real logged-in browser sessions** on separate devices; the other
+  17 are simulated so a queue genuinely forms and the matcher has real work to do.
 
 Generated data is **not committed** (only the generator + the hand-authored scenario YAMLs are), so
 the repo stays clean and the dataset is reproducible from a seed.
