@@ -101,10 +101,13 @@ Two rules that shape the order:
 - **Full breakdown persisted** to `matching_decisions` — candidates, every term, solver used.
 - **Matching simulator** (`scripts/simulate_matching.py`): replay a day of arrivals against a synthetic
   pool to tune weights offline in seconds.
-- Assignment + offer/accept/reject/no-answer re-match (keeping waiting credit and brief).
+- **Offer/accept handshake** (`D33`): offer card + timeout + decline/RONA, `AFTER_CALL_WORK` timer with
+  a Done button, `manual_accept` / `auto_accept` modes, all measured into `assignments`.
 - Agent WebSocket (auth, presence, brief push, acks, reconnect-with-replay).
-- Agent desktop shell in React: incoming-call card, the panel layout from pitch p.7, assurance badge,
-  "why this agent", transcript pane (empty for now).
+- **Agent workstation shell** in React (`D32`): offer card, the panel layout from pitch p.7, assurance
+  badge, "why this agent", queue strip, status control, transcript pane (empty for now), and **the
+  call-control bar wired to a stubbed softphone** — the real WebRTC audio arrives in P5, but the UI,
+  the states and the handshake are all real here and driven by `SimulatedTelephonyAdapter`.
 
 **Exit criteria**
 - 20 simulated concurrent callers + 20 agents (3 real browser sessions) match deterministically;
@@ -173,15 +176,27 @@ Two rules that shape the order:
 ## P5 — Real telephony
 **Goal:** an actual phone call, not a simulation.
 
-- Asterisk 20 in compose: `chan_pjsip`, WSS/WebRTC endpoint for the app, queues, ARI enabled.
-- `AsteriskAriAdapter`: originate/answer/play/bridge/hangup + AudioSocket fork; ARI event stream → bus.
-- WebRTC path from the customer simulator (correlation token in a SIP header), then the RN app.
-- PSTN fallback: ANI → `customer_phones`, pending-intent disambiguation, IVR code, anonymous path.
-- Hold music/prompts, transfer (brief travels with the call), reconnect handling.
-- `TwilioAdapter` as the alternate, behind the same contract tests.
+- Asterisk 20 in compose: `chan_pjsip`, WSS/WebRTC transport, holding bridges, ARI enabled, TLS certs
+  (`mkcert` for LAN machines).
+- `AsteriskAriAdapter`: originate/answer/play/**bridge**/hangup/transfer + AudioSocket fork; ARI event
+  stream → bus.
+- **The agent-side softphone becomes real** (`D32`): SIP.js over WSS registering the workstation as a
+  SIP endpoint, Opus, device picker + level meter + pre-shift audio self-test, ringtone autoplay
+  unlock, mute/hold/DTMF/transfer, and reconnect-without-dropping-the-call.
+- Customer-side WebRTC from the simulator (correlation token in a SIP header).
+- Cold-call path: DID mapping, ANI → `customer_phones`, pending-intent disambiguation, IVR
+  verification, anonymous path.
+- Hold music/prompts, **bridge on Accept** (customer sits in a holding bridge until then), transfer
+  with the brief travelling.
+- `TwilioAdapter` as the alternate, behind the same contract tests. *(Chosen path: Asterisk first,
+  precisely because a real SIP trunk / DID can be attached later without changing the adapter — the
+  same code that runs the demo runs against a real number.)*
 
 **Exit criteria**
-- A real call from the simulator reaches a real agent desktop with a full brief.
+- A real call from a **softphone on a phone over local Wi-Fi** reaches an agent who accepts it **in the
+  browser** and talks through their headset, with the full brief already on screen.
+- Agent presses Accept → audio bridged in < 500 ms (it is a bridge, not a dial-out).
+- Reloading the workstation mid-call does not drop the call.
 - Provider swap (`asterisk` ↔ `twilio` ↔ `simulated`) is env-var only and passes the same contract suite.
 - Media fork starts < 300 ms after answer.
 

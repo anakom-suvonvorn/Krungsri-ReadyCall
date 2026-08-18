@@ -327,18 +327,34 @@ Prometheus + Grafana + Loki, GitHub Actions, `ruff`, `mypy`, `pytest` + `pytest-
 
 ## 8. Where the system physically lives (the two front-ends)
 
-### Agent desktop — a **web app in the browser**
+### Agent workstation — **React + Vite, and the softphone lives in it** (`D32`)
 
-| Option | For | Against |
+**Chosen: React 18 + TypeScript + Vite.** This is not just an info screen — it is the agent's whole job
+surface, and **the call itself happens in the tab**. That raises the bar past what server-rendered
+templates comfortably handle: ten live panels, a WebSocket feed, a live-updating transcript, an
+animating brief, *and* a WebRTC session with call controls, all in one page.
+
+**The in-page softphone stack:**
+
+| Piece | Choice | Notes |
 |---|---|---|
-| **React + Vite SPA** ⭐ | Ten live panels, a WebSocket feed, a live-updating transcript and an animating brief is exactly what a component framework is for. It is the demo's hero screen and deserves good tooling. A WebRTC softphone can live in the same tab, so the agent needs nothing installed. | Node toolchain; someone on the team must know React |
-| Server-rendered Jinja + htmx/vanilla JS + WS | No build step; matches the team's previous project style; fine if nobody wants to write React | A dense realtime dashboard becomes awkward — lots of hand-written DOM patching |
-| Next.js | — | SSR buys us nothing here; extra complexity |
-| Streamlit / Gradio | Fastest to something clickable | Looks like an internal tool, not a product. Wrong for the screen judges will stare at |
+| SIP signalling | **SIP.js** (or JsSIP) over **WSS** to Asterisk `chan_pjsip` | The page registers as a real SIP endpoint; Asterisk bridges to it exactly as to a hardware phone |
+| Media | WebRTC, **Opus** | Browser-native echo cancellation, noise suppression, auto gain |
+| Controls | accept / decline / mute / hold / hangup / DTMF / transfer / conference | Driven from the page; server-side state stays authoritative in the Orchestrator |
+| Devices | `enumerateDevices` picker + level meter + **pre-shift audio self-test** | "My headset wasn't selected" is the classic five-minutes-before-demo failure |
+| Resilience | Audio session and data session are independent | A UI reload does **not** drop a live call; the workstation re-attaches on reconnect |
 
-**Recommendation: React + Vite.** Browser-based matters beyond convenience — real bank agent desktops
-are locked down, and "no install, just a URL" is the realistic deployment story. Agents each log in on
-their own machine; each session is one authenticated WebSocket with a presence heartbeat.
+**Landmines to plan for now, not discover at P5:**
+- Microphone access requires a **secure context**. `localhost` is fine for one machine; agents on other
+  machines on the LAN need real certificates (`mkcert` in dev).
+- SIP-over-WSS needs a cert Asterisk serves — this is most of the "WebRTC certs are fiddly" pain in
+  §1.1, and it lands on the agent side, not the customer side.
+- Autoplay policy: the ringtone needs a prior user gesture, so the workstation has an explicit
+  "go on shift" action that unlocks audio.
+
+*(Alternatives considered and rejected: Jinja + htmx — viable for a display-only screen, awkward once
+the page is also a softphone with a dozen live panels; Next.js — SSR buys nothing here;
+Streamlit/Gradio — looks like an internal tool, wrong for the screen judges stare at.)*
 
 ### Customer side — a **responsive web app that fakes the Krungsri app**
 
@@ -424,6 +440,16 @@ DEFER_MIN_FIT_GAP=0.25
 # --- identity ---
 IDENTITY_PENDING_INTENT_WINDOW_S=900  # ANI + recent intent -> assurance L2
 REQUIRE_L2_FOR_POLICY_DETAILS=true
+
+# --- agent workstation (D32, D33) ---
+AGENT_ACCEPT_MODE=manual              # manual | auto  (per-agent/queue override in DB)
+OFFER_TIMEOUT_S=20                    # decline/timeout -> re-match + flip agent out of READY
+ACW_TIMER_S=45                        # after-call work; 0 = straight back to available
+ACW_MAX_S=300
+AGENT_HEARTBEAT_S=10
+AGENT_PRESENCE_TTL_S=30               # closed tab drops out automatically
+SIP_WSS_URL=wss://asterisk.local:8089/ws
+SIP_REALM=readycall.local
 
 # --- retention ---
 RECORDING_RETENTION_DAYS=90

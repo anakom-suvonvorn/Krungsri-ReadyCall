@@ -114,13 +114,14 @@ final. The screen renders the latest; the history is what lets us measure how ea
 |---|---|
 | `agents` | `agent_id`, `display_name`, `team`, `level`, `languages`, `licence_flags`, `max_concurrent`, `is_active` |
 | `agent_skills` | `agent_id`, `skill_code` (e.g. `health.ipd`, `motor.claim`), `proficiency` 0–1, `certified_until` |
-| `agent_presence` | `agent_id`, `system_state` (offline/available/ringing/on_call/wrap_up/acw), `agent_intent` (ready/break/lunch/training/admin/last_call/draining), `since`, `current_load`, `last_assigned_at`, `device_id`, `heartbeat_at` |
+| `agent_presence` | `agent_id`, `system_state` (offline/available/offering/on_call/after_call_work), `agent_intent` (ready/break/lunch/training/admin/last_call/draining), `since`, `current_load`, `last_assigned_at`, `session_id`, `sip_endpoint`, `accept_mode` (manual/auto), `heartbeat_at` |
+| `agent_workstation_sessions` | `session_id`, `agent_id`, `started_at`, `ended_at`, `user_agent`, `sip_registered`, `audio_devices_json`, `self_test_passed_at` — one row per logged-in browser tab (`D32`) |
 | `agent_state_log` | append-only history of presence changes — who was available when, for post-hoc queue analysis |
 | `agent_schedules` | `agent_id`, weekday/date, shift start/end, `queue_ids` — feeds `within_schedule()` |
 | `queues` | `queue_id`, `name`, `required_skill`, `sla_seconds`, `overflow_queue_id`, `priority_rules_json`, `hours_ref` |
 | `queue_entries` | `id`, `queue_id`, `call_session_id`, `enqueued_at`, `priority`, `waiting_credit_s`, `dequeued_at`, `outcome` |
 | `matching_decisions` | `decision_id`, `call_session_id`, `at`, `kind` (assign/defer/defer_rejected/fallback), `candidates_json` (every agent × every score term: fit parts, urgency parts, total), `chosen_agent_id?`, `deferred_for_agent_id?`, `expected_free_in_s?`, `fit_gap?`, `rationale_th/en`, `weights_version`, `solver` (hungarian/greedy/fifo) |
-| `assignments` | `assignment_id`, `call_session_id`, `agent_id`, `offered_at`, `accepted_at`, `rejected_reason`, `ended_at` |
+| `assignments` | `assignment_id`, `call_session_id`, `agent_id`, `offered_at`, `accepted_at`, `outcome` (accepted/declined/timeout/cancelled), `decline_reason?`, `accept_mode`, `time_to_accept_ms`, `bridged_at`, `ended_at`, `acw_started_at`, `acw_ended_at`, `acw_ended_by` (done_button/timer) — the offer/accept handshake and after-call work, both measured (`D33`) |
 | `call_progress_estimates` | `call_session_id`, `at`, `progress` 0–1, `expected_free_in_s`, `source` (elapsed_vs_aht / transcript_cue / agent_manual), `confidence` — feeds deferral (`D22`) |
 
 `matching_decisions.candidates_json` is deliberately fat — "why this agent, and why did that person

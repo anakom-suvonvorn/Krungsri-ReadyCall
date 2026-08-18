@@ -226,16 +226,18 @@ _`D19`–`D31` added 2026-08-18 after the first design review with the user._
   really them?"
 - **Tradeoffs:** The agent screen needs several disclosure states, and the IVR needs a verification step.
 
-## D21. The agent's ring time is the intake grace period
+## D21. The offer window is the intake grace period
 - **Problem:** If an agent frees up mid-sentence, cutting the caller off loses the sentence; holding
   the agent back to let them finish violates `D12`.
-- **Decision:** Match immediately and start ringing the agent. Intake keeps recording and transcribing
-  until the agent actually *answers* (typically 5–15 s). The brief is finalised during the ring and
-  keeps updating in the first seconds of the call.
-- **Reasoning:** Nobody waits longer, no sentence is lost, and the natural dead time of ringing is put
-  to work. Removes an ugly either/or.
-- **Tradeoffs:** The brief may update while the agent is already greeting — so the UI must animate
-  changes rather than swap silently.
+- **Decision:** Match immediately and send the offer to the agent's workstation. Intake keeps recording
+  and transcribing until the agent presses **Accept** (typically 5–15 s). The brief is finalised during
+  that window and keeps updating in the first seconds of the live call.
+- **Reasoning:** Nobody waits longer, no sentence is lost, and the dead time already inherent in the
+  handshake is put to work. Removes an ugly either/or.
+- **Tradeoffs:** The brief may update while the agent is already greeting, so the UI must animate
+  changes rather than swap silently. Under `auto_accept` there is no offer window at all, and the tail
+  of the utterance lands in the first seconds of the live call instead — same outcome, different timing.
+- *(Amended 2026-08-18: originally worded as "the agent's phone rings". There is no phone — see `D32`.)*
 
 ## D22. One waiting pool + global optimal matching, with guarded deferral
 - **Problem:** Pure FIFO wastes fit; pure best-fit starves callers and hot-spots one popular agent;
@@ -346,3 +348,56 @@ _`D19`–`D31` added 2026-08-18 after the first design review with the user._
   entry.
 - **Tradeoffs:** We write our own retry, timeout, fallback and tracing. Small, and it is exactly the
   code whose behaviour we need to be able to explain.
+
+---
+
+_`D32`–`D33` added 2026-08-18, correcting a misread of the product._
+
+## D32. The agent workstation IS the phone — one browser tab, softphone included
+- **Problem:** Earlier documents described an "agent info screen" and talked about the agent's *phone*
+  ringing, as though the call happened on a separate device and our product merely displayed context
+  beside it. **That was a misreading of the product.** Splitting the call from the work surface would
+  be absurd in practice: the agent would be juggling a handset and a browser, and the system could not
+  control hold, transfer, or the moment of connection.
+- **Decision:** The agent desktop is a **full contact-centre workstation in one browser tab**, and the
+  call happens inside it. The page registers as a **WebRTC SIP endpoint** (SIP over WSS to Asterisk's
+  `chan_pjsip`, via SIP.js or JsSIP); audio goes in and out through the PC headset. From that one tab
+  the agent takes calls, holds, mutes, transfers, hangs up, sends DTMF, sees the brief and customer
+  context, sees the queue, and sets their own status. No desk phone, no installed softphone, no second
+  device.
+- **Scope:** softphone + brief + status control are **required from day one**. Past-customer lookup,
+  outbound dialling, callback list, wallboard and supervisor views come later.
+- **Reasoning:** It is how a real contact centre works; it is the only way we can control the
+  connection moment (`D33`); "just a URL" is the realistic deployment on locked-down bank desktops;
+  and for a demo, everything a judge needs to see is in one window.
+- **Consequences:** Browsers require a **secure context** for microphone access, and SIP-over-WSS needs
+  a certificate Asterisk serves — `localhost` is fine for one machine, other machines on the LAN need
+  real certs (`mkcert`). Codec is Opus with the browser's own echo cancellation. A device picker, mic
+  level meter, and a pre-shift **audio self-test** are part of the workstation, not nice-to-haves.
+- **Resilience:** the audio session and the data session are independent. A UI reload does not drop a
+  live call — the workstation re-attaches to the in-progress call on reconnect; and if the data panel
+  fails, the agent still has the call.
+
+## D33. Offer/accept handshake, with after-call work as a real state
+- **Problem:** How does a matched call actually reach the agent, and what happens in the seconds after
+  a call ends? Two plausible models: (a) auto-enter after-call work, agent manually returns to ready;
+  (b) stay ready and let the agent press Accept or "not yet".
+- **Decision:** `AVAILABLE → OFFERING → ON_CALL → AFTER_CALL_WORK → AVAILABLE`.
+  - The offer is a card + ringtone **in the browser**, with Accept/Decline and a timeout
+    (`OFFER_TIMEOUT_S`, default 20 s). Decline or timeout re-matches to someone else and flips the
+    missing agent out of `READY` (RONA), so a distracted agent cannot black-hole the queue.
+  - After a call, the agent enters `AFTER_CALL_WORK` on a timer (`ACW_TIMER_S`, default 45 s), endable
+    early with **Done** or extendable.
+  - **Both of the user's models are supported by config**, because they suit different moments:
+    `manual_accept` + ACW timer is the default (explicit, visible, demo-friendly); `auto_accept` +
+    `ACW_TIMER_S=0` gives the "connect instantly with a beep" mode busy centres actually use. Per-agent
+    and per-queue.
+  - On Accept, Asterisk **bridges** the customer channel (already connected, sitting in a holding
+    bridge) to the agent's browser endpoint. No dial-out, so the connection is effectively instant.
+- **Reasoning:** After-call work is real — and because the AI drafts the wrap-up, *shrinking ACW is one
+  of the product's most credible metrics*, so it must be measured, which means it must be a state.
+  Model (b) as the sole design was rejected: it looks equivalent but leaves the customer on hold while
+  a distracted agent decides, and the matcher cannot distinguish "thinking" from "walked away".
+  Explicit availability keeps matching honest; RONA covers the same human situation without punishing
+  the caller.
+- **Tradeoffs:** More states to test; the ACW timer needs tuning against real behaviour.

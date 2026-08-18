@@ -76,7 +76,8 @@ Three hard architectural rules follow from that picture:
 | **Analysis** (`services/analysis/`) | Intent, entities, urgency/sentiment, summary, next-best-action, suggested opening, confidence calibration, PII spans, **call-progress estimation**. | Choose the agent. |
 | **Matching Engine** (`services/matching/`) | The waiting pool, agent presence/capacity, fit scoring, the global match, deferral decisions, and the full rationale. | Use an LLM to pick a human (`D8`). |
 | **Intake** (`services/intake/`) | The pre-call experience via a swappable `IntakeStrategy`; produces one `IntakeResult` shape regardless of strategy. | Assume a strategy. |
-| **Agent Delivery** (`api/ws/agent_ws.py`) | Agent presence, push of the `CaseBrief` bundle, live updates, acknowledgements. | Hold business state. |
+| **Agent Delivery** (`api/ws/agent_ws.py`) | Agent presence, the offer/accept handshake, push of the `CaseBrief` bundle, live updates, acknowledgements. | Hold business state. |
+| **Agent Workstation** (`apps/agent_desktop/`) | **The agent's entire job in one browser tab: the softphone itself (WebRTC audio through their headset), the brief, the queue, their status.** There is no separate desk phone. | Be "just a screen". |
 | **Consent/PDPA** (`services/consent/`) | Consent capture, scope (incl. separate health-data consent), redaction policy, retention, audit. | Be optional. |
 | **Wrap-up** (`services/wrapup/`) | Post-call summary + disposition + follow-ups, human-confirmed, written to our store. | Auto-write unverified content. |
 
@@ -143,15 +144,22 @@ and the agent verifies the old-fashioned way.
    MATCHED ◄────────────────────────────────────────────────---┘
       │
       ▼
-   ASSIGNED ──► RINGING_AGENT ──► IN_CALL ──► WRAP_UP ──► RATING ──► CLOSED
-                     │                │
-                     └── no answer ───┘ (re-match; keeps waiting credit + brief)
-                                      └──► TRANSFERRED (brief travels with the call)
+   OFFERED ──────► IN_CALL ──► WRAP_UP ──► RATING ──► CLOSED
+      │  (offer card + ringtone     │
+      │   in the agent's browser;    └──► TRANSFERRED (brief travels with the call)
+      │   they press Accept)
+      │
+      └── declined / offer timeout ──► back to MATCHED (re-match to someone else;
+                                        keeps waiting credit + brief; the agent that
+                                        missed it is auto-flipped out of READY)
 ```
 
 **Invariant:** leaving `QUEUED` is driven by *agent availability*, never by AI completeness. If intake
 is still running when an agent frees up, intake is finalised as **partial** and the call proceeds.
 Waiting on AI to connect a human would invert the entire value proposition. (`D12`)
+
+Note the state is `OFFERED`, not "ringing a phone". There is no phone — the offer arrives in the
+agent's browser tab and the ringtone plays through their headset (§9, `D32`).
 
 ---
 
@@ -231,11 +239,13 @@ Design points worth arguing about (all runtime-tunable):
   the agent screen says so. (`D19`)
 - **Re-offer once.** If the caller pressed 2 and the wait exceeds `INTAKE_REOFFER_AFTER_S` (default
   90 s), offer once more, then never again.
-- **Stopping on "agent available" does not cut the caller off mid-sentence.** The agent's *ring time
-  is the grace period*: the moment a match happens the agent's phone starts ringing (typically
-  5–15 s), and intake keeps recording and transcribing until the agent actually answers. The brief is
-  finalised during the ring and updates on screen in the first seconds of the call. Nobody waits
-  longer, and no sentence is lost. (`D21`)
+- **Stopping on "agent available" does not cut the caller off mid-sentence.** The *offer window is the
+  grace period*: the moment a match happens, an offer card + ringtone appears in the matched agent's
+  browser, and intake keeps recording and transcribing until they press **Accept** (typically 5–15 s).
+  The brief is finalised during that window and keeps updating in the first seconds of the live call.
+  Nobody waits longer, and no sentence is lost. (`D21`)
+  If the agent is in **auto-accept** mode there is no offer window, so the tail of the utterance is
+  transcribed into the first seconds of the live call instead — same outcome, different timing.
 - **Barge-in** on every prompt (a DTMF press interrupts playback) — otherwise the menu feels slow.
 - **A caller who says nothing after pressing 1** gets one re-prompt, then falls back to hold.
 
@@ -383,12 +393,44 @@ rationale on the agent screen.
 
 ---
 
-## 9. Agents: state, presence, and the after-hours path
+## 9. The agent workstation: one browser tab, softphone included
 
-### Two layers of state
+**The agent desktop is not an information screen next to a telephone. It is the whole workstation, and
+the call happens inside it.** (`D32`)
 
-**System state** (automatic, set by the platform): `OFFLINE` · `AVAILABLE` · `RINGING` · `ON_CALL` ·
-`WRAP_UP` (auto on hangup, timed) · `AFTER_CALL_WORK`.
+The agent opens a browser tab, logs in, plugs in a headset, and from that one tab they:
+
+- **take and hold the call itself** — WebRTC audio in/out through the PC's headset, with mute, hold,
+  hangup, DTMF, transfer and conference,
+- see the case brief and customer context for whoever they are talking to,
+- see the queue and their own position in the rotation,
+- set their own status,
+- and (later phases) dial out, work a callback list, and look up past customers.
+
+There is no desk phone, no softphone app to install, no second device. That matters practically —
+bank agent desktops are locked down, so "just a URL" is the realistic deployment — and it matters for
+the demo, because everything a judge needs to see is in one window.
+
+**Must exist from the start:** the softphone, the customer brief, and status control.
+**Later:** past-customer lookup, outbound dialling, callback list, wallboard, supervisor view.
+
+### How the audio actually works
+
+The workstation registers as a **WebRTC SIP endpoint** (SIP over WSS to Asterisk's `chan_pjsip`,
+driven by SIP.js or JsSIP in the page). The agent's browser is a real SIP peer, so Asterisk bridges
+the customer channel to it exactly as it would to a hardware phone. Codec: Opus, with the browser's
+own echo cancellation and noise suppression. The workstation also carries a device picker
+(mic/speaker), a mic level meter, and a pre-shift **audio self-test**, because "my headset wasn't
+selected" is otherwise the classic five-minutes-before-demo failure.
+
+Constraint worth knowing now: browsers only allow microphone access in a **secure context**, and SIP
+over WSS needs a certificate Asterisk serves. `localhost` is fine for one machine; agents on other
+machines on the LAN need real certs (`mkcert` in dev). This is a P5 landmine, flagged early.
+
+### Two layers of agent state
+
+**System state** (automatic, set by the platform): `OFFLINE` · `AVAILABLE` · `OFFERING` ·
+`ON_CALL` · `AFTER_CALL_WORK`.
 
 **Agent intent** (manual, set by the person): `READY` · `BREAK` · `LUNCH` · `TRAINING` · `ADMIN` ·
 **`LAST_CALL`** (finish the current call, then stop taking new ones) · **`DRAINING`** (take no new
@@ -396,14 +438,51 @@ callers, but stay logged in for anything already committed to me).
 
 ```
 effective_availability = system_state == AVAILABLE
-                         and agent_intent in {READY}
+                         and agent_intent == READY
                          and current_load < max_concurrent
                          and within_schedule(agent, now)
 ```
 
-Each agent is a **separate browser session** on their own machine, authenticated as themselves,
-holding a WebSocket that publishes a heartbeat. Presence lives in Redis with a TTL, so a closed laptop
-drops out automatically; the DB keeps the durable record.
+Each agent is a separate authenticated browser session holding a WebSocket that publishes a heartbeat.
+Presence lives in Redis with a TTL, so a closed laptop drops out automatically; the DB keeps the
+durable record in `agent_state_log`.
+
+### The offer/accept handshake, and what happens after a call (`D33`)
+
+```
+ AVAILABLE ──match──► OFFERING ──Accept──► ON_CALL ──hangup──► AFTER_CALL_WORK ──► AVAILABLE
+                 │        │                                          │
+                 │        └── Decline / timeout (default 20 s)       └── "Done" button ends it early,
+                 │            → re-match to someone else, and this       or the timer expires
+                 │              agent is flipped out of READY so a
+                 │              distracted agent cannot black-hole
+                 │              the queue (RONA)
+                 └── auto_accept mode: connect immediately with a short beep, no click
+```
+
+Three things this settles:
+
+1. **Yes, after-call work is real** — dispositions, notes, follow-ups. So a call does **not** drop the
+   agent straight back to `AVAILABLE`; it enters `AFTER_CALL_WORK` with a configurable timer
+   (`ACW_TIMER_S`, default 45 s) that the agent can end early with **Done** or extend.
+   *And this is one of the product's better numbers:* because the AI drafts the wrap-up, ACW should
+   shrink measurably — that reduction is a headline metric, not a side effect (§12).
+2. **Both of your models are supported, by config, because they suit different moments.**
+   - `manual_accept` + ACW timer (**the default**): the agent is explicitly ready, and the Accept
+     press is visible and demonstrable on stage.
+   - `auto_accept` + `ACW_TIMER_S=0`: the call just connects with a beep and the agent goes straight
+     back to available — the "no delay at all" mode busy centres actually use.
+   These are per-agent and per-queue settings, so a demo can show both.
+3. **The variant where the agent stays `READY` and simply doesn't press Accept is deliberately not the
+   default.** It looks equivalent but it isn't: the customer sits on hold while a distracted agent
+   decides, and the matcher can't tell "thinking" from "walked away". Explicit availability keeps the
+   matcher honest — and the decline/timeout path (RONA) covers the same human situation without
+   punishing the caller.
+
+**On the transition itself:** while queued, the customer's channel sits in a holding bridge (hold
+music / intake). On **Accept**, Asterisk bridges the customer channel to the agent's browser endpoint.
+That is a bridge operation on an already-connected channel — effectively instantaneous — so there is
+no dial-out delay between "agent free" and "talking".
 
 ### Queue hours and after-hours
 
@@ -445,10 +524,11 @@ transcribing" indicator to both the agent and (in-app) the customer.
 
 ---
 
-## 11. Data flow E — the agent screen
+## 11. Data flow E — what the workstation shows
 
-Agent desktops hold an authenticated WebSocket and publish presence. On assignment the desktop receives
-the **CaseBrief bundle** *with or before the ring*, so it is on screen when they answer:
+Agent workstations hold an authenticated WebSocket and publish presence. **The brief arrives with the
+offer**, so it is fully on screen while the agent is still deciding to press Accept — they take the
+call already knowing who it is and what it is about:
 
 | Panel (matches pitch p.7) | Source |
 |---|---|
@@ -462,6 +542,8 @@ the **CaseBrief bundle** *with or before the ring*, so it is on screen when they
 | AI Suggested Opening | Analysis (Thai, polite register, editable) |
 | Live transcript (intake + call) + audio player | `transcript_turns` + recording ref |
 | PDPA badges (what's consented / what's masked) | `consents` |
+| **Call controls** — accept/decline, mute, hold, hangup, DTMF, transfer, device picker | The in-page softphone (§9) |
+| **Queue strip** — depth, longest wait, my status, my next-up position | Matching Engine, live |
 
 Every AI panel is labelled as AI-generated and is editable. Agents rate the brief (1–5 + which fields
 were wrong) — that feedback is the evaluation signal for prompt and model iteration.
@@ -481,8 +563,9 @@ were wrong) — that feedback is the evaluation signal for prompt and model iter
      (which goes through the same transcription pipeline).
    - **Agent** — rates the *brief* 1–5 with wrong-field tags, plus a call-difficulty flag.
    Together these are the measurement substrate for the pitch's "↑ NPS" and "brief accuracy" claims.
-4. Metrics roll up: AHT, first-contact resolution, time-to-context, brief-readiness rate, intent
-   accuracy, abandonment, deferral hit rate, CSAT/NPS.
+4. Metrics roll up: AHT, **ACW time** (after-call work — the number the AI-drafted wrap-up should
+   visibly shrink, §9), first-contact resolution, time-to-context, brief-readiness rate, intent
+   accuracy, abandonment, offer-decline/timeout rate, deferral hit rate, CSAT/NPS.
 
 ---
 
@@ -502,6 +585,50 @@ Below `CONFIDENCE_FLOOR` the screen shows **"intent unclear — please confirm"*
 and the recommended actions collapse to generic ones. A confidently wrong brief is worse than no
 brief. (`D13`)
 
+### 13.1 The intent taxonomy — what it is and why everything hangs off it
+
+An **intent** is *the reason someone is calling*. The **taxonomy** is the fixed, closed list of those
+reasons, organised per product line, living in `config/intents.yaml`.
+
+It has to be a closed list because five separate things key off the intent code, and none of them can
+key off free text the model invented:
+
+| Consumer | Uses the intent for |
+|---|---|
+| **Matching** | `intent → required skill` (`skills.yaml`), which decides who can take the call |
+| **Guided intake / slots** | Each intent declares the facts it *needs*; that is what a future AI intake would ask for, and what "entity completeness" scores in §13 |
+| **Playbooks** | The recommended-actions list and the next-best-action come from a per-intent playbook, not from the model improvising |
+| **Urgency** | Each intent carries a default urgency (an accident-in-progress outranks a renewal question) |
+| **Evaluation** | The golden set is labelled with intent codes — that is how "85% intent accuracy" is even measurable |
+
+Each entry looks roughly like:
+
+```yaml
+motor.claim.accident:
+  label_th: "แจ้งอุบัติเหตุรถยนต์"
+  label_en: "Report a motor accident"
+  skill: motor.claim
+  default_urgency: high
+  required_slots: [location, plate_number, injuries, other_party, drivable]
+  playbook: playbooks/motor_accident.yaml
+```
+
+A rough straw-man of the shape — **this needs the team's domain input, it is a product decision more
+than a technical one**, and it is the main input P4 needs:
+
+- **motor** — `claim.accident` · `claim.status` · `roadside_assist` · `policy.coverage` ·
+  `policy.renew` · `document.request`
+- **health** — `ipd.preauth` (the pitch's own scenario) · `claim.submit` · `claim.status` ·
+  `coverage.query` · `network.hospital`
+- **travel** — `claim.submit` · `coverage.query` · `policy.extend`
+- **life** — `policy.value` · `beneficiary.change` · `premium.payment` · `surrender.query`
+- **cross-cutting** — `general.billing` · `general.renewal` · `general.complaint` ·
+  `general.update_details` · `general.new_product` · **`unknown`**
+
+Around 20–40 entries is the right size: fine enough that a skill and a playbook are meaningful,
+coarse enough that a classifier can be accurate and an agent recognises every label. `unknown` is a
+first-class outcome, not a failure — it routes to the product-line generalist.
+
 ---
 
 ## 14. Event backbone
@@ -520,7 +647,8 @@ production scale). All events carry `call_session_id`, `trace_id`, `occurred_at`
 | `transcript.turn` | Transcription | Analysis, Agent Delivery, call-progress |
 | `analysis.brief.updated` | Analysis | Agent Delivery, Matching (fit changed) |
 | `agent.presence.changed` | Agent Delivery | Matching |
-| `matching.decided` / `call.assigned` / `matching.deferred` | Matching | Agent Delivery, Orchestrator |
+| `matching.decided` / `matching.deferred` | Matching | Agent Delivery, Orchestrator |
+| `call.offered` / `offer.accepted` / `offer.declined` / `offer.timeout` | Agent Delivery | Orchestrator, Matching |
 | `call.ended` / `wrapup.saved` / `rating.received` | Orchestrator / Wrap-up / IVR | Metrics |
 
 Consumers are **idempotent** (dedupe on event id) and **replayable** — replaying a call's event stream
@@ -557,7 +685,8 @@ budget degrades (§16) rather than delaying.
 | LLM down / times out | Rule-based brief: intent from the DID/menu/tapped plan, entities by regex, template summary |
 | Core RO unavailable | Last cached snapshot with a staleness badge; else intent-only brief |
 | Matching unavailable | Default queue, FIFO — i.e. exactly today's behaviour |
-| Agent desktop offline | Brief emailed/queued to the agent; call still connects |
+| One agent's workstation drops (tab closed, network, laptop asleep) | Presence TTL expires → that agent is simply not available; the matcher routes elsewhere. If it happens mid-offer, the offer times out and re-matches. **Mid-call the audio is a separate WebRTC session, so a UI reload does not drop the call** — the workstation re-attaches to the in-progress call on reconnect |
+| The agent's brief/data panel fails but audio is fine | The call still works; the panel shows a retry and the agent works the old way. Audio and data are independent paths on purpose |
 | Media fork fails | Call proceeds normally, intake silently skipped, incident logged |
 | Queue closed / nobody logged in | Voicemail intake → briefed `callback_task` (§9) |
 

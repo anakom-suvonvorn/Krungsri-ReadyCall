@@ -18,8 +18,9 @@ Three moves (from the team's pitch, `../Krungsri.pdf`):
    verified identity, the selected product, active policies and recent in-app activity into the call.
 2. **AI Pre-Call Intake** — while queued, the customer can describe the issue. It's recorded,
    transcribed (Thai), summarised and structured into a case brief before they reach the front.
-3. **A ready agent screen** — on assignment the broker already has who / which policy / what they
-   want / what to say / what to do, plus the routing rationale and a confidence signal.
+3. **A ready agent workstation** — the broker takes the call *in the browser* (softphone included),
+   and by the time they press Accept they already have who / which policy / what they want / what to
+   say / what to do, plus the matching rationale and a confidence signal (`D32`).
 
 Targets the brief's *"Broker เวลาจํากัด"* and *"เข้าไม่ถึงข้อมูล"* leaks, in the in-scope areas
 (lead prioritisation, customer engagement, **broker productivity — "สรุปลูกค้าให้ broker ก่อนคุย"**).
@@ -51,7 +52,7 @@ both get replaced in Phase P0 (`PLAN.md`).
 | TTS | Pre-rendered prompt clips built from `voice_prompts.yaml` (`D24`); streaming only for future conversational intake |
 | LLM | `AnthropicAdapter` + `OpenAiCompatibleAdapter` both implemented (`D29`) — the latter covers Typhoon API, OpenAI, vLLM and Ollama by base URL. No LLM framework (`D31`) |
 | Object storage | MinIO (S3 API) for recordings |
-| Agent desktop | React 18 + TypeScript + Vite, WebSocket push, **in the browser** — no install on the agent's machine |
+| Agent workstation | React 18 + TypeScript + Vite. **A full contact-centre workstation in one browser tab — the softphone is in it** (SIP.js over WSS to Asterisk, WebRTC/Opus through the agent's headset), plus the brief, the queue and status control. No desk phone, no install (`D32`) |
 | Customer side | Responsive **web customer simulator** with a demo persona picker, calling the same public `/v1/…` API the real Krungsri app would |
 | DB inspection | `pgweb` in compose + our own **Call Explorer** admin page |
 | Observability | OpenTelemetry traces keyed by `call_session_id`, Prometheus + Grafana + Loki |
@@ -82,7 +83,7 @@ FullProject/
 ├─ src/readycall/
 │  ├─ config.py  logging.py  errors.py
 │  ├─ domain/                # pure models, no I/O
-│  │  ├─ models.py           # Customer, Policy, CallSession, TranscriptTurn, CaseBrief, RoutingDecision…
+│  │  ├─ models.py           # Customer, Policy, CallSession, TranscriptTurn, CaseBrief, MatchingDecision…
 │  │  ├─ enums.py            # CallState, IntentCode, ConsentScope, FinalizeReason…
 │  │  └─ events.py           # event schemas (versioned)
 │  ├─ ports/                 # Protocols only — THE seams
@@ -91,8 +92,8 @@ FullProject/
 │  ├─ adapters/
 │  │  ├─ telephony/  asterisk_ari.py  twilio.py  livekit.py  simulated.py
 │  │  ├─ stt/        thonburian_hf.py  faster_whisper.py  cloud.py  scripted.py
-│  │  ├─ llm/        anthropic.py  typhoon.py  gemini.py  ollama.py  rulebased.py
-│  │  ├─ tts/        prerecorded.py  azure.py  null.py
+│  │  ├─ llm/        anthropic.py  openai_compatible.py  gemini.py  rulebased.py
+│  │  ├─ tts/        prerendered.py  azure.py  null.py   # build-time render, not live
 │  │  ├─ core_data/  mock_postgres.py  fixtures.py  http_api.py  sql_passthrough.py
 │  │  │               caching.py  null.py  mapping.py   # YAML-driven field mapper
 │  │  ├─ event_bus/  redis_streams.py  kafka.py  memory.py
@@ -128,7 +129,7 @@ FullProject/
 ├─ mock/bank_core/           # the simulated read-only bank data
 │  ├─ schema.sql  generate.py  personas.yaml  scenarios/*.yaml
 ├─ apps/
-│  ├─ agent_desktop/         # React + Vite
+│  ├─ agent_desktop/         # React + Vite — workstation INCLUDING the softphone (D32)
 │  └─ customer_sim/          # web page that fakes the mobile app (tap Contact, speak, hold)
 ├─ infra/
 │  ├─ docker-compose.yml  asterisk/  grafana/  k8s/
@@ -157,10 +158,10 @@ Nothing is built. Legend: ☐ planned · ◐ in progress · ☑ done.
 resolver + assurance ladder · ☐ `dids.yaml` · ☐ Customer360 assembler + snapshot + provenance ·
 ☐ caching/circuit breaker · ☐ customer simulator + demo login · ☐ agent screen v1 (context-only brief)
 
-**P2 — matching & agent delivery** ☐ queues + hours · ☐ agent state model (auto × manual) ·
+**P2 — matching & the workstation** ☐ queues + hours · ☐ agent state model (auto × manual) ·
 ☐ presence heartbeat · ☐ fit + urgency scoring · ☐ Hungarian solver · ☐ anti-hot-spot checks ·
-☐ persisted rationale · ☐ matching simulator · ☐ assignment/re-match · ☐ agent WebSocket ·
-☐ agent desktop shell
+☐ persisted rationale · ☐ matching simulator · ☐ **offer/accept + RONA + ACW timer** ·
+☐ agent WebSocket · ☐ workstation shell incl. call-control bar (stubbed softphone)
 
 **P3 — voice, IVR & intake v1** ☐ voice-prompt build pipeline + prompt studio · ☐ IVR flow (menu,
 identify, consent, press-1/2, rating) · ☐ media gateway (per-leg fork) · ☐ recording + encryption ·
@@ -171,8 +172,9 @@ identify, consent, press-1/2, rating) · ☐ media gateway (per-leg fork) · ☐
 summary · ☐ brief versioning · ☐ confidence calibration · ☐ NBA playbooks · ☐ suggested opening ·
 ☐ Anthropic adapter · ☐ OpenAI-compatible adapter · ☐ golden-set evaluation · ☐ provider comparison
 
-**P5 — real telephony** ☐ Asterisk + ARI adapter · ☐ WebRTC path · ☐ PSTN/ANI identification ·
-☐ product-line DIDs · ☐ media fork · ☐ bridge/transfer · ☐ softphone demo path · ☐ Twilio adapter
+**P5 — real telephony** ☐ Asterisk + ARI adapter · ☐ TLS/WSS certs · ☐ **in-browser softphone
+(SIP.js, devices, self-test, reconnect)** · ☐ customer WebRTC path · ☐ PSTN/ANI identification ·
+☐ product-line DIDs · ☐ media fork · ☐ bridge-on-accept/transfer · ☐ Twilio adapter
 
 **P6 — live transcription, wrap-up & metrics** ☐ both-leg live transcription · ☐ call-progress
 estimation · ☐ deferral enabled · ☐ post-call summary · ☐ dispositions · ☐ follow-ups · ☐ ratings
