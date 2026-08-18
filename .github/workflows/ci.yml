@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Sync dependencies
+        run: uv sync --frozen
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Format check
+        run: uv run ruff format --check .
+
+      - name: Types
+        run: uv run mypy
+
+      - name: Tests
+        run: uv run pytest -q
+
+      # The P0 exit criterion, enforced: the whole lifecycle must run on fakes alone.
+      # Scenario 2 is the cold call (no app, no intent) and scenario 3 is the fully
+      # degraded path - if either breaks, the product has stopped working for the
+      # callers who get the least from it.
+      - name: Scenario replays
+        run: |
+          for f in tests/scenarios/*.yaml; do
+            echo "--- $f"
+            uv run python scripts/run_scenario.py "$f" --quiet
+          done

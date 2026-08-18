@@ -1,17 +1,61 @@
 [project]
-name = "fullproject"
+name = "readycall"
 version = "0.1.0"
-description = "Add your description here"
+description = "Krungsri ReadyCall - an AI context layer for insurance service calls"
 readme = "README.md"
 authors = [
-    { name = "anakom978", email = "anakom.suvonvorn@gmail.com" }
+    { name = "HACK VIDVA" },
 ]
-requires-python = ">=3.11"
-dependencies = []
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "pydantic>=2.9",
+    "pydantic-settings>=2.5",
+    "structlog>=24.4",
+    "pyyaml>=6.0",
+]
 
-[project.scripts]
-fullproject = "fullproject:main"
+[project.optional-dependencies]
+# Heavier stacks are opt-in so `uv sync` stays fast and the STT worker does not
+# have to install the web stack (D2). Added phase by phase.
+# web  = ["fastapi", "uvicorn[standard]", "websockets"]
+# db   = ["sqlalchemy>=2.0", "alembic", "asyncpg", "psycopg[binary]"]
+# ml   = ["torch", "transformers", "faster-whisper", "onnxruntime", "silero-vad"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.7",
+    "mypy>=1.13",
+    "types-pyyaml>=6.0.12.20260815",
+]
 
 [build-system]
 requires = ["uv_build>=0.12.1,<0.13.0"]
 build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "readycall"
+module-root = "src"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+filterwarnings = ["error"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+ignore = ["B008"]
+
+[tool.mypy]
+python_version = "3.11"
+packages = ["readycall"]
+mypy_path = "src"
+strict = true
+warn_unreachable = true
+disallow_untyped_decorators = false

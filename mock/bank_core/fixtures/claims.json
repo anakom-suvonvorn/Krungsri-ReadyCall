@@ -1,0 +1,27 @@
+[
+  {
+    "claim_id": "CLM-2026-0331",
+    "policy_no": "HL-2024-000811",
+    "kind": "ipd",
+    "status": "pending_documents",
+    "submitted_at": "2026-05-18T09:00:00",
+    "incident_date": "2026-05-15",
+    "amount_claimed": 24500,
+    "hospital_name": "โรงพยาบาลกรุงเทพ",
+    "documents_required": [
+      "ใบรับรองแพทย์",
+      "ใบเสร็จรับเงินต้นฉบับ"
+    ]
+  },
+  {
+    "claim_id": "CLM-2025-8812",
+    "policy_no": "MT-2025-004512",
+    "kind": "own_damage",
+    "status": "paid",
+    "submitted_at": "2025-09-14T16:20:00",
+    "incident_date": "2025-09-14",
+    "amount_claimed": 18000,
+    "amount_paid": 16000,
+    "documents_required": []
+  }
+]

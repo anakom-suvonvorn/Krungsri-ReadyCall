@@ -1,0 +1,59 @@
+[
+  {
+    "interaction_id": "I0001",
+    "customer_id": "C000001",
+    "channel": "call",
+    "direction": "inbound",
+    "occurred_at": "2026-05-19T10:12:00",
+    "topic": "claim_documents",
+    "summary": "สอบถามเอกสารที่ต้องใช้ในการเคลม",
+    "agent_id": "A006",
+    "outcome": "resolved",
+    "duration_s": 412
+  },
+  {
+    "interaction_id": "I0002",
+    "customer_id": "C000001",
+    "channel": "app",
+    "direction": "inbound",
+    "occurred_at": "2026-08-17T21:40:00",
+    "topic": "viewed_hospitalization_coverage",
+    "summary": "เปิดดูความคุ้มครองผู้ป่วยใน",
+    "outcome": "none",
+    "duration_s": 95
+  },
+  {
+    "interaction_id": "I0003",
+    "customer_id": "C000002",
+    "channel": "call",
+    "direction": "inbound",
+    "occurred_at": "2026-02-02T14:05:00",
+    "topic": "motor_renewal",
+    "summary": "ต่ออายุประกันรถยนต์",
+    "agent_id": "A001",
+    "outcome": "resolved",
+    "duration_s": 620
+  },
+  {
+    "interaction_id": "I0004",
+    "customer_id": "C000002",
+    "channel": "branch",
+    "direction": "inbound",
+    "occurred_at": "2025-12-11T09:30:00",
+    "topic": "sme_consult",
+    "summary": "ปรึกษาความคุ้มครองสำหรับธุรกิจ",
+    "agent_id": "A011",
+    "outcome": "followup",
+    "duration_s": 1800
+  },
+  {
+    "interaction_id": "I0005",
+    "customer_id": "C000003",
+    "channel": "email",
+    "direction": "outbound",
+    "occurred_at": "2025-02-01T08:00:00",
+    "topic": "pa_renewal_reminder",
+    "summary": "แจ้งเตือนต่ออายุประกันอุบัติเหตุ",
+    "outcome": "no_response"
+  }
+]

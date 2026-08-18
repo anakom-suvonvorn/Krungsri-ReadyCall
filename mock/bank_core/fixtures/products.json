@@ -1,0 +1,52 @@
+[
+  {
+    "product_code": "KS-HEALTH-A",
+    "line": "health",
+    "name_th": "กรุงศรี เฮลท์ แพลน เอ",
+    "name_en": "Krungsri Health Plan A",
+    "short_desc": "ประกันสุขภาพเหมาจ่าย ครอบคลุมผู้ป่วยในและผู้ป่วยนอก",
+    "features": {
+      "ipd": true,
+      "opd": true
+    },
+    "is_active": true
+  },
+  {
+    "product_code": "KS-MOTOR-1ST",
+    "line": "motor",
+    "name_th": "ประกันรถยนต์ชั้น 1",
+    "name_en": "Motor Class 1",
+    "short_desc": "คุ้มครองรถยนต์ชั้น 1 พร้อมบริการช่วยเหลือฉุกเฉิน 24 ชั่วโมง",
+    "features": {
+      "roadside": true
+    },
+    "is_active": true
+  },
+  {
+    "product_code": "KS-TRAVEL-ASIA",
+    "line": "travel",
+    "name_th": "ประกันเดินทางเอเชีย",
+    "name_en": "Travel Asia",
+    "short_desc": "ประกันการเดินทางระยะสั้นในเอเชีย",
+    "features": {},
+    "is_active": true
+  },
+  {
+    "product_code": "KS-PA-BASIC",
+    "line": "pa",
+    "name_th": "ประกันอุบัติเหตุส่วนบุคคล",
+    "name_en": "Personal Accident Basic",
+    "short_desc": "ความคุ้มครองอุบัติเหตุพื้นฐาน",
+    "features": {},
+    "is_active": true
+  },
+  {
+    "product_code": "KS-LIFE-SAVE10",
+    "line": "life",
+    "name_th": "ออมทรัพย์ 10 ปี",
+    "name_en": "Savings 10",
+    "short_desc": "ประกันชีวิตแบบสะสมทรัพย์ 10 ปี",
+    "features": {},
+    "is_active": true
+  }
+]

@@ -1,0 +1,52 @@
+# Scenario 2 - the roadside motor claim. THE BASE CASE (D19).
+#
+# Someone has just had an accident. They are standing next to a dented car and they
+# dial the number printed on the windscreen sticker. No app, no intent record, and
+# identity is a guess from caller ID (D20).
+#
+# This scenario exercises, in one run: the cold-call path, the product-line DID as a
+# free intent signal, ANI-based probable identity, and (from P2) urgency-driven
+# matching - a caller at a crash site must not queue behind a renewal question.
+
+name: roadside_motor_claim
+description: "Accident just happened; dialled the sticker number; no app involved"
+
+entry:
+  channel: product_did
+  dialled_did: "+6621234111"     # motor claims - see config/dids.yaml
+  product_line: motor
+  caller_number: "0898887777"    # stored as +66898887777: normalisation must work
+  # NOTE: deliberately no customer_id. It is resolved from ANI, not asserted.
+
+consent:
+  - recording
+  - ai_processing
+
+queue: q_motor_claim
+agent: A001
+
+intake:
+  turns:
+    - text: "รถผมเพิ่งชนมาครับ ตอนนี้อยู่ถนนพระราม 9 ใกล้แยกรัชดา"
+      t_start_ms: 0
+      t_end_ms: 4200
+      confidence: 0.88
+    - text: "ไม่มีใครเจ็บครับ แต่รถหน้าบุบและขับต่อไม่ได้"
+      t_start_ms: 4800
+      t_end_ms: 8600
+      confidence: 0.9
+    - text: "ทะเบียน กข 1234 กรุงเทพครับ ต้องทำอย่างไรต่อ"
+      t_start_ms: 9200
+      t_end_ms: 13000
+      confidence: 0.85
+
+timing:
+  connect: 1.0
+  ivr: 5.0          # the DID already gave us the product line, so the menu is skipped
+  per_turn: 4.5
+  wait: 12.0        # high urgency: should wait less than a routine caller
+  offer: 5.0
+  call: 300.0
+  acw: 60.0         # a claim needs real after-call work (D33)
+
+expect_state: closed

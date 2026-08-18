@@ -1,0 +1,50 @@
+# Product-line phone numbers: the cheapest routing signal in the system (D19).
+#
+# The number printed on the windscreen sticker, the health card, or the travel policy.
+# Dialling it *is* an intent signal - no app, no menu, no speech, no ASR. Adding a new
+# printed number is a line in this file, not code.
+#
+# `skip_product_menu: true` means the DID already told us the product line, so the IVR
+# goes straight to the intake offer instead of asking a question we know the answer to.
+
+version: 1
+
+dids:
+  "+6621234000":
+    label: "General hotline"
+    product_line: unknown
+    default_queue: q_general
+    greeting_prompt: greeting.general
+    skip_product_menu: false
+
+  "+6621234111":
+    label: "Motor claims - printed on the windscreen sticker"
+    product_line: motor
+    default_queue: q_motor_claim
+    greeting_prompt: greeting.motor_claim
+    skip_product_menu: true
+    # A caller on this number is very likely standing next to a damaged car, so the
+    # urgency floor is raised before anyone has said a word (D22).
+    urgency_floor: high
+    assumed_intent: motor.claim.accident
+
+  "+6621234222":
+    label: "Health - printed on the health card"
+    product_line: health
+    default_queue: q_health_policy
+    greeting_prompt: greeting.health
+    skip_product_menu: true
+
+  "+6621234333":
+    label: "Travel - printed on the travel policy schedule"
+    product_line: travel
+    default_queue: q_travel
+    greeting_prompt: greeting.travel
+    skip_product_menu: true
+
+  "+6621234444":
+    label: "Life and savings"
+    product_line: life
+    default_queue: q_life
+    greeting_prompt: greeting.life
+    skip_product_menu: true

@@ -1,0 +1,79 @@
+# Skills and queues. Part of the domain pack (D28).
+#
+# HARD RULE enforced at startup (D22): every skill must be held by at least two active
+# agents. If one person is the only one who can handle motor claims, no scoring function
+# can save the queue - that is a staffing problem and the config should refuse it rather
+# than let it surface as mysterious wait times on demo day.
+
+version: 1
+
+skills:
+  motor.claim:      { label_th: "สินไหมรถยนต์",        queue: q_motor_claim }
+  motor.policy:     { label_th: "กรมธรรม์รถยนต์",       queue: q_motor_policy }
+  health.ipd:       { label_th: "ผู้ป่วยในสุขภาพ",       queue: q_health_ipd }
+  health.claim:     { label_th: "สินไหมสุขภาพ",         queue: q_health_claim }
+  health.policy:    { label_th: "กรมธรรม์สุขภาพ",       queue: q_health_policy }
+  travel.claim:     { label_th: "สินไหมเดินทาง",        queue: q_travel }
+  travel.policy:    { label_th: "กรมธรรม์เดินทาง",      queue: q_travel }
+  life.policy:      { label_th: "กรมธรรม์ชีวิต",         queue: q_life }
+  life.claim:       { label_th: "สินไหมชีวิต",           queue: q_life }
+  general.billing:  { label_th: "การชำระเงิน",           queue: q_general }
+  general.service:  { label_th: "บริการทั่วไป",          queue: q_general }
+  general.sales:    { label_th: "ขายผลิตภัณฑ์",         queue: q_general }
+  general.escalation: { label_th: "เรื่องร้องเรียน",      queue: q_escalation }
+
+queues:
+  q_motor_claim:
+    label_th: "คิวสินไหมรถยนต์"
+    required_skill: motor.claim
+    sla_seconds: 30                 # someone at a crash site
+    hours: always
+    overflow_queue: q_general
+  q_motor_policy:
+    label_th: "คิวกรมธรรม์รถยนต์"
+    required_skill: motor.policy
+    sla_seconds: 90
+    hours: business
+    overflow_queue: q_general
+  q_health_ipd:
+    label_th: "คิวผู้ป่วยใน"
+    required_skill: health.ipd
+    sla_seconds: 45
+    hours: extended
+    overflow_queue: q_health_claim
+  q_health_claim:
+    label_th: "คิวสินไหมสุขภาพ"
+    required_skill: health.claim
+    sla_seconds: 60
+    hours: business
+    overflow_queue: q_general
+  q_health_policy:
+    label_th: "คิวกรมธรรม์สุขภาพ"
+    required_skill: health.policy
+    sla_seconds: 90
+    hours: business
+    overflow_queue: q_general
+  q_travel:
+    label_th: "คิวประกันเดินทาง"
+    required_skill: travel.claim
+    sla_seconds: 60
+    hours: always                   # different time zones by definition
+    overflow_queue: q_general
+  q_life:
+    label_th: "คิวประกันชีวิต"
+    required_skill: life.policy
+    sla_seconds: 90
+    hours: business
+    overflow_queue: q_general
+  q_general:
+    label_th: "คิวบริการทั่วไป"
+    required_skill: general.service
+    sla_seconds: 120
+    hours: business
+    overflow_queue: null
+  q_escalation:
+    label_th: "คิวเรื่องร้องเรียน"
+    required_skill: general.escalation
+    sla_seconds: 60
+    hours: business
+    overflow_queue: null

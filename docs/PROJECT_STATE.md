@@ -1,7 +1,7 @@
 # PROJECT_STATE
 
 _What this project is, what exists, what doesn't, and where everything lives._
-_Last updated: 2026-08-18._
+_Last updated: 2026-08-19._
 
 ---
 
@@ -26,16 +26,39 @@ Targets the brief's *"Broker เวลาจํากัด"* and *"เข้า
 (lead prioritisation, customer engagement, **broker productivity — "สรุปลูกค้าให้ broker ก่อนคุย"**).
 Deliberately outside: underwriting, policy issuance, premium pricing, legal/tax advice, core-system changes.
 
-**This repo is the FULL system.** The hackathon demo is a separate, later, deliberately smaller
-project in `../DemoProject/`.
+**This is the whole project.** There is no separate demo repo — each build phase produces a
+demonstrable slice, so "the demo" is the current state plus a chosen scenario (`D34`).
 
 ---
 
-## 2. Status: PLANNING
+## 2. Status: **P0 foundations built and verified**
 
-Nothing is implemented. The current artifacts are the docs in this folder. `src/` still contains the
-`uv init` placeholder (`src/fullproject/__init__.py`) and `pyproject.toml` still says `fullproject` —
-both get replaced in Phase P0 (`PLAN.md`).
+The spine runs. A full call lifecycle - arrival, IVR, consent, queue, intake, matching, the offer
+handshake, the live call, wrap-up, rating, closed - executes end to end on fake adapters with no
+telephony, no GPU, no database and no API key.
+
+Verified on 2026-08-19: **84 tests pass**, `ruff check` and `ruff format --check` clean, `mypy --strict`
+clean over 41 source files, and all three scenarios replay with byte-identical output twice.
+
+```
+$ uv run python scripts/run_scenario.py tests/scenarios/pattheera_ipd.yaml --quiet
+TIMELINE
+  +   0.00s  (start) intent_created                       intent_created
+  +   0.00s  intent_created -> connecting                 app_placed_call
+  +   1.00s  connecting -> ivr                            ivr_started
+  +  10.00s  ivr -> queued                                queued
+  +  10.00s  queued -> intake_active                      consent_given_press_1
+  +  23.50s  intake_active -> intake_complete             silence_timeout
+  +  45.50s  intake_complete -> matched                   agent_available
+  +  45.50s  matched -> offered                           offered_to:A006
+  +  52.50s  offered -> in_call                           agent_accepted
+  + 292.50s  in_call -> wrap_up                           caller_hung_up
+  + 327.50s  wrap_up -> rating                            wrapup_saved
+  + 327.50s  rating -> closed                             rating_received
+```
+
+**One project, not two** (`D34`): the `DemoProject/` split is dropped. Each phase already produces a
+demonstrable slice, so the demo is simply the current state of the system with a chosen scenario.
 
 ---
 
@@ -61,7 +84,7 @@ Full adapter catalogue and library list: `INTEGRATIONS.md`.
 
 ---
 
-## 4. Planned folder structure
+## 4. Folder structure  (`*` = exists today)
 
 ```
 FullProject/
@@ -149,10 +172,15 @@ business rules, `services` imports only `domain` + `ports`. Any file that breaks
 
 Nothing is built. Legend: ☐ planned · ◐ in progress · ☑ done.
 
-**Phase P0 — foundations**
-☐ package rename + layout · ☐ config/settings · ☐ structured logging + tracing · ☐ `readycall` schema
-+ migrations · ☐ mock `core` schema + generator + personas/scenarios · ☐ all ports defined ·
-☐ fake/null adapters · ☐ contract test harness · ☐ scenario runner skeleton · ☐ CI
+**Phase P0 — foundations** (mostly done)
+☑ package rename + layout · ☑ config/settings (`config.py`, startup coherence checks) ·
+☑ structured logging with `call_session_id` bound + secret redaction · ☑ injected clock and ids
+(`D35`) · ☑ UTF-8 console (`B1`) · ☑ domain models, enums, event schemas · ☑ all 7 ports defined ·
+☑ fake/null adapters for every port · ☑ call state machine + orchestrator + transition log ·
+☑ contract test suites (core data, event bus) · ☑ scenario runner + 3 scenarios · ☑ CI ·
+☑ domain-pack config (`intents.yaml`, `skills.yaml`, `dids.yaml`) · ☑ core fixtures (3 personas,
+4 policies across 4 lines) · ☐ Postgres schema + Alembic · ☐ mock-core *generator* (~2,000 customers;
+hand-authored fixtures exist) · ☐ docker-compose
 
 **P1 — context-aware calling** ☐ intent API · ☐ session auth · ☐ app context events · ☐ identity
 resolver + assurance ladder · ☐ `dids.yaml` · ☐ Customer360 assembler + snapshot + provenance ·
@@ -188,17 +216,31 @@ assist · ☐ proactive outbound · ☐ product recommendation on top of the sam
 
 ---
 
-## 6. How to run (once P0 exists)
+## 6. How to run
+
+Works today, from a clean clone, with no services and no keys:
 
 ```bash
 uv sync
-docker compose -f infra/docker-compose.yml up -d      # postgres, redis, minio, asterisk
+uv run pytest -q
+uv run python scripts/run_scenario.py tests/scenarios/pattheera_ipd.yaml --quiet
+uv run python scripts/run_scenario.py tests/scenarios/roadside_motor_claim.yaml --quiet
+uv run python scripts/run_scenario.py tests/scenarios/anonymous_declined.yaml --quiet
+uv run ruff check . && uv run ruff format --check . && uv run mypy
+```
+
+Arrives with later phases:
+
+```bash
+docker compose -f infra/docker-compose.yml up -d   # postgres, redis, minio, pgweb, asterisk
 uv run alembic upgrade head
 uv run python scripts/seed_mock_core.py --seed 42
-uv run python -m readycall.entrypoints.api            # API + agent WS
-uv run python -m readycall.entrypoints.worker         # orchestrator + analysis consumers
-uv run python scripts/run_scenario.py scenarios/pattheera_ipd.yaml   # full call, no phone
+uv run python -m readycall.entrypoints.api         # API + agent WebSocket
+uv run python -m readycall.entrypoints.worker      # orchestrator + analysis consumers
 ```
+
+Handy: `grep -rn "# P0:" scripts/` lists every lifecycle step the scenario runner is still
+performing by hand, i.e. what the next services take over (`D36`).
 
 ---
 
@@ -223,7 +265,23 @@ uv run python scripts/run_scenario.py scenarios/pattheera_ipd.yaml   # full call
 
 ---
 
-## 8. Reuse outside this hackathon
+## 8. Real numbers (as of 2026-08-19)
+
+| | |
+|---|---|
+| Source files | 41 (`src/` + `tests/` + `scripts/`) |
+| Tests | 84, all passing, ~0.5 s |
+| Ports defined | 7 (telephony, stt, llm, tts, core_data, event_bus, blob_storage) |
+| Adapters | 7 fakes/nulls; no real vendor adapter yet |
+| Call states | 16, transition table self-validated |
+| Event types | 19 |
+| Scenarios | 3 (in-app happy path, cold-call motor claim, fully degraded) |
+| Mock core | 3 customers, 4 policies across 4 product lines, 5 products, 5 interactions, 2 claims |
+| Intent taxonomy | 22 straw-man intents across 5 lines (awaiting domain review) |
+
+---
+
+## 9. Reuse outside this hackathon
 
 Deliberate design goal (`D28`, `ARCHITECTURE.md` §20): the machinery is a **generic context-aware
 contact-centre AI layer**, and everything insurance-specific lives in `config/`, `prompts/`, the
@@ -234,8 +292,8 @@ enforced by a lint check.
 
 ---
 
-## 9. Relationship to the demo project
+## 10. What comes next
 
-`../DemoProject/` will implement a **slice**: most likely the customer simulator + simulated
-telephony + scripted-or-live STT + one persona's full journey + the agent screen. It gets its own
-docs and its own git history. Design decisions still belong here; demo-only shortcuts belong there.
+**P1 — Context-Aware Calling**, for both the app path and the cold-call path: the intent API, the
+identity resolver and assurance ladder, `dids.yaml` wired in, the context assembler with per-field
+provenance, and the first version of the workstation showing a context-only brief. See `PLAN.md`.

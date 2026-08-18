@@ -1,0 +1,42 @@
+[
+  {
+    "holding_id": "H001",
+    "customer_id": "C000001",
+    "kind": "deposit",
+    "opened_at": "2019-06-01",
+    "balance_band": "100k-500k",
+    "status": "active"
+  },
+  {
+    "holding_id": "H002",
+    "customer_id": "C000001",
+    "kind": "card",
+    "opened_at": "2021-02-11",
+    "balance_band": "0-50k",
+    "status": "active"
+  },
+  {
+    "holding_id": "H003",
+    "customer_id": "C000002",
+    "kind": "loan",
+    "opened_at": "2022-08-30",
+    "balance_band": "1m-5m",
+    "status": "active"
+  },
+  {
+    "holding_id": "H004",
+    "customer_id": "C000002",
+    "kind": "deposit",
+    "opened_at": "2015-01-05",
+    "balance_band": "500k-1m",
+    "status": "active"
+  },
+  {
+    "holding_id": "H005",
+    "customer_id": "C000003",
+    "kind": "deposit",
+    "opened_at": "2023-07-19",
+    "balance_band": "0-50k",
+    "status": "active"
+  }
+]

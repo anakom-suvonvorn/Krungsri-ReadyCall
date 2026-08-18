@@ -1,0 +1,34 @@
+# Scenario 3 - the thin end of the wedge, and it must still work.
+#
+# An unrecognised number calls the general hotline and declines the intake offer
+# (presses 2). No identity, no consent, no transcript. Everything the product adds is
+# absent - and the call must still reach an agent with whatever we do know (D19).
+#
+# If this scenario ever fails, the degradation ladder is broken.
+
+name: anonymous_declined
+description: "Unknown caller on the general hotline who declines to record anything"
+
+entry:
+  channel: hotline
+  dialled_did: "+6621234000"
+  caller_number: "+66000000000"   # matches nobody on purpose
+
+consent: []                        # nothing granted
+
+queue: q_general
+agent: A014
+
+intake:
+  declined: true                   # pressed 2
+  turns: []
+
+timing:
+  connect: 1.0
+  ivr: 12.0
+  wait: 95.0
+  offer: 9.0
+  call: 200.0
+  acw: 20.0
+
+expect_state: closed

@@ -1,0 +1,213 @@
+# The intent taxonomy: the closed list of reasons people call.
+#
+# This is the domain pack (D28) - nothing in services/ may hardcode any of it, and
+# retargeting the system to another industry means replacing this file.
+#
+# Five things key off an intent code (ARCHITECTURE.md 13.1):
+#   skill           -> who is allowed to take the call (matching)
+#   required_slots  -> what facts we need (guided intake, entity completeness scoring)
+#   playbook        -> the recommended-actions list on the workstation
+#   default_urgency -> the situational urgency floor for matching
+#   the code itself -> the golden-set label, i.e. how accuracy is measurable at all
+#
+# STATUS: STRAW-MAN, awaiting the team's domain review (NEXT_SESSION Q7).
+# Roughly 20-40 entries is the target: fine enough that a skill and a playbook mean
+# something, coarse enough that a classifier stays accurate and an agent recognises
+# every label on sight.
+
+version: 1
+
+intents:
+  # --- motor ------------------------------------------------------------------------
+  motor.claim.accident:
+    label_th: "แจ้งอุบัติเหตุรถยนต์"
+    label_en: "Report a motor accident"
+    line: motor
+    skill: motor.claim
+    default_urgency: critical      # possibly standing at the roadside right now
+    required_slots: [location, plate_number, injuries, other_party_involved, drivable]
+    playbook: motor_accident
+  motor.claim.status:
+    label_th: "ติดตามสถานะเคลมรถยนต์"
+    label_en: "Motor claim status"
+    line: motor
+    skill: motor.claim
+    default_urgency: normal
+    required_slots: [claim_id]
+    playbook: claim_status
+  motor.roadside_assist:
+    label_th: "ขอความช่วยเหลือฉุกเฉินบนถนน"
+    label_en: "Roadside assistance"
+    line: motor
+    skill: motor.claim
+    default_urgency: high
+    required_slots: [location, plate_number, problem]
+    playbook: roadside_assist
+  motor.policy.coverage:
+    label_th: "สอบถามความคุ้มครองประกันรถยนต์"
+    label_en: "Motor coverage query"
+    line: motor
+    skill: motor.policy
+    default_urgency: normal
+    required_slots: [policy_no]
+    playbook: coverage_query
+  motor.policy.renew:
+    label_th: "ต่ออายุประกันรถยนต์"
+    label_en: "Renew motor policy"
+    line: motor
+    skill: motor.policy
+    default_urgency: normal
+    required_slots: [policy_no]
+    playbook: renewal
+
+  # --- health -----------------------------------------------------------------------
+  health.ipd.preauth:
+    label_th: "แจ้งเข้ารักษาผู้ป่วยใน / ตรวจสอบค่าห้อง"
+    label_en: "Inpatient pre-authorisation / room and board"
+    line: health
+    skill: health.ipd
+    default_urgency: high          # the pitch's own scenario: admitted tomorrow
+    required_slots: [hospital, admission_date, treatment, policy_no]
+    playbook: health_ipd_preauth
+  health.claim.submit:
+    label_th: "ยื่นเคลมค่ารักษาพยาบาล"
+    label_en: "Submit a health claim"
+    line: health
+    skill: health.claim
+    default_urgency: normal
+    required_slots: [hospital, treatment_date, amount]
+    playbook: health_claim_submit
+  health.claim.status:
+    label_th: "ติดตามสถานะเคลมสุขภาพ"
+    label_en: "Health claim status"
+    line: health
+    skill: health.claim
+    default_urgency: normal
+    required_slots: [claim_id]
+    playbook: claim_status
+  health.coverage.query:
+    label_th: "สอบถามความคุ้มครองสุขภาพ"
+    label_en: "Health coverage query"
+    line: health
+    skill: health.policy
+    default_urgency: normal
+    required_slots: [policy_no]
+    playbook: coverage_query
+  health.network.hospital:
+    label_th: "สอบถามโรงพยาบาลในเครือ"
+    label_en: "Network hospital query"
+    line: health
+    skill: health.policy
+    default_urgency: low
+    required_slots: [province]
+    playbook: network_hospital
+
+  # --- travel -----------------------------------------------------------------------
+  travel.claim.submit:
+    label_th: "ยื่นเคลมประกันเดินทาง"
+    label_en: "Submit a travel claim"
+    line: travel
+    skill: travel.claim
+    default_urgency: normal
+    required_slots: [country, incident_date, incident_type]
+    playbook: travel_claim_submit
+  travel.emergency.overseas:
+    label_th: "เหตุฉุกเฉินระหว่างเดินทางต่างประเทศ"
+    label_en: "Overseas travel emergency"
+    line: travel
+    skill: travel.claim
+    default_urgency: critical
+    required_slots: [country, situation]
+    playbook: travel_emergency
+  travel.coverage.query:
+    label_th: "สอบถามความคุ้มครองประกันเดินทาง"
+    label_en: "Travel coverage query"
+    line: travel
+    skill: travel.policy
+    default_urgency: low
+    required_slots: [destination, travel_dates]
+    playbook: coverage_query
+
+  # --- life -------------------------------------------------------------------------
+  life.policy.value:
+    label_th: "สอบถามมูลค่ากรมธรรม์"
+    label_en: "Policy value query"
+    line: life
+    skill: life.policy
+    default_urgency: normal
+    required_slots: [policy_no]
+    playbook: life_policy_value
+  life.beneficiary.change:
+    label_th: "เปลี่ยนผู้รับผลประโยชน์"
+    label_en: "Change beneficiary"
+    line: life
+    skill: life.policy
+    default_urgency: normal
+    required_slots: [policy_no, beneficiary_name, relationship]
+    playbook: beneficiary_change
+  life.claim.death:
+    label_th: "แจ้งเคลมกรณีเสียชีวิต"
+    label_en: "Death claim notification"
+    line: life
+    skill: life.claim
+    default_urgency: high
+    required_slots: [policy_no, date_of_death, relationship_to_insured]
+    playbook: life_death_claim
+    # A bereaved caller must never queue behind a renewal question, and the agent
+    # needs the tone warning on screen before they speak.
+    sensitive: true
+
+  # --- cross-cutting ----------------------------------------------------------------
+  general.billing:
+    label_th: "สอบถามการชำระเบี้ยประกัน"
+    label_en: "Premium payment query"
+    skill: general.billing
+    default_urgency: normal
+    required_slots: [policy_no]
+    playbook: billing
+  general.renewal:
+    label_th: "ต่ออายุกรมธรรม์"
+    label_en: "Policy renewal"
+    skill: general.billing
+    default_urgency: normal
+    required_slots: [policy_no]
+    playbook: renewal
+  general.update_details:
+    label_th: "แก้ไขข้อมูลส่วนตัว"
+    label_en: "Update personal details"
+    skill: general.service
+    default_urgency: low
+    required_slots: [field_to_change]
+    playbook: update_details
+  general.document.request:
+    label_th: "ขอเอกสาร / สำเนากรมธรรม์"
+    label_en: "Request documents"
+    skill: general.service
+    default_urgency: low
+    required_slots: [document_type]
+    playbook: document_request
+  general.complaint:
+    label_th: "ร้องเรียน"
+    label_en: "Complaint"
+    skill: general.escalation
+    default_urgency: high
+    required_slots: [subject]
+    playbook: complaint
+    sensitive: true
+  general.new_product:
+    label_th: "สนใจซื้อผลิตภัณฑ์ใหม่"
+    label_en: "Interested in a new product"
+    skill: general.sales
+    default_urgency: low
+    required_slots: [product_interest]
+    playbook: new_product
+
+  # A first-class outcome, not a failure: route to the product-line generalist and
+  # let the human find out. Better than a confident wrong label (D13).
+  unknown:
+    label_th: "ยังไม่ทราบเรื่องที่ติดต่อ"
+    label_en: "Intent unclear"
+    skill: general.service
+    default_urgency: normal
+    required_slots: []
+    playbook: generic

@@ -1,7 +1,7 @@
 # DECISIONS
 
 _Significant engineering decisions and their rationale. Append new ones at the bottom; never silently reverse one without a new entry explaining why._
-_Last updated: 2026-08-18._
+_Last updated: 2026-08-19._
 
 Format per entry: **Problem → Decision → Reasoning → Alternatives → Tradeoffs → Future.**
 
@@ -401,3 +401,53 @@ _`D32`–`D33` added 2026-08-18, correcting a misread of the product._
   Explicit availability keeps matching honest; RONA covers the same human situation without punishing
   the caller.
 - **Tradeoffs:** More states to test; the ACW timer needs tuning against real behaviour.
+
+---
+
+_`D34`–`D36` added 2026-08-19, at the start of implementation (P0)._
+
+## D34. One project, not two — the DemoProject split is dropped
+- **Problem:** `D1` split the work into `FullProject/` (the real system) and `DemoProject/`
+  (the stage slice). In practice the build plan already produces a demonstrable slice at
+  the end of every phase: P1 is context-aware calling, P2 adds matching and the
+  workstation, P3 adds voice. The demo *is* the current state of the system.
+- **Decision:** Work only in `FullProject/`. `DemoProject/` is abandoned (it never had a
+  commit) and its `docs/` will not be created. What would have been "demo scoping"
+  becomes "choose which phase to show, and which scenario to run".
+- **Reasoning:** The reason for `D1` was to stop demo pressure corrupting the
+  architecture. An iterative build with a scenario runner and a degradation ladder gets
+  that protection for free — there is no place for a shortcut to hide, because every
+  phase has exit criteria and CI runs the scenarios. A second repo would now just be
+  duplicated setup and a second history to keep tidy.
+- **Reverses:** `D1`. Kept in place rather than deleted so the reasoning stays visible.
+- **Tradeoffs:** Demo-only shortcuts, if any are ever needed, now need marking *in place*
+  — a `# DEMO:` comment and a decision entry, rather than living in a separate repo.
+  The `# P0:` markers in `scripts/run_scenario.py` are the same idea already in use.
+- **Note:** The folder is left on disk untouched; deleting it is the user's call.
+
+## D35. Time and ids are injected, never read from the wall
+- **Problem:** Every stage is judged on timing and every scenario replay has to be
+  reproducible (`D18`), which is impossible if code calls `datetime.now()` or generates a
+  random id wherever it likes.
+- **Decision:** A `Clock` protocol (`SystemClock` / `ManualClock`) and a swappable id
+  generator (`random_ids` / `DeterministicIds`). Nothing outside `readycall/clock.py`
+  imports `time` or `datetime.now`. Ids are prefixed and time-sortable
+  (`call_01JQK7M2R4X8ZB3N`) so a log line says what it is at a glance.
+- **Reasoning:** It makes a full call lifecycle run in milliseconds with a *plausible*
+  timeline, and it makes two runs of the same scenario byte-identical — which is the
+  precondition for golden-output comparison of briefs and matching decisions later.
+- **Verified:** `test_scenario_output_is_deterministic` renders each scenario twice and
+  compares.
+
+## D36. The P0 scenario runner performs lifecycle steps itself, and hands them over
+- **Problem:** The P0 exit criterion is a full call from arrival to `closed`, but the
+  services that own most of those steps (identity, matching, IVR, intake, analysis) land
+  in P1–P4.
+- **Decision:** `scripts/run_scenario.py` drives the transitions directly for now, with
+  every stand-in marked `# P0:`. As each service lands it takes its step over and the
+  marker is deleted. The *real* orchestrator, state machine, event bus, fixtures provider
+  and transition log are used throughout — only the edges are fakes.
+- **Reasoning:** It proves the spine end to end immediately, and the `# P0:` markers are
+  an honest, greppable to-do list rather than hidden scaffolding.
+- **Tradeoffs:** The runner temporarily contains logic that belongs in services. Guarded
+  by the markers and by this entry; `grep -rn "# P0:" scripts/` is the checklist.

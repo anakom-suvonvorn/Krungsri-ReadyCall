@@ -1,0 +1,50 @@
+# Scenario 1 - the pitch's own example (Krungsri.pdf p.7).
+#
+# Khun Pattheera taps Contact on Krungsri Health Plan A, being admitted tomorrow, wants
+# to confirm room and board. The happy path: app origin, verified identity, consent
+# given, intake recorded.
+
+name: pattheera_ipd
+description: "In-app tap on Health Plan A; admitted tomorrow; room and board question"
+
+entry:
+  channel: in_app
+  customer_id: C000001
+  product_code: KS-HEALTH-A
+  product_line: health
+  caller_number: "+66812345678"
+
+# Health content, so health_data is consented separately from ai_processing (D14).
+consent:
+  - recording
+  - ai_processing
+  - health_data
+
+queue: q_health_ipd
+agent: A006
+
+intake:
+  turns:
+    - text: "สวัสดีครับ พรุ่งนี้ผมต้องไปนอนโรงพยาบาลกรุงเทพครับ"
+      t_start_ms: 0
+      t_end_ms: 3600
+      confidence: 0.94
+    - text: "อยากทราบว่าค่าห้องที่ประกันจ่ายให้คือวันละเท่าไหร่"
+      t_start_ms: 4100
+      t_end_ms: 8200
+      confidence: 0.91
+    - text: "แล้วต้องเตรียมเอกสารอะไรบ้างสำหรับเคลมครับ"
+      t_start_ms: 8900
+      t_end_ms: 12400
+      confidence: 0.89
+
+timing:
+  connect: 1.0
+  ivr: 9.0
+  per_turn: 4.5
+  wait: 22.0
+  offer: 7.0
+  call: 240.0
+  acw: 35.0
+
+expect_state: closed

@@ -1,0 +1,77 @@
+[
+  {
+    "policy_no": "HL-2024-000811",
+    "customer_id": "C000001",
+    "product_code": "KS-HEALTH-A",
+    "line": "health",
+    "status": "active",
+    "effective_date": "2024-12-15",
+    "expiry_date": "2026-12-15",
+    "sum_insured": 1000000,
+    "premium": 18500,
+    "payment_frequency": "annual",
+    "next_due_date": "2026-11-15",
+    "coverages": [
+      {"kind": "ipd_room_board", "label_th": "ค่าห้องและค่าอาหาร", "amount": 3000, "unit": "per_day"},
+      {"kind": "ipd_annual_limit", "label_th": "วงเงินผู้ป่วยในต่อปี", "amount": 1000000, "unit": "per_year"},
+      {"kind": "opd_limit", "label_th": "ค่ารักษาผู้ป่วยนอก", "amount": 1500, "unit": "per_visit"},
+      {"kind": "deductible", "label_th": "ค่าใช้จ่ายส่วนแรก", "amount": 0}
+    ],
+    "riders": ["critical_illness_rider"],
+    "agent_id_of_record": "A006"
+  },
+  {
+    "policy_no": "MT-2025-004512",
+    "customer_id": "C000002",
+    "product_code": "KS-MOTOR-1ST",
+    "line": "motor",
+    "status": "active",
+    "effective_date": "2025-06-01",
+    "expiry_date": "2026-06-01",
+    "sum_insured": 750000,
+    "premium": 21400,
+    "payment_frequency": "annual",
+    "next_due_date": "2026-05-01",
+    "coverages": [
+      {"kind": "own_damage", "label_th": "ความเสียหายต่อรถยนต์", "amount": 750000},
+      {"kind": "third_party_property", "label_th": "ทรัพย์สินบุคคลภายนอก", "amount": 1000000},
+      {"kind": "deductible", "label_th": "ค่าเสียหายส่วนแรก", "amount": 2000},
+      {"kind": "roadside_assist", "label_th": "บริการช่วยเหลือฉุกเฉิน", "note": "24 ชั่วโมง"}
+    ],
+    "riders": [],
+    "agent_id_of_record": "A001"
+  },
+  {
+    "policy_no": "TR-2026-001204",
+    "customer_id": "C000002",
+    "product_code": "KS-TRAVEL-ASIA",
+    "line": "travel",
+    "status": "active",
+    "effective_date": "2026-08-01",
+    "expiry_date": "2026-08-30",
+    "sum_insured": 2000000,
+    "premium": 1250,
+    "payment_frequency": "single",
+    "coverages": [
+      {"kind": "medical_overseas", "label_th": "ค่ารักษาพยาบาลต่างประเทศ", "amount": 2000000},
+      {"kind": "trip_cancellation", "label_th": "การยกเลิกการเดินทาง", "amount": 50000}
+    ],
+    "riders": []
+  },
+  {
+    "policy_no": "PA-2023-007790",
+    "customer_id": "C000003",
+    "product_code": "KS-PA-BASIC",
+    "line": "pa",
+    "status": "lapsed",
+    "effective_date": "2023-03-01",
+    "expiry_date": "2025-03-01",
+    "sum_insured": 300000,
+    "premium": 2400,
+    "payment_frequency": "annual",
+    "coverages": [
+      {"kind": "accidental_death", "label_th": "การเสียชีวิตจากอุบัติเหตุ", "amount": 300000}
+    ],
+    "riders": []
+  }
+]
