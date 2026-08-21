@@ -22,6 +22,7 @@ from readycall.domain.enums import (
     AssuranceLevel,
     BriefKind,
     CallState,
+    CefrLevel,
     ConsentScope,
     CustomerSegment,
     DegradationReason,
@@ -29,6 +30,7 @@ from readycall.domain.enums import (
     FinalizeReason,
     IdentityMethod,
     IntakeStrategyKind,
+    Language,
     MatchKind,
     OfferOutcome,
     PolicyStatus,
@@ -424,12 +426,21 @@ class AgentSkill(DomainModel):
     certified_until: date | None = None
 
 
+class AgentLanguage(DomainModel):
+    """One language an agent speaks, and how well (`D38`)."""
+
+    language: Language
+    level: CefrLevel
+
+
 class Agent(DomainModel):
     agent_id: str
     display_name: str
     team: str
     level: int = 1
-    languages: tuple[str, ...] = ("th",)
+    languages: tuple[AgentLanguage, ...] = (
+        AgentLanguage(language=Language.TH, level=CefrLevel.NATIVE),
+    )
     skills: tuple[AgentSkill, ...] = ()
     max_concurrent: int = 1
     is_active: bool = True
@@ -442,6 +453,21 @@ class Agent(DomainModel):
 
     def has_skill(self, skill_code: str) -> bool:
         return self.proficiency_for(skill_code) > 0.0
+
+    def level_in(self, language: Language) -> CefrLevel:
+        for spoken in self.languages:
+            if spoken.language is language:
+                return spoken.level
+        return CefrLevel.NONE
+
+    def speaks(self, language: Language, *, at_least: CefrLevel = CefrLevel.B1) -> bool:
+        """Language is a HARD filter in matching, never a soft score (`D38`).
+
+        Past the wait ceiling the matcher drops fit entirely and connects the caller to
+        anyone qualified - but "qualified" still has to include understanding them. A
+        long wait is recoverable; a conversation neither party can hold is not.
+        """
+        return self.level_in(language).at_least(at_least)
 
 
 class AgentPresence(DomainModel):
@@ -594,6 +620,19 @@ class CallSession(DomainModel):
 
     telephony_call_id: str | None = None
     provider: str | None = None
+
+    # Language (D38). `preferred` is what we speak to them; `acceptable` is the hard
+    # filter for matching. They differ because a keypress tells us what someone PREFERS,
+    # not what they can understand - a bilingual caller who picks English is still
+    # perfectly routable to a Thai speaker.
+    preferred_language: Language = Language.TH
+    acceptable_languages: tuple[Language, ...] = (Language.TH,)
+
+    # What the caller actually pressed, in order, e.g. ("1", "2") -> motor, roadside.
+    # Kept because it is the most reliable intent evidence we have (D37) and because a
+    # confused menu path is a UX signal worth seeing.
+    menu_path: tuple[str, ...] = ()
+    menu_intent_code: str | None = None
 
     queue_id: str | None = None
     priority: int = 0

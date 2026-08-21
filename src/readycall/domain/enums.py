@@ -114,6 +114,52 @@ class SpeakerRole(StrEnum):
     UNKNOWN = "unknown"
 
 
+class Language(StrEnum):
+    """Spoken languages the service supports.
+
+    Thai-only is implemented today; English is modelled so nothing has to be retrofitted
+    when it lands (`D38`).
+    """
+
+    TH = "th"
+    EN = "en"
+
+
+class CefrLevel(StrEnum):
+    """How well an agent speaks a language, on the CEFR scale.
+
+    A plain "speaks English: yes/no" flag is not enough to route on. An agent with A1
+    English cannot handle a complex claim conversation in English, and pretending
+    otherwise produces a worse call than a longer wait. So proficiency is graded and the
+    required level is per-intent (`D38`).
+    """
+
+    NONE = "none"
+    A1 = "a1"
+    A2 = "a2"
+    B1 = "b1"
+    B2 = "b2"
+    C1 = "c1"
+    C2 = "c2"
+    NATIVE = "native"
+
+    @property
+    def rank(self) -> int:
+        return {
+            "none": 0,
+            "a1": 1,
+            "a2": 2,
+            "b1": 3,
+            "b2": 4,
+            "c1": 5,
+            "c2": 6,
+            "native": 7,
+        }[self.value]
+
+    def at_least(self, other: CefrLevel) -> bool:
+        return self.rank >= other.rank
+
+
 class ProductLine(StrEnum):
     """Insurance means every line, not just health."""
 

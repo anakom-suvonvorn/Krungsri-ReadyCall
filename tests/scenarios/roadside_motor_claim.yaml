@@ -1,19 +1,22 @@
 # Scenario 2 - the roadside motor claim. THE BASE CASE (D19).
 #
-# Someone has just had an accident. They are standing next to a dented car and they
-# dial the number printed on the windscreen sticker. No app, no intent record, and
-# identity is a guess from caller ID (D20).
+# Someone has just had an accident. They are standing next to a dented car, digging the
+# policy documents out of the glovebox, and dialling the number printed on them. No app,
+# no intent record, and identity is only a guess from caller ID (D20).
 #
 # This scenario exercises, in one run: the cold-call path, the product-line DID as a
 # free intent signal, ANI-based probable identity, and (from P2) urgency-driven
 # matching - a caller at a crash site must not queue behind a renewal question.
 
 name: roadside_motor_claim
-description: "Accident just happened; dialled the sticker number; no app involved"
+description: "Accident just happened; dialled the number on the car documents; no app"
 
 entry:
   channel: product_did
-  dialled_did: "+6621234111"     # motor claims - see config/dids.yaml
+  dialled_did: "+6621234111"     # a motor-claims DID - see config/dids.yaml.
+                                 # NOTE: a general-hotline variant of this scenario is
+                                 # the more common real case; the keypad menu (D37)
+                                 # supplies the product line there instead.
   product_line: motor
   caller_number: "0898887777"    # stored as +66898887777: normalisation must work
   # NOTE: deliberately no customer_id. It is resolved from ANI, not asserted.
@@ -42,7 +45,7 @@ intake:
 
 timing:
   connect: 1.0
-  ivr: 5.0          # the DID already gave us the product line, so the menu is skipped
+  ivr: 5.0          # the DID gave the product line, so step 1 of the menu is skipped
   per_turn: 4.5
   wait: 12.0        # high urgency: should wait less than a routine caller
   offer: 5.0

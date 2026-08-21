@@ -1,7 +1,7 @@
 # DECISIONS
 
 _Significant engineering decisions and their rationale. Append new ones at the bottom; never silently reverse one without a new entry explaining why._
-_Last updated: 2026-08-19._
+_Last updated: 2026-08-19 (second pass)._
 
 Format per entry: **Problem → Decision → Reasoning → Alternatives → Tradeoffs → Future.**
 
@@ -203,16 +203,18 @@ _`D19`–`D31` added 2026-08-18 after the first design review with the user._
 
 ## D19. A plain phone call is the base case; app origin is an enrichment
 - **Problem:** The original design treated the in-app tap as the entry point. But the most compelling
-  insurance call — a motor claim from the roadside, dialled off the windscreen sticker — has no app,
-  no intent record, and possibly no identified customer. A design that assumes the app fails exactly
-  when it matters most.
+  insurance call — a motor claim from the roadside, dialled off the policy documents in the car — has
+  no app, no intent record, and possibly no identified customer. A design that assumes the app fails
+  exactly when it matters most.
 - **Decision:** The `CallSession` is primary and `intent_id` is optional. Every stage must work with
   the enrichments absent: no intent, no identity, no consent, no transcript. Entry channels are
   in-app, **product-line DID**, general hotline, callback, and transfer.
 - **Reasoning:** Coverage of real behaviour, and it makes the value proposition robust: even a cold
   call gets caller-ID context, a DID-derived product line, and an optional recorded intake.
-- **Bonus:** A **dedicated number per product line** (the number printed on the sticker/card/policy)
-  supplies the intent for free, with no app and no menu — the cheapest routing signal in the system.
+- **Bonus, where it exists:** a **dedicated number per product line** supplies the line for free, with
+  no app and no menu. But the common Thai case is a single general hotline printed on everything, so
+  this is an optimisation the system may use and must never depend on — the keypad menu (`D37`) is
+  what actually carries the base case.
 - **Tradeoffs:** More paths to build and test; identity becomes a spectrum (`D20`).
 
 ## D20. Identity is an assurance ladder (L0–L3), and disclosure is gated by it
@@ -451,3 +453,73 @@ _`D34`–`D36` added 2026-08-19, at the start of implementation (P0)._
   an honest, greppable to-do list rather than hidden scaffolding.
 - **Tradeoffs:** The runner temporarily contains logic that belongs in services. Guarded
   by the markers and by this entry; `grep -rn "# P0:" scripts/` is the checklist.
+
+---
+
+_`D37`–`D38` added 2026-08-19 after a design review of the call flow._
+
+## D37. The keypad menu runs FIRST; AI intake is the layer on top
+- **Problem:** The design so far leaned on the app tap, the DID, and the AI intake to work
+  out why someone was calling. Follow the worst case through: a caller on the general
+  hotline (which in Thailand is usually the *only* published number), no app, unrecognised
+  number, declines the recording. The system knew **nothing at all** — worse than the
+  keypad menu every call centre in the country already has. Adding AI is not worth much if
+  the floor sits below the status quo.
+- **Decision:** A **DTMF menu runs before the queue**, in two short steps — product line,
+  then reason — and the caller is queued to the right place before a word is transcribed.
+  The AI pre-call intake then runs *while they wait*, adding the detail a keypad cannot
+  capture (which hospital, which plate, how urgent, what actually happened).
+  - The menu is **skipped when we already know**: the app tap gives line and often intent;
+    a product-line DID gives the line. Asking a question we know the answer to is bad
+    service.
+  - `config/menus.yaml` holds the tree. Reserved keys are consistent everywhere (`9`
+    repeat, `0` operator), every reason menu has a catch-all option, and no menu exceeds
+    seven spoken options — all enforced by tests.
+- **Reasoning:** This re-frames the product honestly. **The base is parity with what
+  already exists** — reliable keypad routing that needs no AI, no consent and no speech.
+  **The AI is the delta on top**: it makes the agent's screen useful rather than making
+  the routing possible. Every failure of the AI layer now degrades to "a normal, competent
+  call centre" instead of "a call centre that knows nothing".
+- **Bonus, and cheap:** when the caller is recognised (assurance L1 is enough — reordering
+  a menu discloses nothing), their likely options are **read out first**: an open claim, an
+  active policy in that line, a product viewed in the app yesterday, a renewal due. Same
+  menu, fewer options to sit through, and it is the cheapest possible use of context we
+  already prefetched.
+- **Alternatives:** AI-first with no menu — rejected, it makes the floor worse than the
+  status quo and bets routing on the least reliable component. Menu-only with no AI —
+  that is just today's call centre.
+- **Tradeoffs:** Two extra keypresses for callers who would rather just talk. Mitigated by
+  skipping the menu whenever we already know, by personalised ordering, and by `0` always
+  reaching a human.
+- **Consequence for matching:** the queue is known at `QUEUED` rather than after intake, so
+  `D23`'s confidence-weighted intent blend now has a *reliable* prior (the keypress) rather
+  than a guess. Speech refines it; it no longer has to establish it.
+
+## D38. Language is modelled now, implemented later; it is a hard filter, and graded
+- **Problem:** The service needs Thai and English eventually. Retrofitting language into
+  matching and the agent roster later would touch the schema, the matcher and the IVR at
+  once — but building it now would slow down the thing that actually matters for the
+  hackathon, which is Thai.
+- **Decision:** Model it now, ship Thai only.
+  - `Language` (th/en) and `CefrLevel` (none/A1…C2/native) in `domain/enums.py`.
+  - `AgentLanguage` on the agent roster, with `Agent.speaks(lang, at_least=B1)`.
+  - `CallSession.preferred_language` **and** `acceptable_languages`, deliberately separate.
+  - `config/menus.yaml` carries a `language_menu` block with `enabled: false`.
+- **Reasoning for graded rather than a yes/no flag:** an agent with A1 English cannot hold
+  a claim conversation in English, and pretending otherwise produces a worse call than a
+  longer wait. So the bar is a *level*, and it can differ per intent — small talk needs
+  less than explaining an exclusion clause.
+- **Reasoning for preferred vs acceptable:** a keypress tells us what someone **prefers**,
+  not what they can understand. A bilingual caller who picks English is still perfectly
+  routable to a Thai speaker. Recording only "English" would shrink the eligible agent pool
+  for no reason. So `preferred` drives what we speak and what the TTS uses; `acceptable` is
+  the matching filter, defaulting to `{preferred}` (the safe read of one keypress) and
+  widened from the customer profile or a previous call.
+  - This also avoids the clumsy four-option menu ("1 Thai only, 2 English only, 3 both…")
+    that asking the question directly would require.
+- **Hard filter, not a score:** past `MAX_WAIT_BEFORE_ANY_AGENT_S` the matcher drops fit
+  entirely and connects to anyone qualified (`D22`) — but "qualified" must still include
+  understanding the caller. A long wait is recoverable; a conversation neither party can
+  hold is not.
+- **Status:** Thai-only in behaviour. The hackathon will very likely stay Thai-only. The
+  standing rule is simply that nothing built in the meantime may assume a single language.

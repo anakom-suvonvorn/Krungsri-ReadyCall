@@ -2,7 +2,7 @@
 
 _How the full ReadyCall system works, end to end. Read this to understand the machine._
 _Status: **design only** — nothing here is implemented yet (see `PLAN.md` for the build order)._
-_Last updated: 2026-08-18._
+_Last updated: 2026-08-19._
 
 ---
 
@@ -14,8 +14,8 @@ changes none of them.
 
 "Insurance" here means **every line** — motor, health, life, travel, personal accident, savings — not
 just health. The health/IPD example in the pitch is one scenario among many; the motor-claim scenario
-(roadside, after an accident, dialling the number off the windscreen sticker) is arguably the
-strongest demonstration of the idea, and it is the one that arrives with no app at all.
+(roadside, after an accident, dialling the number off the policy documents kept in the car) is
+arguably the strongest demonstration of the idea, and it is the one that arrives with no app at all.
 
 ```
    entry channels                ┌───────────────────── ReadyCall ──────────────────────┐
@@ -23,8 +23,8 @@ strongest demonstration of the idea, and it is the one that arrives with no app 
  │ in-app: tap      │            │  ┌────────┐  ┌─────────┐  ┌────────┐  ┌───────────┐  │
  │ Contact on plan  │───────────▶│  │ Intent │─▶│ Context │─▶│Matching│─▶│  Agent    │  │
  │ hotline / website│            │  │  API   │  │Assembler│  │ Engine │  │ Delivery  │  │
- │ sticker on car   │─┐          │  └────────┘  └────┬────┘  └───▲────┘  └─────┬─────┘  │
- │ callback / IVR   │ │          │                   │           │             │        │
+ │ printed number   │─┐          │  └────────┘  └────┬────┘  └───▲────┘  └─────┬─────┘  │
+ │ callback / menu  │ │          │                   │           │             │        │
  └──────────────────┘ │          │            ┌──────▼───────────┴─┐           │        │
                       ├─────────▶│  Call Orchestrator (state machine, per call)│        │
    ┌──────────┐       │   media  │            └──────┬─────────────┘           │        │
@@ -86,21 +86,27 @@ Three hard architectural rules follow from that picture:
 ## 3. Entry channels and the identity assurance ladder
 
 **The system must work for a call that arrives with nothing.** A driver standing next to a dented car
-dials the number printed on the windscreen sticker; they are not going to open an app first. That path
-is the base case; the in-app path is the enriched one. (`D19`)
+digs the policy documents out of the glovebox and dials the number on them; they are not going to open
+an app first. That path is the base case; the in-app path is the enriched one. (`D19`)
+
+In practice that printed number is **usually the general hotline**, not a per-product line — so the
+system must not depend on knowing the product from the number. It asks instead, with a keypad menu
+(§6, `D37`). A product-line DID, where one exists, is an *optimisation* that lets us skip a question.
 
 ### Entry channels
 
 | Channel | How it arrives | What it gives us for free |
 |---|---|---|
 | **In-app tap Contact** | WebRTC from the app (or app-initiated PSTN) carrying a `correlation_token` | Verified identity, exact plan viewed, screen context, consent already collected in-app |
-| **Product-line DID** | A distinct phone number printed per product (motor sticker, health card, travel policy) | **The product line, with no app and no menu.** A dedicated motor-claims number *is* an intent signal |
-| **General hotline** | The main number, from the website or a document | Only the caller's number |
+| **Product-line DID** | A distinct number printed per product (in the car's document folder, on the health card, on the travel schedule) | **The product line, with no app and no menu** — a dedicated motor-claims number *is* an intent signal. A nice-to-have, never assumed |
+| **General hotline** | The main number, from the website or any document. **The common case in Thailand today.** | Only the caller's number — so the keypad menu does the work (`D37`) |
 | **Callback** | We ring them (after-hours voicemail, or an in-app "call me back") | Full context — we chose to place the call |
 | **Transfer** | Another agent hands the call over | The existing brief travels with it |
 
-DIDs are mapped in `config/dids.yaml` → `{product_line, default_queue, greeting_prompt}`. Adding a new
-printed number is a config line, not code.
+DIDs are mapped in `config/dids.yaml` → `{product_line, default_queue, greeting_prompt}`. Adding a
+newly printed number is a config line, not code. An entry with `skip_product_menu: true` must name a
+real product line — skipping the question while not knowing the answer is how a caller ends up
+silently in the wrong queue, and a test enforces it.
 
 ### Identity assurance ladder
 
@@ -205,20 +211,28 @@ customer (if any), product, snapshot and queue.
 Everything the caller hears is a **pre-rendered TTS clip** keyed by a prompt id (`D24`), so the wording
 can be edited without a studio and the audio is deterministic and offline-safe.
 
+**The menu comes first, and it — not the AI — is what routes the call** (`D37`).
+
 ```
 [greeting + recording notice]
   "สวัสดีค่ะ ... สายนี้อาจถูกบันทึกเพื่อพัฒนาคุณภาพบริการ"
         │
-        ├─ (if DID didn't imply it) product menu:  "กด 1 ประกันรถ  กด 2 ประกันสุขภาพ  กด 3 ..."
+        ├── STEP 1: which product line?    ← skipped if the app or the DID already said
+        │     "กด 1 ประกันรถยนต์  กด 2 ประกันสุขภาพ  กด 3 ประกันเดินทาง ..."
         │
-        ├─ (if identity is L0/L1 and the caller wants full service) identify:
+        ├── STEP 2: why are you calling?   ← skipped if the app gave a specific plan
+        │     "กด 1 แจ้งอุบัติเหตุ  กด 2 ขอความช่วยเหลือฉุกเฉิน  ...  กด 6 เรื่องอื่นๆ"
+        │
+        ├── (optional) identify, for full service at L0/L1:
         │     "กรุณากดเลขบัตรประชาชน 4 หลักสุดท้าย" → assurance L3
+        ▼
+  ►► QUEUE IS NOW KNOWN. Nothing after this point is required for routing. ◄◄
         │
         ▼
 [queue position + estimated wait]  "ขณะนี้ท่านอยู่ลำดับที่ 3 ..."
         │
         ▼
-[intake offer]
+[intake offer]  ← the ENRICHMENT layer
   "ระหว่างรอสาย ท่านสามารถเล่าเรื่องที่ต้องการติดต่อไว้ล่วงหน้าได้
    เจ้าหน้าที่จะเห็นข้อมูลทันทีที่รับสาย
    กด 1 เพื่อบันทึกข้อความ   กด 2 เพื่อรอสายตามปกติ"
@@ -226,11 +240,61 @@ can be edited without a studio and the audio is deterministic and offline-safe.
    ┌────┴─────────────────────────┐
  press 1                        press 2
    │                              │
-[beep] record…                 hold music, context-only brief
+[beep] record…                 hold music, menu-derived brief
    │
    └─ stops on: press 1 again  ·  silence > INTAKE_SILENCE_TIMEOUT_S (default 6s)
-                ·  max duration (default 180s)  ·  agent answers
+                ·  max duration (default 180s)  ·  agent accepts the offer
 ```
+
+### Why the menu leads
+
+Follow the worst case through the old design: general hotline (in Thailand usually the
+*only* published number), no app, unrecognised caller, declines the recording. The system
+knew **nothing** — worse than the keypad menu every call centre already has. Adding AI is
+not worth much if the floor sits below the status quo.
+
+So the split is now explicit:
+
+| Layer | Gives | Needs | If it fails |
+|---|---|---|---|
+| **Keypad menu** (the base) | Product line + reason → **the queue** | Nothing. No AI, no consent, no speech, no network | It cannot really fail; `0` always reaches a human |
+| **AI intake** (the delta) | The *detail*: which hospital, which plate, how urgent, what happened | Consent, audio, STT, LLM | Routing is unaffected — it was never the AI's job |
+
+The base is **parity with what already exists**. The AI makes the agent's screen useful; it
+does not make the routing possible. Every AI failure now degrades to "a normal, competent
+call centre" rather than "a call centre that knows nothing."
+
+### Menu rules (`config/menus.yaml`, enforced by tests)
+
+- **Skip what we already know.** App tap → line and often intent; product DID → line.
+  Asking a question we know the answer to is bad service.
+- **Reserved keys are consistent everywhere:** `9` repeat, `0` operator. A caller who
+  learns `0` in one menu must not be surprised in another.
+- **Every reason menu has a catch-all** ("เรื่องอื่นๆ" → `<line>.other`), so an unexpected
+  reason lands with the right line's generalist instead of trapping the caller.
+- **At most seven options**, because past that people stop listening and press `0`.
+- Three unrecognised presses, or silence twice, → the general queue. Never a hang-up.
+
+### Personalised menu ordering
+
+When the caller is recognised (assurance **L1 is enough** — reordering a menu discloses
+nothing), their likely options are read out **first** and take the low numbers. Signals:
+an open claim in that line, an active policy, a product viewed in the app in the last day,
+a renewal due soon. Everything else stays available, just later.
+
+Promoted options are spoken with their context ("กด 1 ประกันรถยนต์ ทะเบียน กข 1234") so a
+caller never has to guess what "1" means today versus last week. This is the cheapest
+possible use of the context we already prefetched at §5.
+
+### Language (`D38`) — modelled, not yet implemented
+
+Thai only today. The shape is agreed so nothing built now blocks it: the call records
+**`preferred_language`** (what we speak, what the TTS uses) separately from
+**`acceptable_languages`** (the hard filter for matching). They differ because a keypress
+says what someone *prefers*, not what they can understand — a bilingual caller who picks
+English is still perfectly routable to a Thai speaker. Agents carry per-language **CEFR
+levels**, and language is a **hard filter**: past the wait ceiling the matcher drops fit
+entirely (`D22`), but "qualified" must still include understanding the caller.
 
 Design points worth arguing about (all runtime-tunable):
 
@@ -306,8 +370,8 @@ agent A's line while agent B sits free) and they make waiting-time fairness inco
 
 ### Fit
 
-`fit(caller, agent) ∈ [0,1]` — hard filters first (required skill, language, licence/authority,
-capacity, not blocked), then:
+`fit(caller, agent) ∈ [0,1]` — hard filters first (required skill, **language at the
+required CEFR level** (`D38`), licence/authority, capacity, not blocked), then:
 
 ```
 fit = w_skill      * skill_match          # agent_skills vs the intent's required skill
@@ -324,6 +388,10 @@ effective_intent = blend(app_or_DID_intent, speech_intent, weight = intent_confi
 
 A low-confidence partial transcript nudges fit; it does not yank someone into a specialist queue. Fit
 is recomputed continuously as turns arrive, and again at the moment of matching. (`D23`)
+
+Since `D37`, the prior is a **keypress rather than a guess** — the caller told us the line
+and the reason. Speech now *refines* the intent instead of having to establish it, which
+is why a wrong or missing transcript can no longer send anyone to the wrong queue.
 
 ### Urgency — what stops starvation
 
@@ -678,11 +746,11 @@ budget degrades (§16) rather than delaying.
 
 | Failure | Behaviour |
 |---|---|
-| No app / no intent (cold call) | DID + ANI + IVR menu; context-only brief at the assurance level reached |
-| Caller presses 2 (no recording) | Context-only brief; agent screen says intake was declined |
+| No app / no intent (cold call) | Keypad menu routes it (`D37`); ANI gives probable identity; brief built from menu + context at the assurance level reached |
+| Caller presses 2 (no recording) | Menu-derived brief (line + reason are still known); agent screen says intake was declined |
 | No consent | Same as above; nothing is analysed |
 | STT down / low confidence | Recording kept + context brief; transcript marked unavailable; agent gets audio playback |
-| LLM down / times out | Rule-based brief: intent from the DID/menu/tapped plan, entities by regex, template summary |
+| LLM down / times out | Rule-based brief: intent from the **menu** (reliable, not a guess), entities by regex, template summary |
 | Core RO unavailable | Last cached snapshot with a staleness badge; else intent-only brief |
 | Matching unavailable | Default queue, FIFO — i.e. exactly today's behaviour |
 | One agent's workstation drops (tab closed, network, laptop asleep) | Presence TTL expires → that agent is simply not available; the matcher routes elsewhere. If it happens mid-offer, the offer times out and re-matches. **Mid-call the audio is a separate WebRTC session, so a UI reload does not drop the call** — the workstation re-attaches to the in-progress call on reconnect |

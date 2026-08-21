@@ -59,6 +59,15 @@ intents:
     default_urgency: normal
     required_slots: [policy_no]
     playbook: renewal
+  motor.other:
+    label_th: "เรื่องอื่นๆ เกี่ยวกับประกันรถยนต์"
+    label_en: "Something else about motor insurance"
+    line: motor
+    skill: motor.policy
+    default_urgency: normal
+    required_slots: []
+    playbook: generic
+    is_catch_all: true
 
   # --- health -----------------------------------------------------------------------
   health.ipd.preauth:
@@ -101,6 +110,15 @@ intents:
     default_urgency: low
     required_slots: [province]
     playbook: network_hospital
+  health.other:
+    label_th: "เรื่องอื่นๆ เกี่ยวกับประกันสุขภาพ"
+    label_en: "Something else about health insurance"
+    line: health
+    skill: health.policy
+    default_urgency: normal
+    required_slots: []
+    playbook: generic
+    is_catch_all: true
 
   # --- travel -----------------------------------------------------------------------
   travel.claim.submit:
@@ -127,6 +145,15 @@ intents:
     default_urgency: low
     required_slots: [destination, travel_dates]
     playbook: coverage_query
+  travel.other:
+    label_th: "เรื่องอื่นๆ เกี่ยวกับประกันเดินทาง"
+    label_en: "Something else about travel insurance"
+    line: travel
+    skill: travel.policy
+    default_urgency: normal
+    required_slots: []
+    playbook: generic
+    is_catch_all: true
 
   # --- life -------------------------------------------------------------------------
   life.policy.value:
@@ -156,6 +183,15 @@ intents:
     # A bereaved caller must never queue behind a renewal question, and the agent
     # needs the tone warning on screen before they speak.
     sensitive: true
+  life.other:
+    label_th: "เรื่องอื่นๆ เกี่ยวกับประกันชีวิต"
+    label_en: "Something else about life insurance"
+    line: life
+    skill: life.policy
+    default_urgency: normal
+    required_slots: []
+    playbook: generic
+    is_catch_all: true
 
   # --- cross-cutting ----------------------------------------------------------------
   general.billing:
@@ -202,8 +238,25 @@ intents:
     required_slots: [product_interest]
     playbook: new_product
 
-  # A first-class outcome, not a failure: route to the product-line generalist and
-  # let the human find out. Better than a confident wrong label (D13).
+  general.other:
+    label_th: "เรื่องอื่นๆ"
+    label_en: "Something else"
+    skill: general.service
+    default_urgency: normal
+    required_slots: []
+    playbook: generic
+    is_catch_all: true
+
+  # Two different kinds of "we do not know", and the difference matters for routing:
+  #
+  #   <line>.other  - we DO know the product line (from the menu, the DID, or the tapped
+  #                   plan), we just do not know the specific reason. Routes to that
+  #                   line's generalist, who already has the right context open.
+  #   unknown       - we do not even know the line. The general queue, and the agent
+  #                   starts from scratch.
+  #
+  # Both are first-class outcomes, not failures. A caller whose reason is not on our list
+  # is a caller, not an error - and it is far better than a confident wrong label (D13).
   unknown:
     label_th: "ยังไม่ทราบเรื่องที่ติดต่อ"
     label_en: "Intent unclear"
@@ -211,3 +264,4 @@ intents:
     default_urgency: normal
     required_slots: []
     playbook: generic
+    is_catch_all: true

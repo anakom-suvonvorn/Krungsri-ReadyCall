@@ -1,0 +1,139 @@
+# The spoken keypad menu. THE BASE ROUTING SIGNAL (D37).
+#
+# Every call centre in the country already does "กด 1 สำหรับ..., กด 2 สำหรับ...". It is
+# reliable, it costs nothing, it needs no AI, and callers already know how it works.
+# So the menu runs FIRST and the system knows which queue the caller belongs in before a
+# single word is transcribed.
+#
+# The AI pre-call intake then sits ON TOP of that as an enrichment: it adds the detail
+# (which hospital, which plate number, how urgent) that a keypad can never capture. If
+# the AI is unavailable, declined, or wrong, routing is unaffected - because routing was
+# never the AI's job.
+#
+# The menu is SKIPPED when we already know the answer:
+#   - the caller tapped Contact on a specific plan in the app  -> line and often intent known
+#   - the caller dialled a product-line DID                     -> line known
+# Asking a question we already know the answer to is bad service, so we do not.
+
+version: 1
+
+settings:
+  barge_in: true              # a keypress interrupts the prompt; menus feel slow otherwise
+  repeat_key: "9"             # "กด 9 เพื่อฟังอีกครั้ง"
+  operator_key: "0"           # always reaches a human; never a dead end
+  max_attempts: 3             # after 3 unrecognised presses -> general queue, not a hang-up
+  invalid_prompt: menu.invalid
+  timeout_s: 7                # silence -> re-prompt once, then general queue
+
+# --- personalisation (D37) -----------------------------------------------------------
+#
+# When we recognise the caller (assurance L1+ is enough - this only reorders a menu, it
+# discloses nothing), the options they are most likely to want are read out FIRST and get
+# the low numbers. Everything else stays available, just later in the list.
+#
+# This is pure UX: fewer options to sit through before hearing your own. It is also the
+# cheapest possible use of the customer context we already prefetched.
+personalisation:
+  enabled: true
+  max_promoted: 2             # promote at most 2, or the menu stops being predictable
+  rules:
+    # An active policy in a line makes that line's option come first.
+    - signal: has_active_policy_in_line
+      weight: 1.0
+    # Viewed that product in the app in the last 24h - the tapped-plan case, degraded.
+    - signal: recent_app_view
+      weight: 0.8
+    # An open claim is a very strong predictor of why someone is calling.
+    - signal: open_claim_in_line
+      weight: 1.2
+    # Renewal due within 30 days.
+    - signal: policy_due_soon
+      weight: 0.6
+  # Promoted options are still spoken in full ("กด 1 ประกันรถยนต์ ทะเบียน กข 1234") so a
+  # caller never has to guess what "1" means today versus yesterday.
+  announce_promoted_context: true
+
+# --- the menus -----------------------------------------------------------------------
+
+menus:
+  # Step 1: which product line? Skipped when the DID or the app already told us.
+  product_line:
+    prompt: menu.product_line
+    options:
+      - { key: "1", label_th: "ประกันรถยนต์",   product_line: motor,  next: motor_reason }
+      - { key: "2", label_th: "ประกันสุขภาพ",   product_line: health, next: health_reason }
+      - { key: "3", label_th: "ประกันเดินทาง",  product_line: travel, next: travel_reason }
+      - { key: "4", label_th: "ประกันชีวิต",     product_line: life,   next: life_reason }
+      - { key: "5", label_th: "เรื่องอื่นๆ",      product_line: unknown, next: general_reason }
+
+  # Step 2: why are you calling? One menu per line, so the options stay short.
+  motor_reason:
+    prompt: menu.motor_reason
+    options:
+      - { key: "1", label_th: "แจ้งอุบัติเหตุ",           intent: motor.claim.accident }
+      - { key: "2", label_th: "ขอความช่วยเหลือฉุกเฉิน",   intent: motor.roadside_assist }
+      - { key: "3", label_th: "ติดตามสถานะเคลม",         intent: motor.claim.status }
+      - { key: "4", label_th: "สอบถามความคุ้มครอง",       intent: motor.policy.coverage }
+      - { key: "5", label_th: "ต่ออายุกรมธรรม์",          intent: motor.policy.renew }
+      - { key: "6", label_th: "เรื่องอื่นๆ",               intent: motor.other }
+
+  health_reason:
+    prompt: menu.health_reason
+    options:
+      - { key: "1", label_th: "แจ้งเข้ารักษาผู้ป่วยใน",     intent: health.ipd.preauth }
+      - { key: "2", label_th: "ยื่นเคลมค่ารักษา",          intent: health.claim.submit }
+      - { key: "3", label_th: "ติดตามสถานะเคลม",         intent: health.claim.status }
+      - { key: "4", label_th: "สอบถามความคุ้มครอง",       intent: health.coverage.query }
+      - { key: "5", label_th: "โรงพยาบาลในเครือ",         intent: health.network.hospital }
+      - { key: "6", label_th: "เรื่องอื่นๆ",               intent: health.other }
+
+  travel_reason:
+    prompt: menu.travel_reason
+    options:
+      - { key: "1", label_th: "เหตุฉุกเฉินระหว่างเดินทาง", intent: travel.emergency.overseas }
+      - { key: "2", label_th: "ยื่นเคลม",                  intent: travel.claim.submit }
+      - { key: "3", label_th: "สอบถามความคุ้มครอง",       intent: travel.coverage.query }
+      - { key: "4", label_th: "เรื่องอื่นๆ",               intent: travel.other }
+
+  life_reason:
+    prompt: menu.life_reason
+    options:
+      - { key: "1", label_th: "สอบถามมูลค่ากรมธรรม์",      intent: life.policy.value }
+      - { key: "2", label_th: "เปลี่ยนผู้รับผลประโยชน์",     intent: life.beneficiary.change }
+      - { key: "3", label_th: "แจ้งเคลมกรณีเสียชีวิต",      intent: life.claim.death }
+      - { key: "4", label_th: "เรื่องอื่นๆ",               intent: life.other }
+
+  general_reason:
+    prompt: menu.general_reason
+    options:
+      - { key: "1", label_th: "การชำระเบี้ยประกัน",        intent: general.billing }
+      - { key: "2", label_th: "ต่ออายุกรมธรรม์",           intent: general.renewal }
+      - { key: "3", label_th: "แก้ไขข้อมูลส่วนตัว",         intent: general.update_details }
+      - { key: "4", label_th: "ขอเอกสาร",                 intent: general.document.request }
+      - { key: "5", label_th: "สนใจผลิตภัณฑ์ใหม่",         intent: general.new_product }
+      - { key: "6", label_th: "ร้องเรียน",                 intent: general.complaint }
+      - { key: "7", label_th: "เรื่องอื่นๆ",                intent: general.other }
+
+# --- language (D38) -------------------------------------------------------------------
+#
+# NOT IMPLEMENTED YET - Thai only for now. Recorded here so the shape is agreed and
+# nothing built in the meantime blocks it.
+#
+# The subtlety: "press 2 for English" tells us what the caller PREFERS, not what they can
+# understand. A bilingual caller who picks English is still perfectly routable to a Thai
+# speaker. So the call records two separate things:
+#
+#   preferred_language    - what to speak to them, and what the TTS uses
+#   acceptable_languages  - the hard filter for matching; a superset of preferred
+#
+# Defaulting `acceptable` to just `{preferred}` is the safe read of a single keypress, and
+# the customer profile (or a previous call) can widen it. That avoids a clumsy four-option
+# menu while still never routing an English-only caller to an agent with no English.
+language_menu:
+  enabled: false
+  prompt: menu.language
+  options:
+    - { key: "1", language: th }
+    - { key: "2", language: en }
+  default: th
+  infer_acceptable_from_profile: true

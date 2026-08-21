@@ -1,7 +1,7 @@
 # PLAN
 
 _The master build plan for the full system: what gets built, in what order, and what "done" means for each phase._
-_Last updated: 2026-08-18._
+_Last updated: 2026-08-19._
 
 ---
 
@@ -123,8 +123,12 @@ Two rules that shape the order:
 
 - **Voice prompts pipeline** (`D24`): `config/voice_prompts.yaml`, `scripts/build_prompts.py`
   (hash-cached rendering), the checked-in fallback prompt pack, and the admin **prompt studio** page.
-- **IVR service**: greeting + recording notice, product menu, identification, queue announcements,
-  the press-1/press-2 intake offer, re-offer once, barge-in, post-call rating keypress.
+- **IVR service**, and note the ordering — **the menu routes the call, before any AI** (`D37`):
+  greeting + recording notice → product-line menu (skipped when the app or DID already said) →
+  reason menu → optional identification → **queue** → only then the press-1/press-2 intake offer.
+  Plus: personalised option ordering from the prefetched context, reserved keys (`9` repeat,
+  `0` operator), catch-all options, re-offer once, barge-in, and the post-call rating keypress.
+  `config/menus.yaml` already holds the tree and is validated by tests.
 - Media Gateway: AudioSocket + WebSocket media servers, **per-leg forking**, resampling to 16 kHz mono
   float32, framing, encrypted recording to MinIO, per-recording key refs.
 - Consent gate (IVR keypress + in-app toggle) writing `consents` before a single frame is analysed.
@@ -139,8 +143,10 @@ Two rules that shape the order:
 **Exit criteria**
 - Utterance end → turn visible **p95 < 1.5 s** on the RTX 3050, with the chosen engine named and the
   bake-off table recorded.
-- A caller who presses 2, and a caller who consents to nothing, both still reach an agent with a
-  context-only brief.
+- A caller who presses 2, and a caller who consents to nothing, both still reach **the correct
+  queue** with a menu-derived brief — because routing never depended on the AI (`D37`).
+- A caller on the general hotline with an unrecognised number reaches the right specialist purely by
+  keypad. That is the floor, and it must be at least as good as an ordinary call centre.
 - Killing the STT worker mid-call degrades to recording-only; the call is unaffected.
 - No audio ever written to local disk unencrypted.
 - Changing a line of Thai in `voice_prompts.yaml` changes what the caller hears after one re-render.

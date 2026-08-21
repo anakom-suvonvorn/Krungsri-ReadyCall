@@ -1,24 +1,34 @@
-# Product-line phone numbers: the cheapest routing signal in the system (D19).
+# Phone numbers we publish, and what each one implies (D19).
 #
-# The number printed on the windscreen sticker, the health card, or the travel policy.
-# Dialling it *is* an intent signal - no app, no menu, no speech, no ASR. Adding a new
-# printed number is a line in this file, not code.
+# The number a customer finds on their policy documents - in the glovebox folder, on the
+# health card, on the travel schedule, on the website. Whether it is literally a sticker
+# does not matter; what matters is that they dial a printed number with no app open.
 #
-# `skip_product_menu: true` means the DID already told us the product line, so the IVR
-# goes straight to the intake offer instead of asking a question we know the answer to.
+# TWO REAL-WORLD CASES, and the system handles both:
+#
+#   1. One general hotline for everything (the common case in Thailand today). We learn
+#      nothing from the number itself, so the keypad menu asks - see config/menus.yaml.
+#   2. A separate number per product line. Then the number IS the answer to the first
+#      menu question, and we skip asking it.
+#
+# So a DID entry is an OPTIMISATION, never a dependency: `skip_product_menu: true` just
+# means "we already know this one, do not make them press a key for it". Everything works
+# without any of these entries - it simply asks one more question.
+#
+# Adding a newly printed number is a line in this file, not code.
 
 version: 1
 
 dids:
   "+6621234000":
-    label: "General hotline"
+    label: "General hotline - printed on most documents, and the number most people dial"
     product_line: unknown
     default_queue: q_general
     greeting_prompt: greeting.general
-    skip_product_menu: false
+    skip_product_menu: false      # we know nothing; the menu earns its keep here
 
   "+6621234111":
-    label: "Motor claims - printed on the windscreen sticker"
+    label: "Motor claims - printed on the policy documents kept in the car"
     product_line: motor
     default_queue: q_motor_claim
     greeting_prompt: greeting.motor_claim

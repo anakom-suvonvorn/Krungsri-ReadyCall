@@ -1,7 +1,7 @@
 # DATA_MODEL
 
 _The two databases, every table, and — most importantly — how the bank's half gets swapped out for the real thing on hackathon day._
-_Status: **design only**. Last updated: 2026-08-18._
+_Status: **design only**. Last updated: 2026-08-19._
 
 ---
 
@@ -70,7 +70,7 @@ port and is mirrored, not replaced.
 | Table | Key columns |
 |---|---|
 | `call_intents` | `intent_id` PK, `customer_id`, `product_code`, `plan_id`, `entry_screen`, `app_context_json`, `correlation_token` (hashed), `channel`, `status`, `created_at`, `expires_at` |
-| `call_sessions` | `call_session_id` PK, `intent_id?`, `customer_id?`, `telephony_call_id`, `provider`, `direction`, `state`, `queue_id`, `priority`, `started_at`, `queued_at`, `answered_at`, `ended_at`, `end_reason`, `stage_timings_json` |
+| `call_sessions` | `call_session_id` PK, `intent_id?`, `customer_id?`, `telephony_call_id`, `provider`, `direction`, `state`, `queue_id`, `priority`, `started_at`, `queued_at`, `answered_at`, `ended_at`, `end_reason`, `stage_timings_json`, **`menu_path`** (the keys actually pressed, e.g. `["1","2"]`), **`menu_intent_code`** (`D37`), **`preferred_language`**, **`acceptable_languages`** (`D38`) |
 | `call_state_transitions` | `id`, `call_session_id`, `from_state`, `to_state`, `reason`, `at` — the demonstrable timeline |
 | `app_context_events` | our own in-app telemetry: `customer_id`, `occurred_at`, `screen`, `product_code`, `section`, `dwell_ms`, TTL-pruned |
 
@@ -112,7 +112,8 @@ final. The screen renders the latest; the history is what lets us measure how ea
 ### Routing & agents
 | Table | Key columns |
 |---|---|
-| `agents` | `agent_id`, `display_name`, `team`, `level`, `languages`, `licence_flags`, `max_concurrent`, `is_active` |
+| `agents` | `agent_id`, `display_name`, `team`, `level`, `licence_flags`, `max_concurrent`, `is_active` |
+| `agent_languages` | `agent_id`, `language` (th/en), `level` (CEFR none/A1…C2/native) — a graded skill, not a yes/no flag, and a **hard filter** in matching (`D38`) |
 | `agent_skills` | `agent_id`, `skill_code` (e.g. `health.ipd`, `motor.claim`), `proficiency` 0–1, `certified_until` |
 | `agent_presence` | `agent_id`, `system_state` (offline/available/offering/on_call/after_call_work), `agent_intent` (ready/break/lunch/training/admin/last_call/draining), `since`, `current_load`, `last_assigned_at`, `session_id`, `sip_endpoint`, `accept_mode` (manual/auto), `heartbeat_at` |
 | `agent_workstation_sessions` | `session_id`, `agent_id`, `started_at`, `ended_at`, `user_agent`, `sip_registered`, `audio_devices_json`, `self_test_passed_at` — one row per logged-in browser tab (`D32`) |
@@ -155,6 +156,10 @@ Deferrals that were *considered and rejected* are logged too, so the guard rails
 **Runtime-tunable, not hardcoded:** routing weights, the confidence floor, intake timeouts, debounce
 intervals, the STT/LLM model choice, and the degradation thresholds. Demo-day tuning must never
 require a code change.
+
+**`menu_path` is worth keeping** even though `menu_intent_code` summarises it: it is the most reliable
+intent evidence in the system (`D37`), and a confused path — repeated re-listens, wrong turns, a `0`
+to the operator — is a UX signal that no other field captures.
 
 ---
 
@@ -247,8 +252,9 @@ integration checklist, and it takes minutes instead of an afternoon.
   script (Thai text + optional recorded audio), the expected intent, expected match target, and the
   expected brief. Scenario #1 is the pitch's own example — *Khun Pattheera, Health Plan A,
   hospitalisation tomorrow, room & board*. Scenario #2 is the **motor claim from the roadside**: no
-  app, dialled off the windscreen sticker, high situational urgency — the case that exercises the
-  cold-call path (`D19`), the assurance ladder (`D20`) and urgency-driven matching (`D22`) at once.
+  app, dialled off the policy documents kept in the car, high situational urgency — the case that
+  exercises the cold-call path (`D19`), the assurance ladder (`D20`) and urgency-driven matching
+  (`D22`) at once.
 
 ### Agents and the pool
 
