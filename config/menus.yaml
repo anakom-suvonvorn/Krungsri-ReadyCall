@@ -31,8 +31,10 @@ settings:
 # discloses nothing), the options they are most likely to want are read out FIRST and get
 # the low numbers. Everything else stays available, just later in the list.
 #
-# This is pure UX: fewer options to sit through before hearing your own. It is also the
-# cheapest possible use of the customer context we already prefetched.
+# REORDERING ONLY. The spoken line is always just the number and the plain label
+# ("กด 1 ประกันรถยนต์"), never the caller's own details. Reading someone's plate number or
+# policy number back at them through a menu is unsettling, and it makes every option take
+# longer to get through - which is the opposite of the point.
 personalisation:
   enabled: true
   max_promoted: 2             # promote at most 2, or the menu stops being predictable
@@ -49,9 +51,8 @@ personalisation:
     # Renewal due within 30 days.
     - signal: policy_due_soon
       weight: 0.6
-  # Promoted options are still spoken in full ("กด 1 ประกันรถยนต์ ทะเบียน กข 1234") so a
-  # caller never has to guess what "1" means today versus yesterday.
-  announce_promoted_context: true
+  # Never speak customer-specific detail in a menu option (see above).
+  announce_promoted_context: false
 
 # --- the menus -----------------------------------------------------------------------
 

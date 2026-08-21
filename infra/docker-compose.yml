@@ -1,0 +1,71 @@
+# Dev infrastructure. Nothing in P0/P1 needs any of it - the whole system runs in memory
+# on fakes - but these are the services the next phases plug into, and standing them up
+# early means the day we need Postgres is not also the day we learn Docker networking.
+#
+#   docker compose -f infra/docker-compose.yml up -d
+#
+# Asterisk arrives at P5 (INTEGRATIONS.md 1.1) and is deliberately not here yet: it needs
+# TLS certs and a WebRTC endpoint, and adding it before the softphone exists would just be
+# a broken container sitting in the file.
+
+name: readycall
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: readycall
+      POSTGRES_PASSWORD: readycall
+      POSTGRES_DB: readycall
+    ports: ["5432:5432"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Creates the two schemas and the SELECT-only role that enforces D5 at the database
+      # rather than by convention: we cannot write to the bank's half because we lack the
+      # grant, not because we promised not to.
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U readycall"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports: ["6379:6379"]
+    volumes: [redisdata:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: readycall
+      MINIO_ROOT_PASSWORD: readycall123
+    ports: ["9000:9000", "9001:9001"]
+    volumes: [miniodata:/data]
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Browse both schemas at http://localhost:8081 (INTEGRATIONS.md 9). Handy, but the
+  # Call Explorer page we build ourselves is the one that answers "why did it do that".
+  pgweb:
+    image: sosedoff/pgweb:latest
+    depends_on:
+      postgres: {condition: service_healthy}
+    environment:
+      PGWEB_DATABASE_URL: postgres://readycall:readycall@postgres:5432/readycall?sslmode=disable
+    ports: ["8081:8081"]
+
+volumes:
+  pgdata:
+  redisdata:
+  miniodata:

@@ -282,9 +282,11 @@ nothing), their likely options are read out **first** and take the low numbers. 
 an open claim in that line, an active policy, a product viewed in the app in the last day,
 a renewal due soon. Everything else stays available, just later.
 
-Promoted options are spoken with their context ("กด 1 ประกันรถยนต์ ทะเบียน กข 1234") so a
-caller never has to guess what "1" means today versus last week. This is the cheapest
-possible use of the context we already prefetched at §5.
+**Reordering only — the spoken line never carries customer detail.** Options are always
+just the number and the plain label ("กด 1 ประกันรถยนต์"). Reading someone's plate or policy
+number back at them through a menu is unsettling, and it lengthens every option, which is
+the opposite of the point. The context we prefetched at §5 decides the *order*; it is
+never read aloud.
 
 ### Language (`D38`) — modelled, not yet implemented
 

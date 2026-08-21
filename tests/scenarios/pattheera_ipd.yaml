@@ -12,6 +12,10 @@ entry:
   customer_id: C000001
   product_code: KS-HEALTH-A
   product_line: health
+  # The app knows the section she tapped Contact from - she was reading the
+  # hospitalisation coverage page - so BOTH menu steps are answered before the call is
+  # even placed (D6, D37). This is the app path at its best.
+  app_intent: health.ipd.preauth
   caller_number: "+66812345678"
 
 # Health content, so health_data is consented separately from ai_processing (D14).
@@ -20,8 +24,14 @@ consent:
   - ai_processing
   - health_data
 
-queue: q_health_ipd
 agent: A006
+
+# No menu: the app said which plan, so asking would be bad service (D37).
+expect:
+  state: closed
+  assurance: l3_verified     # the app's correlation token binds identity (D4)
+  queue: q_health_ipd        # from the app's screen context, no keypresses needed
+  intent: health.ipd.preauth
 
 intake:
   turns:
@@ -47,4 +57,3 @@ timing:
   call: 240.0
   acw: 35.0
 
-expect_state: closed

@@ -1,7 +1,7 @@
 # DECISIONS
 
 _Significant engineering decisions and their rationale. Append new ones at the bottom; never silently reverse one without a new entry explaining why._
-_Last updated: 2026-08-19 (second pass)._
+_Last updated: 2026-08-21._
 
 Format per entry: **Problem → Decision → Reasoning → Alternatives → Tradeoffs → Future.**
 
@@ -485,6 +485,9 @@ _`D37`–`D38` added 2026-08-19 after a design review of the call flow._
   active policy in that line, a product viewed in the app yesterday, a renewal due. Same
   menu, fewer options to sit through, and it is the cheapest possible use of context we
   already prefetched.
+  **Reordering only.** The spoken line stays just the number and the plain label; customer
+  detail is never read aloud in a menu. Hearing your own plate number recited back at you
+  is unsettling, and it makes every option longer — which defeats the purpose.
 - **Alternatives:** AI-first with no menu — rejected, it makes the floor worse than the
   status quo and bets routing on the least reliable component. Menu-only with no AI —
   that is just today's call centre.
@@ -523,3 +526,48 @@ _`D37`–`D38` added 2026-08-19 after a design review of the call flow._
   hold is not.
 - **Status:** Thai-only in behaviour. The hackathon will very likely stay Thai-only. The
   standing rule is simply that nothing built in the meantime may assume a single language.
+
+---
+
+_`D39`–`D41` added 2026-08-21, during P1._
+
+## D39. The database layer is deferred until something actually needs persistence
+- **Problem:** P0 listed "Postgres schema + Alembic" as a deliverable, but nothing in P0 or
+  P1 persists anything across a process. Writing ~15 SQLAlchemy models and a migration
+  chain now would mean writing them against a schema still moving under active design.
+- **Decision:** Ship the **compose file and the schema/role SQL** (so the boundary in `D5`
+  is enforced by grants the day we connect), keep the in-memory repositories behind their
+  Protocols, and write the ORM models at **P2**, when agent presence and matching decisions
+  genuinely need to outlive a process.
+- **Reasoning:** The seams already exist — `CallSessionRepository` and `CallIntentStore`
+  are Protocols with dict-backed implementations, so adding Postgres changes one factory
+  line. Writing the models before the schema settles would mean writing the migrations
+  twice.
+- **Tradeoffs:** Nothing survives a restart yet. Acceptable while the only entrypoint is a
+  scenario replay that runs in half a second.
+- **Trigger to revisit:** the moment two processes need to see the same call, or a demo
+  needs to survive a restart. That is P2.
+
+## D40. The queue falls back to the product line before it falls back to "general"
+- **Problem:** An in-app caller whose plan we know, but whose specific reason we do not,
+  was landing in `q_general` — throwing away the product line we already had.
+- **Decision:** Queue selection walks the best evidence available, in order: an explicit
+  intent (menu or app screen context) → the **line's catch-all intent** → the DID default →
+  `q_general`.
+- **Reasoning:** Knowing the line should always beat not knowing it. `health.other` routes
+  to the health generalist, who opens with the right context; `q_general` does not.
+- **Consequence:** `<line>.other` catch-alls are load-bearing, not decoration — they are
+  what makes this fallback land somewhere useful.
+
+## D41. The app's screen context supplies the intent, not just the product
+- **Problem:** The pitch's own scenario has Khun Pattheera reading the *hospitalisation
+  coverage* page and tapping Contact. Carrying only "Health Plan A" into the call wastes
+  the more specific thing we already knew.
+- **Decision:** The intent API accepts an intent hint derived from the screen the tap came
+  from (`entry.app_intent` in scenarios). The app path therefore answers **both** menu
+  questions before the call is even placed, and the menu is skipped entirely.
+- **Reasoning:** It is the same "skip what we already know" rule as the DID (`D37`), applied
+  one level deeper. It is also what makes the app path visibly better than the keypad path,
+  which is the product argument the pitch is making.
+- **Guard:** it is a *hint*, weighted like a menu answer rather than treated as certainty,
+  and speech can still override it once P4 lands (`D23`).

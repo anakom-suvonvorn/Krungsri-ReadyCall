@@ -1,7 +1,7 @@
 # PROJECT_STATE
 
 _What this project is, what exists, what doesn't, and where everything lives._
-_Last updated: 2026-08-19._
+_Last updated: 2026-08-21._
 
 ---
 
@@ -31,14 +31,17 @@ demonstrable slice, so "the demo" is the current state plus a chosen scenario (`
 
 ---
 
-## 2. Status: **P0 foundations built and verified**
+## 2. Status: **P0 complete, P1 core complete**
 
 The spine runs. A full call lifecycle - arrival, IVR, consent, queue, intake, matching, the offer
 handshake, the live call, wrap-up, rating, closed - executes end to end on fake adapters with no
 telephony, no GPU, no database and no API key.
 
-Verified on 2026-08-19: **84 tests pass**, `ruff check` and `ruff format --check` clean, `mypy --strict`
-clean over 41 source files, and all three scenarios replay with byte-identical output twice.
+As of P1 the identity ladder, the menu walk, the context assembler and the brief builder are real
+services doing real work - only the *edges* (phone, speech, AI, the bank's data) are still fakes.
+
+Verified on 2026-08-21: **161 tests pass**, `ruff check` and `ruff format --check` clean,
+`mypy --strict` clean over 50 source files, and all three scenarios replay byte-identically.
 
 ```
 $ uv run python scripts/run_scenario.py tests/scenarios/pattheera_ipd.yaml --quiet
@@ -182,9 +185,13 @@ Nothing is built. Legend: ☐ planned · ◐ in progress · ☑ done.
 4 policies across 4 lines) · ☐ Postgres schema + Alembic · ☐ mock-core *generator* (~2,000 customers;
 hand-authored fixtures exist) · ☐ docker-compose
 
-**P1 — context-aware calling** ☐ intent API · ☐ session auth · ☐ app context events · ☐ identity
-resolver + assurance ladder · ☐ `dids.yaml` · ☐ Customer360 assembler + snapshot + provenance ·
-☐ caching/circuit breaker · ☐ customer simulator + demo login · ☐ agent screen v1 (context-only brief)
+**P1 — context-aware calling** (core done; the HTTP layer is P1b)
+☑ identity resolver + assurance ladder L0–L3 · ☑ `dids.yaml` + `menus.yaml` wired in ·
+☑ typed, cross-validated domain pack · ☑ Customer360 assembler + frozen snapshot + per-field
+provenance · ☑ caching / stale-serving / circuit breaker · ☑ **context-only brief with
+assurance-gated disclosure** · ☑ mock-core generator · ☑ docker-compose + schema SQL ·
+☐ intent API + session auth · ☐ app context events · ☐ customer simulator + demo login ·
+☐ agent screen v1
 
 **P2 — matching & the workstation** ☐ queues + hours · ☐ agent state model (auto × manual) ·
 ☐ presence heartbeat · ☐ fit + urgency scoring · ☐ Hungarian solver · ☐ anti-hot-spot checks ·
@@ -269,15 +276,16 @@ performing by hand, i.e. what the next services take over (`D36`).
 
 | | |
 |---|---|
-| Source files | 41 (`src/` + `tests/` + `scripts/`) |
-| Tests | 84, all passing, ~0.5 s |
+| Source files | 50 (`src/` + `tests/` + `scripts/` + `mock/`) |
+| Tests | 161, all passing, ~1.4 s |
 | Ports defined | 7 (telephony, stt, llm, tts, core_data, event_bus, blob_storage) |
-| Adapters | 7 fakes/nulls; no real vendor adapter yet |
+| Adapters | 7 fakes/nulls + a caching/circuit-breaking decorator; no real vendor adapter yet |
 | Call states | 16, transition table self-validated |
 | Event types | 19 |
 | Scenarios | 3 (in-app happy path, cold-call motor claim, fully degraded) |
 | Mock core | 3 customers, 4 policies across 4 product lines, 5 products, 5 interactions, 2 claims |
-| Intent taxonomy | 22 straw-man intents across 5 lines (awaiting domain review) |
+| Intent taxonomy | 28 intents across 5 lines, each with a catch-all (revisit during the hackathon) |
+| Generated mock data | 2,000 customers / 2,292 policies / 5,880 interactions (seeded, gitignored) |
 
 ---
 
@@ -294,6 +302,6 @@ enforced by a lint check.
 
 ## 10. What comes next
 
-**P1 — Context-Aware Calling**, for both the app path and the cold-call path: the intent API, the
-identity resolver and assurance ladder, `dids.yaml` wired in, the context assembler with per-field
-provenance, and the first version of the workstation showing a context-only brief. See `PLAN.md`.
+**P1b — the HTTP layer**: `POST /v1/calls/intents`, app context events, and the web customer
+simulator that talks to the same public API the real app would. Then **P2** — the matching engine and
+the agent workstation, which is also when the Postgres/Alembic layer lands (`D39`). See `PLAN.md`.

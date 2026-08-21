@@ -21,12 +21,22 @@ entry:
   caller_number: "0898887777"    # stored as +66898887777: normalisation must work
   # NOTE: deliberately no customer_id. It is resolved from ANI, not asserted.
 
+# The motor DID already gave the product line, so step 1 is skipped and the caller
+# presses straight into the motor reason menu: 1 = แจ้งอุบัติเหตุ.
+menu:
+  path: ["1"]
+
 consent:
   - recording
   - ai_processing
 
-queue: q_motor_claim
 agent: A001
+
+expect:
+  state: closed
+  assurance: l1_probable     # caller ID matched, but nothing verified it (D20)
+  queue: q_motor_claim       # from the menu, before a word was transcribed (D37)
+  intent: motor.claim.accident
 
 intake:
   turns:
@@ -52,4 +62,3 @@ timing:
   call: 300.0
   acw: 60.0         # a claim needs real after-call work (D33)
 
-expect_state: closed

@@ -14,10 +14,21 @@ entry:
   dialled_did: "+6621234000"
   caller_number: "+66000000000"   # matches nobody on purpose
 
+# Nothing is known, so the menu does all the work: 2 = ประกันสุขภาพ, 4 = สอบถามความคุ้มครอง.
+# This is the whole point of D37 - an unrecognised caller who declines the recording still
+# reaches the right specialist.
+menu:
+  path: ["2", "4"]
+
 consent: []                        # nothing granted
 
-queue: q_general
 agent: A014
+
+expect:
+  state: closed
+  assurance: l0_anonymous
+  queue: q_health_policy     # the keypad got them there with no identity and no AI
+  intent: health.coverage.query
 
 intake:
   declined: true                   # pressed 2
@@ -31,4 +42,3 @@ timing:
   call: 200.0
   acw: 20.0
 
-expect_state: closed
