@@ -25,6 +25,14 @@ from readycall.adapters.core_data.fixtures import FixtureFileProvider
 from readycall.adapters.core_data.null import NullCoreDataProvider
 from readycall.adapters.event_bus.memory import InMemoryEventBus
 from readycall.api.realtime import AgentHub
+from readycall.api.schemas import (
+    BriefCoverageOut,
+    BriefCustomerOut,
+    BriefIntentOut,
+    BriefOut,
+    BriefPolicyOut,
+    BriefProvenanceOut,
+)
 from readycall.api.security import (
     DemoAgentSessionStore,
     DemoSessionStore,
@@ -34,8 +42,8 @@ from readycall.api.security import (
 from readycall.clock import Clock, SystemClock
 from readycall.config import CoreDataProviderName, Settings
 from readycall.domain import events as ev
-from readycall.domain.enums import ProductLine
-from readycall.domain.models import IdentityResolution
+from readycall.domain.enums import AssuranceLevel, ProductLine
+from readycall.domain.models import CaseBrief, IdentityResolution
 from readycall.domainpack import DomainPack
 from readycall.logging import get_logger
 from readycall.ports.core_data import CoreDataProvider
@@ -205,6 +213,13 @@ class Container:
         full policy numbers and every coverage figure, and only the *rendering* is gated.
         So this costs no bank-core round trip and no spinner — which is exactly why the
         assembler was never gated by assurance and must not become gated.
+
+        **Returns a wire DTO, never `CaseBrief.model_dump()`.** The domain object carries
+        the whole frozen `ContextSnapshot`, so dumping it shipped the policy number, sum
+        insured, every coverage figure and the date of birth to a call sitting at L1 —
+        beside a field that said disclosure was locked. `BriefOut` has nowhere to put
+        those until the level permits them, which is the difference between a gate and a
+        promise (`D42`).
         """
         snapshot_id = self.snapshot_for_call.get(call_session_id)
         if snapshot_id is None:
@@ -226,7 +241,7 @@ class Container:
             # the record shows what the agent saw before and after, and when it changed.
             version=1 + len(self.attestations.history(call_session_id)),
         )
-        return brief.model_dump(mode="json")
+        return _brief_out(brief, identity).model_dump(mode="json")
 
     async def lookup_digits(
         self, call_session_id: str, *, kind: str, digits: str
@@ -301,3 +316,95 @@ __all__ = [
     "get_container",
     "get_principal",
 ]
+
+
+def _brief_out(brief: CaseBrief, identity: IdentityResolution) -> BriefOut:
+    """Domain brief -> wire brief, gated by assurance at the serialisation boundary.
+
+    Written as one function rather than a method on `CaseBrief` on purpose: the domain
+    model has no business knowing what a wire looks like, and the gate belongs where the
+    bytes leave (`D42`).
+    """
+    snapshot = brief.snapshot
+    payload = snapshot.payload if snapshot else None
+    known = identity.assurance.at_least(AssuranceLevel.L1_PROBABLE)
+    disclose = identity.may_disclose_policy_details
+
+    customer_out: BriefCustomerOut | None = None
+    if known and payload and payload.customer:
+        who = payload.customer
+        customer_out = BriefCustomerOut(
+            display_name_th=" ".join(x for x in (who.first_name_th, who.last_name_th) if x),
+            segment=str(who.segment),
+            is_vulnerable=who.is_vulnerable,
+        )
+
+    policy_out: BriefPolicyOut | None = None
+    if disclose and payload and payload.relevant_policy:
+        policy = payload.relevant_policy
+        policy_out = BriefPolicyOut(
+            policy_no=policy.policy_no,
+            product_th=payload.selected_product.name_th if payload.selected_product else None,
+            status=str(policy.status),
+            line=str(policy.line),
+            sum_insured=policy.sum_insured,
+            next_due_date=policy.next_due_date,
+            coverages=tuple(
+                BriefCoverageOut(
+                    label_th=coverage.label_th,
+                    limit_text=(
+                        f"{coverage.amount:,.0f} {coverage.currency}"
+                        if coverage.amount is not None
+                        else None
+                    ),
+                )
+                for coverage in policy.coverages
+            ),
+        )
+
+    last_contact: str | None = None
+    if known and payload and payload.recent_interactions:
+        latest = payload.recent_interactions[0]
+        last_contact = latest.topic or latest.summary
+
+    return BriefOut(
+        version=brief.version,
+        kind=str(brief.kind),
+        urgency=str(brief.urgency),
+        intent=(
+            BriefIntentOut(
+                code=brief.intent.intent_code,
+                label_th=brief.intent.label_th,
+                confidence=brief.intent.confidence,
+                source=brief.intent.source,
+            )
+            if brief.intent
+            else None
+        ),
+        summary_th=brief.summary_th,
+        suggested_opening_th=brief.suggested_opening_th,
+        # A playbook step the agent may not take yet is omitted, not disabled. "Read the
+        # policy number back to them" is not a greyed-out button at L1, it is advice that
+        # does not apply.
+        actions_th=tuple(
+            action.text_th
+            for action in brief.recommended_actions
+            if identity.assurance.at_least(action.requires_assurance)
+        ),
+        customer=customer_out,
+        relevant_policy=policy_out,
+        other_policy_count=(
+            max(len(payload.active_policies) - (1 if payload.relevant_policy else 0), 0)
+            if disclose and payload
+            else 0
+        ),
+        recent_claim_count=len(payload.recent_claims) if disclose and payload else 0,
+        last_contact_th=last_contact,
+        disclosure_locked=not disclose,
+        degraded=str(brief.degraded),
+        build_ms=brief.build_ms,
+        provenance=tuple(
+            BriefProvenanceOut(field=p.field, source=p.source, stale=p.stale)
+            for p in (snapshot.provenance if snapshot else ())
+        ),
+    )

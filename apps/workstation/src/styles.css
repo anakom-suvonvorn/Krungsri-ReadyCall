@@ -1,0 +1,413 @@
+/* The workstation's look: dense, calm, and readable across a room.
+ *
+ * Two constraints drove this rather than taste. It is used for a whole shift, so nothing
+ * flashes except the one thing that must (an incoming offer). And it is demoed on a
+ * projector, so the type is larger than a normal dashboard's and the assurance badge is
+ * the loudest element on the screen after the offer card - if a judge takes one thing
+ * away, it should be that the system knows how sure it is.
+ */
+
+:root {
+  --bg: #0e1420;
+  --panel: #161e2e;
+  --panel-2: #1d2739;
+  --line: #2a3548;
+  --ink: #e8edf6;
+  --ink-dim: #97a3b8;
+  --ink-faint: #6b7789;
+  --accent: #ffc72c; /* Krungsri yellow */
+  --accent-ink: #221a00;
+  --ok: #34d399;
+  --warn: #fbbf24;
+  --bad: #f87171;
+  --info: #60a5fa;
+  --radius: 10px;
+  --shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "Segoe UI", "Noto Sans Thai", Tahoma, sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--ink);
+  border-radius: 8px;
+  padding: 7px 13px;
+}
+button:hover:not(:disabled) {
+  border-color: var(--ink-faint);
+}
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+button.primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: var(--accent);
+  font-weight: 650;
+}
+button.danger {
+  background: #3a1c1c;
+  border-color: #6b2b2b;
+  color: #ffd7d7;
+}
+button.ghost {
+  background: transparent;
+}
+button.on {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: var(--accent);
+}
+
+input,
+select,
+textarea {
+  font: inherit;
+  background: var(--bg);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 7px 10px;
+  width: 100%;
+}
+
+/* --- layout ------------------------------------------------------------- */
+
+.shell {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  height: 100vh;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 16px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+
+.brand {
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+.brand span {
+  color: var(--accent);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.columns {
+  display: grid;
+  grid-template-columns: 260px 1fr 340px;
+  gap: 12px;
+  padding: 12px;
+  overflow: hidden;
+}
+@media (max-width: 1200px) {
+  .columns {
+    grid-template-columns: 1fr;
+    overflow: auto;
+  }
+}
+
+.col {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+}
+
+.panel h2 {
+  margin: 0 0 10px;
+  font-size: 12px;
+  letter-spacing: 0.9px;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  font-weight: 700;
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.muted {
+  color: var(--ink-dim);
+}
+.faint {
+  color: var(--ink-faint);
+  font-size: 13px;
+}
+.mono {
+  font-family: "Cascadia Mono", Consolas, monospace;
+}
+
+/* --- badges ------------------------------------------------------------- */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 650;
+  border: 1px solid var(--line);
+}
+.badge.ok {
+  background: rgba(52, 211, 153, 0.12);
+  color: var(--ok);
+  border-color: rgba(52, 211, 153, 0.35);
+}
+.badge.warn {
+  background: rgba(251, 191, 36, 0.12);
+  color: var(--warn);
+  border-color: rgba(251, 191, 36, 0.35);
+}
+.badge.bad {
+  background: rgba(248, 113, 113, 0.12);
+  color: var(--bad);
+  border-color: rgba(248, 113, 113, 0.35);
+}
+.badge.info {
+  background: rgba(96, 165, 250, 0.12);
+  color: var(--info);
+  border-color: rgba(96, 165, 250, 0.35);
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* The assurance badge is deliberately the loudest thing after the offer card. */
+.assurance {
+  font-size: 15px;
+  padding: 7px 14px;
+}
+
+/* --- the offer card ----------------------------------------------------- */
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(4, 8, 15, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 40;
+}
+/* Both of these are single-class selectors, so `.hidden` must be MORE specific than
+ * `.scrim` or the display:flex wins and an invisible overlay eats every click. That
+ * exact bug cost an hour on the customer simulator. */
+.scrim.hidden {
+  display: none;
+}
+
+.offer-card {
+  width: min(560px, 92vw);
+  background: var(--panel);
+  border: 2px solid var(--accent);
+  border-radius: 16px;
+  padding: 22px 24px;
+  box-shadow: var(--shadow);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 199, 44, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 14px rgba(255, 199, 44, 0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .offer-card {
+    animation: none;
+  }
+}
+
+.offer-card h1 {
+  margin: 0 0 4px;
+  font-size: 24px;
+}
+
+.countdown {
+  font-size: 40px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+}
+
+.rationale {
+  background: var(--panel-2);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  padding: 9px 12px;
+  margin: 12px 0;
+}
+
+/* --- call bar ----------------------------------------------------------- */
+
+.callbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+
+.timer {
+  font-variant-numeric: tabular-nums;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.stub {
+  font-size: 11px;
+  color: var(--ink-faint);
+  border: 1px dashed var(--line);
+  border-radius: 6px;
+  padding: 2px 7px;
+}
+
+/* --- brief -------------------------------------------------------------- */
+
+.brief-line {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: 10px;
+  padding: 5px 0;
+  border-bottom: 1px solid rgba(42, 53, 72, 0.6);
+}
+.brief-line:last-child {
+  border-bottom: none;
+}
+.brief-line .k {
+  color: var(--ink-faint);
+  font-size: 13px;
+}
+
+.locked {
+  color: var(--ink-faint);
+  font-style: italic;
+}
+
+ol.actions {
+  margin: 6px 0 0;
+  padding-left: 20px;
+}
+ol.actions li {
+  margin-bottom: 4px;
+}
+
+.opening {
+  background: var(--panel-2);
+  border-radius: 8px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--ok);
+}
+
+/* --- keypad ------------------------------------------------------------- */
+
+.digits {
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 26px;
+  letter-spacing: 3px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  min-height: 48px;
+  word-break: break-all;
+}
+
+.keypad {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-top: 8px;
+}
+
+/* --- queues ------------------------------------------------------------- */
+
+.queue {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+  font-size: 13px;
+  border-bottom: 1px solid rgba(42, 53, 72, 0.6);
+}
+.queue:last-child {
+  border-bottom: none;
+}
+
+/* --- toast -------------------------------------------------------------- */
+
+.toast {
+  position: fixed;
+  bottom: 84px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #3a1c1c;
+  border: 1px solid #6b2b2b;
+  color: #ffd7d7;
+  padding: 10px 16px;
+  border-radius: 10px;
+  z-index: 60;
+  box-shadow: var(--shadow);
+  max-width: 90vw;
+}
+
+/* --- sign-in ------------------------------------------------------------ */
+
+.signin {
+  height: 100vh;
+  display: grid;
+  place-items: center;
+}
+.signin .panel {
+  width: min(460px, 92vw);
+}

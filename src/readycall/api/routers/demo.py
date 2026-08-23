@@ -259,7 +259,7 @@ async def place_call(
     # A closed queue is a routing outcome, not an error (`D25`). Say so plainly rather
     # than letting the caller sit in a queue nobody is staffing.
     hours = container.hours.state(spec.hours, container.clock.now())
-    if not hours.is_open:
+    if not hours.is_open and not body.ignore_hours:
         await container.orchestrator.transition(
             session, CallState.VOICEMAIL, reason=f"queue_closed:{hours.closed_reason}"
         )
@@ -301,3 +301,14 @@ async def place_call(
         offered_to=result.offered[0] if result.offered else None,
         unplaced_reason=result.unplaced.get(session.call_session_id),
     )
+
+
+@router.get("/agents", summary="DEMO: who you can sign in as on the workstation")
+async def list_agents(container: ContainerDep) -> list[dict[str, str]]:
+    """The staff-side persona picker. Ids and display names only — no skills, no
+    contact details; the workstation asks for its own agent's detail after signing in."""
+    _require_demo(container)
+    return [
+        {"agent_id": a.agent_id, "display_name": a.display_name, "team": a.team}
+        for a in await container.agents.list_agents()
+    ]

@@ -12,7 +12,7 @@ matters here:
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -341,6 +341,11 @@ class PlaceCallRequest(ApiModel):
     keys: tuple[str, ...] = ()
     #: Seconds already waited, so a demo can show a caller near their SLA without waiting.
     waited_s: float = Field(default=0.0, ge=0.0, le=3600.0)
+    #: DEMO: place the call even when the queue's schedule says it is shut. Rehearsals
+    #: happen at 2 a.m. and judging happens at 10 a.m.; without this, half the queues are
+    #: closed for one of them. It stands in for nothing in the real system — production
+    #: has no such flag, and the closed-queue path (`D25`) is exercised by leaving it off.
+    ignore_hours: bool = False
 
 
 class PlaceCallResponse(ApiModel):
@@ -354,3 +359,79 @@ class PlaceCallResponse(ApiModel):
     offered_to: str | None = None
     #: Which of `D50`'s two reasons applies, when nobody could take the call.
     unplaced_reason: str | None = None
+
+
+# --- the brief, as it crosses the wire ---------------------------------------------
+#
+# This DTO exists because `CaseBrief.model_dump()` LEAKED. The domain object embeds the
+# whole frozen `ContextSnapshot`, so dumping it put the policy number, sum insured, every
+# coverage figure and the customer's date of birth into the payload of a call sitting at
+# `L1_PROBABLE` — while the same response said `may_disclose_policy_details: false`.
+# `BriefBuilder` gates the rendered Thai lines, which is what it was asked to do; nothing
+# gated the object graph hanging off the side of them.
+#
+# `D42` names this failure exactly: "Sending the full brief and hiding fields in React
+# would put someone's coverage one devtools panel away." The gate has to be the *shape of
+# what is serialised*, not a flag next to it — so these models simply have nowhere to put
+# a policy number until the assurance level permits one.
+
+
+class BriefIntentOut(ApiModel):
+    code: str
+    label_th: str
+    confidence: float
+    source: str
+
+
+class BriefCustomerOut(ApiModel):
+    """Requires `L1_PROBABLE`. A name is what lets the agent open the conversation."""
+
+    display_name_th: str
+    segment: str | None = None
+    is_vulnerable: bool = False
+
+
+class BriefCoverageOut(ApiModel):
+    label_th: str
+    limit_text: str | None = None
+
+
+class BriefPolicyOut(ApiModel):
+    """Requires `L2_STRONG` (`D20`). A borrowed phone must not surrender these."""
+
+    policy_no: str
+    product_th: str | None = None
+    status: str
+    line: str
+    sum_insured: float | None = None
+    next_due_date: date | None = None
+    coverages: tuple[BriefCoverageOut, ...] = ()
+
+
+class BriefProvenanceOut(ApiModel):
+    field: str
+    source: str
+    stale: bool = False
+
+
+class BriefOut(ApiModel):
+    version: int
+    kind: str
+    urgency: str
+    intent: BriefIntentOut | None = None
+    summary_th: str | None = None
+    suggested_opening_th: str | None = None
+    #: Already filtered by `requires_assurance` — a step the agent may not take yet is
+    #: absent, not greyed out.
+    actions_th: tuple[str, ...] = ()
+    customer: BriefCustomerOut | None = None
+    relevant_policy: BriefPolicyOut | None = None
+    other_policy_count: int = 0
+    recent_claim_count: int = 0
+    last_contact_th: str | None = None
+    #: True whenever assurance is below `L2_STRONG`; the workstation says so rather than
+    #: rendering an empty row that looks like missing data.
+    disclosure_locked: bool = True
+    degraded: str = "none"
+    build_ms: float | None = None
+    provenance: tuple[BriefProvenanceOut, ...] = ()

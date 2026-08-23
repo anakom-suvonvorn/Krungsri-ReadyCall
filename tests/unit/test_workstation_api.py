@@ -7,6 +7,7 @@ rendered before the assurance gate, a capture that leaks its digits into a respo
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from typing import Any
 
@@ -311,3 +312,77 @@ def test_the_queue_strip_says_when_a_closed_queue_reopens(client: Any) -> None:
     for queue in closed:
         assert queue["closed_reason"] in {"outside_hours", "holiday"}
         assert queue["next_open_at"], "a closed queue must say when it opens again (`D25`)"
+
+
+# --- the disclosure gate is the SHAPE of the payload (D42) ------------------------
+
+
+def test_the_l1_payload_does_not_contain_what_l1_may_not_see(client: Any) -> None:
+    """The regression guard for a real leak.
+
+    `render_brief` used to return `CaseBrief.model_dump()`. The domain object embeds the
+    whole frozen `ContextSnapshot`, so the response carried the policy number, the sum
+    insured, every coverage figure and the customer's date of birth — in the *same body*
+    that said `may_disclose_policy_details: false`.
+
+    Asserting on rendered Thai lines would not have caught it, because those were
+    correctly gated. Only searching the raw bytes does.
+    """
+    call_id = take_a_call(client)
+    body = client.get("/v1/agent/me").json()
+    assert body["identity"]["assurance"] == "l1_probable"
+    assert body["identity"]["may_disclose_policy_details"] is False
+
+    raw = json.dumps(body, ensure_ascii=False)
+    for secret in ("HL-2024-000811", "policy_no", "sum_insured", "coverages", "dob"):
+        assert secret not in raw, f"{secret!r} must not cross the wire at L1"
+    assert body["brief"]["disclosure_locked"] is True
+    assert body["brief"]["relevant_policy"] is None
+    assert call_id
+
+
+def test_promotion_is_a_re_render_that_reveals_the_policy(client: Any) -> None:
+    """The other half: once the agent attests, the same data is allowed through."""
+    call_id = take_a_call(client)
+    before = client.get("/v1/agent/me").json()["brief"]["version"]
+
+    client.post(
+        f"/v1/agent/calls/{call_id}/identity",
+        json={"outcome": "confirmed", "challenge": "date_of_birth"},
+    )
+    after = client.get("/v1/agent/me").json()
+
+    assert after["identity"]["assurance"] == "l3_verified"
+    assert after["brief"]["relevant_policy"] is not None
+    assert after["brief"]["relevant_policy"]["policy_no"] == "HL-2024-000811"
+    assert after["brief"]["disclosure_locked"] is False
+    # `D7`: a new version, so the record shows what the agent saw before and after.
+    assert after["brief"]["version"] > before
+
+
+def test_a_rejected_identity_takes_the_policy_back_off_the_screen(client: Any) -> None:
+    """Assurance moves DOWN as well as up, and the payload has to follow it."""
+    call_id = take_a_call(client)
+    client.post(
+        f"/v1/agent/calls/{call_id}/identity",
+        json={"outcome": "confirmed", "challenge": "policy_number"},
+    )
+    assert client.get("/v1/agent/me").json()["brief"]["relevant_policy"] is not None
+
+    client.post(f"/v1/agent/calls/{call_id}/identity", json={"outcome": "not_this_person"})
+    body = client.get("/v1/agent/me").json()
+    raw = json.dumps(body, ensure_ascii=False)
+    assert "HL-2024-000811" not in raw
+    assert body["brief"] is None or body["brief"]["relevant_policy"] is None
+
+
+def test_actions_needing_assurance_are_absent_not_disabled(client: Any) -> None:
+    """A step the agent may not take yet is advice that does not apply, not a grey button."""
+    call_id = take_a_call(client)
+    at_l1 = client.get("/v1/agent/me").json()["brief"]["actions_th"]
+    client.post(
+        f"/v1/agent/calls/{call_id}/identity",
+        json={"outcome": "confirmed", "challenge": "date_of_birth"},
+    )
+    at_l3 = client.get("/v1/agent/me").json()["brief"]["actions_th"]
+    assert len(at_l3) >= len(at_l1)

@@ -31,6 +31,7 @@ from readycall.logging import configure, get_logger
 log = get_logger(__name__)
 
 SIM_DIR = Path(__file__).resolve().parents[3] / "apps" / "customer_sim"
+WORKSTATION_DIST = Path(__file__).resolve().parents[3] / "apps" / "workstation" / "dist"
 
 
 def create_app(settings: Settings | None = None, *, clock: Clock | None = None) -> FastAPI:
@@ -72,6 +73,22 @@ def create_app(settings: Settings | None = None, *, clock: Clock | None = None) 
     app.include_router(agent.router)
     if settings.demo_login_enabled:
         app.include_router(demo.router)
+
+    # The workstation is a built React bundle (`D32`), mounted only when it exists. That
+    # keeps `uv run python -m readycall.entrypoints.api` working with no node installed —
+    # you get the API and the customer simulator, and the workstation appears once
+    # somebody has run `npm run build` in `apps/workstation`. The demo therefore needs
+    # node ONCE, never at run time (the same worry that made the simulator build-free).
+    if WORKSTATION_DIST.is_dir():
+        app.mount(
+            "/workstation/assets",
+            StaticFiles(directory=WORKSTATION_DIST / "assets"),
+            name="workstation-assets",
+        )
+
+        @app.get("/workstation", include_in_schema=False)
+        async def workstation() -> FileResponse:
+            return FileResponse(WORKSTATION_DIST / "index.html")
 
     if SIM_DIR.is_dir():
         app.mount("/sim/static", StaticFiles(directory=SIM_DIR), name="sim-static")

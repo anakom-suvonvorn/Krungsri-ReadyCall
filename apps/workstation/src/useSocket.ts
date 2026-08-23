@@ -1,0 +1,109 @@
+/**
+ * The live link to the server, and the only stateful thing in the client.
+ *
+ * The contract it upholds (`api/realtime.py`):
+ *
+ * * remember the highest `seq` applied, and send it as `last_seq` on reconnect, so the
+ *   server replays exactly the gap rather than everything or nothing;
+ * * ignore anything with a `seq` we have already applied — a duplicate offer is a call
+ *   ringing at a desk that already answered it;
+ * * treat the socket as a *view*. If it drops, the call carries on; we re-fetch the
+ *   snapshot over REST and carry on with it.
+ *
+ * Reconnect backs off, because the failure this must survive is the server restarting
+ * during a demo, and twenty tabs hammering it as it boots is how a slow start becomes a
+ * failed one.
+ */
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { Snapshot } from "./api";
+
+export type SocketMessage = {
+  seq: number;
+  type: string;
+  at?: string;
+  payload: Record<string, unknown>;
+};
+
+export type SocketStatus = "connecting" | "live" | "offline";
+
+const HEARTBEAT_MS = 10_000;
+const BACKOFF_MS = [500, 1000, 2000, 4000, 8000];
+
+export function useSocket(
+  enabled: boolean,
+  onMessage: (message: SocketMessage) => void,
+  onSnapshot: (snapshot: Snapshot) => void,
+) {
+  const [status, setStatus] = useState<SocketStatus>("offline");
+  const socketRef = useRef<WebSocket | null>(null);
+  const lastSeq = useRef(0);
+  const attempt = useRef(0);
+  const stopped = useRef(false);
+  // Kept in refs, not deps: re-subscribing the socket every time a parent re-renders
+  // would tear down a live connection on every keystroke in the wrap-up box.
+  const handleMessage = useRef(onMessage);
+  const handleSnapshot = useRef(onSnapshot);
+  handleMessage.current = onMessage;
+  handleSnapshot.current = onSnapshot;
+
+  const connect = useCallback(() => {
+    if (stopped.current) return;
+    const scheme = window.location.protocol === "https:" ? "wss" : "ws";
+    const socket = new WebSocket(`${scheme}://${window.location.host}/v1/agent/ws`);
+    socketRef.current = socket;
+    setStatus("connecting");
+
+    socket.onopen = () => {
+      attempt.current = 0;
+      setStatus("live");
+      socket.send(JSON.stringify({ type: "hello", last_seq: lastSeq.current }));
+    };
+
+    socket.onmessage = (event) => {
+      const message = JSON.parse(event.data) as SocketMessage;
+      if (message.type === "snapshot") {
+        handleSnapshot.current(message.payload as unknown as Snapshot);
+        return;
+      }
+      // seq 0 is reserved for out-of-band frames (heartbeat_ack, snapshot) that carry no
+      // ordering; anything at or below what we have applied is a replay we already saw.
+      if (message.seq > 0) {
+        if (message.seq <= lastSeq.current) return;
+        lastSeq.current = message.seq;
+        socket.send(JSON.stringify({ type: "ack", seq: message.seq }));
+      }
+      handleMessage.current(message);
+    };
+
+    socket.onclose = () => {
+      setStatus("offline");
+      if (stopped.current) return;
+      const delay = BACKOFF_MS[Math.min(attempt.current, BACKOFF_MS.length - 1)];
+      attempt.current += 1;
+      window.setTimeout(connect, delay);
+    };
+
+    socket.onerror = () => socket.close();
+  }, []);
+
+  useEffect(() => {
+    if (!enabled) return;
+    stopped.current = false;
+    connect();
+    const beat = window.setInterval(() => {
+      const socket = socketRef.current;
+      if (socket?.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ type: "heartbeat" }));
+      }
+    }, HEARTBEAT_MS);
+
+    return () => {
+      stopped.current = true;
+      window.clearInterval(beat);
+      socketRef.current?.close();
+    };
+  }, [enabled, connect]);
+
+  return status;
+}

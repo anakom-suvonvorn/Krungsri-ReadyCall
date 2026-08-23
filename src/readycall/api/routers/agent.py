@@ -578,6 +578,12 @@ async def _snapshot(container: Any, agent_id: str) -> WorkstationSnapshot:
         queue_id = getattr(session, "queue_id", None) or "q_general"
         spec = container.pack.queues.get(queue_id)
         identity = container.identity_for_call.get(open_offer.call_session_id)
+        # Urgency and wait come from the POOL's record of the caller, not from the call
+        # session, which has neither field. The first version read them off the session
+        # with `getattr(..., "normal")` defaults, so every offer card claimed a normal,
+        # zero-second wait — beside a rationale that said "เรื่องเร่งด่วน". A card that
+        # contradicts its own reason is worse than one with no reason.
+        waiting = container.dispatch.waiting_call(open_offer.call_session_id)
         offer_out = OfferOut(
             assignment_id=open_offer.assignment_id,
             call_session_id=open_offer.call_session_id,
@@ -586,9 +592,14 @@ async def _snapshot(container: Any, agent_id: str) -> WorkstationSnapshot:
             offered_at=open_offer.offered_at,
             queue_id=queue_id,
             queue_label_th=spec.label_th if spec else queue_id,
-            intent_code=getattr(session, "menu_intent_code", None),
-            urgency=str(getattr(session, "urgency", "normal")),
-            waited_s=0.0,
+            intent_code=waiting.intent_code if waiting else None,
+            intent_label_th=(
+                container.pack.intents[waiting.intent_code].label_th
+                if waiting and waiting.intent_code in container.pack.intents
+                else None
+            ),
+            urgency=str(waiting.intent_urgency) if waiting else "normal",
+            waited_s=waiting.total_wait_s if waiting else 0.0,
             assurance=str(identity.assurance) if identity else "l0_anonymous",
             rationale_th=decision.rationale_th if decision else None,
         )

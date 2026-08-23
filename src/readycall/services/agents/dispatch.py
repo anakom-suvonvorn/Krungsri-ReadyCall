@@ -81,6 +81,11 @@ class DispatchService:
     def waiting(self) -> list[WaitingCall]:
         return [call for _, call in self._waiting.values()]
 
+    def waiting_call(self, call_session_id: str) -> WaitingCall | None:
+        """The pool's view of one caller — urgency and accrued wait, for the offer card."""
+        entry = self._waiting.get(call_session_id)
+        return entry[1] if entry else None
+
     def last_decision_for(self, call_session_id: str) -> MatchingDecision | None:
         return self._last_decision.get(call_session_id)
 
