@@ -97,7 +97,45 @@ class ContextEventResponse(ApiModel):
     events_held: int
 
 
+# --- GET /v1/app/contact-reasons ---------------------------------------------------------
+
+
+class ContactReason(ApiModel):
+    """One reason a customer might be calling, for the in-app picker.
+
+    These come from the **same `menus.yaml` the IVR reads** (`D28`). If the app offered a
+    different list from the keypad, a customer would get different options depending on
+    which door they came through, and the intent taxonomy would quietly fork in two.
+    """
+
+    intent_code: str
+    label_th: str
+    #: The keypad digit this reason corresponds to in the IVR. Shown so the app and the
+    #: phone menu are visibly the same menu.
+    key: str | None = None
+
+
+class ContactReasonsResponse(ApiModel):
+    product_line: str
+    reasons: tuple[ContactReason, ...]
+
+
 # --- demo only ---------------------------------------------------------------------------
+
+
+class AppPlan(ApiModel):
+    """A policy the customer actually holds, for the simulator's plan list.
+
+    Demo scaffolding: the real Krungsri app already knows the customer's plans from its own
+    screens and would never ask us for them. Kept under `/v1/demo/` so the public `/v1`
+    surface stays exactly what a real client would call.
+    """
+
+    product_code: str
+    product_line: str
+    name_th: str
+    policy_no_masked: str
+    status: str
 
 
 class DemoPersona(ApiModel):

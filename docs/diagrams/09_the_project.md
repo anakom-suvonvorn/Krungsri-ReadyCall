@@ -2,7 +2,7 @@
 
 _How it gets built, how it is kept honest, and why it is the way it is._
 
-← [Data & events](08_data_and_events.md) · [index](README.md)
+← [Data & events](08_data_and_events.md) · [index](README.md) · next → [Sessions & tokens](10_sessions_and_tokens.md)
 
 ---
 
@@ -93,4 +93,4 @@ fails, the degradation ladder is broken.
 
 ---
 
-← [Data & events](08_data_and_events.md) · [index](README.md)
+← [Data & events](08_data_and_events.md) · [index](README.md) · next → [Sessions & tokens](10_sessions_and_tokens.md)

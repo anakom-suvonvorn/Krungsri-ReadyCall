@@ -834,3 +834,40 @@ that replaced them is the useful part._
 - **Tradeoff:** the simulator will not scale into a real app, and is not meant to. If it
   ever needs to, it gets rewritten in React alongside the workstation — by which point the
   API it calls is unchanged, which is the whole argument.
+
+## D48. The app asks *why* before placing the call, so an app caller skips the IVR entirely
+- **Problem:** `D41` said the screen a customer tapped Contact from supplies the intent. That
+  works for the pitch's own scenario — reading the hospitalisation page implies an IPD
+  question — but it only works when the screen happens to imply something. A customer sitting
+  on a generic plan-detail page has told us the **product line** and nothing about the
+  **reason**, so they still had to answer the second question on the keypad. Worse, the
+  simulator was fudging it: each persona carried a hardcoded `app_intent`, which pretended the
+  app knew the reason without ever asking.
+- **Decision:** tapping *Contact* opens a **reason sheet** in the app. The customer picks
+  from the same list the IVR would read out, and the chosen intent travels with the call.
+  Both menu questions are then answered before the phone rings, and an app caller skips the
+  IVR completely.
+- **One menu, two surfaces.** `GET /v1/app/contact-reasons?product_line=…` reads
+  **`menus.yaml`** — the exact file the IVR reads (`D28`), including the keypad digit for
+  each option. The app shows `1 แจ้งอุบัติเหตุรถยนต์` because the phone would say
+  *"กด 1 แจ้งอุบัติเหตุรถยนต์"*. If the app kept its own list, a customer would get different
+  options depending which door they came through and the taxonomy would quietly fork in two.
+  A test asserts the two lists are identical, in order, with the same keys.
+- **Reasoning — it is strictly better UX, not just faster.** Five options take about a second
+  to read on a screen and roughly thirty to hear in an earpiece, and a screen lets you scan
+  and go back. This is the same instinct as `D37` inverted: the keypad beats speech *on the
+  phone*, and a screen beats the keypad *when there is a screen*.
+- **A free UX win we did not go looking for:** the sheet is a **deliberate barrier against
+  an accidental call**. A single tap on *Contact* previously placed a call; now there is a
+  second, cheap, cancellable step, and tapping outside the sheet dismisses it. Contact
+  buttons sit next to other buttons in a banking app, and a mis-tap that dials a call centre
+  is a bad minute for the customer and a wasted slot for an agent.
+- **The customer may still have no reason to give**, and that is fine: "Contact us — something
+  else" opens the general menu, and skipping the sheet entirely falls back to the keypad,
+  which is exactly the cold-call path (`D19`). Nothing here is load-bearing.
+- **Consequence for the plan list:** the simulator now lists the customer's *actual* policies
+  through `CoreDataProvider`, with the count they really hold — two for the SME owner, none
+  for the customer whose only policy has lapsed. Policy numbers are masked even in the
+  customer's own list, because a policy number on screen is a disclosure regardless of who is
+  looking. Previously it showed three fixed rows named *Documents*, *Claim history* and
+  *Coverage details*, which are pages, not plans.

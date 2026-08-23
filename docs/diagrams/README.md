@@ -2,7 +2,7 @@
 
 _Last updated: 2026-08-23._
 
-**47 diagrams** covering every part of Krungsri ReadyCall. Written to be read in order the
+**50 diagrams** covering every part of Krungsri ReadyCall. Written to be read in order the
 first time, and dipped into afterwards.
 
 ---
@@ -19,7 +19,8 @@ first time, and dipped into afterwards.
 | 6 | **[Agents & matching](06_agents_and_matching.md)** | Who gets which call and why, the agent's two-axis state, and the workstation itself |
 | 7 | **[Voice & AI](07_voice_and_ai.md)** | Speech to text, the LLM layer, and the intake seam that becomes a full AI caller later |
 | 8 | **[Data & events](08_data_and_events.md)** | Every domain object, the two stores, and the event backbone |
-| 9 | **[The project](09_the_project.md)** | Phases, what is built vs faked, how it is tested, and a map of all 43 decisions |
+| 9 | **[The project](09_the_project.md)** | Phases, what is built vs faked, how it is tested, and a map of every decision |
+| 10 | **[Sessions & tokens](10_sessions_and_tokens.md)** | How the system knows who is calling when the client never sends a customer id — and why that is hard to attack |
 
 Short on time? **[Start here](01_start_here.md)** then **[The call](02_the_call.md)** is about
 fifteen minutes and covers most of it.
@@ -93,7 +94,7 @@ uv run python scripts/render_diagrams.py brief_gating
 docs/diagrams/
 ├─ README.md              ← you are here
 ├─ 01_start_here.md …     ← the nine explanation pages
-├─ *.svg                  ← 47 rendered diagrams (committed, so no tooling is needed to read them)
+├─ *.svg                  ← 50 rendered diagrams (committed, so no tooling is needed to read them)
 ├─ .render-manifest.json  ← source hash per diagram, so --check compares content not mtimes
 └─ src/*.mmd              ← mermaid sources; GENERATED ones say so in the header
 ```

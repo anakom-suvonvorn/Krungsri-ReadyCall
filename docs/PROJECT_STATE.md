@@ -288,7 +288,7 @@ performing by hand, i.e. what the next services take over (`D36`).
 | Mock core | 3 customers, 4 policies across 4 product lines, 5 products, 5 interactions, 2 claims |
 | Intent taxonomy | 28 intents across 5 lines, each with a catch-all (revisit during the hackathon) |
 | Generated mock data | 2,000 customers / 2,292 policies / 5,880 interactions (seeded, gitignored) |
-| Diagrams | 47 (12 generated from source, 35 hand-drawn), across 9 explanation pages |
+| Diagrams | 50 (12 generated from source, 38 hand-drawn), across 10 explanation pages |
 
 ---
 

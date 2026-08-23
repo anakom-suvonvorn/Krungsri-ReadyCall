@@ -1,0 +1,38 @@
+%% HANDWRITTEN. Checked against services/identity/resolver.py - the L2 rung
+sequenceDiagram
+    autonumber
+    participant C as Customer
+    participant APP as App (or simulator)
+    participant API as ReadyCall
+    participant STORE as intent store
+    participant TEL as Telephony
+    participant ID as IdentityResolver
+
+    Note over C,API: 14:02 - in the app
+    C->>APP: taps Contact, picks a reason
+    APP->>API: POST /v1/calls/intents (cookie attached automatically)
+    API->>API: cookie -> C000002 (server-side lookup)
+    API->>STORE: save CallIntent{customer_id: C000002, sha256(token), expires 14:17}
+    API-->>APP: token + dial target
+
+    Note over C,TEL: 14:04 - two minutes later, on the phone
+
+    alt the call can carry the token (app-placed / WebRTC)
+        C->>TEL: app places the call, token in the SIP header
+        TEL->>ID: resolve(correlation_token=...)
+        ID->>STORE: get_by_token_hash(sha256(token))
+        STORE-->>ID: intent, not expired
+        ID-->>TEL: <b>L3_VERIFIED</b> - C000002
+        Note right of ID: strongest rung: the app's own login<br/>did the verifying, we inherit it
+    else the token is lost (they just dialled the number by hand)
+        C->>TEL: dials +6621234000 from their own mobile
+        TEL->>ID: resolve(caller_number="+66898887777")
+        ID->>ID: find_customer_by_phone -> C000002
+        Note right of ID: on its own this is a GUESS. Phones get<br/>borrowed, shared, and recycled. = L1.
+        ID->>STORE: any pending intent for C000002 in the last 15 min?
+        STORE-->>ID: yes - created 14:02, two minutes ago
+        ID-->>TEL: <b>L2_STRONG</b> - C000002
+        Note right of ID: TWO independent signals agreeing:<br/>their number, AND an authenticated app<br/>session that just asked to be called.<br/>Not proof - but much better than ANI alone.
+    end
+
+    Note over ID: an unknown number with no token is L0.<br/>The call still connects. Identity gates<br/>DISCLOSURE, never the call itself. (D20)

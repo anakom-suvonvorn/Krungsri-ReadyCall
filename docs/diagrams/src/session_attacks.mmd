@@ -1,0 +1,31 @@
+%% HANDWRITTEN. Checked against api/security.py + tests/unit/test_api.py
+flowchart TB
+    A1["<b>send customer_id in the request body</b><br/>POST /v1/calls/intents {customer_id: 'C000002'}"]:::atk
+    A1 --> D1["<b>422.</b> The schema has no such field and<br/>extra='forbid' rejects unknown keys.<br/>There is nothing to override. (D4)"]:::def1
+
+    A2["<b>guess a session cookie</b>"]:::atk
+    A2 --> D2["<b>401.</b> secrets.token_urlsafe(24) = 192 bits<br/>of CSPRNG randomness. Compared with<br/>hmac.compare_digest, so no timing leak."]:::def1
+
+    A3["<b>read the cookie with JavaScript</b><br/>document.cookie"]:::atk
+    A3 --> D3["<b>empty.</b> HttpOnly. Even XSS on our own<br/>page cannot exfiltrate the session."]:::def1
+
+    A4["<b>steal the DB and replay the tokens</b>"]:::atk
+    A4 --> D4a["<b>useless.</b> Only sha256(token) is stored.<br/>The plaintext is returned once and never<br/>written down."]:::def1
+
+    A5["<b>reuse a token after logout</b>"]:::atk
+    A5 --> D5["<b>401.</b> Logout revokes SERVER-SIDE, not just<br/>the cookie. Clearing the cookie alone would<br/>leave a live session for anyone holding it."]:::def1
+
+    A6["<b>read someone else's intent</b><br/>GET /v1/calls/intents/{their_id}"]:::atk
+    A6 --> D6["<b>404</b> - not 403. The same answer as<br/>'does not exist', so it cannot be used to<br/>discover which ids are real."]:::def1
+
+    A7["<b>keep an old token forever</b>"]:::atk
+    A7 --> D7["<b>expires in 15 min.</b> An expired token earns<br/>nothing and falls THROUGH to a weaker rung -<br/>it never errors, and never grants."]:::def1
+
+    A8["<b>log in as any customer id</b><br/>POST /v1/demo/session {customer_id: 'C000999'}"]:::atk
+    A8 --> D8["<b>404.</b> Only the three configured personas,<br/>and the whole demo router disappears when<br/>demo_login_enabled is false. (D47)"]:::def1
+
+    GAP["<b>what is NOT solved yet, honestly:</b><br/>sessions live in a dict (P2 moves them to Postgres/Redis);<br/>no CSRF token yet - SameSite=Lax only, fine for a<br/>same-origin demo, not for production; no TLS locally;<br/>and the demo login is a persona picker, not authentication.<br/>The SHAPE is right so the real adapter drops in - but this<br/>is not a hardened auth system and does not claim to be."]:::gap
+
+    classDef atk fill:#fdecea,stroke:#d93025,color:#5c1a13
+    classDef def1 fill:#e9f7ef,stroke:#2f9e5f,color:#08361d
+    classDef gap fill:#fff4e6,stroke:#e8a33d,color:#4a2f00

@@ -11,12 +11,15 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, status
 
 from readycall.api.deps import ContainerDep, PrincipalDep
 from readycall.api.schemas import (
+    ContactReason,
+    ContactReasonsResponse,
     ContextEventRequest,
     ContextEventResponse,
     CreateIntentRequest,
     CreateIntentResponse,
     IntentStatusResponse,
 )
+from readycall.domain.enums import ProductLine
 from readycall.logging import call_context, get_logger
 from readycall.services.context.store import AppContextEvent
 
@@ -113,6 +116,52 @@ async def get_call_intent(
         provenance_fields=len(snapshot.provenance),
         degraded=str(snapshot.degraded),
     )
+
+
+@router.get(
+    "/app/contact-reasons",
+    response_model=ContactReasonsResponse,
+    summary="Why might you be calling about this line",
+)
+async def contact_reasons(
+    principal: PrincipalDep,
+    container: ContainerDep,
+    product_line: str = "unknown",
+) -> ContactReasonsResponse:
+    """The reasons the app shows after the customer taps Contact (`D48`).
+
+    Read from the **same `menus.yaml` the IVR reads**. That is the whole point: the app and
+    the keypad offer one menu through two surfaces, so a customer sees the same options
+    whichever door they came through, and the taxonomy cannot fork.
+
+    Answering here is also strictly better UX than answering on the phone — reading five
+    options takes a second on a screen and thirty in an earpiece — and it means an app
+    caller can skip the IVR entirely (`D41`).
+    """
+    try:
+        line = ProductLine(product_line)
+    except ValueError:
+        line = ProductLine.UNKNOWN
+
+    menu = container.pack.reason_menu_for(line)
+    if menu is None:
+        # No line, or a line with no reason menu: fall back to the general menu, which is
+        # exactly what the IVR does.
+        menu = container.pack.menus.get("general_reason")
+
+    reasons: list[ContactReason] = []
+    for option in menu.options if menu else ():
+        if not option.intent:
+            continue
+        spec = container.pack.intents.get(option.intent)
+        reasons.append(
+            ContactReason(
+                intent_code=option.intent,
+                label_th=spec.label_th if spec else option.label_th,
+                key=option.key,
+            )
+        )
+    return ContactReasonsResponse(product_line=str(line), reasons=tuple(reasons))
 
 
 @router.post(

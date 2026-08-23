@@ -26,8 +26,8 @@ from typing import Any
 import yaml
 from fastapi import APIRouter, HTTPException, Request, Response, status
 
-from readycall.api.deps import ContainerDep
-from readycall.api.schemas import DemoLoginRequest, DemoLoginResponse, DemoPersona
+from readycall.api.deps import ContainerDep, PrincipalDep
+from readycall.api.schemas import AppPlan, DemoLoginRequest, DemoLoginResponse, DemoPersona
 from readycall.api.security import DemoSessionStore
 from readycall.errors import ConfigError
 from readycall.logging import get_logger
@@ -101,6 +101,32 @@ async def list_personas(container: ContainerDep) -> list[DemoPersona]:
             )
         )
     return personas
+
+
+@router.get("/plans", response_model=list[AppPlan], summary="The signed-in customer's plans")
+async def list_plans(principal: PrincipalDep, container: ContainerDep) -> list[AppPlan]:
+    """Demo scaffolding. The real app already knows the customer's plans.
+
+    Kept under `/v1/demo/` rather than `/v1/app/` precisely because a real client would
+    never call it — the public surface stays exactly what the real Krungsri app would use.
+    """
+    _require_demo(container)
+
+    plans: list[AppPlan] = []
+    for policy in await container.core.list_policies(principal.customer_id, active_only=True):
+        product = await container.core.get_product(policy.product_code)
+        plans.append(
+            AppPlan(
+                product_code=policy.product_code,
+                product_line=str(policy.line),
+                name_th=product.name_th if product else policy.product_code,
+                # Masked even here: this is a list view, and a policy number on screen is
+                # a disclosure. The agent side gates it on assurance for the same reason.
+                policy_no_masked="•••" + policy.policy_no[-4:],
+                status=str(policy.status),
+            )
+        )
+    return plans
 
 
 @router.post("/session", response_model=DemoLoginResponse, summary="Log in as a persona")

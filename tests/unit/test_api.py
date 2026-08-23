@@ -16,6 +16,8 @@ from fastapi.testclient import TestClient
 from readycall.api.app import create_app
 from readycall.api.schemas import CreateIntentRequest
 from readycall.config import Settings
+from readycall.domain.enums import ProductLine
+from readycall.domainpack import DomainPack
 from tests.conftest import REPO_ROOT
 
 PERSONA = "C000001"
@@ -198,3 +200,60 @@ def test_demo_endpoints_disappear_when_disabled() -> None:
     with TestClient(create_app(settings)) as c:
         assert c.post("/v1/demo/session", json={"customer_id": PERSONA}).status_code == 404
         assert c.get("/health").status_code == 200
+
+
+# --- plans and contact reasons (D48) -----------------------------------------------------
+
+
+def test_plans_reflect_what_the_customer_actually_holds(client: TestClient) -> None:
+    """No made-up rows and no fixed count — the list is the customer's real policies."""
+    client.post("/v1/demo/session", json={"customer_id": "C000002"})
+    plans = client.get("/v1/demo/plans").json()
+    assert [p["product_line"] for p in plans] == ["motor", "travel"]
+    assert all(p["policy_no_masked"].startswith("•••") for p in plans)
+
+
+def test_a_customer_with_nothing_active_gets_an_empty_list(client: TestClient) -> None:
+    """C000003's only policy is lapsed. An empty list is the correct answer, not an error."""
+    client.post("/v1/demo/session", json={"customer_id": "C000003"})
+    assert client.get("/v1/demo/plans").json() == []
+
+
+def test_plan_list_masks_policy_numbers(client: TestClient) -> None:
+    """A policy number on screen is a disclosure, even in a list the customer owns."""
+    client.post("/v1/demo/session", json={"customer_id": "C000002"})
+    body = client.get("/v1/demo/plans").text
+    assert "MT-2025-004512" not in body
+
+
+def test_contact_reasons_come_from_the_same_menu_as_the_ivr(signed_in: TestClient) -> None:
+    """`D48`: one `menus.yaml`, two surfaces.
+
+    If the app offered a different list from the keypad, a customer would see different
+    options depending which door they came through and the taxonomy would fork in two.
+    """
+    pack = DomainPack.load(REPO_ROOT / "config")
+    menu = pack.reason_menu_for(ProductLine.MOTOR)
+    assert menu is not None
+
+    reasons = signed_in.get("/v1/app/contact-reasons", params={"product_line": "motor"}).json()
+    assert [r["intent_code"] for r in reasons["reasons"]] == [
+        o.intent for o in menu.options if o.intent
+    ]
+    assert [r["key"] for r in reasons["reasons"]] == [o.key for o in menu.options if o.intent]
+
+
+def test_unknown_product_line_falls_back_to_the_general_menu(signed_in: TestClient) -> None:
+    """Exactly what the IVR does, so 'something else' is never a dead end."""
+    reasons = signed_in.get("/v1/app/contact-reasons", params={"product_line": "banana"}).json()
+    assert reasons["product_line"] == "unknown"
+    assert any(r["intent_code"].startswith("general.") for r in reasons["reasons"])
+
+
+def test_choosing_a_reason_in_the_app_carries_the_intent(signed_in: TestClient) -> None:
+    """`D41` + `D48`: both menu questions answered before the call is placed."""
+    created = signed_in.post(
+        "/v1/calls/intents",
+        json={"product_code": "KS-HEALTH-A", "app_intent": "health.ipd.preauth"},
+    )
+    assert created.status_code == 201

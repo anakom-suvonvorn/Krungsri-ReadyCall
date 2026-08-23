@@ -1,0 +1,33 @@
+%% HANDWRITTEN. Checked against api/security.py + services/identity/ + D4 + D20
+flowchart TB
+    subgraph phone["<b>ON THE CUSTOMER'S PHONE</b> - holds two opaque strings, understands neither"]
+        direction LR
+        CK["<b>session cookie</b><br/>OB3kL9…<br/>HttpOnly - the page's own JS<br/>literally cannot read it"]:::secret
+        TK["<b>correlation token</b><br/>MNYrQYmuAP4m…<br/>held in memory, carried on the call"]:::secret
+    end
+
+    subgraph server["<b>ON THE SERVER</b> - holds the meaning of both"]
+        direction TB
+        SMAP[("<b>session table</b><br/>OB3kL9… -> C000002, expires 22:15")]:::store
+        IMAP[("<b>intent table</b><br/>sha256(token) -> intent + C000002<br/><b>the token itself is NOT here</b>")]:::store
+    end
+
+    CK -. "sent automatically on every request" .-> SMAP
+    TK -. "carried by the phone call" .-> IMAP
+
+    SMAP --> WHO1["server looks up: who is this?<br/><b>C000002</b>"]:::derive
+    IMAP --> WHO2["server looks up: who is this?<br/><b>C000002</b>"]:::derive
+
+    WHO1 --> KEY
+    WHO2 --> KEY
+    KEY["<b>the customer id is NEVER transmitted.</b><br/>Both directions are: client presents an opaque<br/>reference, server dereferences it privately.<br/>That is the whole mechanism. (D4)"]:::key
+
+    NOTE["<b>why two different strings?</b> The cookie proves who is<br/>using the APP. The token proves this PHONE CALL belongs<br/>to that app session. Cookies do not travel down a<br/>telephone line, so the call needs its own single-purpose,<br/>short-lived credential."]:::note
+
+    HASH["<b>why the token is stored HASHED but the session is not.</b><br/>Different threat: the token is the one credential that also<br/>rides an external channel (the call), so a database leak<br/>must not yield working tokens. Sessions expire in an hour<br/>and are revoked on logout. At P2 both become DB rows and<br/>the session gets the same treatment."]:::note
+
+    classDef secret fill:#fff4e6,stroke:#e8a33d,color:#4a2f00
+    classDef store fill:#e9f7ef,stroke:#2f9e5f,color:#08361d
+    classDef derive fill:#eef4ff,stroke:#5b8def,color:#0b2545
+    classDef key fill:#1f6feb,stroke:#0b3d91,color:#fff
+    classDef note fill:#fffbe6,stroke:#d4a72c,color:#4a3800

@@ -83,6 +83,20 @@
   .headline { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
   .note { font-size: 12px; color: var(--muted); margin-top: 8px; }
   .hidden { display: none; }
+
+  .scrim { position: fixed; inset: 0; background: rgba(6,14,30,.55); display: flex; align-items: flex-end; justify-content: center; z-index: 20; }
+  /* `.scrim` and `.hidden` are both single-class selectors, and `.scrim` comes later,
+     so its display:flex would beat .hidden's display:none - leaving an invisible
+     full-screen overlay that swallows every click. Two classes outranks one. */
+  .scrim.hidden { display: none; }
+  .sheet { background: var(--panel); width: 100%; max-width: 420px; border-radius: 18px 18px 0 0; padding: 18px 18px 26px; box-shadow: 0 -8px 40px rgba(0,0,0,.3); animation: rise .18s ease-out; }
+  @media (min-width: 520px) { .scrim { align-items: center; } .sheet { border-radius: 18px; } }
+  @keyframes rise { from { transform: translateY(14px); opacity: .6 } to { transform: none; opacity: 1 } }
+  .sheet h3 { margin: 0 0 3px; font-size: 17px; }
+  .sheet .sub { margin-bottom: 14px; }
+  .reason { display: flex; gap: 10px; align-items: center; }
+  .reason .k { flex: none; width: 26px; height: 26px; border-radius: 7px; background: var(--bg); border: 1px solid var(--line); display: grid; place-items: center; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .empty { border: 1px dashed var(--line); border-radius: 10px; padding: 14px; text-align: center; color: var(--muted); font-size: 13px; }
 </style>
 </head>
 <body>
@@ -100,16 +114,20 @@
     </section>
 
     <section id="step-browse" class="hidden">
-      <h2>2 · Browse your plans</h2>
+      <h2>2 · Your plans</h2>
       <div class="stack" id="plans"></div>
-      <p class="note">Opening a page posts a context event, which is what becomes
-        “recent activity” on the agent's screen.</p>
+      <p class="note">Real policies, read through the same <code>CoreDataProvider</code> an
+        agent's screen uses. Opening one posts a context event.</p>
     </section>
 
     <section id="step-contact" class="hidden" style="margin-top:16px">
       <h2>3 · Need help?</h2>
-      <button class="primary" id="contact">📞 Contact us about this plan</button>
-      <p class="note">This is the tap the whole product hangs off.</p>
+      <div class="stack">
+        <button class="primary" id="contact" disabled>📞 Contact us about this plan</button>
+        <button id="contact-general">📞 Contact us — something else</button>
+      </div>
+      <p class="note">Tapping opens a list of reasons. Choosing one means this caller can
+        skip the phone menu entirely.</p>
       <button class="ghost" id="logout" style="margin-top:10px">Sign out</button>
     </section>
   </div>
@@ -124,9 +142,10 @@
         <div class="headline"><span id="ms">—</span> <span style="font-size:14px;font-weight:400;color:var(--muted)">to assemble context</span></div>
         <div class="note" id="ready-note">…</div>
 
-        <div style="margin:14px 0 10px"><span class="pill ok" id="pill-ctx">context ready</span> <span class="pill" id="pill-deg">—</span></div>
+        <div style="margin:14px 0 10px"><span class="pill ok" id="pill-ctx">context ready</span> <span class="pill" id="pill-deg">—</span> <span class="pill" id="pill-menu">—</span></div>
 
         <dl class="kv">
+          <dt>reason</dt><dd id="r-reason">—</dd>
           <dt>intent</dt><dd id="r-intent">—</dd>
           <dt>token</dt><dd id="r-token">—</dd>
           <dt>dial</dt><dd id="r-dial">—</dd>
@@ -151,11 +170,21 @@
   </div>
 </div>
 
+<div class="scrim hidden" id="scrim">
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+    <h3 id="sheet-title">เรื่องที่ต้องการติดต่อ</h3>
+    <div class="sub" id="sheet-sub">What is this about?</div>
+    <div class="stack" id="reasons"></div>
+    <p class="note">These are the <b>same options the phone menu offers</b> — one
+      <code>menus.yaml</code>, two surfaces. Tap outside to cancel.</p>
+  </div>
+</div>
+
 <script>
 (() => {
   "use strict";
   const $ = (id) => document.getElementById(id);
-  const state = { customer: null, personas: [], selected: null };
+  const state = { customer: null, personas: [], plans: [], plan: null };
 
   const logEl = $("log");
   let firstLog = true;
@@ -213,27 +242,36 @@
     renderPlans();
   }
 
-  // --- 2. browsing posts context events ----------------------------------------------
-  function renderPlans() {
-    const p = state.customer;
-    const pages = [
-      { section: p.entry_screen || "policy.summary", label: p.entry_screen ? "Coverage details" : "Policy summary" },
-      { section: "policy.documents", label: "Documents" },
-      { section: "claims.history", label: "Claim history" },
-    ];
+  // --- 2. the customer's real plans -------------------------------------------------
+  async function renderPlans() {
     const box = $("plans");
+    let plans = [];
+    try { plans = await api("GET", "/v1/demo/plans"); } catch { /* shown as empty */ }
+    state.plans = plans;
     box.innerHTML = "";
-    for (const page of pages) {
+
+    if (!plans.length) {
+      box.innerHTML = `<div class="empty">No active plans.<br>
+        You can still contact us about something else.</div>`;
+      state.plan = null;
+      $("contact").disabled = true;
+      return;
+    }
+
+    for (const plan of plans) {
       const el = document.createElement("button");
       el.className = "plan";
-      el.innerHTML = `<b>${page.label}</b><br><span class="pill">${page.section}</span>`;
+      el.innerHTML = `<b>${plan.name_th}</b><br>
+        <span class="pill">${plan.product_line}</span>
+        <span class="pill">${plan.policy_no_masked}</span>`;
       el.onclick = async () => {
         [...box.children].forEach((c) => c.classList.remove("active"));
         el.classList.add("active");
-        state.selected = page.section;
+        state.plan = plan;
+        $("contact").disabled = false;
         await api("POST", "/v1/app/context-events", {
-          section: page.section,
-          product_code: p.product_code || null,
+          section: "plan.detail",
+          product_code: plan.product_code,
           dwell_ms: 4000 + Math.floor(Math.random() * 8000),
         });
       };
@@ -242,48 +280,69 @@
     box.firstChild.click();
   }
 
-  // --- 3. tap Contact ----------------------------------------------------------------
-  $("contact").onclick = async () => {
-    const p = state.customer;
-    const btn = $("contact");
-    btn.disabled = true;
+  // --- 3. tap Contact -> pick a reason (D48) -----------------------------------------
+  function closeSheet() { $("scrim").classList.add("hidden"); }
+  $("scrim").onclick = (e) => { if (e.target === $("scrim")) closeSheet(); };
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSheet(); });
+
+  async function openReasons(plan) {
+    const line = plan ? plan.product_line : "unknown";
+    const data = await api("GET", `/v1/app/contact-reasons?product_line=${encodeURIComponent(line)}`);
+    $("sheet-sub").textContent = plan
+      ? `${plan.name_th} — what is this about?`
+      : "Not about a specific plan — what is this about?";
+
+    const box = $("reasons");
+    box.innerHTML = "";
+    for (const r of data.reasons) {
+      const b = document.createElement("button");
+      b.className = "reason";
+      b.innerHTML = `<span class="k">${r.key ?? "•"}</span><span>${r.label_th}</span>`;
+      b.onclick = () => { closeSheet(); placeCall(plan, r); };
+      box.appendChild(b);
+    }
+    $("scrim").classList.remove("hidden");
+  }
+
+  $("contact").onclick = () => openReasons(state.plan);
+  $("contact-general").onclick = () => openReasons(null);
+
+  async function placeCall(plan, reason) {
     try {
       const t0 = performance.now();
       const intent = await api("POST", "/v1/calls/intents", {
-        product_code: p.product_code || null,
-        entry_screen: state.selected || p.entry_screen || null,
-        app_intent: p.app_intent || null,
+        product_code: plan ? plan.product_code : null,
+        entry_screen: plan ? "plan.detail" : null,
+        app_intent: reason ? reason.intent_code : null,
         preferred_channel: "pstn",
       });
       const roundTrip = performance.now() - t0;
 
-      // The prefetch runs AFTER the response is sent, so poll briefly for it. That the
-      // token arrives before the context is finished is the design working, not a race:
-      // the customer can start dialling immediately (`D6`).
+      // The prefetch runs AFTER the response is sent, so poll briefly. That the token
+      // arrives before the context is finished is the design working, not a race: the
+      // customer can start dialling immediately (`D6`).
       let status = null;
       for (let i = 0; i < 25; i++) {
         status = await api("GET", `/v1/calls/intents/${intent.intent_id}`);
         if (status.context_ready) break;
         await new Promise((r) => setTimeout(r, 60));
       }
-      render(intent, status, roundTrip);
+      render(intent, status, roundTrip, reason);
     } catch (err) {
       alert("Failed: " + err.message);
-    } finally {
-      btn.disabled = false;
     }
-  };
+  }
 
-  function render(intent, status, roundTrip) {
+  function render(intent, status, roundTrip, reason) {
     $("result-empty").classList.add("hidden");
     $("result").classList.remove("hidden");
 
     const ms = status && status.context_build_ms != null ? status.context_build_ms : null;
     $("ms").textContent = ms === null ? "—" : `${ms.toFixed(1)} ms`;
     $("ready-note").textContent =
-      `The dial target came back in ${roundTrip.toFixed(0)} ms. ` +
-      `Context assembly ran after that, off the request path — so by the time the phone ` +
-      `rings, the non-speech half of the agent's brief already exists.`;
+      `The dial target came back in ${roundTrip.toFixed(0)} ms. Context assembly ran after ` +
+      `that, off the request path — so by the time the phone rings, the non-speech half of ` +
+      `the agent's brief already exists.`;
 
     const ok = status && status.context_ready;
     $("pill-ctx").className = "pill " + (ok ? "ok" : "warn");
@@ -291,7 +350,10 @@
     const deg = status && status.degraded ? status.degraded : "—";
     $("pill-deg").className = "pill " + (deg === "none" ? "ok" : "warn");
     $("pill-deg").textContent = "degraded: " + deg;
+    $("pill-menu").className = "pill " + (reason ? "ok" : "warn");
+    $("pill-menu").textContent = reason ? "IVR menu: skipped" : "IVR menu: will ask";
 
+    $("r-reason").textContent = reason ? `${reason.label_th} (${reason.intent_code})` : "—";
     $("r-intent").textContent = intent.intent_id;
     $("r-token").textContent = intent.correlation_token.slice(0, 12) + "… (shown once)";
     $("r-dial").textContent = intent.dial_target;
