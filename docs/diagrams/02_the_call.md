@@ -49,7 +49,7 @@ hides those edges.
 
 ![customer journey](customer_journey.svg)
 
-The section labelled **"Waiting — THE PART WE CHANGE"** is the entire product. Everything
+The section labelled **"Waiting - WE CHANGE THIS"** is the entire product. Everything
 before it is what every call centre already does; everything after it is better *because* of
 what happened during the wait.
 
