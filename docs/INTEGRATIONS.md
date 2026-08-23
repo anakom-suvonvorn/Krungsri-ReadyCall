@@ -1,7 +1,7 @@
 # INTEGRATIONS
 
 _Every external thing the system touches: the port that hides it, the adapters behind it, and the config that selects one._
-_Status: **design only**. Last updated: 2026-08-18._
+_Status: **design only**. Last updated: 2026-08-23._
 
 ---
 
@@ -304,7 +304,8 @@ vendor), ElevenLabs (quality, cost). Choose on a listening test of the actual pr
 ## 6. Full library / tooling list
 
 **Runtime (Python 3.11, managed with `uv`)**
-`fastapi`, `uvicorn[standard]`, `pydantic` v2, `pydantic-settings`, `sqlalchemy` 2.0, `alembic`,
+`fastapi`, `uvicorn[standard]` (**installed at P1b**, via the `web` extra), `pydantic` v2,
+`pydantic-settings`, `sqlalchemy` 2.0, `alembic`,
 `asyncpg` + `psycopg[binary]`, `redis`, `httpx`, `websockets`, `aiohttp`, `structlog`,
 `opentelemetry-sdk` + instrumentation, `tenacity` (retries), `orjson`, `python-multipart`,
 `passlib`/`pyjwt` (agent auth), `apscheduler` (retention/rollup jobs).

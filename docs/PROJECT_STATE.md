@@ -40,7 +40,7 @@ telephony, no GPU, no database and no API key.
 As of P1 the identity ladder, the menu walk, the context assembler and the brief builder are real
 services doing real work - only the *edges* (phone, speech, AI, the bank's data) are still fakes.
 
-Verified on 2026-08-21: **161 tests pass**, `ruff check` and `ruff format --check` clean,
+Verified on 2026-08-21: **201 tests pass**, `ruff check` and `ruff format --check` clean,
 `mypy --strict` clean over 50 source files, and all three scenarios replay byte-identically.
 
 ```

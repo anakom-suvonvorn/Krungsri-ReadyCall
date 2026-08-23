@@ -1,7 +1,7 @@
 # DATA_MODEL
 
 _The two databases, every table, and — most importantly — how the bank's half gets swapped out for the real thing on hackathon day._
-_Status: **design only**. Last updated: 2026-08-19._
+_Status: **design only**. Last updated: 2026-08-23._
 
 ---
 

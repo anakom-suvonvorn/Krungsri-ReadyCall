@@ -1,7 +1,7 @@
 # PLAN
 
 _The master build plan for the full system: what gets built, in what order, and what "done" means for each phase._
-_Last updated: 2026-08-19._
+_Last updated: 2026-08-23._
 
 ---
 
@@ -57,7 +57,7 @@ Two rules that shape the order:
 
 ---
 
-## P1 — Context-Aware Calling (no audio at all)
+## P1 — Context-Aware Calling (no audio at all) — ✅ **DONE** (incl. P1b, 2026-08-23)
 **Goal:** the pitch's Step 1, complete — **for both the app path and the cold-call path**.
 
 - `POST /v1/calls/intents` (session auth → `customer_id`, correlation token, expiry) and
@@ -74,11 +74,14 @@ Two rules that shape the order:
   interactions, life events, prior ReadyCall history) with **per-field provenance and freshness**;
   frozen into `context_snapshots`.
 - Prefetch fires on `intent.created`, off the request path.
-- Agent screen v1 (static page, no realtime yet) rendering a **context-only brief**.
+- ~~Agent screen v1 (static page, no realtime yet)~~ → **moved to P2.** Building a static
+  version now means building it twice; it belongs with the workstation and its websocket.
 - Contract tests for all core-data adapters; latency instrumentation on the assembler.
 
-**Exit criteria**
-- Tap-to-snapshot **p95 < 1.5 s** against the mock, measured and recorded.
+**Exit criteria** — met, except where noted
+- ✅ Tap-to-snapshot: measured **~1.8 ms** against fixtures (p95 against `mock_postgres`
+  awaits the DB layer at P2). Note `B3` — stage timings read `0.0` until `SystemClock`
+  moved to `perf_counter`, so any earlier measurement was meaningless.
 - Swapping `CORE_DATA_PROVIDER=mock_postgres → fixtures` changes nothing but the env var, and both
   pass the same contract suite.
 - Every field on the screen can name its source and its age.

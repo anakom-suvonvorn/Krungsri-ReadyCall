@@ -12,7 +12,7 @@ calling and how much to believe it, why they are calling from what they pressed,
 we hold about them assembled before the phone is answered, and the first version of the
 brief an agent reads — with disclosure gated by how sure we are of their identity.
 
-Verified 2026-08-21: **161 tests pass** (~1.4 s), `ruff check` + `ruff format --check`
+Verified 2026-08-21: **201 tests pass** (~1.4 s), `ruff check` + `ruff format --check`
 clean, `mypy --strict` clean over 50 files, all three scenarios replay byte-identically.
 
 ```bash

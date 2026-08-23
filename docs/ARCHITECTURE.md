@@ -2,7 +2,7 @@
 
 _How the full ReadyCall system works, end to end. Read this to understand the machine._
 _Status: **design only** — nothing here is implemented yet (see `PLAN.md` for the build order)._
-_Last updated: 2026-08-19._
+_Last updated: 2026-08-23._
 
 ---
 
@@ -84,6 +84,12 @@ Three hard architectural rules follow from that picture:
 ---
 
 ## 3. Entry channels and the identity assurance ladder
+
+> **The ladder also goes UP during a call (`D42`).** The workstation carries a three-way
+> identity control — *Confirmed* / *Not this person* / *Third party acting for them* — and
+> promotion is a **re-render, not a re-fetch**: the snapshot already holds everything, only
+> the rendering is gated. A keypad lookup (`D44`) supplies *evidence*, never a promotion; a
+> match cannot tell a policyholder from a relative holding their documents.
 
 **The system must work for a call that arrives with nothing.** A driver standing next to a dented car
 digs the policy documents out of the glovebox and dials the number on them; they are not going to open
@@ -209,6 +215,10 @@ customer (if any), product, snapshot and queue.
 ---
 
 ## 6. Data flow B — the line, the IVR, and pre-call intake
+
+> **An app caller skips all of this (`D48`).** Tapping Contact opens a reason sheet in the app,
+> populated from the *same `menus.yaml` this IVR reads*, so both menu questions are answered
+> before the phone rings. One menu, two surfaces.
 
 ### The spoken flow
 
@@ -469,6 +479,10 @@ rationale on the agent screen.
 
 ## 9. The agent workstation: one browser tab, softphone included
 
+> Also on this screen: the **identity control** (`D42`), **untyped keypad capture** with
+> optional lookups (`D43`, `D44`), and a **Ready** button that is the *only* thing which ends
+> after-call work (`D45`).
+
 **The agent desktop is not an information screen next to a telephone. It is the whole workstation, and
 the call happens inside it.** (`D32`)
 
@@ -625,6 +639,13 @@ were wrong) — that feedback is the evaluation signal for prompt and model iter
 ---
 
 ## 12. Data flow F — wrap-up, rating, and the loop back
+
+> **Two corrections since this section was first written.** (1) Saving the wrap-up form closes
+> the *call record*; only the agent declaring their next state — **any** state, Break and Lunch
+> included — ends `AFTER_CALL_WORK`, which is measured from media disconnect. Nothing is ever
+> auto-saved (`D45`). (2) The **rating is not a call state** (`D46`): the customer rates in the
+> IVR seconds after hanging up while the agent may still be typing, so it arrives as an event
+> and attaches to the record whenever it lands, including after closure.
 
 1. Call ends → `WRAP_UP`. Analysis drafts a summary, disposition, and follow-up tasks **from the live
    transcript**. The agent **confirms or edits** — nothing is written as fact from unverified model
