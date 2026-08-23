@@ -282,9 +282,11 @@ Tracks are deliberately aligned to port boundaries so they can proceed in parall
 
 ---
 
-## How the demo will be scoped (later, in `../DemoProject/`)
+## How the demo will be scoped
 
-Not decided yet — but the intended shape, so P0–P4 are built to make it cheap:
+There is no separate demo project (`D34`) — the demo is this system at whatever phase it has
+reached, driven through a chosen scenario. Not decided yet, but the intended shape, so P0–P4
+are built to make it cheap:
 
 - Customer simulator (web) + `SimulatedTelephonyAdapter` (or a real WebRTC call if P5 lands in time).
 - One or two personas end-to-end from the scenario set, with a live-typed or live-spoken variant.

@@ -173,7 +173,7 @@ business rules, `services` imports only `domain` + `ports`. Any file that breaks
 
 ## 5. Feature status
 
-Nothing is built. Legend: ☐ planned · ◐ in progress · ☑ done.
+P0 and the P1 core are built; everything from P1b onward is not. Legend: ☐ planned · ◐ in progress · ☑ done.
 
 **Phase P0 — foundations** (mostly done)
 ☑ package rename + layout · ☑ config/settings (`config.py`, startup coherence checks) ·
@@ -246,7 +246,7 @@ uv run python -m readycall.entrypoints.api         # API + agent WebSocket
 uv run python -m readycall.entrypoints.worker      # orchestrator + analysis consumers
 ```
 
-Handy: `grep -rn "# P0:" scripts/` lists every lifecycle step the scenario runner is still
+Handy: `grep -rn "# P1:" scripts/` lists every lifecycle step the scenario runner is still
 performing by hand, i.e. what the next services take over (`D36`).
 
 ---
@@ -272,7 +272,7 @@ performing by hand, i.e. what the next services take over (`D36`).
 
 ---
 
-## 8. Real numbers (as of 2026-08-19)
+## 8. Real numbers (as of 2026-08-21)
 
 | | |
 |---|---|
