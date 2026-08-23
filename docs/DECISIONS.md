@@ -686,35 +686,67 @@ _`D39`–`D41` added 2026-08-21, during P1._
   caller happens to be holding the one document we guessed.
 
 ## D45. After-call work ends when the person says so, never when our form is saved
+_Revised 2026-08-23, same day, after reading the diagrams back. Three clauses in the first
+version were wrong; they are struck through below rather than deleted, because the reasoning
+that replaced them is the useful part._
+
 - **Problem:** `D33` ended `AFTER_CALL_WORK` on the agent pressing **Done** in the wrap-up
   form, or on a timer. Both assume the agent's remaining work lives *inside this system*. It
   does not — real agents have other tabs, other internal tools, paper forms, a colleague to
-  ask, a note to write. "I finished your form" and "I am ready for another caller" are
-  different statements, and only the second one is about availability.
-- **Decision:** two distinct actions, and `AFTER_CALL_WORK` is redefined.
+  ask, a note to write. "I finished your form" and "I am done with this call" are different
+  statements, and only the second one is about availability.
+- **Decision:**
   - Saving the wrap-up form **closes the call record**. That is our system's work finishing.
-  - Only the person clicking **Ready** moves them out of `AFTER_CALL_WORK`.
-  - `AFTER_CALL_WORK` therefore means *the period between a call ending and the agent
-    declaring readiness* — not *the time taken to fill in our form*.
-  - The ACW timer may auto-save the record so a call cannot hang open forever (flagged as
-    timer-ended, as today). **It must never auto-ready the agent.**
-  - Convenience, not compromise: the workstation offers a combined **Save & Ready** button, so
-    the common case is still one click. The actions only separate when the agent needs them to.
-- **Reasoning:** auto-ready trades an honest metric for a customer-visible failure. If the
-  platform marks an agent available while they are mid-task in another system, the next caller
-  rings an empty desk for a full offer timeout and is then re-matched — RONA. A slightly worse
-  utilisation number is much cheaper than a caller waiting through a ring cycle for nobody.
-- **The model already supported this; we were conflating its two axes.** `AgentPresence.is_available`
-  already requires `system_state is AVAILABLE` **and** `agent_intent is READY`. The bug was
-  never the data model — it was letting a form submission drive the platform axis.
+  - **`AFTER_CALL_WORK` is measured from the moment the media disconnects**, not from any form
+    action. The clock starts when the customer hangs up, full stop.
+  - **ACW ends when the agent declares what they are doing next — *any* next state**, not only
+    Ready. Ready, Break, Lunch, Training, Admin all end it.
+  - **Saving and declaring are independent, and may happen in either order.** An agent may
+    finish their outside work first and then press **Save & Ready** in one go; or save the
+    record immediately, do the outside work, and declare afterwards. Both are normal.
+  - The workstation offers a combined **Save & Ready** button, so the common case is one click.
+- **~~The ACW timer may auto-save the record so a call cannot hang open forever.~~ WRONG, removed.**
+  Three things were confused here:
+  1. It **flatly contradicted `D33`'s own rule** that the summary is *pre-filled, never
+     auto-saved, the agent owns the record*. Both sentences appeared in the same diagram.
+     An auto-save writes an unreviewed AI draft into a customer's file — the exact liability
+     the pre-fill rule exists to prevent.
+  2. **"The call cannot hang open" was a borrowed worry that does not apply.** The customer has
+     already hung up; no media, no channel, no resource is held. The only thing still "open" is
+     a row in our own database. Nobody is waiting on it.
+  3. An unsaved wrap-up is **honest data**. It records that this call was never wrapped up,
+     which is a true and useful fact. Auto-saving replaces it with a fabricated one.
+  If stale rows genuinely need cleaning up later, the fix is a janitor that marks them
+  *abandoned wrap-up* — recording that nothing was written, never inventing content.
+- **~~Only the person clicking Ready ends ACW.~~ Too narrow, corrected above.** An agent who
+  saves the record and then goes to lunch has finished their after-call work; they are simply
+  not available. Ending ACW only on *Ready* would show them sitting in after-call work for an
+  hour, which is both false and a metric nobody could use.
+- **~~The timer must never auto-ready.~~ Still true, and now the timer does nothing else.**
+  Any timer here is purely a *visibility* device: after a threshold it raises a long-ACW
+  indicator for the agent and their supervisor. It writes nothing and changes no state.
+- **This is exactly what the two axes are for.** When the agent declares:
+  - `system_state`: `AFTER_CALL_WORK → AVAILABLE` — the platform has no work for them.
+  - `agent_intent`: whatever they chose — `READY`, `BREAK`, `LUNCH`, `TRAINING`, `ADMIN`.
+  - Offerable is still `AVAILABLE` **and** intent in (`ready`, `last_call`), which
+    `AgentPresence.is_available` already enforces. Lunch ends ACW *and* stays un-offerable,
+    with no new state and no special case.
+- **Reasoning for the core rule:** auto-ready trades an honest metric for a customer-visible
+  failure. If the platform marks an agent available while they are mid-task in another system,
+  the next caller rings an empty desk for a full offer timeout and is then re-matched — RONA.
+  A slightly worse utilisation number is much cheaper than a caller waiting for nobody.
 - **It makes the headline metric truer.** Shrinking ACW is one of this product's most credible
   claims (the AI drafts the wrap-up). Measuring only "time in our form" would let us shrink the
-  number without shrinking the agent's actual work. Measuring end-of-call to declared-ready
-  captures the real thing, including the other systems — which is also what workforce planning
-  actually wants to know.
-- **Known risk, deliberately not solved by auto-ready:** an agent who walks away and never
-  clicks Ready. That is handled by *surfacing* it — a long-ACW indicator, supervisor visibility,
-  a nudge after a threshold — never by the platform asserting an availability nobody confirmed.
+  number without shrinking the agent's actual work. Disconnect-to-declaration captures the real
+  thing, including the systems we do not own — which is what workforce planning wants anyway.
+- **Known risk, deliberately not solved by automation:** an agent who walks away and declares
+  nothing. ACW simply keeps running, which is the honest signal, surfaced as a long-ACW
+  indicator. The platform never asserts a state the person did not choose.
+- **Edge case:** declaring Ready *before* saving leaves an open draft while a new call may
+  arrive. Drafts are per-call and persist, and the workstation warns rather than blocking —
+  an agent who wants to wrap up two calls at once is doing something unusual, not something
+  forbidden.
 - **Scope:** this changes the **agent presence** model only. `CallState` is untouched — the
-  call's own lifecycle (`WRAP_UP → RATING → CLOSED`) is independent of whether the agent is
-  ready for the next one, and always was.
+  call's own lifecycle is independent of whether the agent is ready for the next one.
+  (But see `Q14`: the *ordering* of `WRAP_UP → RATING` is a separate, real problem that
+  reviewing this decision exposed.)

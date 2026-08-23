@@ -1,4 +1,4 @@
-%% HANDWRITTEN. Checked against ARCHITECTURE.md S12 + D33 as amended by D45 + D27
+%% HANDWRITTEN. Checked against ARCHITECTURE.md S12 + D33 as amended by D45 (revised) + D27
 sequenceDiagram
     autonumber
     participant C as Customer
@@ -9,34 +9,35 @@ sequenceDiagram
     participant STORE as readycall store
 
     C->>SYS: hangs up
-    SYS->>SYS: IN_CALL to WRAP_UP (the CALL record)
-    SYS->>SYS: agent -> AFTER_CALL_WORK (presence)
-    Note over SYS,A: ACW is a REAL STATE, not a gap (D33).<br/>No new call is offered during it.
+    SYS->>SYS: agent -> AFTER_CALL_WORK
+    Note over SYS,A: the ACW clock starts HERE, at disconnect (D45).<br/>No new call is offered during it.
 
-    par the customer is asked to rate
+    par the customer rates, immediately
         SYS->>C: "ให้คะแนน 1 ถึง 5"
         C->>SYS: presses 4
+        Note right of C: this happens in seconds, while the<br/>agent has barely started. See Q14.
     and the agent gets a head start
         SYS->>AI: summarise the whole call
         AI-->>A: PRE-FILLED summary + suggested disposition
-        Note right of AI: pre-filled, never auto-saved.<br/>The agent owns the record.
+        Note right of AI: pre-filled, NEVER auto-saved.<br/>The agent owns the record. There is no<br/>timer that writes on their behalf.
     end
 
-    A->>A: edits the summary
-    A->>SYS: disposition + follow-ups, then SAVE
-    SYS->>STORE: call record closed
-    SYS->>SYS: WRAP_UP to RATING to CLOSED
-    Note over SYS,STORE: saving finishes OUR work. It does NOT<br/>mean the agent is free. (D45)
+    Note over A,OTHER: two independent jobs, in either order
 
-    opt the work that is not in our system
-        A->>OTHER: updates another internal tool
-        A->>OTHER: writes a note, asks a colleague, files a form
+    alt saves the record first
+        A->>SYS: edits summary, disposition, SAVE
+        SYS->>STORE: call record closed
+        A->>OTHER: then does the outside work
+    else does the outside work first
+        A->>OTHER: another tool, a form, a colleague
+        A->>SYS: then SAVE
+        SYS->>STORE: call record closed
     end
 
-    A->>SYS: clicks READY
-    SYS->>SYS: AFTER_CALL_WORK to AVAILABLE
-    Note right of SYS: ONLY the person ends ACW. The timer may<br/>auto-save the record so a call cannot hang<br/>open - it must NEVER auto-ready. (D45)
+    A->>SYS: declares the next state
+    Note right of A: Ready / Last call -> ACW ends, OFFERABLE<br/>Break / Lunch / Training / Admin -><br/>ACW ends, NOT offerable
+    SYS->>SYS: AFTER_CALL_WORK ends
 
-    Note over A,SYS: common case is still one click:<br/>the workstation offers "Save & Ready" together.
+    Note over A,SYS: common case is one click: "Save & Ready".
 
     Note over STORE: BOTH sides rate (D27). The agent rates the call<br/>too, which is how we learn whether the brief<br/>was actually any good.

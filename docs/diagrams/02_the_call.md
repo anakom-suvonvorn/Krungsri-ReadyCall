@@ -157,10 +157,13 @@ The summary is **pre-filled, never auto-saved**. The agent edits and owns the re
 that silently writes the customer file is a liability, an AI that saves the agent ninety
 seconds of typing is a feature.
 
-**Saving the form and being ready are two different things** (`D45`). Saving closes the call
+**Saving the form and being done are two different things** (`D45`). Saving closes the call
 record — that is *our* system's work finishing. But an agent's remaining work usually lives
-somewhere we do not own: another internal tool, a paper form, a colleague to ask. So only the
-person clicking **Ready** ends after-call work. See [Agents](06_agents_and_matching.md#64-when-after-call-work-actually-ends).
+somewhere we do not own: another internal tool, a paper form, a colleague to ask. After-call
+work runs from the moment the media disconnects until the agent **declares what they are doing
+next** — Ready, Break, Lunch, Training or Admin, any of which ends it. And nothing here is ever
+auto-saved on the agent's behalf. See
+[Agents](06_agents_and_matching.md#64-when-after-call-work-actually-ends).
 
 Both sides rate the call (`D27`). The agent rating is the part people skip, and it is how we
 find out whether the brief was actually any good — without it we would be optimising a

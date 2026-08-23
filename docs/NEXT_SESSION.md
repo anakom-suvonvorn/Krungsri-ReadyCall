@@ -79,6 +79,7 @@ prompts (P3), the media gateway (P3), and the matching engine (P2).
 | Q11 | Language menu wording when English lands | `preferred` vs `acceptable` modelled (`D38`); Thai-only for now, likely for the hackathon too |
 | Q12 | Which verification challenges count for promotion to L3 (`D42`) | DOB, last 4 of citizen id, policy no. Confirm the real list with Krungsri |
 | Q13 | Does a third-party caller need a named representative on the policy (`D42`) | Assume yes; `Policy` has no `representatives` field yet |
+| Q14 | **`WRAP_UP → RATING` is ordered backwards.** The customer rates in the IVR seconds after hanging up; the agent may save their wrap-up minutes later. The table says rating *follows* wrap-up, and `run_scenario.py` even transitions to `RATING` with reason `wrapup_saved`. In reality they are concurrent. | Fix at **P2/P6**: either make the rating an event that can arrive at any time rather than a call state, or reach `CLOSED` only once both the wrap-up and the rating have landed (or timed out). Touches `machine.py`, the runner and 3 scenarios, so it wants doing deliberately, not in passing. |
 
 Resolved: single project (`D34`) · Asterisk · RTX 3050 · Claude + Typhoon compared ·
 React workstation with the softphone in it · web customer simulator · menu-first flow
@@ -99,10 +100,11 @@ React workstation with the softphone in it · web customer simulator · menu-fir
   A lookup returns evidence (`matched` / `not matched`); it must never promote assurance by
   itself — a match cannot tell the policyholder from a relative holding their papers. And
   because we do not know what the digits are, treat raw captures as sensitive by default.
-- **Saving the wrap-up form is NOT "ready"** (`D45`). It closes the call record. Only the
-  person clicking Ready ends `AFTER_CALL_WORK`. The timer may auto-save; it must never
-  auto-ready — an agent marked available while working elsewhere means the next caller rings
-  an empty desk (RONA).
+- **Saving the wrap-up form is NOT "done"** (`D45`). It closes the call record. ACW runs from
+  **media disconnect** until the agent declares their next state — **any** state (Break and
+  Lunch end it too, not just Ready). **Nothing is ever auto-saved**: the agent owns the record,
+  and an unsaved wrap-up is honest data. Never auto-ready — an agent marked available while
+  working elsewhere means the next caller rings an empty desk (RONA).
 - **Never ask a leading identity question.** "ขอทราบชื่อผู้ติดต่อ", not "ใช่คุณ X ไหมคะ" — naming
   the customer first both leaks that the number belongs to them and weakens the check.
 - **Never hardcode an insurance literal in `services/`** — it goes in `config/` (`D28`).

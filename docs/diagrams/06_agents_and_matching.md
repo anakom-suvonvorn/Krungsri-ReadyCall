@@ -85,10 +85,30 @@ not — there is another internal tool, a paper form, a note to write, a colleag
 `D45` separates the two statements that were being conflated:
 
 - **Saving the wrap-up form closes the call record.** Our system's work is finished.
-- **Only the person clicking Ready ends after-call work.** Their work is finished.
+- **The agent declaring their next state ends after-call work.** Their work is finished.
 
-So `AFTER_CALL_WORK` now means *the period between a call ending and the agent declaring
-readiness* — not *the time taken to fill in our form*.
+So `AFTER_CALL_WORK` is measured **from the moment the media disconnects** until the agent
+says what they are doing next — not from any form action, and not "the time taken to fill in
+our form".
+
+**Any declared state ends it, not just Ready.** An agent who saves the record and goes to
+lunch has finished their after-call work; they are simply not available. Ending ACW only on
+*Ready* would show them sitting in after-call work for an hour — false, and useless as a
+metric. Ready and Last-call end ACW *and* make them offerable; Break, Lunch, Training and
+Admin end ACW and leave them un-offerable.
+
+**Saving and declaring are independent, in either order.** An agent may finish their outside
+work first and then press *Save & Ready* in one go, or save the record immediately and declare
+later. Both are normal.
+
+**There is no auto-save.** An earlier version of this decision had a timer save the record
+"so a call cannot hang open forever". That was wrong three times over: it contradicted
+`D33`'s own *pre-filled, never auto-saved* rule; nothing is actually held open once the
+customer has hung up — no media, no channel, just a row in our own database that nobody is
+waiting on; and an unsaved wrap-up is **honest data**, recording that this call was never
+wrapped up. Auto-saving replaces a true fact with a fabricated one. Any timer here is purely a
+visibility device — a long-ACW indicator for the agent and their supervisor. It writes
+nothing.
 
 **Why auto-ready is actively worse, not just inaccurate:** marking an agent available while
 they are mid-task somewhere else means the next caller rings an empty desk for a full offer
