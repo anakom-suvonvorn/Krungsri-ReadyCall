@@ -1,0 +1,47 @@
+%% HANDWRITTEN. Checked against D3 + src/readycall/ports/
+flowchart TB
+    subgraph inside["<b>THE INSIDE</b> - pure, testable. No vendor SDK may be imported here."]
+        direction TB
+        DOM["<b>domain/</b><br/>models - enums - events<br/>no I/O at all"]:::dom
+        SVC["<b>services/</b><br/>orchestrator - identity - context<br/>brief - matching - intake"]:::svc
+        SVC --> DOM
+    end
+
+    subgraph ports["<b>ports/</b> - Protocol classes only. THE SEAM."]
+        direction LR
+        P1["TelephonyProvider"]:::port
+        P2["SttEngine"]:::port
+        P3["LlmClient"]:::port
+        P4["TtsEngine"]:::port
+        P5["CoreDataProvider"]:::port
+        P6["EventBus"]:::port
+        P7["BlobStorage"]:::port
+    end
+
+    subgraph out["<b>adapters/</b> - the only place a vendor name may appear"]
+        direction LR
+        A1["asterisk / twilio<br/><b>simulated</b>"]:::ad
+        A2["thonburian / faster-whisper<br/><b>scripted</b>"]:::ad
+        A3["anthropic / openai-compat<br/><b>rulebased</b>"]:::ad
+        A4["prerendered / azure<br/><b>null</b>"]:::ad
+        A5["postgres / http / <b>fixtures</b><br/>+ caching decorator"]:::ad
+        A6["redis streams / kafka<br/><b>memory</b>"]:::ad
+        A7["minio / s3<br/><b>memory</b>"]:::ad
+    end
+
+    SVC --> ports
+    P1 --> A1
+    P2 --> A2
+    P3 --> A3
+    P4 --> A4
+    P5 --> A5
+    P6 --> A6
+    P7 --> A7
+
+    NOTE["<b>Why this shape?</b> The hackathon hands us unknown data on the day.<br/>Swapping an adapter is a config change, not a rewrite.<br/><b>Bold</b> = what actually runs today, with no keys and no GPU."]:::note
+
+    classDef dom fill:#1f6feb,stroke:#0b3d91,color:#fff
+    classDef svc fill:#eef4ff,stroke:#5b8def,color:#0b2545
+    classDef port fill:#fff4e6,stroke:#e8a33d,color:#4a2f00
+    classDef ad fill:#e9f7ef,stroke:#2f9e5f,color:#08361d
+    classDef note fill:#fffbe6,stroke:#d4a72c,color:#4a3800

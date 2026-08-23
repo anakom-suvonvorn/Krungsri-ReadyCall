@@ -1,0 +1,33 @@
+%% HANDWRITTEN. Checked against services/brief/builder.py + D20 + D16
+flowchart TB
+    SNAP[("frozen ContextSnapshot<br/><b>holds EVERYTHING</b> - policy numbers,<br/>every Coverage figure")]:::snap
+    ID["IdentityResolution<br/>assurance level"]:::id
+
+    SNAP --> GATE
+    ID --> GATE
+    GATE{"may_disclose_policy_details<br/>= assurance is L2 or better"}:::gate
+
+    GATE -- "NO (L0 / L1)" --> LOW["<b>WITHHELD RENDER</b><br/>- policy number replaced by<br/>&nbsp;&nbsp;'มีกรมธรรม์ที่เกี่ยวข้อง (ยังไม่ยืนยันตัวตน)'<br/>- verify-identity PREPENDED as action 0<br/>- every L2-gated playbook step DROPPED<br/>- degraded = LOW_ASSURANCE"]:::low
+    GATE -- "YES (L2 / L3)" --> HIGH["<b>FULL RENDER</b><br/>- policy number shown<br/>- coverage figures shown<br/>- full playbook"]:::high
+
+    LOW --> PROMO["agent confirms identity,<br/>or a typed policy number matches (D42/D43)"]:::promo
+    PROMO --> HIGH
+    PROMO -.-> NOTE["<b>this is a RE-RENDER, not a re-fetch.</b><br/>The data was already in memory.<br/>No round trip to the bank core."]:::note
+
+    HIGH --> WIRE
+    LOW --> WIRE
+    WIRE["<b>GATE AT THE WIRE, SERVER-SIDE</b><br/>send only what this level permits.<br/>Never ship the full brief and hide<br/>fields in React - devtools defeats that."]:::wire
+    WIRE --> V2["CaseBrief v2 (versioned, never mutated - D7)"]:::v2
+
+    NO_AI["<b>the LLM is not even imported here (D16)</b><br/>every figure is read from a typed Coverage field,<br/>so there is no code path that could put an<br/>invented number on an insurance screen"]:::noai
+
+    classDef snap fill:#e9f7ef,stroke:#2f9e5f,color:#08361d
+    classDef id fill:#eef4ff,stroke:#5b8def,color:#0b2545
+    classDef gate fill:#1f6feb,stroke:#0b3d91,color:#fff
+    classDef low fill:#fdecea,stroke:#d93025,color:#5c1a13
+    classDef high fill:#e9f7ef,stroke:#2f9e5f,color:#08361d
+    classDef promo fill:#fff4e6,stroke:#e8a33d,color:#4a2f00
+    classDef wire fill:#1f6feb,stroke:#0b3d91,color:#fff
+    classDef v2 fill:#eef4ff,stroke:#5b8def,color:#0b2545
+    classDef note fill:#fffbe6,stroke:#d4a72c,color:#4a3800
+    classDef noai fill:#fffbe6,stroke:#d4a72c,color:#4a3800

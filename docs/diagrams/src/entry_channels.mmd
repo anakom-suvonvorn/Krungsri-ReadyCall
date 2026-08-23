@@ -1,0 +1,29 @@
+%% HANDWRITTEN. Checked against D19 + D20 + EntryChannel enum
+flowchart TB
+    A["<b>1. IN-APP</b><br/>logged in, taps Contact<br/>on a specific plan"]:::app
+    B["<b>2. PRODUCT DID</b><br/>dials the number printed on the<br/>documents kept in the car"]:::did
+    C["<b>3. GENERAL HOTLINE</b><br/>dials the one number<br/>they could find"]:::hot
+
+    A --> A1["server mints a token<br/>bound to customer_id (D4)"]
+    A1 --> A2["<b>L3 VERIFIED</b><br/>line KNOWN, intent KNOWN<br/>menu skipped entirely"]:::l3
+
+    B --> B1["the number implies the product line<br/>and can raise the urgency floor"]
+    B1 --> B2["<b>L1 / L2</b> from caller ID<br/>line KNOWN, one keypress for why"]:::l1
+
+    C --> C1["the number tells us nothing"]
+    C1 --> C2["<b>L0 / L1</b><br/>two keypresses give line + intent"]:::l0
+
+    A2 --> Q(["every path lands in the SAME place:<br/><b>a queue + an intent + an assurance level</b><br/>downstream cannot tell them apart"]):::fin
+    B2 --> Q
+    C2 --> Q
+
+    N["<b>D19: the cold call is the BASE CASE.</b><br/>The app path is an enrichment on top - not a happy<br/>path that everything else is a degradation of."]:::note
+
+    classDef app fill:#e9f7ef,stroke:#2f9e5f,color:#08361d
+    classDef did fill:#eef4ff,stroke:#5b8def,color:#0b2545
+    classDef hot fill:#fff4e6,stroke:#e8a33d,color:#4a2f00
+    classDef l3 fill:#e9f7ef,stroke:#2f9e5f,color:#08361d
+    classDef l1 fill:#fff4e6,stroke:#e8a33d,color:#4a2f00
+    classDef l0 fill:#fdecea,stroke:#d93025,color:#5c1a13
+    classDef fin fill:#1f6feb,stroke:#0b3d91,color:#fff
+    classDef note fill:#fffbe6,stroke:#d4a72c,color:#4a3800

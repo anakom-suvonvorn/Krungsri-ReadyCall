@@ -1,0 +1,18 @@
+%% HANDWRITTEN. Checked against tests/ on disk + D36
+flowchart TB
+    S["<b>SCENARIOS</b> - 3 scripted calls, end to end<br/>pattheera_ipd - roadside_motor_claim - anonymous_declined<br/>byte-identical on replay, with expect: blocks checked"]:::scen
+    C["<b>CONTRACT SUITES</b> - tests/contracts/<br/>every adapter for a port must pass the SAME suite.<br/>This is what makes hackathon-day swaps safe:<br/>the new adapter either passes or it does not ship."]:::contract
+    U["<b>UNIT</b> - state machine, orchestrator, domain pack,<br/>identity resolver, context + brief, agent language"]:::unit
+
+    U --> C --> S
+    S --> TOT["<b>161 tests, about 2 seconds</b><br/>no services, no keys, no GPU, no network"]:::tot
+
+    DET["<b>why replays are byte-identical</b><br/>ManualClock + DeterministicIds are INJECTED (D35).<br/>Nothing calls datetime.now() or makes a random id<br/>on its own, so the same scenario produces the same<br/>output every time - which is what makes golden<br/>comparison possible at all."]:::note
+
+    HAND["<b>grep -rn '# P1:' scripts/</b><br/>lists every lifecycle step the runner still does<br/>by hand - i.e. exactly what P2 and P3 take over.<br/>The handover list is executable, not prose. (D36)"]:::note
+
+    classDef scen fill:#1f6feb,stroke:#0b3d91,color:#fff
+    classDef contract fill:#eef4ff,stroke:#5b8def,color:#0b2545
+    classDef unit fill:#e9f7ef,stroke:#2f9e5f,color:#08361d
+    classDef tot fill:#fff4e6,stroke:#e8a33d,color:#4a2f00
+    classDef note fill:#fffbe6,stroke:#d4a72c,color:#4a3800

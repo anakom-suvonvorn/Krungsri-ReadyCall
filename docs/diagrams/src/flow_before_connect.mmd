@@ -1,0 +1,43 @@
+%% HANDWRITTEN. Checked against ARCHITECTURE.md S5 + D6 + services/context/assembler.py
+sequenceDiagram
+    autonumber
+    participant C as Customer
+    participant APP as Krungsri app
+    participant API as ReadyCall API
+    participant ID as IdentityResolver
+    participant CTX as ContextAssembler
+    participant CORE as Bank core (READ-ONLY)
+    participant BR as BriefBuilder
+
+    Note over C,BR: D6 - context assembly starts at TAP, not at ANSWER
+
+    C->>APP: taps Contact on Health Plan A
+    APP->>API: POST /v1/calls/intents (session cookie)
+    Note right of API: identity comes from the SESSION,<br/>never from the request body (D4)
+    API->>API: mint correlation token, store only its SHA-256 hash
+    API-->>APP: token + the number to dial
+
+    par context prefetch starts immediately
+        API->>CTX: build(customer_id, product_code)
+        CTX->>CORE: get_customer
+        CTX->>CORE: list_policies
+        CTX->>CORE: list_interactions
+        CTX->>CORE: list_holdings
+        CTX->>CORE: list_life_events
+        CTX->>CORE: get_product
+        Note right of CTX: 6 reads in PARALLEL (asyncio.gather)<br/>one round trip, not six
+        CORE-->>CTX: rows
+        CTX->>CTX: pick the relevant policy, stamp provenance per field
+        CTX-->>API: frozen ContextSnapshot
+    and the customer is still lifting the phone to their ear
+        APP->>C: dialling...
+    end
+
+    APP->>API: the call arrives, carrying the token
+    API->>ID: resolve(correlation_token)
+    ID->>ID: hash it, look it up, check it has not expired
+    ID-->>API: L3_VERIFIED + customer_id
+    API->>BR: build_context_only(snapshot, identity)
+    BR-->>API: CaseBrief v1
+
+    Note over API,BR: the brief exists BEFORE the phone has finished ringing

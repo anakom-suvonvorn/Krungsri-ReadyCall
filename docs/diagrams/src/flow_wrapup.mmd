@@ -1,0 +1,35 @@
+%% HANDWRITTEN. Checked against ARCHITECTURE.md S12 + D33 + D27
+sequenceDiagram
+    autonumber
+    participant C as Customer
+    participant SYS as ReadyCall
+    participant AI as Analysis
+    participant A as Agent
+    participant STORE as readycall store
+
+    C->>SYS: hangs up
+    SYS->>SYS: IN_CALL to WRAP_UP
+    Note over SYS,A: ACW is a REAL STATE, not a gap (D33).<br/>The agent is not offered a new call during it.
+
+    par the customer is asked to rate
+        SYS->>C: "ให้คะแนน 1 ถึง 5"
+        C->>SYS: presses 4
+    and the agent gets a head start
+        SYS->>AI: summarise the whole call
+        AI-->>A: PRE-FILLED summary + suggested disposition
+        Note right of AI: pre-filled, never auto-saved.<br/>The agent owns the record.
+    end
+
+    A->>A: edits the summary
+    A->>SYS: picks a disposition, adds follow-ups
+    A->>SYS: presses Done
+
+    alt Done pressed
+        SYS->>SYS: WRAP_UP to RATING to CLOSED
+    else ACW timer expires (~45s)
+        SYS->>SYS: auto-close, flagged as timer-ended
+        Note right of SYS: measured, because a team constantly<br/>hitting the timer is a staffing signal
+    end
+
+    SYS->>STORE: transcript, brief versions, decisions, timings, ratings
+    Note over STORE: BOTH sides rate (D27) - the agent rates the<br/>call quality too, which is how we learn whether<br/>the brief was actually any good

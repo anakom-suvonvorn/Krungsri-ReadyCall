@@ -1,0 +1,38 @@
+%% HANDWRITTEN. Checked against D5 + DATA_MODEL.md
+flowchart LR
+    subgraph core["<b>core</b> schema - THE BANK'S DATA"]
+        direction TB
+        T1["customers"]:::ro
+        T2["policies + coverages"]:::ro
+        T3["claims"]:::ro
+        T4["products"]:::ro
+        T5["interactions"]:::ro
+        T6["financial_products"]:::ro
+        T7["life_events"]:::ro
+    end
+
+    subgraph rc["<b>readycall</b> schema - EVERYTHING WE PRODUCE"]
+        direction TB
+        U1["call_sessions + state transitions"]:::rw
+        U2["call_intents (app taps)"]:::rw
+        U3["consents"]:::rw
+        U4["transcripts + intakes"]:::rw
+        U5["case_briefs (versioned)"]:::rw
+        U6["matching_decisions + assignments"]:::rw
+        U7["agents + presence"]:::rw
+        U8["wrapups + ratings"]:::rw
+        U9["disclosure audit log"]:::rw
+    end
+
+    APP["ReadyCall services"]:::app
+    APP -- "<b>SELECT only</b>" --> core
+    APP -- "read + write" --> rc
+
+    G1["<b>enforced TWICE</b> (D5):<br/>1. the CoreDataProvider port has<br/>&nbsp;&nbsp;&nbsp;no write methods at all<br/>2. the readycall_ro DB role is granted<br/>&nbsp;&nbsp;&nbsp;SELECT and nothing else"]:::note
+
+    G2["<b>why.</b> On hackathon day we are handed<br/>someone else's real data in an unknown<br/>shape. Writing to it is not a risk we get<br/>to take. So the design makes it impossible<br/>rather than discouraged."]:::note
+
+    classDef ro fill:#f5f5f5,stroke:#999,color:#333
+    classDef rw fill:#e9f7ef,stroke:#2f9e5f,color:#08361d
+    classDef app fill:#1f6feb,stroke:#0b3d91,color:#fff
+    classDef note fill:#fffbe6,stroke:#d4a72c,color:#4a3800

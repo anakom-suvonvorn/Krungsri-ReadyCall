@@ -1,0 +1,31 @@
+%% HANDWRITTEN. Checked against D14 + ConsentScope + D7
+flowchart TB
+    CALL["a call arrives"]:::in
+    CALL --> ASK["IVR asks, per scope"]:::step
+
+    ASK --> S1["<b>recording</b><br/>may we record your voice?"]:::scope
+    ASK --> S2["<b>ai_processing</b><br/>may we analyse it?"]:::scope
+    ASK --> S3["<b>health_data</b><br/>SEPARATE consent (D14)"]:::health
+    ASK --> S4["<b>cross_org</b><br/>share beyond this team"]:::scope
+
+    S1 --> GATE{"may_run_intake<br/>= recording AND ai_processing"}:::gate
+    S2 --> GATE
+    GATE -- granted --> INTAKE["intake runs, transcript captured"]:::ok
+    GATE -- "declined, or silence" --> NOPE["<b>NO intake. The call proceeds anyway.</b><br/>Brief stays context-only - and is still<br/>correctly routed, because the menu did that."]:::warn
+
+    S3 --> WHY3["<b>why health is its own scope.</b> Health information<br/>is a special category under PDPA. Bundling it into<br/>a single yes/no would be the easy build and the<br/>wrong one - a motor claim caller should not have to<br/>consent to health processing to report a dent."]:::note
+
+    INTAKE --> AUDIT[("every consent recorded with<br/>scope - granted - when - basis - channel")]:::store
+    NOPE --> AUDIT
+
+    RET["<b>retention and erasure (P7)</b><br/>recordings expire on a clock. Erasure has to reach<br/>the blob store, the transcript, the brief versions<br/>AND the event log - which is why blob refs are<br/>indirect rather than inlined everywhere."]:::note
+
+    classDef in fill:#1f6feb,stroke:#0b3d91,color:#fff
+    classDef step fill:#eef4ff,stroke:#5b8def,color:#0b2545
+    classDef scope fill:#eef4ff,stroke:#5b8def,color:#0b2545
+    classDef health fill:#fdecea,stroke:#d93025,color:#5c1a13
+    classDef gate fill:#fff4e6,stroke:#e8a33d,color:#4a2f00
+    classDef ok fill:#e9f7ef,stroke:#2f9e5f,color:#08361d
+    classDef warn fill:#fff4e6,stroke:#e8a33d,color:#4a2f00
+    classDef store fill:#e9f7ef,stroke:#2f9e5f,color:#08361d
+    classDef note fill:#fffbe6,stroke:#d4a72c,color:#4a3800

@@ -1,0 +1,23 @@
+%% HANDWRITTEN. Checked against D21 - the cut-off-mid-sentence problem
+flowchart TB
+    P["<b>the tension</b><br/>an agent frees up while the customer is<br/>mid-sentence describing their problem"]:::prob
+
+    P --> O1["<b>option A: wait for them to finish</b><br/>the agent sits idle, the customer waits longer.<br/>We have made the call centre SLOWER using AI.<br/>Indefensible."]:::bad
+    P --> O2["<b>option B: cut them off instantly</b><br/>we get a fragment, and the customer feels<br/>interrupted by a machine."]:::bad
+    P --> O3["<b>D21: the OFFER WINDOW is the grace period</b>"]:::ok
+
+    O3 --> M1["the agent gets the offer card immediately"]:::step
+    M1 --> M2["those ~7 seconds while they read who and why<br/>are seconds the customer can still be talking"]:::step
+    M2 --> M3["intake finalises as <b>partial</b> - a cut-off<br/>sentence is still useful evidence"]:::step
+    M3 --> M4["agent accepts, legs bridge"]:::step
+
+    O3 --> KEY["<b>the insight:</b> the grace period was already there.<br/>We did not add delay - we noticed that the time an<br/>agent spends reading the brief is dead time for the<br/>customer, and gave it a job. Nobody waits longer."]:::key
+
+    D12["<b>and the hard rule it protects (D12):</b><br/>the call is NEVER blocked on AI. If intake is slow,<br/>down, or unsure, it degrades to a lesser brief.<br/>It never delays the human connection."]:::note
+
+    classDef prob fill:#fff4e6,stroke:#e8a33d,color:#4a2f00
+    classDef bad fill:#fdecea,stroke:#d93025,color:#5c1a13
+    classDef ok fill:#e9f7ef,stroke:#2f9e5f,color:#08361d
+    classDef step fill:#eef4ff,stroke:#5b8def,color:#0b2545
+    classDef key fill:#1f6feb,stroke:#0b3d91,color:#fff
+    classDef note fill:#fffbe6,stroke:#d4a72c,color:#4a3800

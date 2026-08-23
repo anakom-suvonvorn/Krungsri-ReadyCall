@@ -1,0 +1,33 @@
+%% HANDWRITTEN. Checked against scripts/run_scenario.py actual output + domain/events.py
+sequenceDiagram
+    autonumber
+    participant O as Orchestrator
+    participant B as Event bus
+    participant H as Handlers
+
+    Note over O,H: the ACTUAL event sequence from<br/>roadside_motor_claim.yaml, verified by replay
+
+    O->>B: call.initiated
+    O->>B: call.state.changed (connecting to ivr)
+    O->>B: consent.recorded (recording)
+    O->>B: consent.recorded (ai_processing)
+    O->>B: call.state.changed (ivr to queued)
+    O->>B: call.queued
+    O->>B: call.state.changed (queued to intake_active)
+    O->>B: call.state.changed (intake_active to intake_complete)
+    O->>B: call.state.changed (intake_complete to matched)
+    O->>B: call.state.changed (matched to offered)
+    O->>B: call.state.changed (offered to in_call)
+    O->>B: call.state.changed (in_call to wrap_up)
+    O->>B: call.state.changed (wrap_up to rating)
+    O->>B: call.state.changed (rating to closed)
+    O->>B: call.ended
+
+    B->>H: drain() - enqueue-then-drain, never mid-publish
+    Note right of B: DETERMINISTIC ordering. A handler that<br/>publishes does not reorder the queue.
+
+    H->>H: idempotent per event id
+    Note right of H: replaying a call must not double-count.<br/>Every handler is safe to run twice.
+
+    H-->>B: a failed handler is LOGGED, not fatal
+    Note right of H: one broken consumer must not sink a live call

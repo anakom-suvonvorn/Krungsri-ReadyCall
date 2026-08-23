@@ -1,0 +1,25 @@
+%% HANDWRITTEN. Checked against D10 + IntakeStrategyKind
+flowchart TB
+    ORCH["CallOrchestrator<br/><b>does not know or care which one ran</b>"]:::orch
+    ORCH --> SEAM{{"IntakeStrategy - the seam (D10)"}}:::seam
+
+    SEAM --> S1["<b>PASSIVE</b> - P3, the one we build first<br/>'เล่าปัญหาได้เลยค่ะ'<br/>customer talks, we listen and transcribe.<br/>No AI in the loop with the customer."]:::now
+    SEAM --> S2["<b>GUIDED</b> - P8<br/>TTS asks for the missing slots:<br/>'โรงพยาบาลไหนคะ' 'วันที่เท่าไหร่คะ'<br/>still one-way, but it fills gaps"]:::later
+    SEAM --> S3["<b>CONVERSATIONAL</b> - P8<br/>a real AI caller that talks WITH them<br/>while they wait"]:::later
+
+    S1 --> OUT
+    S2 --> OUT
+    S3 --> OUT
+    OUT[("<b>same output contract, always</b><br/>IntakeResult: turns + slots + recording_ref<br/>+ finalize_reason + is_partial")]:::out
+
+    OUT --> DOWN["everything downstream is unchanged.<br/>Brief, matching, workstation, storage:<br/>none of them can tell which strategy ran."]:::down
+
+    NOTE["<b>why the seam exists.</b> The user asked for pre-call<br/>intake to be modular so it can BECOME a full AI caller<br/>later without a rewrite. Getting the output contract<br/>right now is what makes that a swap instead of a rebuild."]:::note
+
+    classDef orch fill:#1f6feb,stroke:#0b3d91,color:#fff
+    classDef seam fill:#fff4e6,stroke:#e8a33d,color:#4a2f00
+    classDef now fill:#e9f7ef,stroke:#2f9e5f,color:#08361d
+    classDef later fill:#f5f5f5,stroke:#999,color:#333,stroke-dasharray:4 3
+    classDef out fill:#eef4ff,stroke:#5b8def,color:#0b2545
+    classDef down fill:#eef4ff,stroke:#5b8def,color:#0b2545
+    classDef note fill:#fffbe6,stroke:#d4a72c,color:#4a3800

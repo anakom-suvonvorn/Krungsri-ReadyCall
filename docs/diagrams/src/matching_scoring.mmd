@@ -1,0 +1,44 @@
+%% HANDWRITTEN. Checked against ARCHITECTURE.md S8 + D22 + D23 + FitBreakdown model
+flowchart TB
+    PAIR["for EVERY (waiting call, free agent) pair"]:::in
+
+    PAIR --> HARD{"<b>HARD FILTERS</b> - pass or excluded"}:::gate
+    HARD -- fail --> OUT["excluded entirely.<br/>Not a low score - <b>not a candidate</b>."]:::bad
+    HARD -- pass --> FIT
+
+    subgraph FIT["<b>FIT</b> - how good is this agent FOR THIS CALL"]
+        direction TB
+        F1["skill_match - do they have the required skill,<br/>and how proficient"]:::f
+        F2["continuity - did they handle this customer before"]:::f
+        F3["historical_fit - how they do on this intent"]:::f
+        F4["load_penalty - subtract for current load"]:::f
+    end
+
+    FIT --> URG
+    subgraph URG["<b>URGENCY</b> - how badly does THIS CALL need someone"]
+        direction TB
+        U1["wait_pressure - how long they have waited"]:::u
+        U2["sla_risk - about to breach"]:::u
+        U3["customer_priority - segment, vulnerability"]:::u
+        U4["situational - at a crash scene, a medical emergency"]:::u
+    end
+
+    URG --> SCORE["score = fit x urgency multiplier"]:::score
+    SCORE --> SOLVE["<b>Hungarian solver</b> over the whole matrix"]:::solve
+    SOLVE --> DEC[("<b>MatchingDecision</b> - persisted<br/>every candidate, every sub-score, the weights<br/>version, the solver, and how long it took")]:::store
+
+    WHY1["<b>why urgency MULTIPLIES rather than adds.</b><br/>Pure best-fit starves people: a caller nobody is<br/>a great match for waits forever while better-matched<br/>callers overtake them. The multiplier means waiting<br/>itself eventually wins, and a hard wait ceiling<br/>then drops to any-qualified-agent."]:::note
+
+    WHY2["<b>why global rather than greedy.</b> Greedy best-first<br/>is locally optimal and globally poor - it hands the<br/>one bilingual agent to the first caller who asks,<br/>then strands the caller who genuinely needed them."]:::note
+
+    WHY3["<b>why persist every candidate (D18).</b> 'Why did I get<br/>this call?' has to be answerable. A matching decision<br/>you cannot explain is one nobody will trust enough<br/>to leave switched on."]:::note
+
+    classDef in fill:#1f6feb,stroke:#0b3d91,color:#fff
+    classDef gate fill:#fff4e6,stroke:#e8a33d,color:#4a2f00
+    classDef bad fill:#fdecea,stroke:#d93025,color:#5c1a13
+    classDef f fill:#eef4ff,stroke:#5b8def,color:#0b2545
+    classDef u fill:#fff4e6,stroke:#e8a33d,color:#4a2f00
+    classDef score fill:#e9f7ef,stroke:#2f9e5f,color:#08361d
+    classDef solve fill:#1f6feb,stroke:#0b3d91,color:#fff
+    classDef store fill:#e9f7ef,stroke:#2f9e5f,color:#08361d
+    classDef note fill:#fffbe6,stroke:#d4a72c,color:#4a3800

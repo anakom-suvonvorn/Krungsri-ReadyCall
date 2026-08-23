@@ -1,0 +1,22 @@
+%% HANDWRITTEN. Checked against D37 - the central product argument
+flowchart TB
+    subgraph bad["<b>IF AI DID THE ROUTING</b> - what we rejected"]
+        direction TB
+        X1["caller speaks"] --> X2["STT transcribes"] --> X3["LLM classifies intent"] --> X4["route to a queue"]
+        X5["<b>worst case:</b> no consent, STT down, model wrong,<br/>or the caller says nothing at all<br/>= we know NOTHING and route to a general pool.<br/><b>That is WORSE than the call centre they have today.</b>"]:::bad
+    end
+
+    subgraph good["<b>D37: THE MENU RUNS FIRST</b>"]
+        direction TB
+        Y1["caller presses 2 keys"] --> Y2["line + intent, deterministically"] --> Y3["queue settled"]
+        Y4["<b>worst case:</b> exactly what every call centre<br/>in the country already achieves.<br/><b>That is our FLOOR, not our ceiling.</b>"]:::ok
+        Y3 --> Y5["AI intake then adds the DETAIL a keypad<br/>can never capture: which hospital, which<br/>plate, how urgent, what they actually need"]:::ai
+    end
+
+    bad --> WHY["<b>the reframing this forced</b><br/>AI is no longer load-bearing for routing.<br/>It is the DELTA on top of a parity base.<br/>If every AI component fails at once, the<br/>call still reaches the right specialist."]:::key
+    good --> WHY
+
+    classDef bad fill:#fdecea,stroke:#d93025,color:#5c1a13
+    classDef ok fill:#e9f7ef,stroke:#2f9e5f,color:#08361d
+    classDef ai fill:#eef4ff,stroke:#5b8def,color:#0b2545
+    classDef key fill:#1f6feb,stroke:#0b3d91,color:#fff

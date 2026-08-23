@@ -1,0 +1,42 @@
+%% HANDWRITTEN. Checked against PROJECT_STATE.md S5 + adapters on disk
+flowchart TB
+    subgraph real["<b>REAL SERVICES</b> - doing actual work today"]
+        direction TB
+        R1["config + startup coherence checks"]:::real
+        R2["injected Clock + ids (deterministic replay)"]:::real
+        R3["16-state machine + orchestrator"]:::real
+        R4["in-memory event bus (replayable)"]:::real
+        R5["<b>DomainPack</b> - typed, cross-validated YAML"]:::real
+        R6["<b>IdentityResolver</b> - the L0-L3 ladder"]:::real
+        R7["<b>ContextAssembler</b> - parallel + provenance"]:::real
+        R8["<b>BriefBuilder</b> - assurance-gated disclosure"]:::real
+        R9["caching + stale-serving + circuit breaker"]:::real
+    end
+
+    subgraph fake["<b>STILL FAKES</b> - only the EDGES"]
+        direction TB
+        F1["telephony -> simulated"]:::fake
+        F2["speech -> scripted turns"]:::fake
+        F3["LLM -> rule-based"]:::fake
+        F4["TTS -> null"]:::fake
+        F5["bank data -> YAML fixtures"]:::fake
+        F6["storage -> in-memory dict"]:::fake
+    end
+
+    subgraph none["<b>NOT BUILT YET</b>"]
+        direction TB
+        N1["HTTP API (P1b)"]:::none
+        N2["customer simulator (P1b)"]:::none
+        N3["matching engine (P2)"]:::none
+        N4["agent workstation (P2)"]:::none
+        N5["Postgres / Alembic (P2, deferred by D39)"]:::none
+        N6["media gateway + real STT (P3)"]:::none
+    end
+
+    real --> KEY["<b>the point of the shape:</b> everything in the left<br/>column is real logic, and every fake is at a PORT.<br/>Swapping one in is a config change, so no phase is<br/>ever blocked on telephony or a GPU."]:::key
+    fake --> KEY
+
+    classDef real fill:#e9f7ef,stroke:#2f9e5f,color:#08361d
+    classDef fake fill:#fff4e6,stroke:#e8a33d,color:#4a2f00
+    classDef none fill:#f5f5f5,stroke:#999,color:#666,stroke-dasharray:4 3
+    classDef key fill:#1f6feb,stroke:#0b3d91,color:#fff

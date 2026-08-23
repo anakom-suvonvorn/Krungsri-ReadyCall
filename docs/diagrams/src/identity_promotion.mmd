@@ -1,0 +1,31 @@
+%% HANDWRITTEN. Checked against D42
+flowchart TB
+    ARR["call arrives<br/>IdentityResolver runs once"]:::in
+    ARR --> LVL["<b>L1_PROBABLE</b> - caller ID matched<br/>name on screen, policy details LOCKED"]:::l1
+
+    LVL --> ACT0["brief shows action 0:<br/>ยืนยันตัวตนผู้ติดต่อก่อนให้ข้อมูลกรมธรรม์"]:::act
+    ACT0 --> ASK["agent asks an <b>OPEN</b> question<br/>ขอทราบชื่อผู้ติดต่อด้วยค่ะ"]:::ask
+    ASK -.-> WHY["<b>never ask a leading question.</b><br/>'ใช่คุณ X ไหมคะ' both leaks that the number<br/>belongs to them AND is weaker verification -<br/>anyone can answer yes."]:::note
+
+    ASK --> CTRL{"agent presses one of THREE"}:::gate
+
+    CTRL -- "Confirmed<br/>(records WHICH challenge)" --> C1["<b>L3_VERIFIED</b><br/>full disclosure<br/>brief re-renders as v2"]:::l3
+    CTRL -- "Not this person" --> C2["<b>L0</b> + rejected id recorded<br/>nothing re-proposes them<br/>feeds a data-quality signal:<br/>usually a recycled mobile number"]:::l0
+    CTRL -- "Third party acting for them" --> C3["context VISIBLE (which policy)<br/>disclosure STILL LOCKED<br/>+ playbook step: check authority to act"]:::l2
+
+    C3 -.-> WHY3["<b>why a third button exists.</b> A daughter calling<br/>about her father is neither confirmed nor wrong.<br/>Forced into a binary the agent presses Confirmed,<br/>and the audit log now says the policyholder was<br/>verified. The binary manufactures a false record."]:::note
+
+    C1 --> AUDIT[("disclosure audit log<br/>what was asked, what was shown, when")]:::store
+    C2 --> AUDIT
+    C3 --> AUDIT
+
+    classDef in fill:#1f6feb,stroke:#0b3d91,color:#fff
+    classDef l1 fill:#fff4e6,stroke:#e8a33d,color:#4a2f00
+    classDef l0 fill:#fdecea,stroke:#d93025,color:#5c1a13
+    classDef l2 fill:#eef4ff,stroke:#5b8def,color:#0b2545
+    classDef l3 fill:#e9f7ef,stroke:#2f9e5f,color:#08361d
+    classDef act fill:#f5f5f5,stroke:#999,color:#333
+    classDef ask fill:#eef4ff,stroke:#5b8def,color:#0b2545
+    classDef gate fill:#1f6feb,stroke:#0b3d91,color:#fff
+    classDef store fill:#e9f7ef,stroke:#2f9e5f,color:#08361d
+    classDef note fill:#fffbe6,stroke:#d4a72c,color:#4a3800

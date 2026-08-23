@@ -104,6 +104,19 @@ React workstation with the softphone in it · web customer simulator · menu-fir
 - Python is pinned **3.11**: PEP 695 generics are a syntax error; use `Generic[T]`.
 - Windows: paths have spaces (quote them).
 
+## Diagrams (visual walkthroughs)
+
+`docs/diagrams/` — **44 diagrams** with explanations, in nine themed pages. Start at
+`docs/diagrams/README.md`. Roughly a quarter are **generated from source** (the transition
+table, the domain pack, the pydantic models, the adapters on disk), so they cannot drift;
+`tests/unit/test_diagrams.py` fails if a committed one falls behind the code.
+
+```bash
+uv run python scripts/gen_diagrams.py      # rebuild derived .mmd sources
+uv run python scripts/render_diagrams.py   # render all .mmd -> .svg  (needs mermaid-cli)
+uv run python scripts/render_diagrams.py --check   # report stale SVGs
+```
+
 ## Explanations (plain-language walkthroughs)
 
 `docs/explanations/` — teaching notes written for building understanding a layer at a time.

@@ -1,0 +1,36 @@
+%% HANDWRITTEN. Checked against ARCHITECTURE.md S10 + D26 + D43
+sequenceDiagram
+    autonumber
+    participant C as Customer
+    participant TEL as Telephony
+    participant MG as Media gateway
+    participant STT as STT workers
+    participant WS as Workstation
+    participant A as Agent
+
+    TEL->>TEL: caller leg and agent leg are BRIDGED
+    Note over TEL,MG: each leg is forked SEPARATELY (D26)<br/>so we never need speaker diarisation -<br/>we know which wire the audio came from
+
+    par caller audio
+        TEL->>MG: fork of the caller leg
+        MG->>STT: 20ms frames, VAD-segmented
+        STT-->>WS: turns tagged speaker=customer
+    and agent audio
+        TEL->>MG: fork of the agent leg
+        MG->>STT: same pipeline
+        STT-->>WS: turns tagged speaker=agent
+    end
+
+    WS->>A: live transcript, both sides, colour-coded
+
+    Note over A,C: the keypad stays live all call (D43)
+    A->>WS: clicks "ask for policy number"
+    WS->>C: prompt to type it
+    C->>TEL: keys 4512 on the handset
+    TEL->>WS: DTMF digits as they arrive
+    WS->>WS: check against the policies we already hold
+    WS-->>A: MATCH - assurance promoted to L3, brief re-renders as v2
+    Note right of WS: machine-checkable, so no agent<br/>judgment is involved
+
+    A->>WS: presses Hang up
+    WS->>TEL: end the call

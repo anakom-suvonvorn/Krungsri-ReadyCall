@@ -1,0 +1,24 @@
+%% HANDWRITTEN. Checked against D32 + D33 + ARCHITECTURE.md S9 + Krungsri.pdf p7
+flowchart TB
+    subgraph tab["<b>ONE BROWSER TAB</b> - this IS the phone (D32)"]
+        direction TB
+        BAR["<b>TOP BAR</b> - presence control<br/>Available / Break / Lunch / Last call &nbsp;&nbsp;|&nbsp;&nbsp; mic + headset self-test"]:::bar
+
+        subgraph main["during a live conversation"]
+            direction LR
+            LEFT["<b>WHO</b><br/>name + segment<br/>assurance badge<br/><b>identity control:</b><br/>Confirmed / Not this<br/>person / Third party<br/>(D42)"]:::panel
+            MID["<b>WHY + WHAT TO SAY</b><br/>intent + urgency<br/>Thai summary<br/>suggested opening<br/>recommended actions<br/>(re-render on promotion)"]:::panel
+            RIGHT["<b>EVIDENCE</b><br/>live transcript, both sides<br/>policy panel (gated)<br/>provenance: says who,<br/>and how old<br/>keypad capture field (D43)"]:::panel
+        end
+
+        CALLBAR["<b>CALL CONTROL</b> - Accept / Hold / Mute / Transfer / Hang up<br/>SIP.js over WSS, WebRTC through the agent headset"]:::ctl
+        WHY["<b>the timeline is visible on purpose (D18)</b><br/>'context ready at 0.4s, before the phone rang'<br/>If the system cannot explain why it did something,<br/>it is not finished."]:::note
+    end
+
+    NO["<b>what is deliberately NOT here:</b> a desk phone,<br/>a separate softphone app, an install, a second screen<br/>to alt-tab to. The correction that produced this:<br/>the workstation is not an info screen NEXT TO the<br/>phone - it is the call centre."]:::key
+
+    classDef bar fill:#1f6feb,stroke:#0b3d91,color:#fff
+    classDef panel fill:#eef4ff,stroke:#5b8def,color:#0b2545
+    classDef ctl fill:#e9f7ef,stroke:#2f9e5f,color:#08361d
+    classDef note fill:#fffbe6,stroke:#d4a72c,color:#4a3800
+    classDef key fill:#fff4e6,stroke:#e8a33d,color:#4a2f00

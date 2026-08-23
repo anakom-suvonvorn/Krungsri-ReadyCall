@@ -1,0 +1,37 @@
+%% HANDWRITTEN. Checked against ARCHITECTURE.md S8 + D22 + D23 + D38
+sequenceDiagram
+    autonumber
+    participant Q as Waiting pool
+    participant M as MatchingEngine
+    participant PR as Presence
+    participant SOLV as Hungarian solver
+    participant WS as Agent workstation
+
+    Note over Q,WS: ONE pool - not one queue per agent (D22)
+
+    loop every tick, and on every relevant event
+        M->>Q: all waiting calls
+        M->>PR: all offerable agents
+        Note right of PR: two axes: what the PLATFORM knows,<br/>and what the PERSON chose (D33)
+
+        M->>M: hard filters FIRST
+        Note right of M: required skill - LANGUAGE (D38)<br/>a failed hard filter is not a low score,<br/>it is exclusion
+
+        M->>M: fit score for every (call, agent) pair
+        Note right of M: skill_match + continuity +<br/>historical_fit - load_penalty
+
+        M->>M: urgency multiplier per call
+        Note right of M: wait_pressure + sla_risk + customer_priority<br/>+ situational. This is what stops starvation.
+
+        M->>SOLV: cost matrix
+        SOLV-->>M: globally optimal assignment
+        Note right of SOLV: greedy best-first is locally optimal<br/>and globally poor - it strands people
+
+        alt a much better agent frees up in seconds
+            M->>M: DEFER, but only inside the guard rails
+            Note right of M: never past the wait ceiling,<br/>never for a critical call
+        else
+            M->>WS: OFFER
+            Note right of WS: every candidate and its score is persisted -<br/>the decision is explainable (D18)
+        end
+    end

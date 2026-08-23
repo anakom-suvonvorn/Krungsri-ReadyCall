@@ -1,0 +1,34 @@
+%% HANDWRITTEN. Checked against D32 + D33 + D21
+sequenceDiagram
+    autonumber
+    participant SYS as ReadyCall
+    participant WS as Workstation (browser)
+    participant A as Agent
+    participant TEL as Telephony
+    participant C as Customer
+    participant INT as Intake
+
+    SYS->>WS: CallOffered (websocket)
+    WS->>A: offer card + ringtone IN THE BROWSER TAB
+    Note over WS,A: there is no desk phone. The tab IS the phone. (D32)
+    WS->>A: shows who / why / urgency BEFORE accepting
+
+    Note over SYS,INT: the offer window doubles as the intake grace period (D21)
+    SYS->>INT: an agent is found - you have ~7s, wrap up cleanly
+    INT->>C: "ขอบคุณค่ะ กำลังต่อสายให้"
+    INT->>SYS: finalize(partial=true) - a cut-off sentence is still useful
+
+    alt Accept
+        A->>WS: clicks Accept
+        WS->>TEL: SIP.js answers over WSS
+        TEL->>TEL: bridge the caller leg to the agent leg
+        SYS->>SYS: OFFERED to IN_CALL
+    else Decline
+        A->>WS: clicks Decline, with a reason
+        SYS->>SYS: OFFERED to MATCHED - re-match someone else
+    else No answer (RONA)
+        Note over WS,SYS: timeout, about 20s
+        SYS->>SYS: OFFERED to MATCHED
+        SYS->>WS: flip the agent OUT of Ready
+        Note right of SYS: otherwise the same unattended desk<br/>keeps being offered calls
+    end

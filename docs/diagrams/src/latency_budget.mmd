@@ -1,0 +1,29 @@
+%% HANDWRITTEN. Checked against ARCHITECTURE.md S15
+gantt
+    title Latency budget - what has to happen before the agent says hello
+    dateFormat X
+    axisFormat %Ss
+    todayMarker off
+
+    section App path
+    tap to intent created        :a1, 0, 200
+    context fan-out (6 parallel) :a2, after a1, 400
+    brief v1 built               :a3, after a2, 100
+    THE PHONE IS STILL RINGING   :milestone, m1, after a3, 0
+
+    section Cold-call path
+    inbound leg up, ANI lookup   :b1, 0, 300
+    IVR greeting + menu step 1   :b2, after b1, 6000
+    menu step 2                  :b3, after b2, 5000
+    ROUTING SETTLED - no AI yet  :milestone, m2, after b3, 0
+    consent prompt               :b4, after b3, 4000
+    context + brief v1           :b5, after b4, 500
+
+    section While they wait
+    intake speech to text (rolling) :c1, 15000, 25000
+    brief v2 with speech            :c2, after c1, 1500
+
+    section The handover
+    offer card appears           :d1, 42000, 1000
+    intake grace period (D21)    :d2, after d1, 7000
+    accepted - legs bridge       :d3, after d2, 500

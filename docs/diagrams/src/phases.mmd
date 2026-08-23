@@ -1,0 +1,22 @@
+%% HANDWRITTEN. Checked against PLAN.md P0-P8
+gantt
+    title Build phases - each one ends in something demonstrable (D34)
+    dateFormat X
+    axisFormat P%S
+    todayMarker off
+
+    section DONE
+    P0 foundations - the spine runs on fakes    :done, p0, 0, 1
+    P1 context - identity, assembly, brief v1   :done, p1, 1, 1
+
+    section NEXT
+    P1b HTTP layer + customer simulator         :active, p1b, 2, 1
+
+    section PLANNED
+    P2 matching engine + agent workstation      :p2, 3, 1
+    P3 voice - IVR, media gateway, STT, intake  :p3, 4, 1
+    P4 analysis - brief v2+, Claude vs Typhoon  :p4, 5, 1
+    P5 real telephony - Asterisk + softphone    :p5, 6, 1
+    P6 live transcription, wrap-up, metrics     :p6, 7, 1
+    P7 PDPA hardening                           :p7, 8, 1
+    P8 future - conversational intake, outbound :p8, 9, 1

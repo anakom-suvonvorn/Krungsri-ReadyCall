@@ -1,7 +1,7 @@
 # PROJECT_STATE
 
 _What this project is, what exists, what doesn't, and where everything lives._
-_Last updated: 2026-08-21._
+_Last updated: 2026-08-23._
 
 ---
 
@@ -95,6 +95,7 @@ FullProject/
 ├─ uv.lock  .python-version  .env.example  .gitignore
 ├─ README.md
 ├─ docs/                     # ← this documentation system
+│  └─ diagrams/            # 44 diagrams + 9 explanation pages; a quarter generated from source
 ├─ config/                   # ← the entire insurance-specific "domain pack" (D28)
 │  ├─ core_mapping.yaml      # bank-data field mapping (swap target, DATA_MODEL §4)
 │  ├─ matching_weights.yaml  # fit + urgency weights, tunable at runtime
@@ -286,6 +287,7 @@ performing by hand, i.e. what the next services take over (`D36`).
 | Mock core | 3 customers, 4 policies across 4 product lines, 5 products, 5 interactions, 2 claims |
 | Intent taxonomy | 28 intents across 5 lines, each with a catch-all (revisit during the hackathon) |
 | Generated mock data | 2,000 customers / 2,292 policies / 5,880 interactions (seeded, gitignored) |
+| Diagrams | 44 (12 generated from source, 32 hand-drawn), across 9 explanation pages |
 
 ---
 

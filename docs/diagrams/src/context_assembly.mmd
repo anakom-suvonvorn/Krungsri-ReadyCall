@@ -1,0 +1,46 @@
+%% HANDWRITTEN. Checked against services/context/assembler.py
+flowchart TB
+    IN["build(customer_id, product_code, product_line)"]:::in
+
+    IN --> CHK{"customer_id known?"}
+    CHK -- no --> EMPTY["empty snapshot<br/>degraded = LOW_ASSURANCE<br/><b>still a snapshot - no special case downstream</b>"]:::warn
+
+    CHK -- yes --> FAN["asyncio.gather - 6 reads AT ONCE"]:::fan
+    FAN --> R1["get_customer"]:::rd
+    FAN --> R2["list_policies"]:::rd
+    FAN --> R3["list_interactions"]:::rd
+    FAN --> R4["list_holdings"]:::rd
+    FAN --> R5["list_life_events"]:::rd
+    FAN --> R6["get_product"]:::rd
+
+    R1 --> SAFE
+    R2 --> SAFE
+    R3 --> SAFE
+    R4 --> SAFE
+    R5 --> SAFE
+    R6 --> SAFE
+    SAFE["_safe() wraps EVERY read<br/>one dead field cannot sink the snapshot"]:::safe
+
+    SAFE --> PICK{"which policy is<br/>this call ABOUT?"}
+    PICK -- "exact product they tapped" --> P1["that one"]:::ok
+    PICK -- "one policy in the line" --> P2["that one"]:::ok
+    PICK -- "several in the line" --> P3["the one expiring soonest"]:::ok
+    PICK -- "they hold exactly one" --> P4["that one"]:::ok
+    PICK -- "two unrelated, no signal" --> P5["<b>NONE - deliberately</b><br/>a confidently wrong policy on screen<br/>is worse than an empty panel"]:::warn
+
+    P1 --> PROV
+    P2 --> PROV
+    P3 --> PROV
+    P4 --> PROV
+    P5 --> PROV
+    PROV["stamp FieldProvenance per field:<br/>source - fetched_at - provider - stale?"]:::prov
+    PROV --> SNAP[("<b>frozen ContextSnapshot</b><br/>immutable, so the screen shows what the<br/>system knew WHEN IT DECIDED")]:::snap
+
+    classDef in fill:#1f6feb,stroke:#0b3d91,color:#fff
+    classDef fan fill:#eef4ff,stroke:#5b8def,color:#0b2545
+    classDef rd fill:#f5f5f5,stroke:#999,color:#333
+    classDef safe fill:#fff4e6,stroke:#e8a33d,color:#4a2f00
+    classDef ok fill:#e9f7ef,stroke:#2f9e5f,color:#08361d
+    classDef warn fill:#fdecea,stroke:#d93025,color:#5c1a13
+    classDef prov fill:#fff4e6,stroke:#e8a33d,color:#4a2f00
+    classDef snap fill:#e9f7ef,stroke:#2f9e5f,color:#08361d

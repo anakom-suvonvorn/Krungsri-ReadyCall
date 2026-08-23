@@ -1,0 +1,33 @@
+%% HANDWRITTEN. Checked against ARCHITECTURE.md S1
+flowchart TB
+    subgraph people[" "]
+        direction LR
+        CUST["<b>Customer</b><br/>Khun Pattheera<br/>a phone, or the Krungsri app"]:::person
+        AGENT["<b>Broker / agent</b><br/>one browser tab<br/>headset plugged into the PC"]:::person
+    end
+
+    subgraph rc["<b>KRUNGSRI READYCALL</b> - the AI context layer we are building"]
+        direction TB
+        CORE["call orchestration - identity - context<br/>routing - speech - brief"]:::ours
+        STORE[("readycall store<br/>WRITABLE - everything we produce")]:::ours
+    end
+
+    subgraph ext["Existing systems - we change none of these"]
+        direction TB
+        BANK[("Krungsri core data<br/><b>READ-ONLY</b> (D5)<br/>customers, policies, claims")]:::ext
+        PHONE["Telephony<br/>Asterisk / SIP trunk / PSTN"]:::ext
+        AI["AI providers<br/>Thonburian STT - Claude / Typhoon"]:::ext
+    end
+
+    CUST -- "taps Contact, or just dials" --> rc
+    rc -- "hold music, prompts, then a human" --> CUST
+    rc -- "who + why + what to say, BEFORE they answer" --> AGENT
+    AGENT -- "talks to the customer through this same tab (D32)" --> rc
+    rc -- "reads. never writes. (D5)" --> BANK
+    rc <-- "media + call control" --> PHONE
+    rc -- "transcribe / summarise. never route. (D37)" --> AI
+    CORE --- STORE
+
+    classDef person fill:#1f6feb,stroke:#0b3d91,color:#fff
+    classDef ours fill:#e9f7ef,stroke:#2f9e5f,color:#08361d
+    classDef ext fill:#f5f5f5,stroke:#999,color:#333

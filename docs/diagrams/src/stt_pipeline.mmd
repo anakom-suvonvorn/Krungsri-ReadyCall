@@ -1,0 +1,23 @@
+%% HANDWRITTEN. Checked against D9 + D30 + INTEGRATIONS.md S2
+flowchart LR
+    MIC["caller leg audio<br/>8kHz mu-law from the PSTN"]:::in
+    MIC --> RS["resample to 16kHz mono"]:::step
+    RS --> VAD["<b>VAD endpointing</b><br/>find where an utterance ENDS"]:::step
+    VAD --> SEG["segment into utterances<br/>not fixed chunks"]:::step
+    SEG --> Q["queue to a WORKER PROCESS<br/>never the event loop"]:::step
+    Q --> M["<b>Thonburian Whisper</b><br/>biodatlab/whisper-th-medium-combined"]:::model
+    M --> TURN["TranscriptTurn<br/>text + timings + asr_confidence + engine"]:::out
+    TURN --> BUS["event bus -> brief builder + workstation"]:::out
+
+    ALT["<b>alternatives benchmarked on the same audio (D30)</b><br/>- faster-whisper / CTranslate2 int8_float16<br/>&nbsp;&nbsp;(probably REQUIRED to hit latency on a 3050)<br/>- Typhoon ASR<br/>- cloud STT as the fallback adapter"]:::note
+
+    GPU["<b>the 3050 constraint.</b> 4-6GB. Whisper pads every<br/>chunk to 30s regardless of real length, which is why<br/>segmentation matters so much. Do NOT plan to run a<br/>local LLM and Whisper on the same card - the default<br/>split is STT local, LLM via API."]:::warn
+
+    WHY["<b>why re-implement rather than copy the old project?</b><br/>The reference code is FILE-BASED: record, then transcribe.<br/>This system needs streaming - partial results while the<br/>customer is still talking. Different shape entirely,<br/>so it is reference for model behaviour, not code to copy. (D9)"]:::note
+
+    classDef in fill:#1f6feb,stroke:#0b3d91,color:#fff
+    classDef step fill:#eef4ff,stroke:#5b8def,color:#0b2545
+    classDef model fill:#e9f7ef,stroke:#2f9e5f,color:#08361d
+    classDef out fill:#fff4e6,stroke:#e8a33d,color:#4a2f00
+    classDef note fill:#fffbe6,stroke:#d4a72c,color:#4a3800
+    classDef warn fill:#fdecea,stroke:#d93025,color:#5c1a13

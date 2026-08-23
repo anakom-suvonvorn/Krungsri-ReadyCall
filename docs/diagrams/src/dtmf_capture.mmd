@@ -1,0 +1,29 @@
+%% HANDWRITTEN. Checked against D43
+flowchart TB
+    PROB["<b>the problem</b><br/>agent needs a policy / claim / plate number.<br/>Spoken digits over a mobile are the WORST case:<br/>short, phonetically confusable, no linguistic<br/>context for a human or a model to lean on."]:::prob
+    PROB --> OLD["today: 'ขอโทษค่ะ ทวนอีกครั้งได้ไหมคะ'<br/><b>= dead air</b>, the exact thing this product exists to remove"]:::bad
+
+    OLD --> NEW["<b>D43: the keypad stays live for the WHOLE call</b>"]:::new
+    NEW --> A1["agent clicks a labelled request<br/>e.g. 'policy number'"]:::step
+    A1 --> A2["a field appears on the workstation<br/>AND a prompt for the caller"]:::step
+    A2 --> A3["caller TYPES it. Digits land as they are pressed."]:::step
+
+    A3 --> CHK{"do we already hold<br/>this customer data?"}:::gate
+    CHK -- yes --> MATCH["check it against their ACTUAL policies"]:::step
+    MATCH -- "matches" --> PROMO["<b>assurance promotes automatically</b><br/>audit line: matched MT-2025-004512 at 14:32:07<br/>stronger than an agent judging a spoken answer"]:::ok
+    MATCH -- "no match" --> NOPE["recorded as a failed challenge.<br/>Disclosure stays locked."]:::bad
+    CHK -- no --> PLAIN["just accurate data entry - still a win"]:::ok
+
+    NEW --> RULE["<b>never capture a full secret.</b><br/>Last 4 of a citizen id, never the whole number.<br/>Never a card number. For secret-ish challenges store<br/>THE OUTCOME ONLY - matched / not - never the digits.<br/>A policy number is not a secret and is stored."]:::note
+
+    NEW --> P5["<b>P5 gotcha</b>: the caller channel must STAY in the<br/>Stasis app and be bridged from within it, or Asterisk<br/>stops emitting ChannelDtmfReceived once bridged.<br/>Always-on passive capture - no mode switch."]:::note
+
+    NEW --> WHY["<b>same principle as D37.</b> The keypad is the reliable<br/>channel, the microphone is the lossy one. Give the<br/>keypad the job speech is worst at. Needs no AI,<br/>so it cannot degrade with one."]:::note
+
+    classDef prob fill:#fdecea,stroke:#d93025,color:#5c1a13
+    classDef bad fill:#fdecea,stroke:#d93025,color:#5c1a13
+    classDef new fill:#1f6feb,stroke:#0b3d91,color:#fff
+    classDef step fill:#eef4ff,stroke:#5b8def,color:#0b2545
+    classDef gate fill:#fff4e6,stroke:#e8a33d,color:#4a2f00
+    classDef ok fill:#e9f7ef,stroke:#2f9e5f,color:#08361d
+    classDef note fill:#fffbe6,stroke:#d4a72c,color:#4a3800

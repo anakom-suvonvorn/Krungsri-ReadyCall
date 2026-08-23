@@ -1,0 +1,29 @@
+%% HANDWRITTEN. Checked against src/ tree on disk
+flowchart LR
+    ROOT["FullProject/"]:::root
+    ROOT --> DOCS["docs/<br/><i>the permanent memory</i>"]:::docs
+    ROOT --> CFG["config/<br/><b>the entire insurance domain pack</b><br/>intents - skills - dids - menus"]:::cfg
+    ROOT --> SRC["src/readycall/"]:::src
+    ROOT --> MOCK["mock/bank_core/<br/>fixtures + 2000-customer generator"]:::misc
+    ROOT --> SCR["scripts/<br/>run_scenario - gen_diagrams"]:::misc
+    ROOT --> TST["tests/<br/>unit - contracts - scenarios"]:::misc
+    ROOT --> INF["infra/<br/>docker-compose + schema SQL"]:::misc
+
+    SRC --> D1["domain/<br/><b>no I/O at all</b>"]:::layer
+    SRC --> D2["ports/<br/><b>Protocols only</b>"]:::layer
+    SRC --> D3["adapters/<br/><b>no business rules</b>"]:::layer
+    SRC --> D4["services/<br/><b>imports only domain + ports</b>"]:::layer
+    SRC --> D5["entrypoints/<br/>the runnable processes"]:::layer
+
+    RULE["<b>the dependency rule, in one line:</b><br/>domain knows nothing - ports know domain -<br/>services know domain and ports - adapters know<br/>ports and a vendor. <b>Any file that breaks that is a bug.</b>"]:::key
+
+    CFGN["<b>why config/ is separate and large.</b> Every insurance<br/>literal lives there, so retargeting this to a hospital<br/>line or a telco desk means swapping YAML, not touching<br/>services/. That reuse claim is D28, and it is enforced:<br/>no insurance literal may be hardcoded in services/."]:::note
+
+    classDef root fill:#1f6feb,stroke:#0b3d91,color:#fff
+    classDef docs fill:#fff4e6,stroke:#e8a33d,color:#4a2f00
+    classDef cfg fill:#e9f7ef,stroke:#2f9e5f,color:#08361d
+    classDef src fill:#eef4ff,stroke:#5b8def,color:#0b2545
+    classDef layer fill:#eef4ff,stroke:#5b8def,color:#0b2545
+    classDef misc fill:#f5f5f5,stroke:#999,color:#333
+    classDef key fill:#1f6feb,stroke:#0b3d91,color:#fff
+    classDef note fill:#fffbe6,stroke:#d4a72c,color:#4a3800

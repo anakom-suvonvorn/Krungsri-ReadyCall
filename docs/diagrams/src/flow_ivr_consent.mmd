@@ -1,0 +1,41 @@
+%% HANDWRITTEN. Checked against ARCHITECTURE.md S6 + D37 + D14 + config/menus.yaml
+sequenceDiagram
+    autonumber
+    participant C as Customer
+    participant TEL as Telephony
+    participant IVR as IVR service
+    participant PACK as DomainPack
+    participant ORCH as CallOrchestrator
+
+    C->>TEL: dials +6621234000 (general hotline)
+    TEL->>IVR: call arrives, ANI +66898887777
+    IVR->>PACK: did("+6621234000")
+    PACK-->>IVR: line unknown, skip_product_menu false
+
+    Note over IVR,C: STEP 1 - which product line?
+    IVR->>C: "กด 1 ประกันรถยนต์ กด 2 ประกันสุขภาพ ..."
+    Note right of IVR: reordered if we recognise them, but it<br/>NEVER speaks their details aloud (D37)
+    C->>IVR: presses 2
+
+    Note over IVR,C: STEP 2 - why are you calling?
+    IVR->>C: "กด 1 แจ้งเข้ารักษาผู้ป่วยใน ... กด 4 สอบถามความคุ้มครอง ..."
+    C->>IVR: presses 4
+
+    IVR->>PACK: walk_menu(["2","4"])
+    PACK-->>IVR: line health, intent health.coverage.query
+    IVR->>PACK: queue_for_intent - intent to skill to queue
+    PACK-->>IVR: q_health_policy
+
+    Note over IVR,ORCH: ROUTING IS NOW SETTLED. No AI has run. (D37)
+
+    IVR->>C: "ให้บันทึกเสียงเพื่อเตรียมข้อมูลไหมคะ กด 1 ตกลง กด 2 ไม่"
+    alt presses 1
+        C->>IVR: 1
+        IVR->>ORCH: record_consent(recording + ai_processing)
+        ORCH-->>IVR: intake may run
+    else presses 2, or says nothing
+        C->>IVR: 2
+        IVR->>ORCH: no consent recorded
+        Note right of ORCH: the call proceeds anyway (D14). The brief<br/>stays context-only - and is still correctly routed.
+    end
+    ORCH->>ORCH: enqueue(q_health_policy)

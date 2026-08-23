@@ -1,0 +1,36 @@
+%% HANDWRITTEN. Checked against adapters/core_data/caching.py
+stateDiagram-v2
+    direction LR
+    [*] --> CLOSED
+
+    CLOSED: <b>CLOSED</b> - normal
+    CLOSED: every call goes through to the bank core
+    CLOSED: results cached with a TTL
+
+    OPEN: <b>OPEN</b> - upstream is down
+    OPEN: fail INSTANTLY, do not even try
+    OPEN: serve stale cache and SAY SO
+
+    HALF: <b>cooldown elapsed</b>
+    HALF: let one call through and see
+
+    CLOSED --> OPEN : failures cross the threshold
+    OPEN --> HALF : cooldown elapsed
+    HALF --> CLOSED : it worked
+    HALF --> OPEN : it failed again
+
+    note right of OPEN
+        WHY this matters more than it looks:
+        without a breaker, a dead core costs
+        a full timeout PER LOOKUP - six reads
+        means six timeouts, and the brief is
+        late for every single caller.
+        With it, degradation costs microseconds.
+    end note
+
+    note right of CLOSED
+        served_stale flag propagates all the way
+        to the agent screen as CORE_DATA_STALE.
+        An agent seeing old data deserves to
+        know it is old. (D18)
+    end note

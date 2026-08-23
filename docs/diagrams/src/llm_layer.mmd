@@ -1,0 +1,24 @@
+%% HANDWRITTEN. Checked against D29 + D31 + D16 + INTEGRATIONS.md S3
+flowchart TB
+    SVC["analysis services<br/>intent - entities - summary - NBA - opening"]:::svc
+    SVC --> PORT{{"<b>LlmClient</b> port<br/>LlmResult[T] - typed output, always"}}:::port
+
+    PORT --> A1["<b>AnthropicAdapter</b><br/>Claude"]:::ad
+    PORT --> A2["<b>OpenAiCompatibleAdapter</b><br/>one adapter, four backends by base URL:<br/>Typhoon API - OpenAI - vLLM - Ollama"]:::ad
+    PORT --> A3["RuleBasedLlm<br/><b>runs today</b> - no key, no GPU"]:::now
+    PORT -.-> A4["Gemini - defined, not implemented"]:::todo
+
+    A1 --> CMP["<b>both implemented from day one (D29)</b><br/>so Thai quality can be COMPARED on the same<br/>golden set rather than argued about"]:::note
+    A2 --> CMP
+
+    SVC --> NOFW["<b>no LangChain, no agent framework (D31)</b><br/>What we actually need is: render a versioned prompt,<br/>call an HTTP endpoint, parse JSON into a pydantic model,<br/>retry, record cost and latency. That is ~200 lines we<br/>fully control, versus a dependency that hides the<br/>prompt, hides the retry, and breaks on upgrade.<br/><b>Revisit trigger is written down:</b> if we ever need real<br/>multi-step tool use, reopen the decision."]:::note
+
+    HARD["<b>the hard rule (D16)</b><br/>coverage figures, eligibility and prices are DATA.<br/>The model may summarise, classify and rank -<br/>it may never PRODUCE a number. Hallucinating<br/>a room-and-board limit is not a bad answer,<br/>it is a mis-selling incident."]:::hard
+
+    classDef svc fill:#1f6feb,stroke:#0b3d91,color:#fff
+    classDef port fill:#fff4e6,stroke:#e8a33d,color:#4a2f00
+    classDef ad fill:#eef4ff,stroke:#5b8def,color:#0b2545
+    classDef now fill:#e9f7ef,stroke:#2f9e5f,color:#08361d
+    classDef todo fill:#f5f5f5,stroke:#999,color:#666,stroke-dasharray:4 3
+    classDef note fill:#fffbe6,stroke:#d4a72c,color:#4a3800
+    classDef hard fill:#fdecea,stroke:#d93025,color:#5c1a13

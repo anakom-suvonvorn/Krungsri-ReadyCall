@@ -1,0 +1,107 @@
+# Diagrams — the whole system, visually
+
+_Last updated: 2026-08-23._
+
+**44 diagrams** covering every part of Krungsri ReadyCall. Written to be read in order the
+first time, and dipped into afterwards.
+
+---
+
+## Read them in this order
+
+| # | Page | What you get out of it |
+|---|---|---|
+| 1 | **[Start here](01_start_here.md)** | What the system *is*, who talks to it, and the one structural idea (ports & adapters) that everything else rests on |
+| 2 | **[The call, end to end](02_the_call.md)** | The lifecycle every call follows — as a state machine, as two human journeys, and as five detailed sequence diagrams |
+| 3 | **[Identity & disclosure](03_identity.md)** | How we work out who is calling, why that is a ladder rather than a yes/no, and what unlocks policy details |
+| 4 | **[Routing](04_routing.md)** | How a caller reaches the right specialist — the keypad menu, the intent taxonomy, the published numbers |
+| 5 | **[Context & the brief](05_context_and_brief.md)** | How the agent's screen gets filled in before the phone is answered, and what happens when things break |
+| 6 | **[Agents & matching](06_agents_and_matching.md)** | Who gets which call and why, the agent's two-axis state, and the workstation itself |
+| 7 | **[Voice & AI](07_voice_and_ai.md)** | Speech to text, the LLM layer, and the intake seam that becomes a full AI caller later |
+| 8 | **[Data & events](08_data_and_events.md)** | Every domain object, the two stores, and the event backbone |
+| 9 | **[The project](09_the_project.md)** | Phases, what is built vs faked, how it is tested, and a map of all 43 decisions |
+
+Short on time? **[Start here](01_start_here.md)** then **[The call](02_the_call.md)** is about
+fifteen minutes and covers most of it.
+
+---
+
+## Why some of these are generated, and why that matters
+
+Roughly a quarter of the diagrams are **generated directly from the running system** rather
+than drawn by hand:
+
+| Diagram | Built by reading |
+|---|---|
+| `state_machine`, `state_machine_readable` | the actual `TRANSITIONS` table |
+| `menu_tree`, `routing_chain`, `dids`, `product_lines` | the loaded, validated `DomainPack` |
+| `domain_models` | the pydantic models and their real field names |
+| `events` | the event registry |
+| `ports_adapters` | the packages present on disk |
+| `assurance_ladder`, `agent_state`, `degradation_ladder` | the enums |
+
+A hand-drawn architecture diagram is a comment, and comments rot — six weeks from now it
+quietly describes a system that no longer exists. These cannot: if someone adds a menu
+option, a state, or an adapter, the diagram changes when it is regenerated. Every generated
+file carries a `%% GENERATED` banner naming its source of truth.
+
+The rest are hand-drawn because they describe *intent* rather than structure — sequence
+flows, the reasoning behind a decision, the roadmap. Those carry a `%% HANDWRITTEN` banner
+naming the doc or module they were checked against.
+
+---
+
+## Regenerating
+
+```bash
+uv run python scripts/gen_diagrams.py      # rebuild the derived .mmd sources
+uv run python scripts/render_diagrams.py   # render every .mmd to .svg
+```
+
+`render_diagrams.py` needs the mermaid CLI:
+
+```bash
+npm install -g @mermaid-js/mermaid-cli
+```
+
+It drives a headless browser. If puppeteer has no bundled Chromium it will find an
+installed Chrome or Edge automatically; override with `PUPPETEER_EXECUTABLE_PATH`, or point
+at a specific CLI with `MMDC=/path/to/mmdc`.
+
+To check whether any SVG has fallen behind its source:
+
+```bash
+uv run python scripts/render_diagrams.py --check
+```
+
+Render a single diagram while iterating:
+
+```bash
+uv run python scripts/render_diagrams.py brief_gating
+```
+
+---
+
+## Layout
+
+```
+docs/diagrams/
+├─ README.md              ← you are here
+├─ 01_start_here.md …     ← the nine explanation pages
+├─ *.svg                  ← 44 rendered diagrams (committed, so no tooling is needed to read them)
+└─ src/*.mmd              ← mermaid sources; GENERATED ones say so in the header
+```
+
+`.svg` files are committed deliberately. Anyone should be able to read this documentation
+by opening a file, with no npm, no browser automation, and no build step.
+
+---
+
+## Two gotchas if you edit the sources
+
+- **`call` is a reserved word in mermaid.** A flowchart `classDef call` or a gantt task
+  beginning with "call" is parsed as the click/callback syntax and fails. Both bit us; both
+  are worked around by renaming.
+- **Thai renders fine, but needs the font stack.** The shared config in
+  `render_diagrams.py` sets `Segoe UI, Noto Sans Thai, Tahoma` — dropping that gives tofu
+  boxes for every Thai label.
