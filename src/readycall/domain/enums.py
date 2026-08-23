@@ -22,7 +22,9 @@ class CallState(StrEnum):
     OFFERED = "offered"  # offer card + ringtone in the agent's BROWSER (D32)
     IN_CALL = "in_call"
     WRAP_UP = "wrap_up"
-    RATING = "rating"
+    # NOTE: there is deliberately no RATING state (`D46`). A rating is a fact received
+    # about a call, not a phase the call passes through - the customer rates in the IVR
+    # seconds after hanging up, while the agent may still be writing the wrap-up.
     CLOSED = "closed"
     # terminal / exceptional
     ABANDONED = "abandoned"  # caller hung up while waiting

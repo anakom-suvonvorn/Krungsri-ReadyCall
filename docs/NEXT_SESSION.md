@@ -27,7 +27,7 @@ Everything runs **in memory, with no services, no keys, no GPU**. Nothing needs 
 
 **Foundation (P0)** — config with startup coherence checks · structured logging with
 `call_session_id` bound and secrets redacted · injected `Clock` + swappable id generator
-(`D35`) · UTF-8 console (`B1`) · 16 call states, 19 event types, ~30 domain models · all
+(`D35`) · UTF-8 console (`B1`) · 15 call states, 19 event types, ~30 domain models · all
 7 ports · a fake/null adapter for each · the call state machine + orchestrator (single
 writer, full transition log) · in-memory event bus (deterministic, replayable, idempotent).
 
@@ -79,9 +79,9 @@ prompts (P3), the media gateway (P3), and the matching engine (P2).
 | Q11 | Language menu wording when English lands | `preferred` vs `acceptable` modelled (`D38`); Thai-only for now, likely for the hackathon too |
 | Q12 | Which verification challenges count for promotion to L3 (`D42`) | DOB, last 4 of citizen id, policy no. Confirm the real list with Krungsri |
 | Q13 | Does a third-party caller need a named representative on the policy (`D42`) | Assume yes; `Policy` has no `representatives` field yet |
-| Q14 | **`WRAP_UP → RATING` is ordered backwards.** The customer rates in the IVR seconds after hanging up; the agent may save their wrap-up minutes later. The table says rating *follows* wrap-up, and `run_scenario.py` even transitions to `RATING` with reason `wrapup_saved`. In reality they are concurrent. | Fix at **P2/P6**: either make the rating an event that can arrive at any time rather than a call state, or reach `CLOSED` only once both the wrap-up and the rating have landed (or timed out). Touches `machine.py`, the runner and 3 scenarios, so it wants doing deliberately, not in passing. |
 
-Resolved: single project (`D34`) · Asterisk · RTX 3050 · Claude + Typhoon compared ·
+Resolved: **Q14 — the rating is now an event, not a call state (`D46`)** · single project
+(`D34`) · Asterisk · RTX 3050 · Claude + Typhoon compared ·
 React workstation with the softphone in it · web customer simulator · menu-first flow
 (`D37`) · **menu options are reordered but never speak customer detail aloud**.
 
@@ -100,6 +100,9 @@ React workstation with the softphone in it · web customer simulator · menu-fir
   A lookup returns evidence (`matched` / `not matched`); it must never promote assurance by
   itself — a match cannot tell the policyholder from a relative holding their papers. And
   because we do not know what the digits are, treat raw captures as sensitive by default.
+- **A rating is NOT a call state** (`D46`). `WRAP_UP → CLOSED` directly; ratings attach to
+  the record whenever they arrive, including after closure. The rule: *call state describes
+  the call's progress, it never claims data completeness.*
 - **Saving the wrap-up form is NOT "done"** (`D45`). It closes the call record. ACW runs from
   **media disconnect** until the agent declares their next state — **any** state (Break and
   Lunch end it too, not just Ready). **Nothing is ever auto-saved**: the agent owns the record,

@@ -671,3 +671,11 @@ _Append here rather than editing above, so the walkthrough stays a snapshot of P
   `CefrLevel`, `AgentLanguage`, and preferred/acceptable language on the call session were
   added to `domain/`, and language became a hard filter in the matching design. Everything
   still runs Thai-only; the model just doesn't have to be retrofitted later.
+- **2026-08-23 — `CallState.RATING` no longer exists (`D46`).** Two places above still
+  draw the lifecycle as `WRAP_UP → RATING → CLOSED` (the diagram in the state-machine
+  section, and step 10 of the walkthrough). It is now `WRAP_UP → CLOSED`. The old ordering
+  asserted something false: the customer rates in the IVR within seconds of hanging up,
+  while the agent may still be writing the wrap-up minutes later. A rating is now a
+  `RatingReceived` event that attaches to the call record whenever it arrives, including
+  after the call has closed. The rule to carry forward: *call state describes the call's
+  progress; it never claims data completeness.* There are now **15** call states, not 16.

@@ -16,7 +16,9 @@ drawing that turns the picture into a hairball that hides the real flow. (§2.2 
 complete version.)
 
 Read the spine down the middle: **arrive → IVR → queue → intake → matched → offered → in
-call → wrap-up → rating → closed.**
+call → wrap-up → closed.**
+
+There is deliberately **no rating state** (`D46`) — see §2.8.
 
 Three edges carry real decisions rather than mechanics:
 
@@ -165,9 +167,26 @@ next** — Ready, Break, Lunch, Training or Admin, any of which ends it. And not
 auto-saved on the agent's behalf. See
 [Agents](06_agents_and_matching.md#64-when-after-call-work-actually-ends).
 
-Both sides rate the call (`D27`). The agent rating is the part people skip, and it is how we
-find out whether the brief was actually any good — without it we would be optimising a
-product with no feedback signal on its core claim.
+**The rating is an event, not a state** (`D46`). The table used to say
+`WRAP_UP → RATING → CLOSED`, which asserts an ordering that is false: the customer rates in
+the IVR *within seconds* of hanging up, while the agent may still be typing three minutes
+later. So `CallState.RATING` is gone. A rating attaches to the call record whenever it
+arrives — including after the call has closed — and the rule that falls out is worth stating
+plainly: **call state describes the call's progress; it never claims data completeness.**
+
+That also fixed the demo. The timeline used to print `rating → closed` at a fictional moment.
+Now the scenario prints the real one:
+
+```
+RATING
+  csat=4/5  via customer_ivr  at +297.5s
+  (call closed at +327.5s - the rating landed 30.0s earlier)
+```
+
+Both sides rate (`D27`). The agent rating is the part people skip, and it is how we find out
+whether the brief was actually any good — without it we would be optimising a product with no
+feedback signal on its core claim. It fits the same mechanism: a `Rating` with
+`source=agent`, arriving on its own schedule.
 
 ---
 

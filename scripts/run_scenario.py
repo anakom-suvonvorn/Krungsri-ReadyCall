@@ -38,12 +38,14 @@ from readycall.adapters.stt.scripted import ScriptedSttEngine, ScriptedTurn
 from readycall.adapters.telephony.simulated import SimulatedTelephonyProvider
 from readycall.clock import ManualClock
 from readycall.console import enable_utf8
+from readycall.domain import events as ev
 from readycall.domain.enums import (
     AssuranceLevel,
     CallState,
     ConsentScope,
     EntryChannel,
     ProductLine,
+    RatingSource,
 )
 from readycall.domain.models import CallIntent, CaseBrief, ContextSnapshot
 from readycall.domainpack import DomainPack
@@ -155,6 +157,7 @@ class ScenarioRun:
 
         self.snapshot: ContextSnapshot | None = None
         self.brief: CaseBrief | None = None
+        self.rating: ev.RatingReceived | None = None
         self.transcript: list[str] = []
         self.notes: list[str] = []
 
@@ -369,9 +372,25 @@ class ScenarioRun:
 
         self.clock.advance(sc.seconds("call", 180.0))
         session = await orch.transition(session, CallState.WRAP_UP, reason="caller_hung_up")
-        self.clock.advance(sc.seconds("acw", 30.0))
-        session = await orch.transition(session, CallState.RATING, reason="wrapup_saved")
-        session = await orch.transition(session, CallState.CLOSED, reason="rating_received")
+
+        # The customer rates in the IVR within seconds of hanging up, while the agent is
+        # still writing the wrap-up. The two are concurrent, so the rating is an event
+        # attached to the call rather than a state the call passes through (`D46`).
+        acw_s = sc.seconds("acw", 30.0)
+        rating_delay_s = min(sc.seconds("rating_delay", 5.0), acw_s)
+        self.clock.advance(rating_delay_s)
+        self.rating = ev.RatingReceived(
+            call_session_id=session.call_session_id,
+            occurred_at=self.clock.now(),
+            trace_id=session.trace_id,
+            source=str(RatingSource.CUSTOMER_IVR),
+            csat=int(sc.timing.get("csat", 4)),
+        )
+        await self.bus.publish(self.rating)
+
+        # P1: the agent's own rating (D27) lands with the workstation at P2.
+        self.clock.advance(acw_s - rating_delay_s)
+        session = await orch.transition(session, CallState.CLOSED, reason="wrapup_saved")
 
         await self.telephony.hangup(telephony_call_id, "completed")
         await self.bus.drain()
@@ -453,6 +472,19 @@ def render(run: ScenarioRun, session: Any) -> str:
             add(f"  {consent.scope}: {'granted' if consent.granted else 'refused'}")
     else:
         add("  (none - intake skipped, call unaffected)")
+
+    add("")
+    add("RATING")
+    if run.rating is not None:
+        # Printed with the offset it actually arrived at, not the moment the call closed.
+        # The customer rates while the agent is still typing - that is the whole point
+        # of the rating being an event rather than a state (`D46`).
+        offset = (run.rating.occurred_at - session.created_at).total_seconds()
+        add(f"  csat={run.rating.csat}/5  via {run.rating.source}  at +{offset:.1f}s")
+        closed = (session.ended_at - session.created_at).total_seconds()
+        add(f"  (call closed at +{closed:.1f}s - the rating landed {closed - offset:.1f}s earlier)")
+    else:
+        add("  (none - the customer hung up without rating, which is normal)")
 
     add("")
     add(f"FINAL STATE  {session.state}   reason={session.end_reason}")

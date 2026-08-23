@@ -40,8 +40,6 @@ stateDiagram-v2
     IN_CALL --> WRAP_UP
     WRAP_UP --> CLOSED
     WRAP_UP --> FAILED
-    WRAP_UP --> RATING
-    RATING --> CLOSED
     ABANDONED --> [*]
     CLOSED --> [*]
     FAILED --> [*]

@@ -12,6 +12,11 @@ Two entries in this table encode real decisions rather than mechanics:
   finalises as partial during the offer window (`D21`).
 * `OFFERED -> MATCHED` exists so a declined or timed-out offer re-matches to somebody
   else instead of stranding the caller (RONA, `D33`).
+* There is **no rating state** (`D46`). `WRAP_UP` goes straight to `CLOSED`. The customer
+  rates in the IVR seconds after hanging up while the agent may still be typing, so the
+  two are concurrent; a rating state after wrap-up asserted an ordering that is simply
+  false. A rating arrives as an event and attaches to the call record whenever it lands,
+  including after the call is closed.
 """
 
 from __future__ import annotations
@@ -35,8 +40,7 @@ _TRANSITIONS: Final[dict[CallState, frozenset[CallState]]] = {
     S.MATCHED: frozenset({S.OFFERED, S.MATCHED, S.QUEUED, S.ABANDONED, S.FAILED}),
     S.OFFERED: frozenset({S.IN_CALL, S.MATCHED, S.ABANDONED, S.FAILED}),
     S.IN_CALL: frozenset({S.WRAP_UP, S.TRANSFERRED, S.FAILED}),
-    S.WRAP_UP: frozenset({S.RATING, S.CLOSED, S.FAILED}),
-    S.RATING: frozenset({S.CLOSED}),
+    S.WRAP_UP: frozenset({S.CLOSED, S.FAILED}),
     # terminal
     S.CLOSED: frozenset(),
     S.ABANDONED: frozenset(),

@@ -150,7 +150,11 @@ and the agent verifies the old-fashioned way.
    MATCHED ◄────────────────────────────────────────────────---┘
       │
       ▼
-   OFFERED ──────► IN_CALL ──► WRAP_UP ──► RATING ──► CLOSED
+   OFFERED ──────► IN_CALL ──► WRAP_UP ──► CLOSED
+      │                          (no rating state: the customer rates in the IVR within
+      │                           seconds of hanging up, while the agent may still be
+      │                           writing the wrap-up. The rating is an event that
+      │                           attaches to the record whenever it lands — D46)
       │  (offer card + ringtone     │
       │   in the agent's browser;    └──► TRANSFERRED (brief travels with the call)
       │   they press Accept)

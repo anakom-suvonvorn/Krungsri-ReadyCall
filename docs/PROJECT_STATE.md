@@ -281,7 +281,7 @@ performing by hand, i.e. what the next services take over (`D36`).
 | Tests | 161, all passing, ~1.4 s |
 | Ports defined | 7 (telephony, stt, llm, tts, core_data, event_bus, blob_storage) |
 | Adapters | 7 fakes/nulls + a caching/circuit-breaking decorator; no real vendor adapter yet |
-| Call states | 16, transition table self-validated |
+| Call states | 15, transition table self-validated (the rating is an event, not a state — `D46`) |
 | Event types | 19 |
 | Scenarios | 3 (in-app happy path, cold-call motor claim, fully degraded) |
 | Mock core | 3 customers, 4 policies across 4 product lines, 5 products, 5 interactions, 2 claims |

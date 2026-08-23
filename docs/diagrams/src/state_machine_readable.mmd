@@ -23,8 +23,6 @@ stateDiagram-v2
     IN_CALL --> TRANSFERRED
     IN_CALL --> WRAP_UP
     WRAP_UP --> CLOSED
-    WRAP_UP --> RATING
-    RATING --> CLOSED
     CLOSED --> [*]
     TRANSFERRED --> [*]
     VOICEMAIL --> [*]

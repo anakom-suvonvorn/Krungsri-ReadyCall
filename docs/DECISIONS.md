@@ -748,5 +748,50 @@ that replaced them is the useful part._
   forbidden.
 - **Scope:** this changes the **agent presence** model only. `CallState` is untouched — the
   call's own lifecycle is independent of whether the agent is ready for the next one.
-  (But see `Q14`: the *ordering* of `WRAP_UP → RATING` is a separate, real problem that
-  reviewing this decision exposed.)
+  (Reviewing this decision also exposed that `WRAP_UP → RATING` was ordered backwards —
+  raised as `Q14` and resolved by `D46`, which deletes the rating state entirely.)
+
+## D46. A rating is an event attached to a call, not a state the call passes through
+- **Problem:** the table said `WRAP_UP -> RATING -> CLOSED`, and `run_scenario.py` even
+  transitioned into `RATING` with the reason `wrapup_saved`. That asserts an ordering which
+  is false in wall-clock time: the customer rates in the IVR **within seconds** of hanging
+  up, while the agent may still be writing the wrap-up three minutes later. The model had no
+  honest answer for when `RATING` was entered, no place for a rating that arrives late, and
+  no place at all for the agent's own rating (`D27`), which happens during or after wrap-up.
+  Most callers also simply hang up without rating, which the ordering treated as an
+  exception rather than the common case.
+- **Decision:** `CallState.RATING` is deleted. `WRAP_UP` goes straight to `CLOSED`. A rating
+  arrives as a `RatingReceived` event and attaches to the call record by `call_session_id`
+  **whenever it lands — including after the call is closed.** A `Rating` domain model carries
+  either side, distinguished by `RatingSource` (`customer_ivr` / `customer_app` / `agent`).
+- **The rule this establishes:** *call state describes the call's progress; it never claims
+  data completeness.* `CLOSED` means the call is over, not that every fact about it has
+  arrived. That was already true for analysis output and finalised transcripts — the rating
+  was the one place we pretended otherwise.
+- **Alternatives considered:**
+  - **A join: close only once wrap-up *and* rating have settled.** Buys a `CLOSED` that
+    genuinely means "nothing more is coming". Rejected because it smears state across boolean
+    fields *outside* the enum — exactly what a single transition table exists to prevent —
+    so `assert_can(from, to)` would stop being sufficient to validate a transition. It also
+    needs an arbitrary rating timeout, and nothing in this system actually requires that
+    guarantee.
+  - **Orthogonal regions** (true concurrent agent-side and customer-side sub-states). Most
+    theoretically correct, and it would cost the flat dict plus the single `assert_can`
+    lookup that make the machine self-validating and explainable. Overkill here.
+  - **Fixing only the reason string** (`wrapup_saved` -> `rating_prompted`). One line, and it
+    relabels the problem without fixing it.
+  - **Also removing `WRAP_UP` from `CallState`**, on the grounds that `D45` put after-call
+    work on the agent. Rejected as over-correction: the *call record* has a legitimate
+    wrap-up phase (an interaction is not complete until dispositioned) and the *agent* has an
+    ACW period. Two different entities, two clocks, both real.
+- **Cost:** four lines and a `Rating` model. No test asserted on the state and no scenario
+  referenced it, because the scenarios always asserted `state: closed`.
+- **It improves the demo, which was a surprise.** The timeline used to print
+  `rating -> closed` at a fictional moment. The event carries its real timestamp, so the
+  scenario now prints `csat=4/5 via customer_ivr at +297.5s` alongside
+  `call closed at +327.5s - the rating landed 30.0s earlier`. That is a truer story, and a
+  better one: it shows the customer finishing while the agent is still working.
+- **Guarded by `tests/unit/test_rating_is_not_a_state.py`**, which pins that the state is
+  gone, that `WRAP_UP`'s targets are exactly `{CLOSED, FAILED}` so no waypoint can be slipped
+  back in, and that a rating arriving two minutes after closure neither errors nor reopens
+  the call.

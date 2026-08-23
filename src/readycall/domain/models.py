@@ -35,6 +35,7 @@ from readycall.domain.enums import (
     OfferOutcome,
     PolicyStatus,
     ProductLine,
+    RatingSource,
     SpeakerRole,
     Urgency,
 )
@@ -586,6 +587,26 @@ class QueueEntry(DomainModel):
 
     def wait_seconds(self, now: datetime) -> float:
         return (now - self.enqueued_at).total_seconds() + self.waiting_credit_s
+
+
+class Rating(DomainModel):
+    """A score somebody gave a call.
+
+    Deliberately *not* a call state (`D46`). Ratings arrive on their own schedule: the
+    customer rates in the IVR within seconds of hanging up, the agent rates during or
+    after wrap-up, and either may never rate at all. So this attaches to a call record by
+    `call_session_id` whenever it turns up - including after the call has closed.
+
+    Both sides rate, which is how we learn whether the brief was any good (`D27`).
+    """
+
+    rating_id: str
+    call_session_id: str
+    source: RatingSource
+    received_at: datetime
+    csat: int | None = Field(default=None, ge=1, le=5)
+    nps: int | None = Field(default=None, ge=0, le=10)
+    comment: str | None = None
 
 
 class StateTransition(DomainModel):
