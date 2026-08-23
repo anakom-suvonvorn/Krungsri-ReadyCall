@@ -1,152 +1,145 @@
 # NEXT_SESSION
 
 _The live working state. READ THIS FIRST every session. Keep it short and current._
-_Last updated: 2026-08-23._
+_Last updated: 2026-08-24._
 
 ---
 
 ## Where things stand right now
 
-**P0 complete. P1 complete, including P1b (the HTTP layer).** The system now *knows something* about a call: who is
-calling and how much to believe it, why they are calling from what they pressed, everything
-we hold about them assembled before the phone is answered, and the first version of the
-brief an agent reads — with disclosure gated by how sure we are of their identity.
+**P0 · P1 · P1b · P2a complete.** The system knows who is calling and how much to believe
+it, why they are calling from what they pressed or tapped, everything we hold about them
+assembled before the phone is answered, the brief an agent reads with disclosure gated by
+identity — and now **which agent should take the call, and why**.
 
-Verified 2026-08-21: **201 tests pass** (~1.4 s), `ruff check` + `ruff format --check`
-clean, `mypy --strict` clean over 50 files, all three scenarios replay byte-identically.
+Verified 2026-08-24: **225 tests pass**, `ruff check` + `ruff format --check` clean,
+`mypy --strict` clean over 70 files, all scenarios replay byte-identically, 50/50 diagrams
+current.
 
 ```bash
 uv sync --extra web
 uv run pytest -q
 uv run python scripts/run_scenario.py tests/scenarios/anonymous_declined.yaml --quiet
-uv run python -m readycall.entrypoints.api    # then open http://127.0.0.1:8000/sim
+uv run python scripts/run_matching.py --calls 25 --compare
+uv run python -m readycall.entrypoints.api          # then http://127.0.0.1:8000/sim
 ```
 
-Everything runs **in memory, with no services, no keys, no GPU**. Nothing needs Docker yet.
+Everything runs **in memory, no services, no keys, no GPU**. Nothing needs Docker yet.
 
 ## What exists (cumulative)
 
-**Foundation (P0)** — config with startup coherence checks · structured logging with
-`call_session_id` bound and secrets redacted · injected `Clock` + swappable id generator
-(`D35`) · UTF-8 console (`B1`) · 15 call states, 19 event types, ~30 domain models · all
-7 ports · a fake/null adapter for each · the call state machine + orchestrator (single
-writer, full transition log) · in-memory event bus (deterministic, replayable, idempotent).
+**P0 — foundations.** Config with startup coherence checks · structured logging with
+`call_session_id` bound and secrets redacted · injected `Clock` + swappable ids (`D35`) ·
+UTF-8 console (`B1`) · **15** call states, 19 event types, ~30 domain models · 8 ports, each
+with a fake · call state machine + orchestrator (single writer, full transition log) ·
+in-memory event bus (deterministic, replayable, idempotent).
 
-**P1 services**
+**P1 — context.** `domainpack.py` (typed, cross-validated YAML; `walk_menu` turns keypresses
+into line + intent) · `services/identity/` (the L0–L3 ladder, `D20`) ·
+`services/context/assembler.py` (parallel fan-out, per-field provenance, frozen snapshot,
+declines to guess a policy) · `services/brief/builder.py` (context-only brief, disclosure
+gated at L2) · `adapters/core_data/caching.py` (TTL + serve-stale + circuit breaker).
 
-- `domainpack.py` — loads and **cross-validates** `intents/skills/dids/menus.yaml` into
-  typed objects at startup; dangling references and overflow cycles fail loudly.
-  `walk_menu(["2","4"])` turns keypresses into a product line + intent.
-- `services/identity/` — the **L0–L3 assurance ladder** (`D20`). Token (hashed) → L3,
-  ANI + recent app intent → L2, ANI alone → L1, nothing → L0. Never refuses; an unknown
-  caller is a path, not an error.
-- `services/context/assembler.py` — parallel fan-out → `Customer360`, **per-field
-  provenance**, frozen snapshot, relevant-policy selection that declines to guess between
-  unrelated policies.
-- `services/brief/builder.py` — the **context-only brief**: intent, urgency, Thai summary,
-  playbook actions, suggested opening. Disclosure gated at L2; below it the policy number
-  is withheld, a verify-identity step is prepended, and L2-gated actions are dropped.
-- `adapters/core_data/caching.py` — TTL cache + **serve-stale-and-say-so** + circuit
-  breaker, so a dead upstream degrades in microseconds instead of timing out per lookup.
+**P1b — the HTTP layer.** `POST /v1/calls/intents` · `GET /v1/calls/intents/{id}` ·
+`POST /v1/app/context-events` · `GET /v1/app/contact-reasons` · `/health` · demo persona
+picker and plans under `/v1/demo/` · **customer simulator** at `/sim`, one HTML file, no
+build step (`D47`). Identity comes from a `SessionResolver`, never the request body (`D4`).
 
-**Also landed** — `mock/bank_core/generate.py` (2,000 customers, deterministic, reproduces
-the brief's holding distribution, every 7th record Buddhist-era dated) ·
-`infra/docker-compose.yml` (postgres/redis/minio/pgweb) + schema SQL that enforces `D5`
-with a `SELECT`-only role.
+**P2a — matching.** `ports/agent_directory.py` + 15-agent roster (every skill held by 2+) ·
+`config/matching_weights.yaml` with startup validation · hard filters (skill, **graded**
+language, capacity) · fit + urgency with full breakdowns · **our own Hungarian solver**
+(`D49`) plus greedy for comparison · guard rails (wait ceiling, anti-hot-spot, guarded
+deferral) · a `MatchingDecision` per call **including non-assignments**, with every candidate
+and a Thai rationale · `scripts/run_matching.py --compare`.
 
 ## Next steps (in order)
 
-1. **P2 — matching + the agent workstation** (`PLAN.md`). Also the natural moment to add
-   the **Postgres/SQLAlchemy/Alembic layer** (`D39`), since agent presence and matching
-   decisions are the first things that must outlive a process.
-2. **P3** — voice/IVR/intake (the menu prompts become real audio). **P4** — analysis and
-   brief v2+ with Claude and Typhoon compared.
+1. **P2b — the agent workstation.** The offer/accept handshake + RONA + ACW (`D45`), agent
+   WebSocket, presence heartbeat, the workstation shell with a stubbed softphone, the
+   identity control (`D42`) and the keypad capture panel (`D44`). This is where **React**
+   finally appears (`D32`).
+2. **The database layer** (`D39`) lands with P2b — agent presence is the first thing that
+   genuinely must outlive a process. Postgres + SQLAlchemy 2.0 + Alembic; `infra/` and the
+   schema SQL are already written.
+3. **P3** — voice/IVR/intake (menu prompts become real audio). **P4** — analysis and brief
+   v2+ with Claude and Typhoon compared.
 
-`grep -rn "# P1:" scripts/` lists what the scenario runner still does by hand: the IVR
-prompts (P3), the media gateway (P3), and the matching engine (P2).
+`grep -rn "# P1:" scripts/` still lists what `run_scenario.py` does by hand.
 
 ## Still open
 
 | # | Question | Current default |
 |---|---|---|
-| Q7 | Intent taxonomy + menu wording (`config/intents.yaml`, `config/menus.yaml`) | **User said: leave as-is, revisit during the hackathon.** 28 intents, straw-man Thai wording |
+| Q7 | Intent taxonomy + menu wording | **User: leave as-is, revisit during the hackathon.** 28 intents, straw-man Thai |
 | Q8 | Typhoon model ids / licence / pricing | Verify against live docs when writing the adapter |
 | Q9 | `OFFER_TIMEOUT_S=20`, `ACW_TIMER_S=45` | Guesses; tune against how a real agent works |
-| Q11 | Language menu wording when English lands | `preferred` vs `acceptable` modelled (`D38`); Thai-only for now, likely for the hackathon too |
-| Q12 | Which verification challenges count for promotion to L3 (`D42`) | DOB, last 4 of citizen id, policy no. Confirm the real list with Krungsri |
-| Q13 | Does a third-party caller need a named representative on the policy (`D42`) | Assume yes; `Policy` has no `representatives` field yet |
+| Q11 | Language menu wording when English lands | `preferred` vs `acceptable` modelled (`D38`); Thai-only for now |
+| Q12 | Which challenges count for promotion to L3 (`D42`) | DOB, last 4 of citizen id, policy no. Confirm with Krungsri |
+| Q13 | Does a third-party caller need a named representative (`D42`) | Assume yes; `Policy` has no `representatives` field yet |
+| Q15 | Matching weights are guesses | Tune against real volumes; `--compare` exists to re-measure |
 
-Resolved: **Q14 — the rating is now an event, not a call state (`D46`)** · single project
-(`D34`) · Asterisk · RTX 3050 · Claude + Typhoon compared ·
-React workstation with the softphone in it · web customer simulator · menu-first flow
-(`D37`) · **menu options are reordered but never speak customer detail aloud**.
+Resolved: **Q14 — the rating is an event, not a call state (`D46`)** · single project
+(`D34`) · Asterisk · RTX 3050 · Claude + Typhoon compared · React workstation with the
+softphone in it · web customer simulator · menu-first flow (`D37`) · menu options are
+reordered but never speak customer detail aloud.
 
 ## Things to be careful about (live landmines)
 
 - **Never edit the reference folders** (`scamprojectthing/ProjectCode`, `music-backlog-adder`).
 - **`enable_utf8()` before printing domain text** — Thai + cp1252 kills the process (`B1`).
 - **`event` is not usable as a structlog kwarg** (`B2`).
-- **Routing must never depend on the AI** (`D37`). The menu settles the queue; speech refines it.
-- **Never let AI delay the call** (`D12`). **Never let the model produce coverage numbers** (`D16`).
-- **An ANI match is probable, not verified** (`D20`) — below L2, no policy numbers.
-- **Assurance goes UP mid-call** (`D42`) — and promotion must be a **re-render, not a re-fetch**.
-  The assembler is deliberately not gated; keep it that way. **Gate at the wire, server-side** —
-  never send the full brief and hide fields in React.
-- **Keypad capture is UNTYPED** (`D44`). Never assume the caller holds a particular document.
-  A lookup returns evidence (`matched` / `not matched`); it must never promote assurance by
-  itself — a match cannot tell the policyholder from a relative holding their papers. And
-  because we do not know what the digits are, treat raw captures as sensitive by default.
-- **A rating is NOT a call state** (`D46`). `WRAP_UP → CLOSED` directly; ratings attach to
-  the record whenever they arrive, including after closure. The rule: *call state describes
-  the call's progress, it never claims data completeness.*
-- **Saving the wrap-up form is NOT "done"** (`D45`). It closes the call record. ACW runs from
-  **media disconnect** until the agent declares their next state — **any** state (Break and
-  Lunch end it too, not just Ready). **Nothing is ever auto-saved**: the agent owns the record,
-  and an unsaved wrap-up is honest data. Never auto-ready — an agent marked available while
-  working elsewhere means the next caller rings an empty desk (RONA).
-- **Never ask a leading identity question.** "ขอทราบชื่อผู้ติดต่อ", not "ใช่คุณ X ไหมคะ" — naming
-  the customer first both leaks that the number belongs to them and weakens the check.
-- **Never hardcode an insurance literal in `services/`** — it goes in `config/` (`D28`).
-- **Never `datetime.now()` or a raw random id** outside `clock.py`/`ids.py` (`D35`).
 - **`time.monotonic()` is useless for stage timings on Windows** (`B3`) — ~15.6 ms tick, so
   everything measured `0.0`. `SystemClock` uses `perf_counter`; do not "simplify" it back.
-- **The client never sends `customer_id`** (`D4`). It comes from the session. There is a test
-  asserting the request schema has no such field.
-- **Menu options never speak customer detail** — reordering only.
+- **The client never sends `customer_id`** (`D4`). A test asserts the request schema has no
+  such field.
+- **Routing must never depend on the AI** (`D37`). The menu settles the queue; speech refines.
+- **Never let AI delay the call** (`D12`). **Never let the model produce coverage numbers** (`D16`).
+- **An ANI match is probable, not verified** (`D20`) — below L2, no policy numbers.
+- **Assurance goes UP mid-call** (`D42`) — promotion is a **re-render, not a re-fetch**, and
+  the gate is **server-side at the wire**, never hidden fields in React.
+- **Keypad capture is UNTYPED** (`D44`). A lookup returns evidence; only the agent attests.
+- **Saving the wrap-up form is NOT "done"** (`D45`). ACW runs from media disconnect until the
+  agent declares *any* next state. Nothing is ever auto-saved.
+- **A rating is NOT a call state** (`D46`). Call state describes progress, never data completeness.
+- **Hard filters exclude, they do not down-rank** (`D22`). A failed filter is not a low score.
+- **Never hardcode an insurance literal in `services/`** — it goes in `config/` (`D28`).
+- **Never `datetime.now()` or a raw random id** outside `clock.py`/`ids.py` (`D35`).
 - **`docs/` is excluded from `ruff format`** — the explanations are verbatim records.
 - Python is pinned **3.11**: PEP 695 generics are a syntax error; use `Generic[T]`.
-- Windows: paths have spaces (quote them).
+- Windows: paths have spaces (quote them); heredocs with apostrophes fail — use the Write tool.
 
 ## Diagrams (visual walkthroughs)
 
 `docs/diagrams/` — **50 diagrams** with explanations, in ten themed pages. Start at
-`docs/diagrams/README.md`. Roughly a quarter are **generated from source** (the transition
-table, the domain pack, the pydantic models, the adapters on disk), so they cannot drift;
-`tests/unit/test_diagrams.py` fails if a committed one falls behind the code.
+`docs/diagrams/README.md`. Twelve are **generated from source** (transition table, domain
+pack, pydantic models, adapters on disk), so they cannot drift;
+`tests/unit/test_diagrams.py` fails if a committed one falls behind. It has already caught
+two real changes.
 
 ```bash
 uv run python scripts/gen_diagrams.py      # rebuild derived .mmd sources
 uv run python scripts/render_diagrams.py   # render all .mmd -> .svg  (needs mermaid-cli)
-uv run python scripts/render_diagrams.py --check   # report stale SVGs
+uv run python scripts/render_diagrams.py --check   # content-hash staleness check
 ```
 
 ## Explanations (plain-language walkthroughs)
 
-`docs/explanations/` — teaching notes written for building understanding a layer at a time.
-**Snapshots, not specifications**; each has a "changes since" section at the bottom.
+`docs/explanations/` — teaching notes, one per phase, written for building understanding a
+layer at a time. **Snapshots, not specifications**; each has a "changes since" section.
 Write one per phase as it lands — the user reads these to follow along.
 
-- `P0_foundations.md` — the skeleton, bottom-up: utilities, domain, ports, adapters, the
-  state machine, the scenario runner, the tests.
-- `P1_context.md` — the domain pack, the assurance ladder, the caching layer, the context
-  assembler, the context-only brief, and the mock generator.
+- `P0_foundations.md` — the skeleton, bottom-up.
+- `P1_context.md` — domain pack, assurance ladder, caching, assembler, context-only brief.
 - `P1b_http_layer.md` — the session seam, why the request schema *is* the enforcement of
-  `D4`, prefetch off the request path, the customer simulator, and the timing bug (`B3`)
-  that only surfaced because someone looked at the screen.
+  `D4`, prefetch off the request path, the simulator, and the `B3` timing bug.
+- `P2a_matching.md` — hard filters vs scores, why urgency multiplies, the Hungarian solver
+  and the silent bug that made it return nothing, and what measuring the greedy gap said.
 
 ## Handy references
 
-- Pitch deck: `../Krungsri.pdf` (workstation mock is p.7). Brief:
+- Pitch deck: `../Krungsri.pdf` (workstation mock p.7). Brief:
   `../KS_Hackathon_Briefing_Insurance in AI Era_VSharing.pdf` (judging = **I-F-C-U**).
 - Thai STT reference (read-only): `…/scamprojectthing/ProjectCode/STT_Thonburian_Whisper/`.
 - Docs style reference (read-only): `…/music-backlog-adder/CLAUDE.md` + `docs/`.
+- Mermaid CLI lives in the scratchpad this session; `npm i -g @mermaid-js/mermaid-cli` for a
+  permanent one, or set `MMDC=/path/to/mmdc`.

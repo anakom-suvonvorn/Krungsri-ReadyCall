@@ -31,17 +31,18 @@ demonstrable slice, so "the demo" is the current state plus a chosen scenario (`
 
 ---
 
-## 2. Status: **P0 complete, P1 complete (including P1b — the HTTP layer)**
+## 2. Status: **P0, P1, P1b complete · P2a (matching engine) complete**
 
 The spine runs. A full call lifecycle - arrival, IVR, consent, queue, intake, matching, the offer
 handshake, the live call, wrap-up, rating, closed - executes end to end on fake adapters with no
 telephony, no GPU, no database and no API key.
 
-As of P1 the identity ladder, the menu walk, the context assembler and the brief builder are real
-services doing real work - only the *edges* (phone, speech, AI, the bank's data) are still fakes.
+As of P2a the identity ladder, the menu walk, the context assembler, the brief builder, the public
+API and the matching engine are all real services doing real work - only the *edges* (phone, speech,
+AI, the bank's data, the agent roster) are still fakes.
 
-Verified on 2026-08-21: **201 tests pass**, `ruff check` and `ruff format --check` clean,
-`mypy --strict` clean over 50 source files, and all three scenarios replay byte-identically.
+Verified on 2026-08-24: **225 tests pass**, `ruff check` and `ruff format --check` clean,
+`mypy --strict` clean over 70 source files, and all three scenarios replay byte-identically.
 
 ```
 $ uv run python scripts/run_scenario.py tests/scenarios/pattheera_ipd.yaml --quiet
@@ -195,10 +196,19 @@ assurance-gated disclosure** · ☑ mock-core generator · ☑ docker-compose + 
 ☑ **app context events** · ☑ **customer simulator + demo persona picker** (`D47`) ·
 ☐ agent screen v1 (moves to P2 with the workstation)
 
-**P2 — matching & the workstation** ☐ queues + hours · ☐ agent state model (auto × manual) ·
-☐ presence heartbeat · ☐ fit + urgency scoring · ☐ Hungarian solver · ☐ anti-hot-spot checks ·
-☐ persisted rationale · ☐ matching simulator · ☐ **offer/accept + RONA + ACW timer** ·
-☐ agent WebSocket · ☐ workstation shell incl. call-control bar (stubbed softphone)
+**P2a — the matching engine** (done)
+☑ agent directory port + 15-agent roster (every skill held by 2+, `D22`) · ☑ tunable
+`matching_weights.yaml` with startup validation · ☑ hard filters (skill, **graded language**,
+capacity) · ☑ fit + urgency scoring with full breakdowns · ☑ **Hungarian solver, ours**
+(`D49`) + greedy for comparison · ☑ guard rails: wait ceiling, anti-hot-spot, guarded
+deferral · ☑ persisted rationale on every decision incl. non-assignments · ☑ matching
+simulator with `--compare`
+
+**P2b — the workstation** ☐ queues + hours · ☐ presence heartbeat · ☐ **offer/accept + RONA
++ ACW** (`D45`) · ☐ agent WebSocket · ☐ workstation shell incl. call-control bar (stubbed
+softphone) · ☐ identity control (`D42`) · ☐ keypad capture panel (`D44`) ·
+☐ **Postgres/SQLAlchemy/Alembic** (`D39` — presence is the first thing that must outlive a
+process)
 
 **P3 — voice, IVR & intake v1** ☐ voice-prompt build pipeline + prompt studio · ☐ IVR flow (menu,
 identify, consent, press-1/2, rating) · ☐ media gateway (per-leg fork) · ☐ recording + encryption ·
@@ -274,14 +284,14 @@ performing by hand, i.e. what the next services take over (`D36`).
 
 ---
 
-## 8. Real numbers (as of 2026-08-21)
+## 8. Real numbers (as of 2026-08-24)
 
 | | |
 |---|---|
-| Source files | 50 (`src/` + `tests/` + `scripts/` + `mock/`) |
-| Tests | 161, all passing, ~1.4 s |
-| Ports defined | 7 (telephony, stt, llm, tts, core_data, event_bus, blob_storage) |
-| Adapters | 7 fakes/nulls + a caching/circuit-breaking decorator; no real vendor adapter yet |
+| Source files | 70 (`src/` + `tests/` + `scripts/` + `mock/`) |
+| Tests | 225, all passing, ~5 s |
+| Ports defined | 8 (telephony, stt, llm, tts, core_data, event_bus, blob_storage, agent_directory) |
+| Adapters | 8 fakes/nulls + a caching/circuit-breaking decorator; no real vendor adapter yet |
 | Call states | 15, transition table self-validated (the rating is an event, not a state — `D46`) |
 | Event types | 19 |
 | Scenarios | 3 (in-app happy path, cold-call motor claim, fully degraded) |

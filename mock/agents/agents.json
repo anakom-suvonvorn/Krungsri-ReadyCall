@@ -1,0 +1,454 @@
+[
+  {
+    "agent_id": "A001",
+    "display_name": "ธนกฤต ศรีวิชัย",
+    "team": "motor",
+    "level": 3,
+    "languages": [
+      {
+        "language": "th",
+        "level": "native"
+      },
+      {
+        "language": "en",
+        "level": "b2"
+      }
+    ],
+    "skills": [
+      {
+        "skill_code": "general.service",
+        "proficiency": 0.6
+      },
+      {
+        "skill_code": "motor.claim",
+        "proficiency": 0.95
+      },
+      {
+        "skill_code": "motor.policy",
+        "proficiency": 0.8
+      }
+    ],
+    "max_concurrent": 1,
+    "is_active": true
+  },
+  {
+    "agent_id": "A002",
+    "display_name": "ปิยะพร ชูเกียรติ",
+    "team": "motor",
+    "level": 2,
+    "languages": [
+      {
+        "language": "th",
+        "level": "native"
+      }
+    ],
+    "skills": [
+      {
+        "skill_code": "motor.claim",
+        "proficiency": 0.85
+      },
+      {
+        "skill_code": "motor.policy",
+        "proficiency": 0.7
+      }
+    ],
+    "max_concurrent": 1,
+    "is_active": true
+  },
+  {
+    "agent_id": "A003",
+    "display_name": "วรินทร์ อารีย์",
+    "team": "motor",
+    "level": 2,
+    "languages": [
+      {
+        "language": "th",
+        "level": "native"
+      },
+      {
+        "language": "en",
+        "level": "a2"
+      }
+    ],
+    "skills": [
+      {
+        "skill_code": "general.billing",
+        "proficiency": 0.7
+      },
+      {
+        "skill_code": "motor.claim",
+        "proficiency": 0.6
+      },
+      {
+        "skill_code": "motor.policy",
+        "proficiency": 0.9
+      }
+    ],
+    "max_concurrent": 1,
+    "is_active": true
+  },
+  {
+    "agent_id": "A004",
+    "display_name": "ณัฐพงษ์ ทองดี",
+    "team": "health",
+    "level": 3,
+    "languages": [
+      {
+        "language": "th",
+        "level": "native"
+      },
+      {
+        "language": "en",
+        "level": "c1"
+      }
+    ],
+    "skills": [
+      {
+        "skill_code": "health.claim",
+        "proficiency": 0.85
+      },
+      {
+        "skill_code": "health.ipd",
+        "proficiency": 0.95
+      },
+      {
+        "skill_code": "health.policy",
+        "proficiency": 0.7
+      }
+    ],
+    "max_concurrent": 1,
+    "is_active": true
+  },
+  {
+    "agent_id": "A005",
+    "display_name": "สิริกร พันธุ์ทอง",
+    "team": "health",
+    "level": 2,
+    "languages": [
+      {
+        "language": "th",
+        "level": "native"
+      },
+      {
+        "language": "en",
+        "level": "b1"
+      }
+    ],
+    "skills": [
+      {
+        "skill_code": "health.claim",
+        "proficiency": 0.9
+      },
+      {
+        "skill_code": "health.policy",
+        "proficiency": 0.8
+      }
+    ],
+    "max_concurrent": 1,
+    "is_active": true
+  },
+  {
+    "agent_id": "A006",
+    "display_name": "อรพรรณ วงศ์สุวรรณ",
+    "team": "health",
+    "level": 3,
+    "languages": [
+      {
+        "language": "th",
+        "level": "native"
+      },
+      {
+        "language": "en",
+        "level": "b2"
+      }
+    ],
+    "skills": [
+      {
+        "skill_code": "health.claim",
+        "proficiency": 0.75
+      },
+      {
+        "skill_code": "health.ipd",
+        "proficiency": 0.9
+      },
+      {
+        "skill_code": "health.policy",
+        "proficiency": 0.9
+      }
+    ],
+    "max_concurrent": 1,
+    "is_active": true
+  },
+  {
+    "agent_id": "A007",
+    "display_name": "กันตพงศ์ แสงเพชร",
+    "team": "health",
+    "level": 1,
+    "languages": [
+      {
+        "language": "th",
+        "level": "native"
+      }
+    ],
+    "skills": [
+      {
+        "skill_code": "general.service",
+        "proficiency": 0.7
+      },
+      {
+        "skill_code": "health.policy",
+        "proficiency": 0.65
+      }
+    ],
+    "max_concurrent": 1,
+    "is_active": true
+  },
+  {
+    "agent_id": "A008",
+    "display_name": "ชญานิศ ภักดี",
+    "team": "travel",
+    "level": 2,
+    "languages": [
+      {
+        "language": "th",
+        "level": "native"
+      },
+      {
+        "language": "en",
+        "level": "c1"
+      }
+    ],
+    "skills": [
+      {
+        "skill_code": "general.service",
+        "proficiency": 0.6
+      },
+      {
+        "skill_code": "travel.claim",
+        "proficiency": 0.9
+      },
+      {
+        "skill_code": "travel.policy",
+        "proficiency": 0.85
+      }
+    ],
+    "max_concurrent": 1,
+    "is_active": true
+  },
+  {
+    "agent_id": "A009",
+    "display_name": "พีรพัฒน์ จันทร์เพ็ญ",
+    "team": "travel",
+    "level": 2,
+    "languages": [
+      {
+        "language": "th",
+        "level": "native"
+      },
+      {
+        "language": "en",
+        "level": "b2"
+      }
+    ],
+    "skills": [
+      {
+        "skill_code": "travel.claim",
+        "proficiency": 0.8
+      },
+      {
+        "skill_code": "travel.policy",
+        "proficiency": 0.75
+      }
+    ],
+    "max_concurrent": 1,
+    "is_active": true
+  },
+  {
+    "agent_id": "A010",
+    "display_name": "เมธาวี รุ่งเรือง",
+    "team": "life",
+    "level": 3,
+    "languages": [
+      {
+        "language": "th",
+        "level": "native"
+      },
+      {
+        "language": "en",
+        "level": "b1"
+      }
+    ],
+    "skills": [
+      {
+        "skill_code": "life.claim",
+        "proficiency": 0.9
+      },
+      {
+        "skill_code": "life.policy",
+        "proficiency": 0.95
+      }
+    ],
+    "max_concurrent": 1,
+    "is_active": true
+  },
+  {
+    "agent_id": "A011",
+    "display_name": "ศุภกร บุญมี",
+    "team": "life",
+    "level": 2,
+    "languages": [
+      {
+        "language": "th",
+        "level": "native"
+      }
+    ],
+    "skills": [
+      {
+        "skill_code": "general.service",
+        "proficiency": 0.6
+      },
+      {
+        "skill_code": "life.claim",
+        "proficiency": 0.7
+      },
+      {
+        "skill_code": "life.policy",
+        "proficiency": 0.8
+      }
+    ],
+    "max_concurrent": 1,
+    "is_active": true
+  },
+  {
+    "agent_id": "A012",
+    "display_name": "จิราพร เกษมสุข",
+    "team": "general",
+    "level": 2,
+    "languages": [
+      {
+        "language": "th",
+        "level": "native"
+      },
+      {
+        "language": "en",
+        "level": "b1"
+      }
+    ],
+    "skills": [
+      {
+        "skill_code": "general.billing",
+        "proficiency": 0.85
+      },
+      {
+        "skill_code": "general.sales",
+        "proficiency": 0.7
+      },
+      {
+        "skill_code": "general.service",
+        "proficiency": 0.9
+      }
+    ],
+    "max_concurrent": 2,
+    "is_active": true
+  },
+  {
+    "agent_id": "A013",
+    "display_name": "อนันต์ วัฒนกุล",
+    "team": "general",
+    "level": 3,
+    "languages": [
+      {
+        "language": "th",
+        "level": "native"
+      },
+      {
+        "language": "en",
+        "level": "b2"
+      }
+    ],
+    "skills": [
+      {
+        "skill_code": "general.billing",
+        "proficiency": 0.7
+      },
+      {
+        "skill_code": "general.escalation",
+        "proficiency": 0.95
+      },
+      {
+        "skill_code": "general.service",
+        "proficiency": 0.85
+      }
+    ],
+    "max_concurrent": 1,
+    "is_active": true
+  },
+  {
+    "agent_id": "A014",
+    "display_name": "พัชราภา สุขสันต์",
+    "team": "general",
+    "level": 2,
+    "languages": [
+      {
+        "language": "th",
+        "level": "native"
+      },
+      {
+        "language": "en",
+        "level": "a2"
+      }
+    ],
+    "skills": [
+      {
+        "skill_code": "general.billing",
+        "proficiency": 0.75
+      },
+      {
+        "skill_code": "general.sales",
+        "proficiency": 0.8
+      },
+      {
+        "skill_code": "general.service",
+        "proficiency": 0.85
+      }
+    ],
+    "max_concurrent": 2,
+    "is_active": true
+  },
+  {
+    "agent_id": "A015",
+    "display_name": "ธีรภัทร มงคล",
+    "team": "general",
+    "level": 3,
+    "languages": [
+      {
+        "language": "th",
+        "level": "native"
+      },
+      {
+        "language": "en",
+        "level": "c1"
+      }
+    ],
+    "skills": [
+      {
+        "skill_code": "general.escalation",
+        "proficiency": 0.85
+      },
+      {
+        "skill_code": "general.service",
+        "proficiency": 0.8
+      },
+      {
+        "skill_code": "health.policy",
+        "proficiency": 0.6
+      },
+      {
+        "skill_code": "motor.policy",
+        "proficiency": 0.6
+      }
+    ],
+    "max_concurrent": 1,
+    "is_active": true
+  }
+]

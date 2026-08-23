@@ -1,0 +1,1 @@
+"""Agent roster adapters."""

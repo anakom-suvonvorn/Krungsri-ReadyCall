@@ -4,6 +4,8 @@ flowchart LR
     subgraph core["services/ + domain/ (no vendor imports)"]
         logic([business logic]):::core
     end
+    logic --> P_agent_directory["ports/agent_directory.py"]:::port
+    P_agent_directory --> A_agent_directory_fixtures["fixtures.py"]:::adapter
     logic --> P_blob_storage["ports/blob_storage.py"]:::port
     P_blob_storage -.-> A_blob_storage_none["no adapter yet"]:::todo
     logic --> P_core_data["ports/core_data.py"]:::port

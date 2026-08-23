@@ -1,0 +1,72 @@
+# How a call is matched to an agent (`D22`, `D23`).
+#
+# Everything here is a TUNING KNOB, not a rule. The rules — hard filters exclude, urgency
+# multiplies, the solver is global — live in `services/matching/`. This file only decides
+# how much each signal counts, so a supervisor can retune without a deploy.
+#
+# `version` is recorded on every MatchingDecision (`weights_version`). When someone asks
+# "why did that call go there last Tuesday", the answer has to include which weights were
+# in force at the time.
+
+version: "2026-08-23.1"
+
+# --- FIT: how good is this agent FOR THIS CALL ----------------------------------------
+#
+# Scored 0..1 and combined linearly. `skill_match` dominates on purpose: an agent who can
+# actually handle the case beats a familiar face who cannot.
+fit:
+  skill_match: 1.0        # do they hold the required skill, and how proficient
+  continuity: 0.35        # did they handle this customer before
+  historical_fit: 0.20    # how they perform on this intent specifically
+  load_penalty: 0.30      # subtracted, scaled by current load / max_concurrent
+
+  # Continuity is valuable but must not become a trap. If the last contact went badly, or
+  # was long ago, sending them back to the same agent is not continuity, it is a rut.
+  continuity_max_age_days: 60
+  continuity_requires_good_outcome: true
+
+# --- URGENCY: how badly does THIS CALL need someone now -------------------------------
+#
+# Combined into a MULTIPLIER on fit, never added to it. Adding lets a great fit outrank a
+# desperate caller forever; multiplying means waiting eventually wins on its own. This is
+# the whole answer to starvation (`D22`).
+urgency:
+  wait_pressure: 1.0      # how long they have waited, against the queue's SLA
+  sla_risk: 0.8           # about to breach
+  customer_priority: 0.4  # segment, vulnerability flag
+  situational: 1.2        # intent's own urgency: at a crash scene, a medical emergency
+
+  # The multiplier is clamped so urgency can dominate but never make skill irrelevant:
+  # a critical caller still must not be routed to someone who cannot help them.
+  min_multiplier: 1.0
+  max_multiplier: 3.0
+
+# --- HARD FILTERS: pass or be excluded ------------------------------------------------
+#
+# NOT scores. A failed hard filter means "not a candidate", not "a low-ranked candidate".
+# Scoring these softly is how a caller ends up with someone who cannot help them, purely
+# because everything else scored well.
+hard_filters:
+  require_skill: true
+  require_language: true          # CEFR level per language (`D38`)
+  min_language_level: b1          # below this, a complex claim conversation goes badly
+  respect_max_concurrent: true
+  respect_schedule: true
+
+# --- guard rails ------------------------------------------------------------------------
+guards:
+  # Past this wait, drop to ANY qualified agent regardless of fit. A perfect match nobody
+  # is available for is worth less than a good one who is.
+  max_wait_before_any_agent_s: 180
+
+  # Deferral: hold a call briefly for a much better agent who is about to free up.
+  # Guarded hard, because "wait for someone better" is how a caller gets forgotten.
+  defer_enabled: true
+  defer_max_wait_s: 60          # never defer a call already waiting this long
+  defer_max_hold_s: 25          # never hold longer than this
+  defer_min_fit_gap: 0.25       # only if the better agent is *clearly* better
+  defer_never_above_urgency: high  # never defer a high/critical caller
+
+  # Anti-hot-spot: stop one strong agent absorbing every hard call in a shift.
+  hot_spot_window_calls: 20
+  hot_spot_max_share: 0.35

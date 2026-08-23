@@ -871,3 +871,43 @@ that replaced them is the useful part._
   customer's own list, because a policy number on screen is a disclosure regardless of who is
   looking. Previously it showed three fixed rows named *Documents*, *Claim history* and
   *Coverage details*, which are pages, not plans.
+
+_`D49` added 2026-08-24, during P2a._
+
+## D49. The Hungarian solver is ours, and the greedy gap is measured rather than asserted
+- **Problem:** `D22` chose global optimal assignment over greedy best-first. Two things were
+  left open: what implements it, and how much it actually buys.
+- **Decision on the implementation:** written in `services/matching/solver.py`, ~90 lines,
+  rather than adding `scipy` for `linear_sum_assignment`. Same reasoning as `D31` on LLM
+  frameworks — a ~30MB dependency that would also land on the STT box, to avoid one
+  well-understood O(n³) algorithm on a matrix of tens by tens, where constant factors are
+  irrelevant. Owning it also means the rationale we persist is genuinely ours to explain.
+- **Decision on the claim:** `scripts/run_matching.py --compare` scores Hungarian **and**
+  greedy on the same matrix, so "greedy is worse" is a measurement, not a slogan.
+- **What the measurement actually said**, across seven seeds at 25 waiting calls:
+
+  | seed | greedy leaves on the table |
+  |---|---|
+  | 7, 42 | **0.0%** — identical assignment |
+  | 13 | 0.1% |
+  | 2024 | 0.5% |
+  | 1 | 0.7% |
+  | 99 | 5.1% |
+  | 123 | **8.2%** |
+
+  So the honest claim is **not** "greedy is bad". It is: *greedy is usually fine and
+  occasionally meaningfully worse, and it is worst exactly when agents are scarce relative
+  to skill diversity* — which is precisely when routing matters most. An 8% worse assignment
+  during a staffing crunch is a real cost; the same algorithm costs nothing when the centre
+  is quiet. Keeping the comparison in the tool means this can be re-checked against real
+  volumes rather than trusted.
+- **A bug worth recording even though it never shipped:** the first implementation returned
+  an **empty matching on every input** — a Python tuple-assignment order bug in the
+  augmenting-path backtrack (`j0, p[j0] = way[j0], p[way[j0]]` rebinds `j0` before `p[j0]`
+  is resolved). No exception; every caller simply came back `no_candidates`, which is
+  indistinguishable from "nobody was available". Only known-optimal small cases catch that
+  class of failure, so `test_matching.py` now pins several, including one asserting that a
+  solvable matrix produces *some* assignment.
+- **Tradeoff:** we own an algorithm we must maintain. Mitigated by the property test —
+  Hungarian must never score below greedy, over pseudo-random matrices — which is cheap and
+  catches almost any regression.

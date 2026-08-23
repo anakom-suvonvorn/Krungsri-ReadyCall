@@ -1,0 +1,348 @@
+"""The matching engine: hard filters, scoring, the solver, and the guard rails.
+
+The solver tests are here because I got it wrong first time in a way nothing else would
+have caught: a Python tuple-assignment order bug made `hungarian()` return an *empty*
+matching on every input. No exception, no warning — every caller just came back
+`no_candidates`, which looks exactly like "nobody was available". Known-optimal small cases
+are the only thing that catches that class of bug.
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from readycall.adapters.agent_directory.fixtures import FixtureAgentDirectory
+from readycall.clock import ManualClock
+from readycall.domain.enums import (
+    AgentIntent,
+    AgentSystemState,
+    CefrLevel,
+    Language,
+    MatchKind,
+    Urgency,
+)
+from readycall.domain.models import Agent, AgentLanguage, AgentPresence, AgentSkill
+from readycall.errors import ConfigError
+from readycall.services.matching import solver
+from readycall.services.matching.engine import MatchingEngine
+from readycall.services.matching.scoring import (
+    WaitingCall,
+    hard_filter,
+    score_fit,
+    score_urgency,
+)
+from readycall.services.matching.weights import MatchingWeights
+from tests.conftest import REPO_ROOT
+
+ROSTER = REPO_ROOT / "mock" / "agents" / "agents.json"
+
+
+@pytest.fixture
+def weights() -> MatchingWeights:
+    return MatchingWeights.load(REPO_ROOT / "config" / "matching_weights.yaml")
+
+
+@pytest.fixture
+def directory() -> FixtureAgentDirectory:
+    return FixtureAgentDirectory(ROSTER)
+
+
+def make_agent(agent_id: str = "A", skill: str = "motor.claim", prof: float = 0.9, **kw) -> Agent:
+    return Agent(
+        agent_id=agent_id,
+        display_name=agent_id,
+        team="t",
+        languages=kw.pop(
+            "languages", (AgentLanguage(language=Language.TH, level=CefrLevel.NATIVE),)
+        ),
+        skills=(AgentSkill(skill_code=skill, proficiency=prof),),
+        **kw,
+    )
+
+
+def make_presence(agent_id: str = "A", load: int = 0, *, clock: ManualClock) -> AgentPresence:
+    return AgentPresence(
+        agent_id=agent_id,
+        system_state=AgentSystemState.AVAILABLE,
+        agent_intent=AgentIntent.READY,
+        since=clock.now(),
+        current_load=load,
+    )
+
+
+def make_call(**kw) -> WaitingCall:
+    base = dict(
+        call_session_id="call_1",
+        queue_id="q_motor_claim",
+        required_skill="motor.claim",
+        intent_code="motor.claim.accident",
+        intent_urgency=Urgency.NORMAL,
+        waiting_s=10.0,
+        sla_seconds=30,
+    )
+    base.update(kw)
+    return WaitingCall(**base)  # type: ignore[arg-type]
+
+
+# --- the solver --------------------------------------------------------------------------
+
+
+def test_hungarian_finds_the_known_optimum() -> None:
+    """Greedy takes 5 then is stuck with 2 (=7); the optimum is 5+4=9."""
+    matrix = [[1.0, 5.0], [4.0, 2.0]]
+    assert solver.total_score(matrix, solver.hungarian(matrix)) == pytest.approx(9.0)
+
+
+def test_hungarian_beats_greedy_on_the_classic_trap() -> None:
+    """The one-scarce-agent case: greedy hands them to whoever asks first."""
+    matrix = [[9.0, 8.0], [8.5, 1.0]]
+    hun, gre = solver.best_greedy_gap(matrix)
+    assert hun == pytest.approx(16.5)
+    assert gre == pytest.approx(10.0)
+    assert hun > gre
+
+
+def test_hungarian_never_scores_worse_than_greedy() -> None:
+    """The property that actually matters, over pseudo-random matrices."""
+    import random
+
+    rng = random.Random(7)
+    for _ in range(40):
+        rows, cols = rng.randint(1, 7), rng.randint(1, 7)
+        matrix = [[rng.uniform(0, 1) for _ in range(cols)] for _ in range(rows)]
+        hun, gre = solver.best_greedy_gap(matrix)
+        assert hun >= gre - 1e-9
+
+
+def test_hungarian_assigns_something_when_anything_is_possible() -> None:
+    """The regression guard for the tuple-assignment bug: an empty matching is not 'no fit'."""
+    matrix = [[1.0, 2.0], [3.0, 4.0]]
+    assert any(a is not None for a in solver.hungarian(matrix))
+
+
+def test_hungarian_refuses_impossible_pairs() -> None:
+    matrix = [[solver.IMPOSSIBLE, 5.0], [4.0, solver.IMPOSSIBLE]]
+    assert solver.hungarian(matrix) == [1, 0]
+
+
+def test_more_calls_than_agents_leaves_some_unassigned() -> None:
+    matrix = [[1.0], [2.0], [3.0]]
+    assignment = solver.hungarian(matrix)
+    assert sum(1 for a in assignment if a is not None) == 1
+
+
+@pytest.mark.parametrize("matrix", [[], [[]]])
+def test_solver_handles_empty_input(matrix: list[list[float]]) -> None:
+    assert all(a is None for a in solver.hungarian(matrix))
+
+
+# --- hard filters ------------------------------------------------------------------------
+
+
+def test_missing_skill_excludes_rather_than_down_ranks(
+    weights: MatchingWeights, clock: ManualClock
+) -> None:
+    """A failed hard filter is not a low score — it is not a candidate."""
+    agent = make_agent(skill="health.policy")
+    assert hard_filter(make_call(), agent, make_presence(clock=clock), weights) == "skill"
+
+
+def test_language_is_graded_not_a_yes_no_flag(weights: MatchingWeights, clock: ManualClock) -> None:
+    """`D38`: A2 English cannot carry a complex claim conversation."""
+    weak = make_agent(
+        languages=(
+            AgentLanguage(language=Language.TH, level=CefrLevel.NATIVE),
+            AgentLanguage(language=Language.EN, level=CefrLevel.A2),
+        )
+    )
+    strong = make_agent(
+        languages=(
+            AgentLanguage(language=Language.TH, level=CefrLevel.NATIVE),
+            AgentLanguage(language=Language.EN, level=CefrLevel.B2),
+        )
+    )
+    english = make_call(acceptable_languages=(Language.EN,))
+    assert hard_filter(english, weak, make_presence(clock=clock), weights) == "language"
+    assert hard_filter(english, strong, make_presence(clock=clock), weights) is None
+
+
+def test_a_full_agent_is_excluded(weights: MatchingWeights, clock: ManualClock) -> None:
+    agent = make_agent(max_concurrent=1)
+    presence = make_presence(load=1, clock=clock)
+    assert hard_filter(make_call(), agent, presence, weights) == "at_capacity"
+
+
+# --- scoring -----------------------------------------------------------------------------
+
+
+def test_urgency_multiplies_so_waiting_eventually_wins(weights: MatchingWeights) -> None:
+    """`D22`: the answer to starvation. A long wait must outrank a slightly better fit."""
+    fresh = score_urgency(make_call(waiting_s=1.0), weights)
+    stale = score_urgency(make_call(waiting_s=300.0), weights)
+    assert stale.total > fresh.total
+    assert stale.total <= weights.urgency_max
+
+
+def test_urgency_is_relative_to_the_queues_own_sla(weights: MatchingWeights) -> None:
+    """40s is nothing on a 120s policy question and near-breach on a 45s pre-auth."""
+    slow = score_urgency(make_call(waiting_s=40.0, sla_seconds=120), weights)
+    fast = score_urgency(make_call(waiting_s=40.0, sla_seconds=45), weights)
+    assert fast.total > slow.total
+
+
+def test_urgency_never_makes_skill_irrelevant(weights: MatchingWeights) -> None:
+    """Clamped: a caller at a crash scene still must not reach someone unqualified."""
+    desperate = score_urgency(
+        make_call(waiting_s=9999.0, intent_urgency=Urgency.CRITICAL, is_vulnerable=True), weights
+    )
+    assert desperate.total <= weights.urgency_max
+
+
+def test_continuity_expires_and_requires_a_good_outcome(
+    weights: MatchingWeights, clock: ManualClock
+) -> None:
+    """Continuity must not become a rut."""
+    from datetime import timedelta
+
+    agent = make_agent("A007")
+    presence = make_presence("A007", clock=clock)
+    now = clock.now()
+
+    recent_good = make_call(last_agent_id="A007", last_contact_at=now - timedelta(days=3))
+    stale_call = make_call(last_agent_id="A007", last_contact_at=now - timedelta(days=400))
+    bad_call = make_call(
+        last_agent_id="A007", last_contact_at=now - timedelta(days=3), last_outcome_good=False
+    )
+
+    assert score_fit(recent_good, agent, presence, weights, now=now).continuity == 1.0
+    assert score_fit(stale_call, agent, presence, weights, now=now).continuity == 0.0
+    assert score_fit(bad_call, agent, presence, weights, now=now).continuity == 0.0
+
+
+# --- the engine --------------------------------------------------------------------------
+
+
+async def test_every_decision_is_explainable(
+    directory: FixtureAgentDirectory, weights: MatchingWeights, clock: ManualClock
+) -> None:
+    """`D18`: 'why did I get this call' must be answerable from stored data."""
+    engine = MatchingEngine(directory=directory, weights=weights, clock=clock)
+    presence = {
+        a.agent_id: make_presence(a.agent_id, clock=clock) for a in await directory.list_agents()
+    }
+
+    decisions = await engine.match([make_call()], presence)
+    decision = decisions[0]
+
+    assert decision.rationale_th
+    assert decision.weights_version == weights.version
+    assert decision.solver == "hungarian"
+    assert decision.candidates, "every candidate considered must be kept, not just the winner"
+    assert decision.urgency is not None
+    assert decision.decide_ms is not None
+
+
+async def test_excluded_candidates_record_why(
+    directory: FixtureAgentDirectory, weights: MatchingWeights, clock: ManualClock
+) -> None:
+    engine = MatchingEngine(directory=directory, weights=weights, clock=clock)
+    presence = {
+        a.agent_id: make_presence(a.agent_id, clock=clock) for a in await directory.list_agents()
+    }
+
+    decision = (await engine.match([make_call()], presence))[0]
+    excluded = [c for c in decision.candidates if c.fit.hard_filter_failed is not None]
+    assert excluded, "most of a 15-agent roster cannot handle a motor claim"
+    assert all(c.fit.hard_filter_failed == "skill" for c in excluded)
+
+
+async def test_no_agents_online_is_a_decision_not_a_crash(
+    directory: FixtureAgentDirectory, weights: MatchingWeights, clock: ManualClock
+) -> None:
+    engine = MatchingEngine(directory=directory, weights=weights, clock=clock)
+    decision = (await engine.match([make_call()], {}))[0]
+    assert decision.kind is MatchKind.NO_CANDIDATES
+    assert decision.chosen_agent_id is None
+
+
+async def test_past_the_wait_ceiling_takes_anyone_qualified(
+    directory: FixtureAgentDirectory, weights: MatchingWeights, clock: ManualClock
+) -> None:
+    engine = MatchingEngine(directory=directory, weights=weights, clock=clock)
+    presence = {
+        a.agent_id: make_presence(a.agent_id, clock=clock) for a in await directory.list_agents()
+    }
+
+    long_wait = make_call(waiting_s=weights.max_wait_before_any_agent_s + 10)
+    decision = (await engine.match([long_wait], presence))[0]
+    assert decision.kind is MatchKind.FALLBACK
+
+
+async def test_a_critical_caller_is_never_deferred(
+    directory: FixtureAgentDirectory, weights: MatchingWeights, clock: ManualClock
+) -> None:
+    """Holding someone at a crash scene for a better-matched agent is indefensible."""
+    engine = MatchingEngine(directory=directory, weights=weights, clock=clock)
+    presence = {
+        a.agent_id: make_presence(a.agent_id, clock=clock) for a in await directory.list_agents()
+    }
+
+    critical = make_call(intent_urgency=Urgency.CRITICAL, waiting_s=2.0)
+    decision = (await engine.match([critical], presence))[0]
+    assert decision.kind is not MatchKind.DEFER
+
+
+async def test_two_calls_do_not_get_the_same_agent(
+    directory: FixtureAgentDirectory, weights: MatchingWeights, clock: ManualClock
+) -> None:
+    engine = MatchingEngine(directory=directory, weights=weights, clock=clock)
+    presence = {
+        a.agent_id: make_presence(a.agent_id, clock=clock) for a in await directory.list_agents()
+    }
+
+    calls = [make_call(call_session_id="c1"), make_call(call_session_id="c2")]
+    chosen = [d.chosen_agent_id for d in await engine.match(calls, presence) if d.chosen_agent_id]
+    assert len(chosen) == len(set(chosen))
+
+
+# --- the roster and the weights ------------------------------------------------------------
+
+
+async def test_no_skill_is_held_by_only_one_agent(directory: FixtureAgentDirectory) -> None:
+    """`D22`: a skill one person holds means their lunch break closes a queue."""
+    from readycall.domainpack import DomainPack
+
+    pack = DomainPack.load(REPO_ROOT / "config")
+    thin = {
+        code: len(await directory.agents_with_skill(code))
+        for code in pack.skills
+        if len(await directory.agents_with_skill(code)) < 2
+    }
+    assert not thin, f"single-point-of-failure skills: {thin}"
+
+
+def test_weights_reject_an_urgency_multiplier_below_one(tmp_path) -> None:
+    """Below 1.0 would make waiting *lower* a score — the opposite of the intent."""
+    import yaml
+
+    raw = yaml.safe_load(
+        (REPO_ROOT / "config" / "matching_weights.yaml").read_text(encoding="utf-8")
+    )
+    raw["urgency"]["min_multiplier"] = 0.5
+    bad = tmp_path / "w.yaml"
+    bad.write_text(yaml.safe_dump(raw), encoding="utf-8")
+    with pytest.raises(ConfigError, match="min_multiplier"):
+        MatchingWeights.load(bad)
+
+
+def test_weights_reject_a_negative_weight(tmp_path) -> None:
+    import yaml
+
+    raw = yaml.safe_load(
+        (REPO_ROOT / "config" / "matching_weights.yaml").read_text(encoding="utf-8")
+    )
+    raw["fit"]["continuity"] = -1.0
+    bad = tmp_path / "w.yaml"
+    bad.write_text(yaml.safe_dump(raw), encoding="utf-8")
+    with pytest.raises(ConfigError, match="negative"):
+        MatchingWeights.load(bad)

@@ -29,7 +29,7 @@ flowchart TB
 
     WHY1["<b>why urgency MULTIPLIES rather than adds.</b><br/>Pure best-fit starves people: a caller nobody is<br/>a great match for waits forever while better-matched<br/>callers overtake them. The multiplier means waiting<br/>itself eventually wins, and a hard wait ceiling<br/>then drops to any-qualified-agent."]:::note
 
-    WHY2["<b>why global rather than greedy.</b> Greedy best-first<br/>is locally optimal and globally poor - it hands the<br/>one bilingual agent to the first caller who asks,<br/>then strands the caller who genuinely needed them."]:::note
+    WHY2["<b>why global rather than greedy - MEASURED (D49).</b><br/>scripts/run_matching.py --compare scores both on the<br/>same matrix. Across seven seeds greedy left between<br/><b>0.0% and 8.2%</b> on the table. So the honest claim is not<br/>'greedy is bad' - it is that greedy is usually fine and<br/>occasionally much worse, and it is worst exactly when<br/>agents are scarce relative to skill diversity, which is<br/>when routing matters most."]:::note
 
     WHY3["<b>why persist every candidate (D18).</b> 'Why did I get<br/>this call?' has to be answerable. A matching decision<br/>you cannot explain is one nobody will trust enough<br/>to leave switched on."]:::note
 

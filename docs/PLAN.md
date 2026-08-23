@@ -91,6 +91,7 @@ Two rules that shape the order:
 ---
 
 ## P2 — Matching, queues, agents, and the desktop
+_Split in practice: **P2a the engine (done, 2026-08-24)**, P2b the workstation._
 **Goal:** the right agent gets the call, for the right reason, and the screen is live.
 
 - `skills.yaml` / `queues.yaml` / `queue_hours.yaml`; `queues` + `queue_entries`; SLA + overflow.
