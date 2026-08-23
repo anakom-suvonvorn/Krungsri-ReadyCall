@@ -27,10 +27,20 @@ import yaml
 from fastapi import APIRouter, HTTPException, Request, Response, status
 
 from readycall.api.deps import ContainerDep, PrincipalDep
-from readycall.api.schemas import AppPlan, DemoLoginRequest, DemoLoginResponse, DemoPersona
+from readycall.api.schemas import (
+    AppPlan,
+    DemoLoginRequest,
+    DemoLoginResponse,
+    DemoPersona,
+    PlaceCallRequest,
+    PlaceCallResponse,
+)
 from readycall.api.security import DemoSessionStore
+from readycall.domain.enums import CallState, ProductLine, Urgency
 from readycall.errors import ConfigError
 from readycall.logging import get_logger
+from readycall.services.identity.resolver import hash_token
+from readycall.services.matching.scoring import WaitingCall
 
 log = get_logger(__name__)
 router = APIRouter(prefix="/v1/demo", tags=["demo"])
@@ -170,3 +180,124 @@ async def demo_logout(request: Request, response: Response, container: Container
     if isinstance(sessions, DemoSessionStore):
         sessions.revoke(token)
     response.delete_cookie(container.settings.session_cookie_name)
+
+
+# --- DEMO: a caller arriving, standing in for telephony -------------------------------
+#
+# Real calls arrive through `TelephonyProvider` at P5 (Asterisk/ARI). Until then the
+# workstation needs *some* way to have a caller on the line, so this walks one call
+# through the real lifecycle: identity resolution, IVR, queue, match, offer. Every step
+# below is the production service - only the trigger is fake.
+#
+# `# P2b:` marks the steps a real IVR will drive. `grep -rn "# P2b:" src/` lists them.
+
+
+@router.post("/calls", response_model=PlaceCallResponse, summary="DEMO: place a call")
+async def place_call(
+    body: PlaceCallRequest, container: ContainerDep, request: Request
+) -> PlaceCallResponse:
+    _require_demo(container)
+
+    # `D4` again, on the demo path: the correlation token is the only thing that binds a
+    # call to an identity. A body field naming the customer would undo the whole ladder.
+    resolution = await container.identity.resolve(
+        correlation_token=body.correlation_token,
+        caller_number=body.caller_number,
+    )
+
+    intent = None
+    if body.correlation_token:
+        intent = await container.intent_store.get_by_token_hash(hash_token(body.correlation_token))
+
+    if intent is not None and resolution.customer_id:
+        session = await container.orchestrator.start_from_intent(
+            intent_id=intent.intent_id,
+            customer_id=resolution.customer_id,
+            product_code=intent.product_code,
+            product_line=(
+                container.pack.intent(body.intent_code).line
+                if body.intent_code
+                else ProductLine.UNKNOWN
+            ),
+        )
+    else:
+        session = await container.orchestrator.start_cold_call(
+            caller_number=body.caller_number,
+            dialled_did=body.did,
+        )
+
+    container.identity_for_call[session.call_session_id] = resolution
+
+    # The context snapshot: reuse the one the app path already built (`D6`), or build one
+    # now for a cold call. Reuse is the point - by the time the phone rings, the six reads
+    # to the bank core have already happened.
+    snapshot_id = None
+    if intent is not None:
+        snapshot_id = container.snapshot_for_intent.get(intent.intent_id)
+    if snapshot_id is None and resolution.customer_id:
+        snapshot = await container.assembler.build(customer_id=resolution.customer_id)
+        await container.snapshots.save(snapshot)
+        snapshot_id = snapshot.snapshot_id
+    if snapshot_id:
+        container.snapshot_for_call[session.call_session_id] = snapshot_id
+
+    # P2b: the IVR walk is a real menu walk at P3; here the caller's choices arrive in
+    # the request body because there is no audio yet.
+    intent_code = body.intent_code
+    if body.keys:
+        walk = container.pack.walk_menu(list(body.keys))
+        intent_code = walk.intent_code or intent_code
+    queue_id = container.pack.queue_for_intent(intent_code) if intent_code else "q_general"
+    spec = container.pack.queues[queue_id]
+
+    await container.orchestrator.enter_ivr(session)
+    session.menu_path = tuple(body.keys)
+    session.menu_intent_code = intent_code
+    session.snapshot_id = snapshot_id
+    await container.orchestrator.enqueue(session, queue_id=queue_id)
+
+    # A closed queue is a routing outcome, not an error (`D25`). Say so plainly rather
+    # than letting the caller sit in a queue nobody is staffing.
+    hours = container.hours.state(spec.hours, container.clock.now())
+    if not hours.is_open:
+        await container.orchestrator.transition(
+            session, CallState.VOICEMAIL, reason=f"queue_closed:{hours.closed_reason}"
+        )
+        return PlaceCallResponse(
+            call_session_id=session.call_session_id,
+            state=str(session.state),
+            queue_id=queue_id,
+            queue_open=False,
+            closed_reason=hours.closed_reason,
+            next_open_at=hours.next_open_at,
+            assurance=str(resolution.assurance),
+        )
+
+    await container.orchestrator.transition(session, CallState.MATCHED, reason="ready_for_matching")
+    container.dispatch.admit(
+        session,
+        WaitingCall(
+            call_session_id=session.call_session_id,
+            queue_id=queue_id,
+            required_skill=spec.required_skill,
+            intent_code=intent_code or "unknown",
+            intent_urgency=(
+                container.pack.intent(intent_code).default_urgency
+                if intent_code
+                else Urgency.NORMAL
+            ),
+            waiting_s=body.waited_s,
+            sla_seconds=spec.sla_seconds,
+        ),
+    )
+    result = await container.dispatch.tick()
+
+    return PlaceCallResponse(
+        call_session_id=session.call_session_id,
+        state=str(session.state),
+        queue_id=queue_id,
+        queue_open=True,
+        assurance=str(resolution.assurance),
+        offered_to=result.offered[0] if result.offered else None,
+        unplaced_reason=result.unplaced.get(session.call_session_id),
+    )

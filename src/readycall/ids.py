@@ -116,3 +116,15 @@ def correlation_token() -> str:
     A bearer credential: never logged in full, stored only as a hash.
     """
     return secrets.token_urlsafe(32)
+
+
+def capture_id() -> str:
+    return generate("cap")
+
+
+def attestation_id() -> str:
+    return generate("attest")
+
+
+def agent_session_id() -> str:
+    return generate("asess")

@@ -108,8 +108,81 @@ class DemoSessionStore:
         return Principal(customer_id=customer_id, session_id=match, method="demo_persona")
 
 
+@dataclass(frozen=True, slots=True)
+class AgentPrincipal:
+    """Who a *staff* request belongs to. Deliberately not `Principal`.
+
+    Customer and agent sessions are separate types, separate stores and separate cookie
+    names. Sharing any of the three would mean one bug — a mixed-up lookup, a copied
+    cookie name — silently turns a customer session into an agent one, and the agent
+    surface can see every caller's brief.
+    """
+
+    agent_id: str
+    session_id: str
+    method: str = "agent_session"
+
+
+@runtime_checkable
+class AgentSessionResolver(Protocol):
+    @property
+    def name(self) -> str: ...
+
+    async def resolve(self, session_token: str | None) -> AgentPrincipal: ...
+
+
+class DemoAgentSessionStore:
+    """DEMO: sign in as a roster agent (`D47`'s reasoning, applied to the staff side).
+
+    Real deployments authenticate against the bank's staff directory / SSO. The seam is
+    what matters: the workstation endpoints cannot tell a demo session from a real one,
+    and no endpoint ever accepts an `agent_id` from the client.
+    """
+
+    name = "demo_agent"
+
+    def __init__(self, *, clock: Clock, ttl_s: float = 43200.0) -> None:
+        # A long default TTL on purpose: a shift is eight hours and an agent being logged
+        # out mid-call by an expiring cookie is a worse failure than a stale session.
+        self._clock = clock
+        self._ttl_s = ttl_s
+        self._sessions: dict[str, tuple[str, float]] = {}
+
+    def issue(self, agent_id: str) -> str:
+        token = secrets.token_urlsafe(24)
+        self._sessions[token] = (agent_id, self._clock.now().timestamp() + self._ttl_s)
+        log.info("agent session issued", agent_id=agent_id, expires_in_s=self._ttl_s)
+        return token
+
+    def revoke(self, session_token: str | None) -> None:
+        if session_token:
+            self._sessions.pop(session_token, None)
+
+    async def resolve(self, session_token: str | None) -> AgentPrincipal:
+        if not session_token:
+            raise AuthenticationRequired("no agent session cookie")
+
+        match: str | None = None
+        for known in self._sessions:
+            if hmac.compare_digest(known, session_token):
+                match = known
+                break
+        if match is None:
+            raise AuthenticationRequired("unknown agent session")
+
+        agent_id, expires_at = self._sessions[match]
+        if self._clock.now().timestamp() >= expires_at:
+            del self._sessions[match]
+            raise AuthenticationRequired("agent session expired")
+
+        return AgentPrincipal(agent_id=agent_id, session_id=match, method="demo_agent")
+
+
 __all__ = [
+    "AgentPrincipal",
+    "AgentSessionResolver",
     "AuthenticationRequired",
+    "DemoAgentSessionStore",
     "DemoSessionStore",
     "Principal",
     "SessionResolver",

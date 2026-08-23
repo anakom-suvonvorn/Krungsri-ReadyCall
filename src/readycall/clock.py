@@ -54,6 +54,12 @@ class ManualClock:
     """
 
     def __init__(self, start: datetime | None = None) -> None:
+        # WATCH OUT: the default is 09:00 UTC on 1 January, which is 16:00 in Bangkok on
+        # **New Year's Day** — a public holiday. Every queue on the `business` schedule is
+        # therefore CLOSED under a default `ManualClock`, and a test that places a call
+        # will get `queue_closed:holiday` instead of an offer (`config/queue_hours.yaml`).
+        # The default is not changed because scenario replays are byte-compared against
+        # golden output built on it; pass an explicit `start` when hours matter.
         self._now = start or datetime(2026, 1, 1, 9, 0, 0, tzinfo=UTC)
         self._mono = 0.0
 

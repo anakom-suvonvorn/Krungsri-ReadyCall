@@ -174,10 +174,19 @@ class Settings(BaseSettings):
     # --- agent workstation (D32, D33) ---
     agent_accept_mode: AcceptMode = AcceptMode.MANUAL
     offer_timeout_s: float = 20.0
-    acw_timer_s: float = 45.0
-    acw_max_s: float = 300.0
+    #: After-call work thresholds are **visibility only** (`D45`). Nothing expires,
+    #: auto-saves or auto-readies when they pass — ACW ends when the agent declares what
+    #: they are doing next, full stop. Renamed from `acw_timer_s` / `acw_max_s`, which
+    #: read like expiry deadlines and were an open invitation to implement one.
+    acw_long_after_s: float = 45.0
+    acw_supervisor_alert_after_s: float = 300.0
     agent_heartbeat_s: float = 10.0
     agent_presence_ttl_s: float = 30.0
+    agent_session_cookie_name: str = "readycall_agent"
+    agent_session_ttl_s: float = 43200.0  # a shift, not an hour
+    #: DEMO: enables /v1/agent/demo-login, the staff-side equivalent of the persona
+    #: picker. Must be false anywhere near real data.
+    demo_agent_login_enabled: bool = True
     sip_wss_url: str | None = None
     sip_realm: str = "readycall.local"
 
@@ -213,8 +222,11 @@ class Settings(BaseSettings):
                 "MAX_WAIT_BEFORE_ANY_AGENT_S must exceed TARGET_WAIT_S — the hard "
                 "anti-starvation ceiling has to sit above the soft target (D22)"
             )
-        if self.acw_timer_s > self.acw_max_s:
-            raise ConfigError("ACW_TIMER_S must be <= ACW_MAX_S")
+        if self.acw_long_after_s > self.acw_supervisor_alert_after_s:
+            raise ConfigError(
+                "ACW_LONG_AFTER_S must be <= ACW_SUPERVISOR_ALERT_AFTER_S — the agent "
+                "sees their own wrap-up running long before a supervisor is told (D45)"
+            )
         return self
 
     @property

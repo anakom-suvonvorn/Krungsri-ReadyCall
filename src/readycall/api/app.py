@@ -21,7 +21,7 @@ from fastapi.staticfiles import StaticFiles
 
 from readycall import __version__
 from readycall.api.deps import Container
-from readycall.api.routers import demo, health, mobile
+from readycall.api.routers import agent, demo, health, mobile
 from readycall.api.security import AuthenticationRequired
 from readycall.clock import Clock
 from readycall.config import Settings, get_settings
@@ -69,6 +69,7 @@ def create_app(settings: Settings | None = None, *, clock: Clock | None = None) 
 
     app.include_router(health.router)
     app.include_router(mobile.router)
+    app.include_router(agent.router)
     if settings.demo_login_enabled:
         app.include_router(demo.router)
 
