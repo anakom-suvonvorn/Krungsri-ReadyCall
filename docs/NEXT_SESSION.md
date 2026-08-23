@@ -1,7 +1,7 @@
 # NEXT_SESSION
 
 _The live working state. READ THIS FIRST every session. Keep it short and current._
-_Last updated: 2026-08-21._
+_Last updated: 2026-08-23._
 
 ---
 
@@ -77,6 +77,8 @@ prompts (P3), the media gateway (P3), and the matching engine (P2).
 | Q8 | Typhoon model ids / licence / pricing | Verify against live docs when writing the adapter |
 | Q9 | `OFFER_TIMEOUT_S=20`, `ACW_TIMER_S=45` | Guesses; tune against how a real agent works |
 | Q11 | Language menu wording when English lands | `preferred` vs `acceptable` modelled (`D38`); Thai-only for now, likely for the hackathon too |
+| Q12 | Which verification challenges count for promotion to L3 (`D42`) | DOB, last 4 of citizen id, policy no. Confirm the real list with Krungsri |
+| Q13 | Does a third-party caller need a named representative on the policy (`D42`) | Assume yes; `Policy` has no `representatives` field yet |
 
 Resolved: single project (`D34`) · Asterisk · RTX 3050 · Claude + Typhoon compared ·
 React workstation with the softphone in it · web customer simulator · menu-first flow
@@ -90,6 +92,11 @@ React workstation with the softphone in it · web customer simulator · menu-fir
 - **Routing must never depend on the AI** (`D37`). The menu settles the queue; speech refines it.
 - **Never let AI delay the call** (`D12`). **Never let the model produce coverage numbers** (`D16`).
 - **An ANI match is probable, not verified** (`D20`) — below L2, no policy numbers.
+- **Assurance goes UP mid-call** (`D42`) — and promotion must be a **re-render, not a re-fetch**.
+  The assembler is deliberately not gated; keep it that way. **Gate at the wire, server-side** —
+  never send the full brief and hide fields in React.
+- **Never ask a leading identity question.** "ขอทราบชื่อผู้ติดต่อ", not "ใช่คุณ X ไหมคะ" — naming
+  the customer first both leaks that the number belongs to them and weakens the check.
 - **Never hardcode an insurance literal in `services/`** — it goes in `config/` (`D28`).
 - **Never `datetime.now()` or a raw random id** outside `clock.py`/`ids.py` (`D35`).
 - **Menu options never speak customer detail** — reordering only.

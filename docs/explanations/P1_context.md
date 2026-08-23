@@ -343,4 +343,20 @@ handshake and the softphone UI live.
 
 _Append here rather than editing above._
 
-- (nothing yet)
+- **2026-08-23 — the ladder now goes up during the call (`D42`).** Section 4's table shows
+  L1 as a dead end ("name, but no policy number"). It is no longer one. The agent has an
+  identity control with three outcomes — *Confirmed* (promotes to L3), *Not this person*
+  (drops to L0 and suppresses the rejected id), and *Third party acting for them* (context
+  visible, disclosure still locked). Action 0, "ยืนยันตัวตนผู้ติดต่อก่อนให้ข้อมูลกรมธรรม์",
+  is the on-screen prompt for exactly this.
+- **2026-08-23 — promotion costs nothing, and the reason is in section 6.** The assembler
+  is *not* gated by assurance; only `BriefBuilder`'s rendering is. Measured at L1 in the
+  motor scenario: the snapshot already holds `MT-2025-004512` and all four `Coverage`
+  figures while the brief prints "มีกรมธรรม์ที่เกี่ยวข้อง (ยังไม่ยืนยันตัวตน)". Confirming
+  identity re-renders from memory — no bank-core round trip. **The gate must stay
+  server-side at the wire**: never ship the full brief and hide fields in the browser.
+- **2026-08-23 — the keypad stays live for the whole call (`D43`).** Section 4 explains
+  "keyed their id in the IVR" as an arrival-time thing. It is now available mid-call too:
+  the agent asks the caller to *type* a policy or claim number instead of reading it out,
+  and when the typed value matches a policy we already hold, assurance promotes
+  automatically — stronger evidence than an agent's judgment of a spoken answer.

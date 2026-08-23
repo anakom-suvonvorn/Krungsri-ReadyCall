@@ -1,7 +1,7 @@
 # DECISIONS
 
 _Significant engineering decisions and their rationale. Append new ones at the bottom; never silently reverse one without a new entry explaining why._
-_Last updated: 2026-08-21._
+_Last updated: 2026-08-23._
 
 Format per entry: **Problem → Decision → Reasoning → Alternatives → Tradeoffs → Future.**
 
@@ -571,3 +571,66 @@ _`D39`–`D41` added 2026-08-21, during P1._
   which is the product argument the pitch is making.
 - **Guard:** it is a *hint*, weighted like a menu answer rather than treated as certainty,
   and speech can still override it once P4 lands (`D23`).
+
+---
+
+## D42. Assurance is raised mid-call, and the agent's identity control has three outcomes
+- **Problem:** `D20` built the assurance ladder as a one-shot decision taken at call arrival.
+  But identity is exactly the thing that gets *resolved during the conversation* — the agent
+  asks, the caller answers. With no way to raise the level mid-call, an ANI-matched caller
+  stayed at L1 forever and the agent could never unlock the policy details they had just
+  verbally verified. The ladder had no upward staircase.
+- **Decision:** Assurance is mutable during a call, through an explicit control on the
+  workstation with **three** outcomes, not two:
+  - **Confirmed** — the agent verified by challenge (DOB, last 4 of citizen id, policy no).
+    The agent records *which* challenge was used; promotion is to L3.
+  - **Not this person** — the ANI guess was wrong. Assurance drops to L0, and the rejected
+    `customer_id` is recorded on the session so nothing re-proposes them.
+  - **Third party acting for them** — see below; the most common real case after the first two.
+- **Reasoning for three:** a daughter calling about her father's claim is neither "confirmed"
+  nor "wrong". Forcing that case into a binary makes the agent press *Confirmed*, and the
+  audit log then falsely records that the policyholder was verified. The third button exists
+  to keep the disclosure log honest, which is the whole point of having one under PDPA.
+  Third party = the case context attaches (the agent sees which policy it is about) but
+  disclosure stays locked and a playbook step appears to check authority to act.
+- **Rejection is not plain L0:** "this is not C000002" is information, not the absence of it.
+  It suppresses the guess for the rest of the call and feeds a data-quality signal — a
+  rejected ANI match usually means a recycled mobile number sitting stale in the core data.
+- **Cost is a re-render, not a re-fetch.** Verified on 2026-08-23: at L1 the frozen snapshot
+  already holds the full policy numbers and every `Coverage` figure; only `BriefBuilder`'s
+  rendering is gated. Promotion therefore rebuilds a brief from data already in memory. No
+  bank-core round trip, no spinner. This is why the assembler was never gated by assurance
+  and must not become gated.
+- **The gate is server-side, at the wire.** The workstation must receive only what the
+  current assurance permits. Sending the full brief and hiding fields in React would put
+  someone's coverage one devtools panel away. Promotion = the client re-requests and the
+  server renders more.
+- **Versioned, not mutated:** promotion produces brief **v2** (`D7`), so the record shows
+  what the agent saw before and after, and when it changed.
+
+## D43. The keypad stays live during the call: digits are typed, not spoken
+- **Problem:** Mid-call, agents constantly need digit strings — policy number, claim number,
+  citizen id, plate, hospital code. Spoken digits over a mobile connection are the single
+  worst case for accuracy: short, phonetically confusable, and with no linguistic context for
+  either a human or an STT model to constrain them. The result is "ขอโทษค่ะ ทวนอีกครั้งได้ไหมคะ"
+  — dead air, which is the exact thing this product exists to remove.
+- **Decision:** DTMF is captured on the caller's leg for the **whole** call, not just in the
+  IVR. The agent clicks a labelled request ("policy number"), a field appears on both the
+  workstation and the caller's prompt, and the digits land as they are typed.
+- **Reasoning:** this is `D37` applied a second time. The keypad is the reliable channel and
+  the microphone is the lossy one, so the keypad gets the job speech is worst at. It needs no
+  AI, so it cannot degrade with one.
+- **It doubles as identity verification.** When we already hold the customer's data, a typed
+  policy number can be *checked against their actual policies*. A match is stronger evidence
+  than an agent's judgment of a spoken answer, and it promotes assurance automatically with a
+  machine-checkable audit line — no subjective confirmation involved. This makes `D42`'s
+  "Confirmed" button the fallback for verbal verification, not the primary path.
+- **Never capture a full secret.** Last 4 of a citizen id, never the whole number; never a
+  card number. For secret-ish challenges the system stores **the outcome only** (matched /
+  did not match), never the entered digits. A policy number is not a secret and is stored.
+- **Logged as disclosure evidence:** every challenge issued, its type, its outcome and its
+  timestamp. This is the record that proves policy details were not handed to a stranger.
+- **Implementation note (P5):** the caller's channel must stay in the Stasis app and be
+  bridged from within it, or Asterisk stops emitting `ChannelDtmfReceived` once bridged.
+  Always-on passive capture, no mode switch — a "digit entry mode" that interrupts the
+  conversation would be worse than asking.
