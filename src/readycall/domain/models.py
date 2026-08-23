@@ -493,8 +493,37 @@ class AgentPresence(DomainModel):
 
     @property
     def accepts_new_callers(self) -> bool:
-        """LAST_CALL and DRAINING stay logged in but take nobody new (`D33`)."""
+        """LAST_CALL and DRAINING stay logged in but take nobody new (`D33`).
+
+        Note `D45`'s supporting text says "intent in (ready, last_call)" — that is a slip
+        in the prose, not the rule. `LAST_CALL` means *finish the one I am on*, so it must
+        not be offered a new caller; amended in `DECISIONS.md` under `D45`.
+        """
         return self.agent_intent is AgentIntent.READY
+
+    @property
+    def in_after_call_work(self) -> bool:
+        return self.system_state is AgentSystemState.AFTER_CALL_WORK
+
+
+class AgentStateChange(DomainModel):
+    """One row of `agent_state_log` — who moved which axis, when, and who moved it.
+
+    Both axes are recorded on every change even though only one moves at a time, because
+    the useful question later is "what was true at 14:03", not "what changed at 14:03".
+    """
+
+    agent_id: str
+    at: datetime
+    system_state: AgentSystemState
+    agent_intent: AgentIntent
+    #: `"agent"` or `"platform"`. The platform writing to the intent axis is the narrow
+    #: exception in `D51`, and this field is what makes it auditable rather than sneaky.
+    set_by: str
+    reason: str
+    call_session_id: str | None = None
+    #: Filled in only on the change that ends after-call work (`D45`): disconnect → here.
+    acw_seconds: float | None = None
 
 
 class FitBreakdown(DomainModel):
@@ -562,7 +591,10 @@ class Assignment(DomainModel):
     ended_at: datetime | None = None
     acw_started_at: datetime | None = None
     acw_ended_at: datetime | None = None
-    acw_ended_by: str | None = None  # done_button | timer
+    #: The `AgentIntent` the agent declared to end after-call work — `ready`, `lunch`,
+    #: `admin`, … Was `done_button | timer`, which `D45` reversed: a timer never ends
+    #: ACW, and saving the form is not the same statement as being done with the call.
+    acw_ended_by: str | None = None
 
     @property
     def time_to_accept_ms(self) -> float | None:

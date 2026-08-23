@@ -942,3 +942,61 @@ _`D49` added 2026-08-24, during P2a._
 - **Future:** `ALL_QUALIFIED_BUSY` is the natural trigger for a "we are short-staffed **right
   now**" signal, and the count it carries is already the number that matters. A roster gap that
   persists across ticks is a different alert on a much slower clock.
+
+## D51. Signing in is not being ready, and the platform writes the person's axis exactly twice
+- **Problem:** `D33` gives every agent two axes — `system_state` (the platform's) and
+  `agent_intent` (the person's) — but never said what happens at the two moments where the
+  platform *needs* the person's axis to change and the person is not there to change it:
+  the instant they sign in, and the instant an offer times out with nobody answering (RONA).
+  Left unspecified, the tempting answers are "sign in as READY" and "set them to BREAK",
+  and both put words in the agent's mouth.
+- **Decision:**
+  - A new intent value **`NOT_READY`**, which an agent may **not** declare for themselves.
+  - **Sign-in sets `AVAILABLE` + `NOT_READY`.** The workstation shows a prominent Ready
+    button; declaring is one click and is the person's own statement.
+  - **RONA sets `NOT_READY`** too, and both writes are recorded in `agent_state_log` with
+    `set_by="platform"` and a distinct `reason` (`signed_in`, `rona_missed_offer`).
+  - The *reason* lives in the log, not in a second enum value. "Not taking calls" is one
+    state however it was arrived at; splitting it into `NOT_READY` and `NOT_RESPONDING`
+    would put the same fact in two places and force every consumer to know both.
+- **Reasoning:** this is `D45`'s rule — *the platform never asserts a state the person did
+  not choose* — applied to the two gaps it did not cover. Starting an agent READY hands a
+  call to someone who just opened the tab and is making coffee; the caller pays for that
+  with a full offer timeout. Setting them to BREAK after a missed offer fabricates a reason
+  and quietly corrupts the one dataset workforce planning actually uses.
+- **Why `set_by` earns its column:** "they chose break" and "we stopped offering because
+  nobody picked up" are very different facts about the same person, and a supervisor
+  looking at a shift needs to tell them apart. Without the field they are indistinguishable.
+- **An agent still cannot declare `NOT_READY` for themselves** — the service rejects it. A
+  person saying "I am not ready" is really saying break, lunch, training or admin, and
+  collapsing those into one value throws away the only thing the log is good for.
+- **Correction to `D45` while implementing this:** its text says offerable is "`AVAILABLE`
+  and intent in (`ready`, `last_call`)". That is a slip in the prose. `LAST_CALL` means
+  *finish the one I am on, then stop*, so it must **not** be offered a new caller — which is
+  what `AgentPresence.accepts_new_callers` has always done. The code was right; the
+  sentence was wrong. Asserted now by a test rather than left to be re-derived.
+- **Tradeoffs:** one more enum value, and an agent who signs in and starts working without
+  pressing Ready sits idle. That is visible on their own screen and is the safe direction to
+  fail in.
+
+## D52. An agent who declined or missed a call is excluded from re-matching it
+- **Problem:** the matcher solves the whole waiting pool globally every tick and has no
+  memory. On the tick after a decline or a RONA timeout it re-computes the same matrix,
+  reaches the same optimum, and offers the same caller to the same desk. The caller watches
+  one agent not answer, forever, and every individual decision is defensible.
+- **Decision:** `AssignmentService` keeps the set of agents who have already been offered
+  and rejected each call, and `WaitingCall.excluded_agent_ids` feeds it into the matcher as
+  a **hard filter** returning `"already_offered"`. Both a decline and a timeout exclude;
+  a *cancel* (the caller hung up) does not, because nobody did anything wrong.
+- **Reasoning for a hard filter rather than a penalty:** it is the same argument as `D22`.
+  A penalty large enough to work is a hard filter with extra steps, and a penalty small
+  enough to be a penalty re-offers the call as soon as everyone else is busy. More
+  importantly the filter *names itself* in the decision record — "already offered to A001"
+  is the answer to "why is this caller still waiting", and a score cannot say it.
+- **Consequence:** with `D50` in place the two failure shapes stay legible — a call whose
+  only qualified agent has already declined now reports `no_qualified_agent` with an
+  `already_offered` exclusion visible in its candidate list, rather than looking like a
+  skill gap.
+- **Future:** the exclusion is per-call and lives as long as the call does. If a shift ever
+  runs long enough that re-offering a declined call becomes reasonable, that is a timed
+  expiry on this set — not a softening of the filter.

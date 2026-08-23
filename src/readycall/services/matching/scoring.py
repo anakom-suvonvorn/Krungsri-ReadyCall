@@ -56,6 +56,10 @@ class WaitingCall:
     is_vulnerable: bool = False
     #: Survives a re-match; never reset by a fit change (`QueueEntry.waiting_credit_s`).
     waiting_credit_s: float = 0.0
+    #: Agents who already declined or missed this call (`D33`). A hard filter, not a
+    #: penalty: without it the global solver re-picks the same best agent on the very
+    #: next tick and the caller watches one desk not answer, indefinitely.
+    excluded_agent_ids: tuple[str, ...] = ()
 
     @property
     def total_wait_s(self) -> float:
@@ -69,6 +73,11 @@ def hard_filter(
     weights: MatchingWeights,
 ) -> str | None:
     """Return the name of the first filter that fails, or `None` if the agent qualifies."""
+    if agent.agent_id in call.excluded_agent_ids:
+        # Checked first: "they already turned this call down" is a better explanation than
+        # any of the others, and it is the one a supervisor asks about.
+        return "already_offered"
+
     if weights.require_skill and agent.proficiency_for(call.required_skill) <= 0.0:
         return "skill"
 

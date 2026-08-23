@@ -213,8 +213,18 @@ class AgentSystemState(StrEnum):
 
 
 class AgentIntent(StrEnum):
-    """Set by the person (`D33`)."""
+    """Set by the person (`D33`).
 
+    `NOT_READY` is the one value the **platform** may also write, and only in two
+    situations, both recorded with `set_by="platform"` in the state log (`D51`): on
+    sign-in, because the person has not declared anything yet and the platform must
+    never assert a state they did not choose (`D45`); and after a missed offer, so a
+    distracted agent cannot black-hole the queue (RONA, `D33`). The *reason* lives in
+    the log, not in a second enum value - "not taking calls" is one state, however it
+    was arrived at.
+    """
+
+    NOT_READY = "not_ready"
     READY = "ready"
     BREAK = "break"
     LUNCH = "lunch"

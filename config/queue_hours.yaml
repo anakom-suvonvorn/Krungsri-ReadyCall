@@ -1,0 +1,79 @@
+# When each queue is open. Part of the domain pack (`D28`), referenced by the `hours:`
+# field on every queue in `skills.yaml`.
+#
+# Two named schedules today. Motor claims is `always` because a crash does not check the
+# time; policy servicing is `business` because nobody needs a renewal quote at 3 a.m.
+#
+# A closed queue is NOT a dead end (`D25`): the caller is offered a briefed callback,
+# which runs the same intake pipeline and lands in the morning queue already summarised.
+# That is why this file matters at P2b — "closed" is a routing outcome, not an error.
+
+version: 1
+
+# Thailand has no daylight saving and has sat at UTC+7 since 1920, but the zone is named
+# rather than hardcoded as +07:00 so the rule stays a rule. NOTE (Windows): `zoneinfo`
+# has no tz database of its own on Windows and raises `ZoneInfoNotFoundError` unless the
+# `tzdata` package is installed. It is a declared dependency for exactly this reason —
+# a fixed offset would have hidden the problem on the one platform we demo from.
+timezone: Asia/Bangkok
+
+schedules:
+  always:
+    label_th: "ตลอด 24 ชั่วโมง"
+    always_open: true
+    # Deliberately ignores the holiday list below. A 24/7 claims line is 24/7 on New
+    # Year's Day too — that is the day people crash cars.
+    observes_holidays: false
+
+  extended:
+    label_th: "เวลาทำการขยาย"
+    always_open: false
+    # In-patient pre-authorisation (`q_health_ipd`). Admissions do not stop at six, but
+    # this is not a 24/7 desk either — 07:00–22:00 every day, holidays included, because
+    # a hospital admitting someone on Songkran still needs an answer.
+    observes_holidays: false
+    weekly:
+      mon: ["07:00-22:00"]
+      tue: ["07:00-22:00"]
+      wed: ["07:00-22:00"]
+      thu: ["07:00-22:00"]
+      fri: ["07:00-22:00"]
+      sat: ["07:00-22:00"]
+      sun: ["07:00-22:00"]
+
+  business:
+    label_th: "เวลาทำการ"
+    always_open: false
+    observes_holidays: true
+    # Local time, 24-hour, inclusive start / exclusive end. Multiple windows per day are
+    # allowed (a lunch break would be two windows); we do not close for lunch, because
+    # the queue does not — individual agents go to LUNCH on their own axis (`D33`).
+    weekly:
+      mon: ["08:30-18:00"]
+      tue: ["08:30-18:00"]
+      wed: ["08:30-18:00"]
+      thu: ["08:30-18:00"]
+      fri: ["08:30-18:00"]
+      sat: ["09:00-16:00"]
+      sun: []
+
+# Thai public holidays. Dates only — a holiday closes a `business` queue for the whole
+# day. Straw-man list for 2026; the real one comes from Krungsri's HR calendar and is a
+# config change, not a code change.
+holidays:
+  - { date: "2026-01-01", label_th: "วันขึ้นปีใหม่" }
+  - { date: "2026-03-03", label_th: "วันมาฆบูชา" }
+  - { date: "2026-04-06", label_th: "วันจักรี" }
+  - { date: "2026-04-13", label_th: "วันสงกรานต์" }
+  - { date: "2026-04-14", label_th: "วันสงกรานต์" }
+  - { date: "2026-04-15", label_th: "วันสงกรานต์" }
+  - { date: "2026-05-01", label_th: "วันแรงงานแห่งชาติ" }
+  - { date: "2026-05-04", label_th: "วันฉัตรมงคล" }
+  - { date: "2026-06-03", label_th: "วันเฉลิมพระชนมพรรษาสมเด็จพระนางเจ้าฯ" }
+  - { date: "2026-07-28", label_th: "วันเฉลิมพระชนมพรรษาพระบาทสมเด็จพระเจ้าอยู่หัว" }
+  - { date: "2026-08-12", label_th: "วันแม่แห่งชาติ" }
+  - { date: "2026-10-13", label_th: "วันคล้ายวันสวรรคต ร.9" }
+  - { date: "2026-10-23", label_th: "วันปิยมหาราช" }
+  - { date: "2026-12-05", label_th: "วันพ่อแห่งชาติ" }
+  - { date: "2026-12-10", label_th: "วันรัฐธรรมนูญ" }
+  - { date: "2026-12-31", label_th: "วันสิ้นปี" }

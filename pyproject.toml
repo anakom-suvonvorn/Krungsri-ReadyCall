@@ -12,6 +12,7 @@ dependencies = [
     "pydantic-settings>=2.5",
     "structlog>=24.4",
     "pyyaml>=6.0",
+    "tzdata>=2026.3",
 ]
 
 [project.optional-dependencies]
