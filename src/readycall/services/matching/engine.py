@@ -74,7 +74,7 @@ class MatchingEngine:
 
         agents = [a for a in await self._directory.list_agents() if a.agent_id in presence]
         if not agents:
-            return [self._no_candidates(call, now, watch) for call in calls]
+            return [self._nobody_online(call, now, watch) for call in calls]
 
         # --- 1 + 2: candidates and scores ---------------------------------------------
         matrix: list[list[float]] = []
@@ -116,15 +116,28 @@ class MatchingEngine:
             )
             chosen_index = assignment[index]
             if chosen_index is None:
+                # WHY it went unplaced, not just THAT it did (`D50`). The solver returns no
+                # column for two opposite reasons and used to report both as "no agent with
+                # the skill is available" - which was simply false whenever a qualified
+                # agent existed and had merely been won by a higher-scoring call.
+                qualified = sum(1 for j in range(len(agents)) if breakdowns[index][j][2] is None)
                 decisions.append(
                     MatchingDecision(
                         decision_id=ids.decision_id(),
                         call_session_id=call.call_session_id,
                         at=now,
-                        kind=MatchKind.NO_CANDIDATES,
+                        kind=(
+                            MatchKind.ALL_QUALIFIED_BUSY
+                            if qualified
+                            else MatchKind.NO_QUALIFIED_AGENT
+                        ),
                         candidates=candidates,
                         urgency=urgency,
-                        rationale_th="ไม่มีเจ้าหน้าที่ที่มีทักษะ/ภาษาที่ตรงและว่างอยู่",
+                        rationale_th=(
+                            f"เจ้าหน้าที่ที่ตรงทักษะ {qualified} คนกำลังรับสายอื่นอยู่"
+                            if qualified
+                            else "ไม่มีเจ้าหน้าที่ที่มีทักษะ/ภาษาที่ตรงออนไลน์อยู่"
+                        ),
                         weights_version=self._weights.version,
                         solver=self._solver_name,
                         decide_ms=watch.elapsed_ms(),
@@ -210,14 +223,19 @@ class MatchingEngine:
             return MatchKind.DEFER, best[0]
         return MatchKind.ASSIGN, None
 
-    def _no_candidates(
+    def _nobody_online(
         self, call: WaitingCall, now: datetime, watch: Stopwatch
     ) -> MatchingDecision:
+        """An empty floor is the degenerate case of "nobody qualified" (`D50`).
+
+        It keeps its own rationale because the operational response differs: a skill gap
+        needs a differently-skilled agent, an empty floor needs *anyone*.
+        """
         return MatchingDecision(
             decision_id=ids.decision_id(),
             call_session_id=call.call_session_id,
             at=now,
-            kind=MatchKind.NO_CANDIDATES,
+            kind=MatchKind.NO_QUALIFIED_AGENT,
             urgency=score_urgency(call, self._weights),
             rationale_th="ไม่มีเจ้าหน้าที่ออนไลน์",
             weights_version=self._weights.version,

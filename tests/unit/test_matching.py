@@ -261,8 +261,111 @@ async def test_no_agents_online_is_a_decision_not_a_crash(
 ) -> None:
     engine = MatchingEngine(directory=directory, weights=weights, clock=clock)
     decision = (await engine.match([make_call()], {}))[0]
-    assert decision.kind is MatchKind.NO_CANDIDATES
+    assert decision.kind is MatchKind.NO_QUALIFIED_AGENT
     assert decision.chosen_agent_id is None
+
+
+class ListDirectory:
+    """An `AgentDirectory` over a fixed list, for contrived rosters."""
+
+    name = "list"
+
+    def __init__(self, agents: list[Agent]) -> None:
+        self._agents = agents
+
+    async def get_agent(self, agent_id: str) -> Agent | None:
+        return next((a for a in self._agents if a.agent_id == agent_id), None)
+
+    async def list_agents(self, *, active_only: bool = True) -> list[Agent]:
+        return [a for a in self._agents if a.is_active or not active_only]
+
+    async def agents_with_skill(self, skill_code: str) -> list[Agent]:
+        return [a for a in self._agents if a.proficiency_for(skill_code) > 0.0]
+
+
+async def test_losing_the_contest_for_an_agent_is_not_a_roster_gap(
+    weights: MatchingWeights, clock: ManualClock
+) -> None:
+    """`D50`: the call that merely lost must not be told nobody is qualified.
+
+    One qualified agent, two callers who both need them. Exactly one can be placed. The
+    other is a CAPACITY problem — the wrong answer here ("no agent with this skill is
+    available") sends a supervisor hiring for a skill they already have on the floor.
+    """
+    only_one = make_agent("A1", skill="motor.claim", prof=0.9)
+    engine = MatchingEngine(directory=ListDirectory([only_one]), weights=weights, clock=clock)
+    presence = {"A1": make_presence("A1", clock=clock)}
+
+    winner = make_call(call_session_id="c_win", waiting_s=120.0)
+    loser = make_call(call_session_id="c_lose", waiting_s=5.0)
+    by_id = {d.call_session_id: d for d in await engine.match([winner, loser], presence)}
+
+    assert by_id["c_win"].chosen_agent_id == "A1"
+    assert by_id["c_lose"].chosen_agent_id is None
+    assert by_id["c_lose"].kind is MatchKind.ALL_QUALIFIED_BUSY
+    # ...and the evidence is right there in the decision: a candidate who passed every
+    # hard filter. That contradiction is what made the old label detectably wrong.
+    assert any(c.fit.hard_filter_failed is None for c in by_id["c_lose"].candidates)
+
+
+async def test_a_skill_nobody_holds_is_a_roster_gap(
+    weights: MatchingWeights, clock: ManualClock
+) -> None:
+    wrong_skill = make_agent("A1", skill="travel.claim", prof=0.9)
+    engine = MatchingEngine(directory=ListDirectory([wrong_skill]), weights=weights, clock=clock)
+    presence = {"A1": make_presence("A1", clock=clock)}
+
+    decision = (await engine.match([make_call()], presence))[0]
+    assert decision.kind is MatchKind.NO_QUALIFIED_AGENT
+    assert all(c.fit.hard_filter_failed is not None for c in decision.candidates)
+
+
+async def test_unplaced_kind_always_agrees_with_the_candidate_list(
+    directory: FixtureAgentDirectory, weights: MatchingWeights, clock: ManualClock
+) -> None:
+    """The invariant, over a full contended load rather than one contrived pair.
+
+    A decision that says "nobody qualified" while listing a qualified candidate is a lie,
+    and it is a lie a reader can catch — so a test can too. Under-staffing the floor makes
+    both kinds occur in the same tick.
+    """
+    roster = await directory.list_agents()
+    presence = {a.agent_id: make_presence(a.agent_id, clock=clock) for a in roster[:3]}
+    calls = [
+        make_call(
+            call_session_id=f"c{i}",
+            required_skill=skill,
+            queue_id="q_general",
+            # Past `defer_max_wait_s` (60) so nothing is held back, and well under the
+            # 180 s fallback ceiling. Without this the contended motor call is DEFERred
+            # and the ALL_QUALIFIED_BUSY branch never runs.
+            waiting_s=float(70 + i * 7),
+        )
+        # Four motor calls against three motor-capable agents guarantees one loses the
+        # contest outright; `life`/`health` have nobody at all on this cut-down floor.
+        for i, skill in enumerate(
+            ["motor.claim"] * 4 + ["life.claim", "health.ipd"],
+        )
+    ]
+
+    engine = MatchingEngine(directory=directory, weights=weights, clock=clock)
+    decisions = await engine.match(calls, presence)
+    # `chosen_agent_id is None` covers THREE meanings, not two: a deferred call is being
+    # held on purpose for a better agent, which is neither a roster gap nor a capacity
+    # one. (The first draft of this test missed that and failed on a DEFER.)
+    unplaced = [d for d in decisions if d.chosen_agent_id is None and d.kind is not MatchKind.DEFER]
+    assert unplaced, "three agents cannot cover six calls across three skills"
+
+    kinds = set()
+    for d in unplaced:
+        had_qualified = any(c.fit.hard_filter_failed is None for c in d.candidates)
+        expected = MatchKind.ALL_QUALIFIED_BUSY if had_qualified else MatchKind.NO_QUALIFIED_AGENT
+        assert d.kind is expected, f"{d.call_session_id}: {d.kind} contradicts its candidates"
+        kinds.add(d.kind)
+    assert kinds == {MatchKind.ALL_QUALIFIED_BUSY, MatchKind.NO_QUALIFIED_AGENT}, (
+        "this fixture is meant to exercise BOTH reasons; if it stops doing so the test "
+        "has quietly become weaker than it looks"
+    )
 
 
 async def test_past_the_wait_ceiling_takes_anyone_qualified(

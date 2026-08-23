@@ -107,8 +107,13 @@ if not problems:
 print("\nREFERENCES TO REMOVED THINGS")
 gone = {
     r"CallState\.RATING": "the RATING state was deleted (D46)",
+    # Lowercase too: a stale *pasted transcript* in PROJECT_STATE survived the D46 audit
+    # because it said `wrap_up -> rating`, not `CallState.RATING`. Copied-in tool output
+    # is exactly the kind of doc that rots invisibly.
+    r"-> rating\b|rating -> ": "no call transitions through rating any more (D46)",
     r"DemoProject/": "DemoProject was abandoned (D34)",
     r"time\.monotonic\(\)": "replaced by perf_counter (B3) - ok inside B3/clock docstrings",
+    r"\bno_candidates\b": "split into no_qualified_agent / all_qualified_busy (D50, B4)",
 }
 found = []
 for path in targets:

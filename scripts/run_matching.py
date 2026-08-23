@@ -161,16 +161,25 @@ async def main() -> int:
     print("\n" + "=" * 78)
     print("SUMMARY")
     for kind, count in sorted(kinds.items()):
-        print(f"  {kind:16} {count}")
-    print(f"  assigned         {len(assigned)}/{len(calls)}")
+        print(f"  {kind:20} {count}")
+    print(f"  {'assigned':20} {len(assigned)}/{len(calls)}")
     if unassigned:
         worst = max(unassigned, key=lambda c: c.total_wait_s)
         print(f"  longest unassigned wait: {worst.total_wait_s:.0f}s ({worst.intent_code})")
         starved = [c for c in unassigned if c.total_wait_s >= weights.max_wait_before_any_agent_s]
         print(f"  past the wait ceiling and STILL unassigned: {len(starved)}")
-        if starved:
-            print("    (all of these failed a HARD filter - skill or language - so waiting")
-            print("     longer cannot help them; they need a qualified agent to come online)")
+        # Split by WHY, and read it off the decisions rather than asserting it (`D50`).
+        # The old text claimed every starved caller had failed a hard filter, which was a
+        # guess that happened to hold on the default seed.
+        kind_by_call = {d.call_session_id: d.kind for d in decisions}
+        roster_gap = [c for c in starved if kind_by_call[c.call_session_id] == "no_qualified_agent"]
+        capacity = [c for c in starved if kind_by_call[c.call_session_id] == "all_qualified_busy"]
+        if roster_gap:
+            print(f"    ROSTER gap   {len(roster_gap)}: no qualified agent is online at all,")
+            print("                    so waiting longer cannot help these callers")
+        if capacity:
+            print(f"    CAPACITY     {len(capacity)}: qualified agents exist but are all busy,")
+            print("                    so these callers are next as one frees up")
 
     if args.compare:
         matrix = _matrix(calls, roster, presence, weights, clock)

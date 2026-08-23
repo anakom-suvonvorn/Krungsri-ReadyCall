@@ -1,7 +1,7 @@
 # PROJECT_STATE
 
 _What this project is, what exists, what doesn't, and where everything lives._
-_Last updated: 2026-08-23._
+_Last updated: 2026-08-24._
 
 ---
 
@@ -41,7 +41,7 @@ As of P2a the identity ladder, the menu walk, the context assembler, the brief b
 API and the matching engine are all real services doing real work - only the *edges* (phone, speech,
 AI, the bank's data, the agent roster) are still fakes.
 
-Verified on 2026-08-24: **225 tests pass**, `ruff check` and `ruff format --check` clean,
+Verified on 2026-08-24: **228 tests pass**, `ruff check` and `ruff format --check` clean,
 `mypy --strict` clean over 70 source files, and all three scenarios replay byte-identically.
 
 ```
@@ -57,9 +57,16 @@ TIMELINE
   +  45.50s  matched -> offered                           offered_to:A006
   +  52.50s  offered -> in_call                           agent_accepted
   + 292.50s  in_call -> wrap_up                           caller_hung_up
-  + 327.50s  wrap_up -> rating                            wrapup_saved
-  + 327.50s  rating -> closed                             rating_received
+  + 327.50s  wrap_up -> closed                            wrapup_saved
+
+RATING
+  csat=4/5  via customer_ivr  at +297.5s
+  (call closed at +327.5s - the rating landed 30.0s earlier)
 ```
+
+The last two lines are the point of `D46`: the rating arrived **30 seconds before** the call
+closed, while the agent was still writing up. A `RATING` state after `WRAP_UP` asserted an
+ordering that does not hold.
 
 **One project, not two** (`D34`): the `DemoProject/` split is dropped. Each phase already produces a
 demonstrable slice, so the demo is simply the current state of the system with a chosen scenario.
@@ -202,7 +209,8 @@ assurance-gated disclosure** · ☑ mock-core generator · ☑ docker-compose + 
 capacity) · ☑ fit + urgency scoring with full breakdowns · ☑ **Hungarian solver, ours**
 (`D49`) + greedy for comparison · ☑ guard rails: wait ceiling, anti-hot-spot, guarded
 deferral · ☑ persisted rationale on every decision incl. non-assignments · ☑ matching
-simulator with `--compare`
+simulator with `--compare` · ☑ unplaced callers say **which** of the two reasons applies —
+roster gap vs capacity (`D50`, `B4`)
 
 **P2b — the workstation** ☐ queues + hours · ☐ presence heartbeat · ☐ **offer/accept + RONA
 + ACW** (`D45`) · ☐ agent WebSocket · ☐ workstation shell incl. call-control bar (stubbed

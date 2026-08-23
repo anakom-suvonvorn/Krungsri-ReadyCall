@@ -239,7 +239,12 @@ class MatchKind(StrEnum):
     DEFER = "defer"
     DEFER_REJECTED = "defer_rejected"
     FALLBACK = "fallback"  # past the wait ceiling: any qualified agent
-    NO_CANDIDATES = "no_candidates"
+    # The two ways a call goes unplaced are OPPOSITE messages to a supervisor, so they are
+    # two kinds rather than one (`D50`). Nobody qualified is a ROSTER problem - waiting
+    # cannot help, someone with the skill has to come online. All qualified busy is a
+    # CAPACITY problem - this caller is next as soon as one of them frees up.
+    NO_QUALIFIED_AGENT = "no_qualified_agent"
+    ALL_QUALIFIED_BUSY = "all_qualified_busy"
 
 
 class BriefKind(StrEnum):

@@ -1,7 +1,7 @@
 # DECISIONS
 
 _Significant engineering decisions and their rationale. Append new ones at the bottom; never silently reverse one without a new entry explaining why._
-_Last updated: 2026-08-23._
+_Last updated: 2026-08-24._
 
 Format per entry: **Problem → Decision → Reasoning → Alternatives → Tradeoffs → Future.**
 
@@ -911,3 +911,34 @@ _`D49` added 2026-08-24, during P2a._
 - **Tradeoff:** we own an algorithm we must maintain. Mitigated by the property test —
   Hungarian must never score below greedy, over pseudo-random matrices — which is cheap and
   catches almost any regression.
+
+## D50. "Unplaced" is two outcomes, not one, because they demand opposite responses
+- **Problem:** the matcher had a single `no_candidates` outcome for every caller it could not
+  place. Two genuinely different situations collapsed into it: *nobody online holds the required
+  skill or language*, and *qualified agents exist but every one of them was won by a
+  higher-scoring call this tick*. Shipped, this was actively misleading — see `B4`, where twelve
+  of seventeen callers were told no qualified agent existed while the decision record listed one.
+- **Decision:** `MatchKind.NO_CANDIDATES` is replaced by **`NO_QUALIFIED_AGENT`** and
+  **`ALL_QUALIFIED_BUSY`**, selected by whether any candidate in that row passed every hard
+  filter. Each carries its own Thai rationale; the busy one states how many qualified agents are
+  occupied. An empty floor is reported as `NO_QUALIFIED_AGENT` with its own wording, since the
+  response there is "get anyone online", not "get this skill online".
+- **Reasoning:** the whole justification for storing a decision per call, including the ones we
+  chose not to assign (`D22`, `D18`), is that someone can ask *"why is this caller still
+  waiting?"* and get a true answer. A roster gap and a capacity shortfall lead a supervisor to do
+  opposite things — retrain versus staff up — so an outcome that cannot tell them apart is not
+  an explanation, it is noise wearing an explanation's clothes.
+- **Consequence beyond the label:** the same distinction now drives the starvation summary in
+  `scripts/run_matching.py`, which previously *asserted* that every caller past the wait ceiling
+  had failed a hard filter. That claim is false on `--seed 123`. Reported facts are now read off
+  the stored decisions rather than reasoned about in the printer.
+- **Alternatives:** keep one kind and put the nuance only in the rationale string — rejected,
+  because a free-text Thai sentence cannot be aggregated, alerted on, or charted, and the whole
+  point is that a supervisor sees "eleven callers waiting on a skill gap" at a glance. Add a
+  boolean `had_qualified_candidates` flag beside the existing kind — rejected as a second source
+  of truth for one fact.
+- **Tradeoffs:** one more enum member for consumers to handle, and any future dashboard must
+  treat both as "unplaced" when counting. Cheap next to the misdirection it removes.
+- **Future:** `ALL_QUALIFIED_BUSY` is the natural trigger for a "we are short-staffed **right
+  now**" signal, and the count it carries is already the number that matters. A roster gap that
+  persists across ticks is a different alert on a much slower clock.

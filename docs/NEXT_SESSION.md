@@ -12,7 +12,7 @@ it, why they are calling from what they pressed or tapped, everything we hold ab
 assembled before the phone is answered, the brief an agent reads with disclosure gated by
 identity — and now **which agent should take the call, and why**.
 
-Verified 2026-08-24: **225 tests pass**, `ruff check` + `ruff format --check` clean,
+Verified 2026-08-24: **228 tests pass**, `ruff check` + `ruff format --check` clean,
 `mypy --strict` clean over 70 files, all scenarios replay byte-identically, 50/50 diagrams
 current.
 
@@ -50,7 +50,8 @@ build step (`D47`). Identity comes from a `SessionResolver`, never the request b
 language, capacity) · fit + urgency with full breakdowns · **our own Hungarian solver**
 (`D49`) plus greedy for comparison · guard rails (wait ceiling, anti-hot-spot, guarded
 deferral) · a `MatchingDecision` per call **including non-assignments**, with every candidate
-and a Thai rationale · `scripts/run_matching.py --compare`.
+and a Thai rationale · `scripts/run_matching.py --compare`. Unplaced callers report **which
+of the two reasons** applies (`D50`, `B4`).
 
 ## Next steps (in order)
 
@@ -102,6 +103,9 @@ reordered but never speak customer detail aloud.
   agent declares *any* next state. Nothing is ever auto-saved.
 - **A rating is NOT a call state** (`D46`). Call state describes progress, never data completeness.
 - **Hard filters exclude, they do not down-rank** (`D22`). A failed filter is not a low score.
+- **A call can go unplaced for two opposite reasons** (`D50`, `B4`) — `NO_QUALIFIED_AGENT`
+  (roster gap; waiting cannot help) vs `ALL_QUALIFIED_BUSY` (capacity; they are next). And
+  `chosen_agent_id is None` covers a **third** case: a deliberate `DEFER`.
 - **Never hardcode an insurance literal in `services/`** — it goes in `config/` (`D28`).
 - **Never `datetime.now()` or a raw random id** outside `clock.py`/`ids.py` (`D35`).
 - **`docs/` is excluded from `ruff format`** — the explanations are verbatim records.

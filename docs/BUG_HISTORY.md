@@ -1,7 +1,7 @@
 # BUG_HISTORY
 
 _Solved bugs and the lessons they bought. **Search this file FIRST when debugging** — the answer may already be here._
-_Last updated: 2026-08-23._
+_Last updated: 2026-08-24._
 
 Format per entry:
 
@@ -92,6 +92,49 @@ Format per entry:
 - **Also worth noting:** this was found by *running the thing and looking at it*, not by a
   test. No assertion would have caught it — `0.0` is a perfectly valid float and the code
   was doing exactly what it said. Some bugs only show up when a human reads the output.
+
+## B4. The matcher told supervisors "nobody is qualified" while listing a qualified agent
+
+- **Symptoms:** `run_matching.py --calls 25` reported `no_candidates` on 17 of 25 callers, with
+  the Thai rationale *"ไม่มีเจ้าหน้าที่ที่มีทักษะ/ภาษาที่ตรงและว่างอยู่"* — "no agent with matching
+  skill/language is available". **Twelve of those seventeen printed a qualified candidate on the
+  very next line**, e.g. `call_sim_002 -> no_candidates … A006 score=2.276 skill=0.90`.
+- **Found by:** reading the output aloud while explaining it to the user. Nothing failed, nothing
+  was slow, and every test passed. The contradiction is only visible to someone who reads the
+  rationale and the candidate list *together* — which is exactly what a supervisor does.
+- **Root cause:** `MatchingEngine.match` treated "the solver returned no column for this row" as a
+  single condition and always emitted `MatchKind.NO_CANDIDATES`. The solver returns no column for
+  **two unrelated reasons**: the row is entirely `IMPOSSIBLE` (every agent failed a hard filter),
+  or the row had qualified agents who were all won by higher-scoring calls in the same tick. One
+  is a roster gap, the other is a capacity shortfall.
+- **Why it mattered more than a cosmetic label:** the two produce **opposite operational
+  responses**. "No agent with this skill is online" tells a supervisor to fix the roster — hire or
+  retrain for a skill they may already have on the floor. "They are all busy" tells them the
+  caller is next as soon as someone frees. Acting on the wrong one wastes the day.
+- **A second instance of the same fault, in the summary:** `run_matching.py` printed
+  *"all of these failed a HARD filter — so waiting longer cannot help them"* unconditionally for
+  every caller past the wait ceiling. That was an **assertion, not a measurement**. It happened to
+  be true on the default seed. On `--seed 123` it is provably false: two callers are past the
+  ceiling and one of them (`health.ipd.preauth`, waiting 200 s) has a qualified agent who is
+  merely busy.
+- **Fix:** `MatchKind.NO_CANDIDATES` split into `NO_QUALIFIED_AGENT` and `ALL_QUALIFIED_BUSY`,
+  chosen by whether any candidate in the row passed every hard filter, each with its own rationale
+  (the busy one names the count). The summary now reads the reason off the stored decisions and
+  splits the starved callers into `ROSTER gap` and `CAPACITY` (`D50`).
+- **Verification:** 228 tests pass. Three new tests: a contrived one-agent/two-caller contest where
+  the loser must be `ALL_QUALIFIED_BUSY` *and* must list a candidate that passed every filter; a
+  roster-gap case; and an invariant over a contended load asserting the kind can never contradict
+  its own candidate list — with a guard that fails if the fixture stops exercising both branches.
+  On the real 25-call run the 17 became **12 `all_qualified_busy` + 5 `no_qualified_agent`**, and
+  the five are the `life` calls, correct because no life-skilled agent is online in that draw.
+- **Lesson:** the same shape as `B3` and the Hungarian bug — **a confident, plausible, wrong answer
+  is far more dangerous than a crash**, and none of the three were caught by a test. What made this
+  one catchable is that the decision record carries its own evidence: the candidate list
+  contradicts the label, so a *test* can check the two against each other. Where an explanation is
+  the product, assert that the explanation agrees with the data it was derived from.
+- **Writing the first version of that invariant test also surfaced a third meaning** of
+  `chosen_agent_id is None`: a deferred call, deliberately held. Worth remembering before treating
+  that field as a binary.
 
 ---
 

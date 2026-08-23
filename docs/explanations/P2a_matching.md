@@ -181,4 +181,15 @@ uv run python scripts/run_matching.py --seed 123 --calls 25   # full per-call re
 
 _Append here rather than editing above._
 
-- (nothing yet)
+- **2026-08-24 — `no_candidates` no longer exists; it was two outcomes wearing one name
+  (`D50`, `B4`).** Anywhere above that says a call came back `no_candidates`, read
+  **`NO_QUALIFIED_AGENT`** (nobody online holds the skill or language — a roster gap,
+  waiting cannot help) or **`ALL_QUALIFIED_BUSY`** (qualified agents exist but were all won
+  by higher-scoring calls this tick — a capacity shortfall, this caller is next). The old
+  single kind claimed the first while the decision record often listed a qualified
+  candidate: on the default 25-call run, **12 of 17 unplaced callers were mislabelled**.
+- The starvation summary in `run_matching.py` used to assert that every caller past the wait
+  ceiling had failed a hard filter. It now reads the reason off the decisions. On
+  `--seed 123` the old text was flatly wrong.
+- `chosen_agent_id is None` means **three** things, not two — the third is a deliberate
+  `DEFER`. Filter it out before reasoning about unplaced callers.
