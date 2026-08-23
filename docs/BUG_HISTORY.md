@@ -55,6 +55,46 @@ Format per entry:
 
 ---
 
+## B3. Every stage timing recorded as exactly `0.0 ms` on Windows
+
+- **Symptoms:** the customer simulator's headline metric read **"0.0 ms to assemble
+  context"**. Not missing, not an error — a confident zero. The same zero appeared in
+  `context_build_ms` on the intent status endpoint and in every `stage_timings_ms` entry
+  written by the scenario runner, which is why nobody had noticed: a plausible-looking
+  number that happens to be wrong is much easier to miss than a crash.
+- **Root cause:** `SystemClock.monotonic_ms()` used `time.monotonic()`. On Windows that is
+  backed by the ~15.6 ms system tick, so anything faster than a tick measures as zero.
+  Measured on the dev laptop:
+
+  ```
+  monotonic    resolution: 0.015625 s   -> 2 distinct values in 200,000 samples
+  perf_counter resolution: 1e-07 s      -> 200,000 distinct values
+  ```
+
+  Every stage in the system so far — context assembly against fixtures, brief building,
+  the domain-pack walk — completes in well under 15 ms, so *all* of them read as `0.0`.
+- **Investigation:** the giveaway was that the number was exactly `0.0` rather than small
+  and noisy. A real measurement of something fast jitters; a clean zero across every
+  unrelated stage means the instrument, not the code. Confirmed with
+  `time.get_clock_info()` and a distinct-values count on both clocks.
+- **Fix:** `SystemClock.monotonic_ms()` now uses `time.perf_counter()`. Both clocks are
+  monotonic, which is the property `Stopwatch` needs; only `perf_counter` also has the
+  resolution. One line, plus a docstring saying why so nobody "simplifies" it back.
+- **Verification:** the same request now reports `context_build_ms = 0.400…`. Full suite
+  green; scenario replays stay byte-identical because they use `ManualClock`, which was
+  never affected.
+- **Lesson:** this quietly gutted `D18` — *every stage writes a timing record* — and the
+  pitch's own claim that the demo can **show** "context ready before the phone rang". A
+  timing story told with an instrument that cannot resolve the thing being timed is worse
+  than no story, because it looks like it works. **`time.monotonic()` is for measuring
+  elapsed time coarsely; `time.perf_counter()` is for measuring performance.** They are not
+  interchangeable on Windows, which is the demo platform.
+- **Also worth noting:** this was found by *running the thing and looking at it*, not by a
+  test. No assertion would have caught it — `0.0` is a perfectly valid float and the code
+  was doing exactly what it said. Some bugs only show up when a human reads the output.
+
+---
+
 ## Areas where bugs are expected (write them up when they happen)
 
 Recording these up front so the first person to hit one recognises it as a known-risky area rather

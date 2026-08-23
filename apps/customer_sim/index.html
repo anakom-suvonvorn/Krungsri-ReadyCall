@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ReadyCall — Customer Simulator</title>
+<!--
+  The customer side of the demo: a phone-shaped stand-in for the Krungsri app.
+
+  It talks ONLY to the public /v1 API - the same contract the real app would call. There is
+  no privileged back door and no simulator-specific endpoint, which is the whole point: when
+  the real app replaces this page, nothing on the server changes.
+
+  Deliberately one file with no build step (`D47`). A demo should not be able to fail
+  because a bundler did.
+-->
+<style>
+  :root {
+    --bg: #f2f4f8; --panel: #ffffff; --ink: #0b2545; --muted: #5b6b84;
+    --line: #dfe5ee; --brand: #1f6feb; --brand-ink: #ffffff;
+    --ok: #2f9e5f; --ok-bg: #e9f7ef; --warn: #e8a33d; --warn-bg: #fff8ec;
+    --radius: 14px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117; --panel: #161b22; --ink: #e6edf3; --muted: #9aa7b8;
+      --line: #2a3240; --ok-bg: #10251a; --warn-bg: #2a2113;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.55 "Segoe UI", "Noto Sans Thai", Tahoma, system-ui, sans-serif;
+    display: flex; justify-content: center; padding: 20px 14px 60px;
+  }
+  .wrap { width: 100%; max-width: 1040px; display: grid; gap: 18px; grid-template-columns: minmax(0,380px) minmax(0,1fr); align-items: start; }
+  @media (max-width: 860px) { .wrap { grid-template-columns: 1fr; } }
+
+  h1 { font-size: 20px; margin: 0 0 2px; letter-spacing: -0.01em; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 10px; }
+  p  { margin: 0 0 10px; }
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 16px; }
+
+  .phone {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 26px;
+    padding: 18px; box-shadow: 0 10px 30px rgba(10,25,60,.10);
+  }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }
+  .card + .card { margin-top: 14px; }
+
+  button {
+    font: inherit; cursor: pointer; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--panel); color: var(--ink); padding: 10px 14px; width: 100%;
+    text-align: left; transition: border-color .15s, transform .05s;
+  }
+  button:hover:not(:disabled) { border-color: var(--brand); }
+  button:active:not(:disabled) { transform: translateY(1px); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  button.primary { background: var(--brand); color: var(--brand-ink); border-color: var(--brand); text-align: center; font-weight: 600; }
+  button.ghost { text-align: center; }
+  .stack { display: grid; gap: 8px; }
+
+  .persona b { display: block; }
+  .persona span { color: var(--muted); font-size: 13px; }
+
+  .plan { border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+  .plan.active { border-color: var(--brand); background: color-mix(in srgb, var(--brand) 7%, transparent); }
+
+  .kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; font-size: 13px; }
+  .kv dt { color: var(--muted); }
+  .kv dd { margin: 0; font-variant-numeric: tabular-nums; word-break: break-all; }
+
+  .pill { display: inline-block; font-size: 12px; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+  .pill.ok { background: var(--ok-bg); border-color: var(--ok); color: var(--ok); }
+  .pill.warn { background: var(--warn-bg); border-color: var(--warn); color: var(--warn); }
+
+  .log { font: 12px/1.5 ui-monospace, "Cascadia Mono", Consolas, monospace; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px; max-height: 260px; overflow: auto; }
+  .log div { padding: 1px 0; }
+  .log .m { color: var(--muted); }
+  .log .g { color: var(--ok); }
+  .log .w { color: var(--warn); }
+
+  .headline { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .note { font-size: 12px; color: var(--muted); margin-top: 8px; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ── the "phone" ─────────────────────────────────────────────────────── -->
+  <div class="phone">
+    <h1>Krungsri <span style="color:var(--muted);font-weight:400">(simulated app)</span></h1>
+    <div class="sub" id="who">Not signed in</div>
+
+    <section id="step-login">
+      <h2>1 · Sign in</h2>
+      <div class="stack" id="personas"><div class="sub">Loading personas…</div></div>
+      <p class="note">Stands in for the bank's login. The API cannot tell this apart from a real session.</p>
+    </section>
+
+    <section id="step-browse" class="hidden">
+      <h2>2 · Browse your plans</h2>
+      <div class="stack" id="plans"></div>
+      <p class="note">Opening a page posts a context event, which is what becomes
+        “recent activity” on the agent's screen.</p>
+    </section>
+
+    <section id="step-contact" class="hidden" style="margin-top:16px">
+      <h2>3 · Need help?</h2>
+      <button class="primary" id="contact">📞 Contact us about this plan</button>
+      <p class="note">This is the tap the whole product hangs off.</p>
+      <button class="ghost" id="logout" style="margin-top:10px">Sign out</button>
+    </section>
+  </div>
+
+  <!-- ── what the server did ─────────────────────────────────────────────── -->
+  <div>
+    <div class="card">
+      <h2>What the server did</h2>
+      <div id="result-empty" class="sub">Tap <b>Contact</b> to see it.</div>
+
+      <div id="result" class="hidden">
+        <div class="headline"><span id="ms">—</span> <span style="font-size:14px;font-weight:400;color:var(--muted)">to assemble context</span></div>
+        <div class="note" id="ready-note">…</div>
+
+        <div style="margin:14px 0 10px"><span class="pill ok" id="pill-ctx">context ready</span> <span class="pill" id="pill-deg">—</span></div>
+
+        <dl class="kv">
+          <dt>intent</dt><dd id="r-intent">—</dd>
+          <dt>token</dt><dd id="r-token">—</dd>
+          <dt>dial</dt><dd id="r-dial">—</dd>
+          <dt>expires</dt><dd id="r-exp">—</dd>
+          <dt>policies</dt><dd id="r-pol">—</dd>
+          <dt>interactions</dt><dd id="r-int">—</dd>
+          <dt>fields w/ provenance</dt><dd id="r-prov">—</dd>
+        </dl>
+
+        <p class="note">The token is returned <b>once</b>; the server stores only its SHA-256
+          hash. Carrying it on the call is what makes identity <code>L3_VERIFIED</code>
+          instead of a guess from caller ID.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>API calls made</h2>
+      <div class="log" id="log"><div class="m">nothing yet</div></div>
+      <p class="note">Every line is a request to the public <code>/v1</code> API — the same
+        one the real Krungsri app would call. There is no simulator-only endpoint.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const state = { customer: null, personas: [], selected: null };
+
+  const logEl = $("log");
+  let firstLog = true;
+  function log(method, path, status, extra) {
+    if (firstLog) { logEl.innerHTML = ""; firstLog = false; }
+    const row = document.createElement("div");
+    const cls = status >= 200 && status < 300 ? "g" : "w";
+    row.innerHTML = `<span class="m">${method}</span> ${path} ` +
+                    `<span class="${cls}">${status}</span>` +
+                    (extra ? ` <span class="m">${extra}</span>` : "");
+    logEl.appendChild(row);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  async function api(method, path, body) {
+    const opts = { method, credentials: "same-origin", headers: {} };
+    if (body !== undefined) {
+      opts.headers["Content-Type"] = "application/json";
+      opts.body = JSON.stringify(body);
+    }
+    const res = await fetch(path, opts);
+    let data = null;
+    try { data = res.status === 204 ? null : await res.json(); } catch { /* no body */ }
+    log(method, path, res.status);
+    if (!res.ok) throw new Error((data && data.detail) || res.statusText);
+    return data;
+  }
+
+  // --- 1. personas ------------------------------------------------------------------
+  async function loadPersonas() {
+    try {
+      state.personas = await api("GET", "/v1/demo/personas");
+    } catch {
+      $("personas").innerHTML = `<div class="sub">Could not load personas.</div>`;
+      return;
+    }
+    const box = $("personas");
+    box.innerHTML = "";
+    for (const p of state.personas) {
+      const b = document.createElement("button");
+      b.className = "persona";
+      b.innerHTML = `<b>${p.display_name}</b><span>${p.summary}</span>`;
+      b.onclick = () => signIn(p);
+      box.appendChild(b);
+    }
+  }
+
+  async function signIn(persona) {
+    const out = await api("POST", "/v1/demo/session", { customer_id: persona.customer_id });
+    state.customer = { ...persona, display_name: out.display_name };
+    $("who").textContent = `Signed in as ${out.display_name} · ${out.customer_id}`;
+    $("step-login").classList.add("hidden");
+    $("step-browse").classList.remove("hidden");
+    $("step-contact").classList.remove("hidden");
+    renderPlans();
+  }
+
+  // --- 2. browsing posts context events ----------------------------------------------
+  function renderPlans() {
+    const p = state.customer;
+    const pages = [
+      { section: p.entry_screen || "policy.summary", label: p.entry_screen ? "Coverage details" : "Policy summary" },
+      { section: "policy.documents", label: "Documents" },
+      { section: "claims.history", label: "Claim history" },
+    ];
+    const box = $("plans");
+    box.innerHTML = "";
+    for (const page of pages) {
+      const el = document.createElement("button");
+      el.className = "plan";
+      el.innerHTML = `<b>${page.label}</b><br><span class="pill">${page.section}</span>`;
+      el.onclick = async () => {
+        [...box.children].forEach((c) => c.classList.remove("active"));
+        el.classList.add("active");
+        state.selected = page.section;
+        await api("POST", "/v1/app/context-events", {
+          section: page.section,
+          product_code: p.product_code || null,
+          dwell_ms: 4000 + Math.floor(Math.random() * 8000),
+        });
+      };
+      box.appendChild(el);
+    }
+    box.firstChild.click();
+  }
+
+  // --- 3. tap Contact ----------------------------------------------------------------
+  $("contact").onclick = async () => {
+    const p = state.customer;
+    const btn = $("contact");
+    btn.disabled = true;
+    try {
+      const t0 = performance.now();
+      const intent = await api("POST", "/v1/calls/intents", {
+        product_code: p.product_code || null,
+        entry_screen: state.selected || p.entry_screen || null,
+        app_intent: p.app_intent || null,
+        preferred_channel: "pstn",
+      });
+      const roundTrip = performance.now() - t0;
+
+      // The prefetch runs AFTER the response is sent, so poll briefly for it. That the
+      // token arrives before the context is finished is the design working, not a race:
+      // the customer can start dialling immediately (`D6`).
+      let status = null;
+      for (let i = 0; i < 25; i++) {
+        status = await api("GET", `/v1/calls/intents/${intent.intent_id}`);
+        if (status.context_ready) break;
+        await new Promise((r) => setTimeout(r, 60));
+      }
+      render(intent, status, roundTrip);
+    } catch (err) {
+      alert("Failed: " + err.message);
+    } finally {
+      btn.disabled = false;
+    }
+  };
+
+  function render(intent, status, roundTrip) {
+    $("result-empty").classList.add("hidden");
+    $("result").classList.remove("hidden");
+
+    const ms = status && status.context_build_ms != null ? status.context_build_ms : null;
+    $("ms").textContent = ms === null ? "—" : `${ms.toFixed(1)} ms`;
+    $("ready-note").textContent =
+      `The dial target came back in ${roundTrip.toFixed(0)} ms. ` +
+      `Context assembly ran after that, off the request path — so by the time the phone ` +
+      `rings, the non-speech half of the agent's brief already exists.`;
+
+    const ok = status && status.context_ready;
+    $("pill-ctx").className = "pill " + (ok ? "ok" : "warn");
+    $("pill-ctx").textContent = ok ? "context ready" : "context pending";
+    const deg = status && status.degraded ? status.degraded : "—";
+    $("pill-deg").className = "pill " + (deg === "none" ? "ok" : "warn");
+    $("pill-deg").textContent = "degraded: " + deg;
+
+    $("r-intent").textContent = intent.intent_id;
+    $("r-token").textContent = intent.correlation_token.slice(0, 12) + "… (shown once)";
+    $("r-dial").textContent = intent.dial_target;
+    $("r-exp").textContent = new Date(intent.expires_at).toLocaleTimeString();
+    $("r-pol").textContent = status ? status.policies_found : "—";
+    $("r-int").textContent = status ? status.interactions_found : "—";
+    $("r-prov").textContent = status ? status.provenance_fields : "—";
+  }
+
+  $("logout").onclick = async () => {
+    await api("POST", "/v1/demo/logout");
+    location.reload();
+  };
+
+  loadPersonas();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,46 @@
+# DEMO ONLY: who you can log in as in the customer simulator (`D47`).
+#
+# This file exists because the simulator needs *some* way to become an authenticated
+# customer, and building a real identity provider is out of scope - we are a context layer
+# on top of Krungsri's systems, not an auth vendor. Swapping in the bank's real login means
+# deleting this file and pointing `SessionResolver` at their OIDC; nothing else changes.
+#
+# IMPORTANT: this lists **customer ids and screen hints only** - never names, never policy
+# numbers, never anything about the person. Everything shown in the picker is read live
+# through `CoreDataProvider`, so the picker can never drift from the data an agent would
+# actually see, and this file stays safe to commit.
+#
+# `entry_screen` + `app_intent` are what demonstrate `D41`: the screen the customer tapped
+# Contact from answers the second menu question, so the app path skips the keypad entirely.
+
+version: 1
+
+personas:
+  - customer_id: C000001
+    # The pitch's own scenario (Krungsri.pdf p.7): reading the hospitalisation coverage
+    # page, being admitted tomorrow, wants to confirm room and board.
+    entry_screen: coverage.hospitalisation
+    app_intent: health.ipd.preauth
+    product_code: KS-HEALTH-A
+    blurb_en: "Reading hospitalisation coverage - admitted tomorrow"
+    blurb_th: "กำลังดูความคุ้มครองผู้ป่วยใน - พรุ่งนี้ต้องนอนโรงพยาบาล"
+
+  - customer_id: C000002
+    # Holds two policies in *different* lines, which is the case that makes the assembler
+    # decline to guess a relevant policy when no signal says which one the call is about.
+    entry_screen: claims.report
+    app_intent: motor.claim.accident
+    product_code: KS-MOTOR-1ST
+    blurb_en: "Two policies in different lines - motor claim"
+    blurb_th: "ถือกรมธรรม์สองประเภท - แจ้งเคลมรถยนต์"
+
+  - customer_id: C000003
+    # A freelancer whose only policy has LAPSED, and no screen hint at all. Two things
+    # worth demonstrating at once: the app path with `D6` (prefetch) but none of `D41`,
+    # and what an agent sees when the customer holds nothing active - which the brief's
+    # own data says is roughly a third of customers.
+    entry_screen: null
+    app_intent: null
+    product_code: KS-PA-BASIC
+    blurb_en: "Lapsed policy, no screen hint - the thin-context case"
+    blurb_th: "กรมธรรม์ขาดอายุ ไม่มีบริบทหน้าจอ"

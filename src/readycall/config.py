@@ -155,6 +155,22 @@ class Settings(BaseSettings):
     identity_pending_intent_window_s: float = 900.0
     require_l2_for_policy_details: bool = True
 
+    # --- the public API (P1b) ---
+    api_host: str = "127.0.0.1"
+    api_port: int = 8000
+    api_cors_origins: list[str] = Field(default_factory=list)
+    #: How long a correlation token stays usable. Must not exceed the window the identity
+    #: resolver will still honour a pending intent for, or the app path would mint tokens
+    #: that quietly resolve to a weaker rung than the caller expects.
+    intent_ttl_s: float = 900.0
+    session_cookie_name: str = "readycall_session"
+    session_ttl_s: float = 3600.0
+    #: The number the app tells the customer to dial. Config, never hardcoded (`D28`).
+    default_dial_target: str = "+6621234000"
+    #: DEMO: enables /v1/demo/* - the persona picker that stands in for a real bank login.
+    #: Must be false anywhere near real data. See `D47`.
+    demo_login_enabled: bool = True
+
     # --- agent workstation (D32, D33) ---
     agent_accept_mode: AcceptMode = AcceptMode.MANUAL
     offer_timeout_s: float = 20.0

@@ -33,7 +33,16 @@ class SystemClock:
         return datetime.now(UTC)
 
     def monotonic_ms(self) -> float:
-        return time.monotonic() * 1000.0
+        """High-resolution monotonic milliseconds.
+
+        `time.perf_counter()`, **not** `time.monotonic()` (`B3`). Both are monotonic, but
+        on Windows `monotonic()` is backed by the ~15.6 ms system tick: measured on the dev
+        laptop it produced *2 distinct values* across 200,000 samples, where `perf_counter`
+        produced 200,000. Every stage faster than a tick therefore recorded as exactly
+        `0.0`, which silently emptied the timing records that `D18` exists to provide and
+        made the demo report "context assembled in 0.0 ms".
+        """
+        return time.perf_counter() * 1000.0
 
 
 class ManualClock:

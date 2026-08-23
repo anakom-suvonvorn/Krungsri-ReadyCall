@@ -7,7 +7,7 @@ _Last updated: 2026-08-23._
 
 ## Where things stand right now
 
-**P0 complete. P1 core complete.** The system now *knows something* about a call: who is
+**P0 complete. P1 complete, including P1b (the HTTP layer).** The system now *knows something* about a call: who is
 calling and how much to believe it, why they are calling from what they pressed, everything
 we hold about them assembled before the phone is answered, and the first version of the
 brief an agent reads — with disclosure gated by how sure we are of their identity.
@@ -16,9 +16,10 @@ Verified 2026-08-21: **161 tests pass** (~1.4 s), `ruff check` + `ruff format --
 clean, `mypy --strict` clean over 50 files, all three scenarios replay byte-identically.
 
 ```bash
-uv sync
+uv sync --extra web
 uv run pytest -q
 uv run python scripts/run_scenario.py tests/scenarios/anonymous_declined.yaml --quiet
+uv run python -m readycall.entrypoints.api    # then open http://127.0.0.1:8000/sim
 ```
 
 Everything runs **in memory, with no services, no keys, no GPU**. Nothing needs Docker yet.
@@ -55,15 +56,10 @@ with a `SELECT`-only role.
 
 ## Next steps (in order)
 
-1. **P1b — the HTTP layer.** `POST /v1/calls/intents` (session auth → `customer_id`,
-   correlation token, expiry), `POST /v1/app/context-events`, and the **web customer
-   simulator** with a demo persona picker. The rule that matters: the simulator talks to
-   the *same public API the real Krungsri app would*, so replacing it later changes
-   nothing server-side. Needs `fastapi` + `uvicorn` added to the `web` extra.
-2. **P2 — matching + the agent workstation** (`PLAN.md`). Also the natural moment to add
+1. **P2 — matching + the agent workstation** (`PLAN.md`). Also the natural moment to add
    the **Postgres/SQLAlchemy/Alembic layer** (`D39`), since agent presence and matching
    decisions are the first things that must outlive a process.
-3. **P3** — voice/IVR/intake (the menu prompts become real audio). **P4** — analysis and
+2. **P3** — voice/IVR/intake (the menu prompts become real audio). **P4** — analysis and
    brief v2+ with Claude and Typhoon compared.
 
 `grep -rn "# P1:" scripts/` lists what the scenario runner still does by hand: the IVR
@@ -112,6 +108,10 @@ React workstation with the softphone in it · web customer simulator · menu-fir
   the customer first both leaks that the number belongs to them and weakens the check.
 - **Never hardcode an insurance literal in `services/`** — it goes in `config/` (`D28`).
 - **Never `datetime.now()` or a raw random id** outside `clock.py`/`ids.py` (`D35`).
+- **`time.monotonic()` is useless for stage timings on Windows** (`B3`) — ~15.6 ms tick, so
+  everything measured `0.0`. `SystemClock` uses `perf_counter`; do not "simplify" it back.
+- **The client never sends `customer_id`** (`D4`). It comes from the session. There is a test
+  asserting the request schema has no such field.
 - **Menu options never speak customer detail** — reordering only.
 - **`docs/` is excluded from `ruff format`** — the explanations are verbatim records.
 - Python is pinned **3.11**: PEP 695 generics are a syntax error; use `Generic[T]`.
@@ -140,6 +140,9 @@ Write one per phase as it lands — the user reads these to follow along.
   state machine, the scenario runner, the tests.
 - `P1_context.md` — the domain pack, the assurance ladder, the caching layer, the context
   assembler, the context-only brief, and the mock generator.
+- `P1b_http_layer.md` — the session seam, why the request schema *is* the enforcement of
+  `D4`, prefetch off the request path, the customer simulator, and the timing bug (`B3`)
+  that only surfaced because someone looked at the screen.
 
 ## Handy references
 

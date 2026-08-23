@@ -795,3 +795,42 @@ that replaced them is the useful part._
   gone, that `WRAP_UP`'s targets are exactly `{CLOSED, FAILED}` so no waypoint can be slipped
   back in, and that a rating arriving two minutes after closure neither errors nor reopens
   the call.
+
+## D47. The customer simulator is one static page, and its login is a marked shim
+- **Problem:** the customer side of the demo needs to (a) authenticate as a customer and
+  (b) be something a judge can watch. Neither is our product. Building a real identity
+  provider is out of scope — the competition brief puts core-system changes out of scope
+  and we are a context layer, not an auth vendor — and a React app for a three-screen
+  simulator buys nothing but a build step that can fail.
+- **Decision, two parts:**
+  1. **`apps/customer_sim/index.html` is a single file with no build step.** No npm, no
+     bundler, no `node_modules`. FastAPI serves it directly, so
+     `uv run python -m readycall.entrypoints.api` is the entire setup. The React decision
+     (`D32`) still stands for the **agent workstation** at P2, which genuinely needs
+     component state, a websocket and a softphone; the simulator needs three screens and a
+     fetch call.
+  2. **The persona picker is a `DemoSessionStore`, behind `demo_login_enabled`**, and is
+     marked `DEMO` in place rather than hidden in a separate repo (`D34`). It stands in for
+     the bank's login and nothing else.
+- **What is *not* faked, and this is the point:** the *shape* is real. A token is issued
+  server-side, the mapping to a customer lives on the server, the cookie is HttpOnly, and
+  `/v1/calls/intents` **cannot tell a demo session from a real one** because it only ever
+  asks a `SessionResolver`. Swapping in Krungsri's OIDC changes one adapter.
+- **The simulator talks only to the public `/v1` API.** No privileged back door, no
+  simulator-only endpoint. That is what makes "replace this page with the real Krungsri
+  app" a true statement rather than an aspiration — and the page shows its own request log
+  so a judge can see there is nothing else.
+- **Persona *ids* live in `config/demo_personas.yaml`; everything displayed is read live
+  through `CoreDataProvider`.** Two consequences worth having: the picker cannot drift from
+  the data an agent would actually see, and the file stays free of names and policy numbers,
+  so it is safe to commit.
+- **Rejected: adding `list_customers` to `CoreDataProvider`** so the picker could browse.
+  The port models what the *system* needs — lookup by id and by phone — and a browse method
+  would oblige every future adapter, including one written under time pressure on hackathon
+  morning, to implement something only a demo uses.
+- **Guard:** `demo_login_enabled=False` removes the router entirely (verified by test), so
+  the endpoints 404 rather than merely refusing. Login also accepts *only* configured
+  personas, so it can never become "log in as any customer id you can guess".
+- **Tradeoff:** the simulator will not scale into a real app, and is not meant to. If it
+  ever needs to, it gets rewritten in React alongside the workstation — by which point the
+  API it calls is unchanged, which is the whole argument.

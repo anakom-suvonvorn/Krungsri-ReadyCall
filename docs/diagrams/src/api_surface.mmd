@@ -1,0 +1,39 @@
+%% HANDWRITTEN. Checked against src/readycall/api/ + D4 + D47
+flowchart TB
+    subgraph clients["clients - both speak the SAME public API"]
+        direction LR
+        SIM["<b>customer simulator</b><br/>apps/customer_sim/index.html<br/>one file, no build step (D47)"]:::sim
+        APP["<b>the real Krungsri app</b><br/>does not exist yet, and needs<br/>no server change when it does"]:::future
+    end
+
+    clients --> AUTH{{"<b>SessionResolver</b> - the seam<br/>cookie -> customer_id, SERVER-SIDE"}}:::gate
+    AUTH -.-> A1["DemoSessionStore<br/>persona picker (D47)"]:::demo
+    AUTH -.-> A2["the bank's OIDC<br/>one adapter, later"]:::future
+
+    AUTH --> R1["<b>POST /v1/calls/intents</b><br/>mint a correlation token"]:::route
+    AUTH --> R2["<b>GET /v1/calls/intents/{id}</b><br/>what the prefetch found"]:::route
+    AUTH --> R3["<b>POST /v1/app/context-events</b><br/>a screen they looked at"]:::route
+
+    R1 --> SVC["IntentService<br/>routes stay thin: validate, delegate"]:::svc
+    SVC --> STORE[("intent stored -<br/>only the token's SHA-256 hash")]:::store
+    SVC --> BUS(["publish <b>intent.created</b>"]):::bus
+
+    BUS --> BG["drained AFTER the response is sent"]:::bg
+    BG --> ASM["ContextAssembler - 6 parallel reads"]:::svc
+    ASM --> SNAP[("frozen ContextSnapshot")]:::store
+    SNAP --> R2
+
+    D4["<b>D4, enforced by the schema not by a check.</b><br/>CreateIntentRequest has NO customer_id field, and<br/>extra='forbid' makes smuggling one in a 422. If a<br/>client could assert identity, anyone with curl could<br/>mint a token for a stranger and walk it to L3 on the<br/>next call - the whole ladder would rest on their input."]:::note
+
+    D6["<b>D6: why the bus, not a direct call.</b> The endpoint<br/>publishes and returns a dial target immediately; the<br/>six reads to the bank core happen afterwards, while<br/>the customer is still lifting the phone to their ear.<br/>Measured: dial target in ~50ms, context in ~1.8ms<br/>after it."]:::note
+
+    classDef sim fill:#e9f7ef,stroke:#2f9e5f,color:#08361d
+    classDef future fill:#f5f5f5,stroke:#999,color:#666,stroke-dasharray:4 3
+    classDef gate fill:#1f6feb,stroke:#0b3d91,color:#fff
+    classDef demo fill:#fff4e6,stroke:#e8a33d,color:#4a2f00
+    classDef route fill:#eef4ff,stroke:#5b8def,color:#0b2545
+    classDef svc fill:#eef4ff,stroke:#5b8def,color:#0b2545
+    classDef store fill:#e9f7ef,stroke:#2f9e5f,color:#08361d
+    classDef bus fill:#fff4e6,stroke:#e8a33d,color:#4a2f00
+    classDef bg fill:#fff4e6,stroke:#e8a33d,color:#4a2f00
+    classDef note fill:#fffbe6,stroke:#d4a72c,color:#4a3800

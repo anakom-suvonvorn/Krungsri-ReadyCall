@@ -1,0 +1,48 @@
+%% HANDWRITTEN. Checked against the verified P1b request flow
+sequenceDiagram
+    autonumber
+    participant U as Customer
+    participant SIM as Simulator (a web page)
+    participant API as ReadyCall API
+    participant SESS as SessionResolver
+    participant SVC as IntentService
+    participant BUS as Event bus
+    participant ASM as ContextAssembler
+    participant CORE as Bank core (READ-ONLY)
+
+    U->>SIM: picks a persona
+    SIM->>API: POST /v1/demo/session
+    API-->>SIM: HttpOnly cookie
+    Note right of API: DEMO shim for the bank's login (D47).<br/>The endpoints below cannot tell it apart<br/>from a real session.
+
+    U->>SIM: opens the coverage page
+    SIM->>API: POST /v1/app/context-events
+    Note right of API: cheap and frequent - a ring-buffer<br/>append, no I/O. Windowed on read:<br/>browsing from 3 weeks ago is noise.
+
+    U->>SIM: taps Contact
+    SIM->>API: POST /v1/calls/intents {product_code, entry_screen, app_intent}
+    Note over SIM,API: NO customer_id in the body. There is no<br/>such field to send. (D4)
+
+    API->>SESS: resolve(cookie)
+    SESS-->>API: Principal(customer_id)
+    API->>SVC: create(customer_id=..., ...)
+    SVC->>SVC: mint token, store ONLY its SHA-256 hash
+    SVC->>BUS: publish intent.created
+    SVC-->>API: intent + plaintext token
+    API-->>SIM: 201 {intent_id, correlation_token, dial_target, expires_at}
+    Note right of SIM: ~50ms. The customer can start<br/>dialling NOW.
+
+    API->>BUS: drain (background task, after the response)
+    BUS->>ASM: intent.created
+    par six reads at once
+        ASM->>CORE: customer / policies / interactions
+        ASM->>CORE: holdings / life events / product
+    end
+    CORE-->>ASM: rows
+    ASM->>ASM: pick relevant policy, stamp provenance
+    ASM-->>BUS: frozen ContextSnapshot (measured: 1.8ms)
+
+    U->>SIM: (still lifting the phone to their ear)
+    SIM->>API: GET /v1/calls/intents/{id}
+    API-->>SIM: context_ready, build_ms, policies, provenance fields
+    Note over SIM,API: D18: the claim is inspectable, not asserted.

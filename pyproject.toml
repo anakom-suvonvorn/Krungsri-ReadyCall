@@ -17,7 +17,7 @@ dependencies = [
 [project.optional-dependencies]
 # Heavier stacks are opt-in so `uv sync` stays fast and the STT worker does not
 # have to install the web stack (D2). Added phase by phase.
-# web  = ["fastapi", "uvicorn[standard]", "websockets"]
+web = ["fastapi>=0.115", "uvicorn[standard]>=0.32", "websockets>=13"]
 # db   = ["sqlalchemy>=2.0", "alembic", "asyncpg", "psycopg[binary]"]
 # ml   = ["torch", "transformers", "faster-whisper", "onnxruntime", "silero-vad"]
 
@@ -28,6 +28,7 @@ dev = [
     "ruff>=0.7",
     "mypy>=1.13",
     "types-pyyaml>=6.0.12.20260815",
+    "httpx2>=2.12.0",
 ]
 
 [build-system]

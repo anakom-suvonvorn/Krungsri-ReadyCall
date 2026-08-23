@@ -31,7 +31,7 @@ demonstrable slice, so "the demo" is the current state plus a chosen scenario (`
 
 ---
 
-## 2. Status: **P0 complete, P1 core complete**
+## 2. Status: **P0 complete, P1 complete (including P1b — the HTTP layer)**
 
 The spine runs. A full call lifecycle - arrival, IVR, consent, queue, intake, matching, the offer
 handshake, the live call, wrap-up, rating, closed - executes end to end on fake adapters with no
@@ -191,8 +191,9 @@ hand-authored fixtures exist) · ☐ docker-compose
 ☑ typed, cross-validated domain pack · ☑ Customer360 assembler + frozen snapshot + per-field
 provenance · ☑ caching / stale-serving / circuit breaker · ☑ **context-only brief with
 assurance-gated disclosure** · ☑ mock-core generator · ☑ docker-compose + schema SQL ·
-☐ intent API + session auth · ☐ app context events · ☐ customer simulator + demo login ·
-☐ agent screen v1
+☑ **intent API + session auth** (`POST /v1/calls/intents`, `SessionResolver` seam) ·
+☑ **app context events** · ☑ **customer simulator + demo persona picker** (`D47`) ·
+☐ agent screen v1 (moves to P2 with the workstation)
 
 **P2 — matching & the workstation** ☐ queues + hours · ☐ agent state model (auto × manual) ·
 ☐ presence heartbeat · ☐ fit + urgency scoring · ☐ Hungarian solver · ☐ anti-hot-spot checks ·
@@ -287,7 +288,7 @@ performing by hand, i.e. what the next services take over (`D36`).
 | Mock core | 3 customers, 4 policies across 4 product lines, 5 products, 5 interactions, 2 claims |
 | Intent taxonomy | 28 intents across 5 lines, each with a catch-all (revisit during the hackathon) |
 | Generated mock data | 2,000 customers / 2,292 policies / 5,880 interactions (seeded, gitignored) |
-| Diagrams | 45 (12 generated from source, 33 hand-drawn), across 9 explanation pages |
+| Diagrams | 47 (12 generated from source, 35 hand-drawn), across 9 explanation pages |
 
 ---
 

@@ -80,6 +80,30 @@ clear.
 
 By the last line of this diagram the brief exists, and the phone has not finished ringing.
 
+### The API that actually does this
+
+![api surface](api_surface.svg)
+
+Two things this picture is really about.
+
+**`D4` is enforced by the schema, not by a check.** `CreateIntentRequest` has no
+`customer_id` field, and `extra="forbid"` turns smuggling one in into a 422. If a client
+*could* assert identity, anyone with curl could mint a correlation token for a stranger and
+walk it to `L3_VERIFIED` on the next call — the entire assurance ladder would rest on a
+value the attacker supplied. A test asserts the field stays absent, because "we remembered
+not to add it" is not a guarantee.
+
+**The event bus is why assembly is off the request path.** The endpoint publishes
+`intent.created` and returns; the bus is drained in a background task *after* the response
+is sent. Measured on the dev laptop: dial target back in ~50 ms, context assembled in
+**1.8 ms** shortly after. The customer starts dialling before the reads have even finished.
+
+![tap Contact flow](flow_tap_contact.svg)
+
+The simulator and the real Krungsri app are the same client as far as this diagram is
+concerned. There is no privileged back door and no simulator-only endpoint — which is what
+makes "swap the simulator for the real app" a true statement rather than an aspiration.
+
 ---
 
 ## 2.5 The IVR, the menu, and consent
