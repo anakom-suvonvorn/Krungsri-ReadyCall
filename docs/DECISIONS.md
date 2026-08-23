@@ -1000,3 +1000,54 @@ _`D49` added 2026-08-24, during P2a._
 - **Future:** the exclusion is per-call and lives as long as the call does. If a shift ever
   runs long enough that re-offering a declined call becomes reasonable, that is a timed
   expiry on this set — not a softening of the filter.
+
+## D53. Nothing crosses the wire as a domain model where a permission boundary exists
+- **Problem:** `B5`. `render_brief` returned `CaseBrief.model_dump()`, and `CaseBrief`
+  embeds the frozen `ContextSnapshot`, which embeds the whole `Customer360`. A call at
+  `L1_PROBABLE` therefore shipped the policy number, the sum insured, every coverage
+  figure and the customer's date of birth — in the same body whose
+  `may_disclose_policy_details` field said `false`. Every individual component was
+  behaving correctly; the leak lived between them.
+- **Decision:** the agent API serialises **wire DTOs**, never domain models, anywhere
+  assurance gates what may be seen. `BriefOut` and its nested models have **no field** for
+  a policy number until `_brief_out` is allowed to fill one, and the raw snapshot is not
+  representable at all — only field-level provenance survives.
+- **Reasoning:** `D42` already said the gate must be server-side at the wire. It was not
+  wrong, it was *unenforceable*: a rule that says "do not send too much" loses to
+  `model_dump()`, which sends everything by construction and does so silently. A DTO
+  converts the rule into a property of the type — it can only leak what it has a field
+  for — and that is the difference between a gate and a promise.
+- **Scope, deliberately narrow:** this is not "DTOs everywhere". Internal seams keep
+  passing domain objects, which is what makes them pleasant. It applies where bytes leave
+  the process **and** something must be withheld: the brief today, transcripts and
+  recordings later, anything a supervisor view exposes.
+- **Consequence for testing:** the assertion has to be on the **bytes**. Every test we had
+  checked rendered Thai lines, which were correctly gated, and none could see a field the
+  renderer never mentions. The new tests serialise the whole response and search the raw
+  string for the policy number.
+- **Alternatives:** a `model_dump(exclude=...)` allow-list — rejected, because the default
+  is still "include", so a field added to `Customer360` next month leaks until somebody
+  remembers to exclude it. A response-model filter in FastAPI — same objection, and it
+  cannot express "this field, but only above L2".
+- **Tradeoffs:** two shapes to keep in step, and a mapping function to maintain. Cheap: the
+  mapping is where the rule is written down, and the alternative already shipped a leak.
+
+## D54. The demo may bypass queue hours, and says so in the request
+- **Problem:** most queues run on `business` hours. Rehearsals happen at 2 a.m. and the
+  laptop's clock is real, so half the system is unreachable exactly when it is being built
+  and practised on — while the *correct* behaviour (a closed queue offering a briefed
+  callback, `D25`) is a feature we want to show, not one we want to fight.
+- **Decision:** `PlaceCallRequest.ignore_hours`, default `false`, marked `DEMO:` in the
+  schema and in the caller. Leaving it off exercises the real closed-queue path; turning it
+  on places the call anyway.
+- **Reasoning:** the honest alternatives are worse. Faking the clock would desynchronise
+  every timestamp in the call record. Making every queue 24/7 would delete a real feature
+  from the config. A flag on the *demo* endpoint changes nothing about production, which
+  has no such endpoint at all.
+- **What it stands in for:** nothing. Unlike most `DEMO:` markers this is not a placeholder
+  for a service that has not landed — it is a rehearsal convenience, and the real system's
+  behaviour is what happens with the flag absent.
+- **Related landmine:** `ManualClock()` defaults to 09:00 UTC on 1 January = 16:00 Bangkok
+  on **New Year's Day**, so every `business` queue is closed under a default test clock.
+  Documented on the class rather than changed, because scenario replays are byte-compared
+  against golden output built on that epoch.

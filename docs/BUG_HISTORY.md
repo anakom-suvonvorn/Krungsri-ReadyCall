@@ -136,6 +136,44 @@ Format per entry:
   `chosen_agent_id is None`: a deferred call, deliberately held. Worth remembering before treating
   that field as a binary.
 
+## B5. The brief leaked everything it was supposed to be hiding
+
+- **Symptoms:** none visible. The workstation rendered correctly: at `l1_probable` the policy
+  row said *ปกปิดจนกว่าจะยืนยันตัวตน*, the identity panel said disclosure was locked, and the
+  Thai summary carefully said "มีกรมธรรม์ที่เกี่ยวข้อง (ยังไม่ยืนยัน)" instead of a number.
+  **The bytes told a different story.** The same response body contained
+  `HL-2024-000811`, `sum_insured`, every `coverages` entry, and the customer's `dob`.
+- **Found by:** dumping the raw JSON while driving the UI and grepping it for the policy
+  number, rather than reading the screen. Nothing on the screen was wrong.
+- **Root cause:** `Container.render_brief` returned `CaseBrief.model_dump(mode="json")`.
+  `CaseBrief` carries `snapshot: ContextSnapshot`, which carries the whole `Customer360` —
+  every policy, every coverage figure, the customer record. `BriefBuilder` gates the
+  *rendered Thai lines* by assurance, which is exactly what it was asked to do; nothing
+  gated the object graph hanging off the side of them. Serialising the domain model shipped
+  both.
+- **Why this one is the worst kind:** every safeguard around it was working. The ladder was
+  right, the builder was right, the flag in the payload was right, the UI was right. The
+  leak lived in the gap between "the brief is gated" and "the brief *object* is gated", and
+  every test asserted the first.
+- **`D42` predicted it, in as many words:** *"Sending the full brief and hiding fields in
+  React would put someone's coverage one devtools panel away."* The decision was written; the
+  implementation still did the thing the decision forbade, because the forbidden thing is
+  what `model_dump()` does by default.
+- **Fix:** a wire DTO (`BriefOut` and friends in `api/schemas.py`) built by `_brief_out()`.
+  The customer block requires `L1_PROBABLE`; the policy block requires `L2_STRONG`;
+  recommended actions are filtered by their own `requires_assurance`; the raw snapshot never
+  crosses at all, only field-level provenance. **The gate is now the shape of the payload** —
+  there is nowhere to put a policy number until the level permits one.
+- **Verification:** a test that serialises the whole workstation snapshot and searches the
+  raw string for `HL-2024-000811`, `policy_no`, `sum_insured`, `coverages` and `dob` at L1;
+  a second that promotes to L3 and asserts the policy *is* now present with a bumped brief
+  version (`D7`); a third that rejects the identity and asserts it goes away again. 292 tests
+  pass, and the browser shows the same thing: locked at L1, full coverage table at L3.
+- **Lesson:** **never serialise a domain model onto a wire that has a permission boundary.**
+  A DTO is not ceremony there — it is where the boundary is enforced, because a DTO can only
+  leak what it has a field for. And test the *bytes*: an assertion about rendered text cannot
+  see a field the renderer never mentions.
+
 ---
 
 ## Areas where bugs are expected (write them up when they happen)

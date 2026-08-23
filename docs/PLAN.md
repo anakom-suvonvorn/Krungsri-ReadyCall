@@ -1,7 +1,7 @@
 # PLAN
 
 _The master build plan for the full system: what gets built, in what order, and what "done" means for each phase._
-_Last updated: 2026-08-23._
+_Last updated: 2026-08-24._
 
 ---
 
@@ -91,7 +91,8 @@ Two rules that shape the order:
 ---
 
 ## P2 — Matching, queues, agents, and the desktop
-_Split in practice: **P2a the engine (done, 2026-08-24)**, P2b the workstation._
+_Split in practice: **P2a the engine (done, 2026-08-24)** and **P2b the workstation
+(done, 2026-08-24)**. The database layer slipped again — see the note under the exit criteria._
 **Goal:** the right agent gets the call, for the right reason, and the screen is live.
 
 - `skills.yaml` / `queues.yaml` / `queue_hours.yaml`; `queues` + `queue_entries`; SLA + overflow.
@@ -119,6 +120,19 @@ _Split in practice: **P2a the engine (done, 2026-08-24)**, P2b the workstation._
 - The rationale panel explains a real assignment in a sentence a judge understands.
 - No starvation: with a skewed skill mix, the wait-time p99 stays under the configured ceiling.
 - Match → brief rendered **< 1 s**.
+
+**Status 2026-08-24.** Met, except the multi-browser load test: the handshake, presence, the
+workstation and the disclosure gate are all verified end to end in a real browser, and brief
+render is **0.2 ms** (a re-render of a frozen snapshot, not a fetch — `D42`), but the
+20-caller × 3-session run has not been done. The matching engine's own determinism is covered
+by `scripts/run_matching.py --seed`.
+
+**The database (`D39`) did NOT land with P2b.** Presence, assignments and the state log are
+still in memory. The reason is not oversight: `D39`'s trigger was "two processes need to see
+the same call", and P2b is a single process. Landing Postgres would have doubled the size of an
+already-large phase and made every test need a container. It is now the first item of P2c, and
+the seams it plugs into (`CallSessionRepository`, `PresenceService`, `AssignmentService`) are
+already Protocol-shaped or dict-backed behind one class each.
 
 ---
 

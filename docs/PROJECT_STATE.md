@@ -31,18 +31,20 @@ demonstrable slice, so "the demo" is the current state plus a chosen scenario (`
 
 ---
 
-## 2. Status: **P0, P1, P1b complete · P2a (matching engine) complete**
+## 2. Status: **P0 · P1 · P1b · P2a · P2b complete**
 
 The spine runs. A full call lifecycle - arrival, IVR, consent, queue, intake, matching, the offer
 handshake, the live call, wrap-up, rating, closed - executes end to end on fake adapters with no
 telephony, no GPU, no database and no API key.
 
-As of P2a the identity ladder, the menu walk, the context assembler, the brief builder, the public
-API and the matching engine are all real services doing real work - only the *edges* (phone, speech,
-AI, the bank's data, the agent roster) are still fakes.
+As of P2b the identity ladder, the menu walk, the context assembler, the brief builder, the public
+API, the matching engine, agent presence, the offer handshake and the React workstation are all real
+services doing real work - only the *edges* (phone, speech, AI, the bank's data, the agent roster)
+are still fakes. An agent signs in at `/workstation`, a caller arrives, the desk rings, the brief is
+already there, and the disclosure gate moves when the agent attests.
 
-Verified on 2026-08-24: **228 tests pass**, `ruff check` and `ruff format --check` clean,
-`mypy --strict` clean over 70 source files, and all three scenarios replay byte-identically.
+Verified on 2026-08-24: **292 tests pass**, `ruff check` and `ruff format --check` clean,
+`mypy --strict` clean over 81 source files, and all three scenarios replay byte-identically.
 
 ```
 $ uv run python scripts/run_scenario.py tests/scenarios/pattheera_ipd.yaml --quiet
@@ -142,18 +144,20 @@ FullProject/
 │  │  ├─ transcription/      stream_manager.py  vad.py  turns.py  worker.py
 │  │  ├─ analysis/           intent.py  entities.py  summary.py  brief.py
 │  │  │                      nba.py  opening.py  confidence.py  pii.py  progress.py
-│  │  ├─ matching/           engine.py  fit.py  urgency.py  solver.py
-│  │  │                      queues.py  presence.py  defer.py
+│  │  ├─ matching/*          engine.py  scoring.py  solver.py  weights.py
+│  │  ├─ agents/*            presence.py  assignment.py  dispatch.py   # P2b
+│  │  ├─ queues/*            hours.py                                  # P2b
+│  │  ├─ capture/*           keypad.py            # untyped DTMF capture (D44)
 │  │  ├─ consent/            service.py  policy.py  retention.py
 │  │  ├─ wrapup/             service.py  callbacks.py
 │  │  └─ metrics/            rollups.py
 │  ├─ media/                 # the media gateway (audio I/O, resampling, framing, recording)
 │  │  ├─ gateway.py  audiosocket.py  ws_media.py  resample.py  recorder.py
 │  ├─ api/
-│  │  ├─ app.py  deps.py  security.py
-│  │  ├─ routers/  mobile.py  agent.py  telephony_webhooks.py  admin.py  health.py
-│  │  ├─ ws/       agent_ws.py  customer_ws.py
-│  │  └─ schemas/  # request/response DTOs (never leak ORM models)
+│  │  ├─ app.py*  deps.py*  security.py*  realtime.py*   # realtime = the agent hub
+│  │  ├─ routers/  mobile.py*  agent.py*  demo.py*  health.py*  telephony_webhooks.py  admin.py
+│  │  └─ schemas.py*   # request/response DTOs. NEVER serialise a domain model where a
+│  │                   #   permission boundary exists - that shipped a leak (B5, D53)
 │  ├─ db/
 │  │  ├─ session.py  base.py
 │  │  ├─ models/    readycall/*.py        # our writable tables
@@ -164,8 +168,10 @@ FullProject/
 ├─ mock/bank_core/           # the simulated read-only bank data
 │  ├─ schema.sql  generate.py  personas.yaml  scenarios/*.yaml
 ├─ apps/
-│  ├─ agent_desktop/         # React + Vite — workstation INCLUDING the softphone (D32)
-│  └─ customer_sim/          # web page that fakes the mobile app (tap Contact, speak, hold)
+│  ├─ workstation/*          # React 18 + TS + Vite — the agent desktop (D32). dist/ is
+│  │                         #   gitignored and mounted at /workstation when it exists,
+│  │                         #   so the API runs with no node installed.
+│  └─ customer_sim/*         # one static HTML page, no build step (D47)
 ├─ infra/
 │  ├─ docker-compose.yml  asterisk/  grafana/  k8s/
 ├─ scripts/                  # seed_db, run_scenario, convert_ct2_model, eval_golden_set…
@@ -212,11 +218,14 @@ deferral · ☑ persisted rationale on every decision incl. non-assignments · �
 simulator with `--compare` · ☑ unplaced callers say **which** of the two reasons applies —
 roster gap vs capacity (`D50`, `B4`)
 
-**P2b — the workstation** ☐ queues + hours · ☐ presence heartbeat · ☐ **offer/accept + RONA
-+ ACW** (`D45`) · ☐ agent WebSocket · ☐ workstation shell incl. call-control bar (stubbed
-softphone) · ☐ identity control (`D42`) · ☐ keypad capture panel (`D44`) ·
-☐ **Postgres/SQLAlchemy/Alembic** (`D39` — presence is the first thing that must outlive a
-process)
+**P2b — the workstation** (done, except the DB)
+☑ queues + hours (`queue_hours.yaml`, holidays, next-open time) · ☑ presence with both axes +
+heartbeat sweep (`D51`) · ☑ **offer/accept + RONA + ACW** (`D45`), with re-offer exclusion
+(`D52`) · ☑ agent WebSocket: per-agent sequencing, replay-on-reconnect, backoff · ☑ **React
+workstation** incl. call-control bar (stubbed softphone) · ☑ identity control (`D42`) ·
+☑ keypad capture panel (`D44`) · ☑ **the disclosure gate moved to a wire DTO** after it
+leaked (`B5`, `D53`) · ☐ **Postgres/SQLAlchemy/Alembic** (`D39`) — deferred again; see
+`NEXT_SESSION`
 
 **P3 — voice, IVR & intake v1** ☐ voice-prompt build pipeline + prompt studio · ☐ IVR flow (menu,
 identify, consent, press-1/2, rating) · ☐ media gateway (per-leg fork) · ☐ recording + encryption ·

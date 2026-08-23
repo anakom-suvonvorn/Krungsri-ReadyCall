@@ -2,7 +2,7 @@
 
 _How the full ReadyCall system works, end to end. Read this to understand the machine._
 _Status: **design only** — nothing here is implemented yet (see `PLAN.md` for the build order)._
-_Last updated: 2026-08-23._
+_Last updated: 2026-08-24._
 
 ---
 
@@ -520,9 +520,18 @@ machines on the LAN need real certs (`mkcert` in dev). This is a P5 landmine, fl
 **System state** (automatic, set by the platform): `OFFLINE` · `AVAILABLE` · `OFFERING` ·
 `ON_CALL` · `AFTER_CALL_WORK`.
 
-**Agent intent** (manual, set by the person): `READY` · `BREAK` · `LUNCH` · `TRAINING` · `ADMIN` ·
-**`LAST_CALL`** (finish the current call, then stop taking new ones) · **`DRAINING`** (take no new
-callers, but stay logged in for anything already committed to me).
+**Agent intent** (manual, set by the person): `NOT_READY` · `READY` · `BREAK` · `LUNCH` ·
+`TRAINING` · `ADMIN` · **`LAST_CALL`** (finish the current call, then stop taking new ones) ·
+**`DRAINING`** (take no new callers, but stay logged in for anything already committed to me).
+
+> **`D51` (P2b):** `NOT_READY` is the one value an agent may **not** declare for themselves —
+> saying "I'm not ready" really means break, lunch, training or admin, and collapsing those
+> throws away the only thing the state log is for. It is also the one value the *platform*
+> writes on the person's axis, in exactly two places: **on sign-in** (signing in is not being
+> ready — a call must not reach someone who just opened the tab) and **after a missed offer**
+> (RONA). Both are stamped `set_by="platform"` with a distinct reason, because "they chose
+> break" and "we stopped offering because nobody picked up" are very different facts about
+> the same person.
 
 ```
 effective_availability = system_state == AVAILABLE
@@ -547,6 +556,17 @@ durable record in `agent_state_log`.
                  │              the queue (RONA)
                  └── auto_accept mode: connect immediately with a short beep, no click
 ```
+
+> **`D52` (P2b):** both a decline and a timeout **exclude that agent from re-matching this
+> call**, as a hard filter named `already_offered`. Without it the global matcher re-solves a
+> millisecond later, reaches the same optimum, and offers the same caller to the same desk —
+> forever, with every individual decision defensible. A *cancel* (the caller hung up while it
+> rang) excludes nobody, because nobody did anything wrong.
+>
+> The two rejections are also treated differently on purpose: a decline leaves the agent
+> `READY` (they are at their desk and told us something), a timeout sets `NOT_READY` (there is
+> nobody there). Conflating them either punishes an honest agent or lets an empty desk absorb
+> the queue.
 
 Three things this settles:
 
@@ -576,6 +596,14 @@ no dial-out delay between "agent free" and "talking".
 
 Queues have schedules (`config/queue_hours.yaml`: business hours, holidays, per-line overrides —
 motor claims is plausibly 24/7 while policy servicing is not).
+
+> **P2b:** implemented. `config/queue_hours.yaml` holds named schedules (`always`,
+> `extended`, `business`) and a Thai holiday calendar; `QueueHours.state()` returns an
+> `OpenState` carrying **the next opening moment** and a reason, so "closed" is an answer the
+> IVR can speak rather than a boolean the caller has to interpret. `always` and `extended`
+> ignore holidays deliberately — a crash does not check the calendar, and hospitals admit on
+> Songkran. Windows landmine: `zoneinfo` has no tz database there, so `tzdata` is a declared
+> dependency (green on Linux CI, broken on the demo laptop, otherwise).
 
 When a queue is closed, or nobody is logged in, the caller is offered:
 
@@ -617,6 +645,11 @@ transcribing" indicator to both the agent and (in-app) the customer.
 Agent workstations hold an authenticated WebSocket and publish presence. **The brief arrives with the
 offer**, so it is fully on screen while the agent is still deciding to press Accept — they take the
 call already knowing who it is and what it is about:
+
+> **P2b:** the panels below marked ✅ are live in `apps/workstation`. What arrives with the
+> offer is deliberately *less* than the brief — queue, intent, urgency, accrued wait, assurance
+> and the matcher's one-line rationale — because the full brief is gated on assurance and is
+> rendered only once the call is taken.
 
 | Panel (matches pitch p.7) | Source |
 |---|---|
@@ -811,6 +844,14 @@ budget degrades (§16) rather than delaying.
 - **Consent-first.** Explicit consent before any analysis; **health data requires a separate consent**;
   every use is tied to a recorded lawful basis.
 - **Assurance-gated disclosure.** Policy numbers and coverage figures are not rendered below L2/L3 (§3).
+  **The gate is the shape of what is serialised, not a rule about it** (`D53`). The agent API sends
+  wire DTOs, never domain models: `BriefOut` has *no field* for a policy number until the level
+  permits one. This is not theoretical tidiness — returning `CaseBrief.model_dump()` shipped the
+  policy number, sum insured, every coverage figure and the customer's date of birth to a call at
+  `L1_PROBABLE`, in the same body that said disclosure was locked (`B5`). Every component around it
+  was behaving correctly; the leak lived in the object graph hanging off a correctly-gated summary.
+  Tests for this assert on the **raw bytes**, because an assertion about rendered text cannot see a
+  field the renderer never mentions.
 - **Data minimisation.** The Context Assembler pulls only the fields the current product/intent needs;
   raw transactions are never surfaced — only derived, non-sensitive signals.
 - **PII handling.** Detected PII spans in transcripts are masked in the UI by default; reveal is an
