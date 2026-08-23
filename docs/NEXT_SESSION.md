@@ -119,7 +119,7 @@ React workstation with the softphone in it · web customer simulator · menu-fir
 
 ## Diagrams (visual walkthroughs)
 
-`docs/diagrams/` — **45 diagrams** with explanations, in nine themed pages. Start at
+`docs/diagrams/` — **50 diagrams** with explanations, in ten themed pages. Start at
 `docs/diagrams/README.md`. Roughly a quarter are **generated from source** (the transition
 table, the domain pack, the pydantic models, the adapters on disk), so they cannot drift;
 `tests/unit/test_diagrams.py` fails if a committed one falls behind the code.
