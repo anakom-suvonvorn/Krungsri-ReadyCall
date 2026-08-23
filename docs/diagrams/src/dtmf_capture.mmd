@@ -1,29 +1,44 @@
-%% HANDWRITTEN. Checked against D43
+%% HANDWRITTEN. Checked against D43 as amended by D44
 flowchart TB
-    PROB["<b>the problem</b><br/>agent needs a policy / claim / plate number.<br/>Spoken digits over a mobile are the WORST case:<br/>short, phonetically confusable, no linguistic<br/>context for a human or a model to lean on."]:::prob
+    PROB["<b>the problem</b><br/>the agent needs a number - policy, claim, citizen id, plate.<br/>Spoken digits over a mobile are the WORST case: short,<br/>phonetically confusable, no linguistic context for a<br/>human or a model to lean on."]:::prob
     PROB --> OLD["today: 'ขอโทษค่ะ ทวนอีกครั้งได้ไหมคะ'<br/><b>= dead air</b>, the exact thing this product exists to remove"]:::bad
 
-    OLD --> NEW["<b>D43: the keypad stays live for the WHOLE call</b>"]:::new
-    NEW --> A1["agent clicks a labelled request<br/>e.g. 'policy number'"]:::step
-    A1 --> A2["a field appears on the workstation<br/>AND a prompt for the caller"]:::step
-    A2 --> A3["caller TYPES it. Digits land as they are pressed."]:::step
+    OLD --> CAP["<b>THE PRIMITIVE: untyped capture</b> (D43 + D44)"]:::new
+    CAP --> C1["agent starts capture"]:::step
+    C1 --> C2["customer keys <b>whatever they actually have</b>"]:::step
+    C2 --> C3["agent stops capture - raw digits on screen"]:::step
 
-    A3 --> CHK{"do we already hold<br/>this customer data?"}:::gate
-    CHK -- yes --> MATCH["check it against their ACTUAL policies"]:::step
-    MATCH -- "matches" --> PROMO["<b>assurance promotes automatically</b><br/>audit line: matched MT-2025-004512 at 14:32:07<br/>stronger than an agent judging a spoken answer"]:::ok
-    MATCH -- "no match" --> NOPE["recorded as a failed challenge.<br/>Disclosure stays locked."]:::bad
-    CHK -- no --> PLAIN["just accurate data entry - still a win"]:::ok
+    C3 --> USE{"<b>now the agent chooses</b><br/>interpretation is a SEPARATE step"}:::gate
+    USE -- "<b>default, and all we build first</b>" --> U0["<b>the agent just uses the digits</b><br/>reads them, pastes them, types them<br/>into whatever they were going to"]:::ok
+    USE -- "added later, one at a time" --> U1["match against THIS customer's policies"]:::opt
+    USE -- "added later" --> U2["match last N of a citizen id"]:::opt
+    USE -- "added later" --> U3["look up a claim number"]:::opt
 
-    NEW --> RULE["<b>never capture a full secret.</b><br/>Last 4 of a citizen id, never the whole number.<br/>Never a card number. For secret-ish challenges store<br/>THE OUTCOME ONLY - matched / not - never the digits.<br/>A policy number is not a secret and is stored."]:::note
+    U1 --> EV
+    U2 --> EV
+    U3 --> EV
+    EV["<b>a lookup returns EVIDENCE, never an action</b><br/>renders matched / not matched + what it matched.<br/>Changes no assurance. Unlocks no field.<br/>Writes nothing to the identity record."]:::ev
 
-    NEW --> P5["<b>P5 gotcha</b>: the caller channel must STAY in the<br/>Stasis app and be bridged from within it, or Asterisk<br/>stops emitting ChannelDtmfReceived once bridged.<br/>Always-on passive capture - no mode switch."]:::note
+    EV --> AGENT
+    U0 --> AGENT
+    AGENT{"<b>the agent still attests</b> (D42)<br/>Confirmed / Not this person / Third party"}:::gate2
+    AGENT --> AUDIT[("audit holds TWO independent facts:<br/>'system matched MT-2025-004512'<br/>AND 'agent attested third party'")]:::store
 
-    NEW --> WHY["<b>same principle as D37.</b> The keypad is the reliable<br/>channel, the microphone is the lossy one. Give the<br/>keypad the job speech is worst at. Needs no AI,<br/>so it cannot degrade with one."]:::note
+    WHY["<b>why a match cannot promote on its own.</b> A daughter<br/>calling for her father may legitimately be holding his<br/>documents and type his policy number correctly. Auto-<br/>promoting would record her as the verified policyholder -<br/>the exact failure D42 exists to prevent."]:::note
+
+    ASSUME["<b>why capture is untyped.</b> We cannot assume the caller<br/>has any particular document. They may have a citizen id<br/>in their wallet, a claim SMS, a renewal letter, or nothing.<br/>Asking for one specific thing and building around it fails<br/>the moment they do not have it - which is often."]:::note
+
+    SEC["<b>the safe default inverts.</b> Because capture is untyped,<br/><b>we do not know what the digits are</b> - so raw captures are<br/>treated as potentially sensitive: masked in transcripts and<br/>logs, short retention, one-click discard. Only once a lookup<br/>NAMES the value may it be stored in the clear."]:::warn
 
     classDef prob fill:#fdecea,stroke:#d93025,color:#5c1a13
     classDef bad fill:#fdecea,stroke:#d93025,color:#5c1a13
     classDef new fill:#1f6feb,stroke:#0b3d91,color:#fff
     classDef step fill:#eef4ff,stroke:#5b8def,color:#0b2545
     classDef gate fill:#fff4e6,stroke:#e8a33d,color:#4a2f00
+    classDef gate2 fill:#1f6feb,stroke:#0b3d91,color:#fff
     classDef ok fill:#e9f7ef,stroke:#2f9e5f,color:#08361d
+    classDef opt fill:#f5f5f5,stroke:#999,color:#666,stroke-dasharray:4 3
+    classDef ev fill:#eef4ff,stroke:#5b8def,color:#0b2545
+    classDef store fill:#e9f7ef,stroke:#2f9e5f,color:#08361d
     classDef note fill:#fffbe6,stroke:#d4a72c,color:#4a3800
+    classDef warn fill:#fff4e6,stroke:#e8a33d,color:#4a2f00

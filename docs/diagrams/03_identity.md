@@ -69,7 +69,7 @@ a name has to be produced.
 
 ---
 
-## 3.3 The keypad is also a verifier
+## 3.3 The keypad is a tool, not an oracle
 
 ![DTMF capture](dtmf_capture.svg)
 
@@ -78,24 +78,46 @@ phonetically confusable, and with no linguistic context for a human or a model t
 Every *"ขอโทษค่ะ ทวนอีกครั้งได้ไหมคะ"* is dead air, the exact thing this product exists to
 remove.
 
-So `D43` keeps DTMF capture live for the whole call. The agent clicks "policy number", a
-field appears, and the customer types it.
+So `D43` keeps DTMF capture live for the whole call — and `D44` makes it deliberately dumb.
 
-The part that makes this more than a data-entry convenience: **when we already hold their
-data, the typed value can be checked against their actual policies.** A match is
-machine-verifiable evidence — strictly stronger than an agent's judgment of a spoken answer
-— so it promotes assurance automatically, with an audit line like `matched MT-2025-004512 at
-14:32:07`. No subjective confirmation involved.
+**The primitive is untyped capture.** The agent starts capture, the customer keys whatever
+they actually have, the agent stops it. Raw digits appear on screen. That is all.
 
-This is the same principle as the keypad menu, applied twice: **the keypad is the reliable
-channel and the microphone is the lossy one, so give the keypad the jobs speech is worst at.**
-Neither use needs AI, so neither can degrade when the AI does.
+The earlier design had the agent click "policy number" and build the feature around that,
+which quietly assumed the caller is holding a specific document. They may have a citizen ID
+card in their wallet, a claim SMS on the screen they are calling from, a renewal letter, or
+nothing at all. Someone standing next to a crashed car has whatever was in the glovebox.
+Guessing which document and designing for it fails the moment they do not have it.
+
+**Interpretation is a separate, optional step.** With digits on screen the agent may run a
+lookup — match against this customer's policies, match the last N of a citizen ID, look up a
+claim number — or may just *use the digits themselves*. That last one is the default, and the
+only mode built first; named lookups get added afterwards, one at a time, as each proves worth
+automating.
+
+**A lookup returns evidence, never an action.** It renders *matched / not matched* and what it
+matched against. It changes no assurance, unlocks no field, and writes nothing to the identity
+record. Promotion stays `D42`'s three-way agent control.
+
+That last rule is the important correction. `D43` originally said a match promotes assurance
+*automatically*, which reintroduces the exact failure `D42` exists to prevent — **a match
+cannot tell the policyholder apart from a daughter holding his documents.** She may type his
+policy number perfectly. Only a human can distinguish those, so a human does.
+
+The audit record ends up *better* for it, holding two independent facts rather than one
+machine assertion: *the system matched `MT-2025-004512`* **and** *the agent attested third
+party acting for the policyholder*.
+
+This is still the same principle as the keypad menu, applied twice: **the keypad is the
+reliable channel and the microphone is the lossy one, so give the keypad the jobs speech is
+worst at.** Neither use needs AI, so neither can degrade when the AI does.
 
 Two hard constraints:
 
-- **Never capture a full secret.** Last 4 of a citizen ID, never the whole number; never a
-  card number. For secret-ish challenges the system stores **the outcome only** — matched or
-  not — never the digits. A policy number is not a secret and is stored.
+- **The safe default inverts.** Because capture is untyped, *we do not know what the digits
+  are* — so raw captures are treated as potentially sensitive: masked in transcripts and logs,
+  short retention, one-click discard. Only once a lookup **names** the value may it be stored
+  in the clear, and secret-ish challenges still store the outcome only, never the digits.
 - **P5 gotcha:** the caller's channel must stay in the Stasis app and be bridged from within
   it, or Asterisk stops emitting `ChannelDtmfReceived` once the legs bridge.
 

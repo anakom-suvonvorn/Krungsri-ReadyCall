@@ -2,7 +2,7 @@
 
 _Last updated: 2026-08-23._
 
-**44 diagrams** covering every part of Krungsri ReadyCall. Written to be read in order the
+**45 diagrams** covering every part of Krungsri ReadyCall. Written to be read in order the
 first time, and dipped into afterwards.
 
 ---
@@ -74,6 +74,11 @@ To check whether any SVG has fallen behind its source:
 uv run python scripts/render_diagrams.py --check
 ```
 
+This compares **content hashes**, recorded in `.render-manifest.json` when each SVG is
+rendered — not modification times. Re-running `gen_diagrams.py` rewrites every source file,
+so an mtime check reported all 45 as stale when nothing had changed, and a check that cries
+wolf gets ignored.
+
 Render a single diagram while iterating:
 
 ```bash
@@ -88,7 +93,8 @@ uv run python scripts/render_diagrams.py brief_gating
 docs/diagrams/
 ├─ README.md              ← you are here
 ├─ 01_start_here.md …     ← the nine explanation pages
-├─ *.svg                  ← 44 rendered diagrams (committed, so no tooling is needed to read them)
+├─ *.svg                  ← 45 rendered diagrams (committed, so no tooling is needed to read them)
+├─ .render-manifest.json  ← source hash per diagram, so --check compares content not mtimes
 └─ src/*.mmd              ← mermaid sources; GENERATED ones say so in the header
 ```
 

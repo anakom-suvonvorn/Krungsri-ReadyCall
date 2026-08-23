@@ -1,4 +1,4 @@
-%% HANDWRITTEN. Checked against ARCHITECTURE.md S10 + D26 + D43
+%% HANDWRITTEN. Checked against ARCHITECTURE.md S10 + D26 + D43 + D44
 sequenceDiagram
     autonumber
     participant C as Customer
@@ -23,14 +23,25 @@ sequenceDiagram
 
     WS->>A: live transcript, both sides, colour-coded
 
-    Note over A,C: the keypad stays live all call (D43)
-    A->>WS: clicks "ask for policy number"
-    WS->>C: prompt to type it
-    C->>TEL: keys 4512 on the handset
-    TEL->>WS: DTMF digits as they arrive
-    WS->>WS: check against the policies we already hold
-    WS-->>A: MATCH - assurance promoted to L3, brief re-renders as v2
-    Note right of WS: machine-checkable, so no agent<br/>judgment is involved
+    Note over A,C: the keypad stays live all call (D43/D44)
+    A->>C: asks for a number they actually have
+    A->>WS: START capture
+    C->>TEL: keys the digits
+    TEL->>WS: digits as they arrive
+    A->>WS: STOP capture
+    Note right of WS: capture is UNTYPED - we did not<br/>assume WHICH document they hold
+
+    alt agent runs an optional lookup
+        A->>WS: match against this customer's policies
+        WS-->>A: matched MT-2025-004512
+        Note right of WS: EVIDENCE ONLY. Changes no assurance.
+    else agent just uses the digits
+        WS-->>A: the digits, and nothing else happens
+    end
+
+    A->>WS: attests - Confirmed / Not this person / Third party (D42)
+    WS->>WS: assurance updated, brief re-renders as v2
+    Note right of WS: a match cannot tell the policyholder from<br/>a daughter holding his documents. Only a<br/>human can make that call.
 
     A->>WS: presses Hang up
     WS->>TEL: end the call

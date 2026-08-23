@@ -390,6 +390,9 @@ _`D32`–`D33` added 2026-08-18, correcting a misread of the product._
     missing agent out of `READY` (RONA), so a distracted agent cannot black-hole the queue.
   - After a call, the agent enters `AFTER_CALL_WORK` on a timer (`ACW_TIMER_S`, default 45 s), endable
     early with **Done** or extendable.
+    ⚠️ **AMENDED BY `D45`:** "endable with Done" conflated finishing *our* wrap-up form with being
+    ready for another call. Saving the form closes the call record; only the person's **Ready**
+    click ends `AFTER_CALL_WORK`.
   - **Both of the user's models are supported by config**, because they suit different moments:
     `manual_accept` + ACW timer is the default (explicit, visible, demo-friendly); `auto_accept` +
     `ACW_TIMER_S=0` gives the "connect instantly with a beep" mode busy centres actually use. Per-agent
@@ -621,10 +624,13 @@ _`D39`–`D41` added 2026-08-21, during P1._
   the microphone is the lossy one, so the keypad gets the job speech is worst at. It needs no
   AI, so it cannot degrade with one.
 - **It doubles as identity verification.** When we already hold the customer's data, a typed
-  policy number can be *checked against their actual policies*. A match is stronger evidence
-  than an agent's judgment of a spoken answer, and it promotes assurance automatically with a
-  machine-checkable audit line — no subjective confirmation involved. This makes `D42`'s
-  "Confirmed" button the fallback for verbal verification, not the primary path.
+  policy number can be *checked against their actual policies*. A match is strong evidence.
+  ⚠️ **AMENDED BY `D44`:** this entry originally said a match "promotes assurance
+  automatically ... no subjective confirmation involved". That was wrong, and wrong for the
+  exact reason `D42` exists — a match cannot tell the policyholder apart from a daughter
+  holding their documents. Promotion is always the agent's attestation; the lookup only
+  supplies evidence. `D44` also drops the assumption that the captured digits are a
+  known kind of thing.
 - **Never capture a full secret.** Last 4 of a citizen id, never the whole number; never a
   card number. For secret-ish challenges the system stores **the outcome only** (matched /
   did not match), never the entered digits. A policy number is not a secret and is stored.
@@ -634,3 +640,81 @@ _`D39`–`D41` added 2026-08-21, during P1._
   bridged from within it, or Asterisk stops emitting `ChannelDtmfReceived` once bridged.
   Always-on passive capture, no mode switch — a "digit entry mode" that interrupts the
   conversation would be worse than asking.
+
+---
+
+## D44. Keypad capture is generic; the agent interprets it, and only the agent attests identity
+- **Problem:** `D43` described capture as "the agent clicks *policy number*, the customer types
+  it". Two assumptions were baked in, and both are unsafe:
+  1. **that the customer has the thing we asked for.** They may have a citizen ID card in
+     their wallet, a claim SMS on the screen they are calling from, a renewal letter, or
+     nothing at all. Someone standing next to a crashed car has whatever was in the glovebox.
+     Asking for one specific document and building the feature around it fails the moment
+     they do not have it — which is often.
+  2. **that a match proves who is holding the phone.** It does not. A daughter calling on her
+     father's behalf may legitimately be holding his documents and type his policy number
+     correctly. `D43` said a match promotes assurance *automatically* — which reintroduces the
+     precise failure `D42` was written to prevent, one decision later.
+- **Decision:**
+  - **Capture is untyped.** The agent starts capture, the customer keys whatever they have,
+    the agent stops it. Raw digits appear on the workstation. That is the whole primitive.
+  - **Interpretation is a separate, optional step.** With digits on screen the agent may run a
+    lookup — match against this customer's policy numbers, match the last N of a citizen id,
+    look up a claim number — or may simply *use the digits themselves* and run nothing.
+  - **"The agent handles it" is the default and the only mode we build first.** Named lookups
+    are added afterwards, one at a time, as they prove worth automating.
+  - **A lookup returns evidence, never an action.** It renders `matched` / `not matched` plus
+    what it matched against. It never changes assurance, never unlocks a field, never writes
+    to the identity record on its own.
+  - **Promotion stays `D42`'s three-way agent control.** Confirmed / Not this person / Third
+    party acting for them.
+- **Reasoning:** separating *capture* from *interpretation* is what makes the feature survive
+  reality. The hard, valuable part — getting digits across a lossy line accurately — works for
+  any number the customer happens to have. Everything above it is convenience that can be
+  added incrementally without redesigning the primitive.
+- **The audit record gets better, not worse.** Instead of one machine assertion, it holds two
+  independent facts: *the system matched policy MT-2025-004512* **and** *the agent attested
+  third party acting for the policyholder*. A daughter with the right documents is now
+  recorded as exactly that, rather than as a verified policyholder.
+- **New consequence — the safe default inverts.** `D43` could say "a policy number is not a
+  secret, so store it". With untyped capture **we do not know what the digits are**, so raw
+  captures must be treated as potentially sensitive by default: masked in transcripts and
+  logs, short retention, discardable with one click. Only once a lookup names the value may it
+  be stored in the clear, and secret-ish challenges still store the outcome only.
+- **Tradeoff:** one more click for the agent in the common case, and a capture whose meaning
+  is not machine-known. Worth it — the alternative is a feature that only works when the
+  caller happens to be holding the one document we guessed.
+
+## D45. After-call work ends when the person says so, never when our form is saved
+- **Problem:** `D33` ended `AFTER_CALL_WORK` on the agent pressing **Done** in the wrap-up
+  form, or on a timer. Both assume the agent's remaining work lives *inside this system*. It
+  does not — real agents have other tabs, other internal tools, paper forms, a colleague to
+  ask, a note to write. "I finished your form" and "I am ready for another caller" are
+  different statements, and only the second one is about availability.
+- **Decision:** two distinct actions, and `AFTER_CALL_WORK` is redefined.
+  - Saving the wrap-up form **closes the call record**. That is our system's work finishing.
+  - Only the person clicking **Ready** moves them out of `AFTER_CALL_WORK`.
+  - `AFTER_CALL_WORK` therefore means *the period between a call ending and the agent
+    declaring readiness* — not *the time taken to fill in our form*.
+  - The ACW timer may auto-save the record so a call cannot hang open forever (flagged as
+    timer-ended, as today). **It must never auto-ready the agent.**
+  - Convenience, not compromise: the workstation offers a combined **Save & Ready** button, so
+    the common case is still one click. The actions only separate when the agent needs them to.
+- **Reasoning:** auto-ready trades an honest metric for a customer-visible failure. If the
+  platform marks an agent available while they are mid-task in another system, the next caller
+  rings an empty desk for a full offer timeout and is then re-matched — RONA. A slightly worse
+  utilisation number is much cheaper than a caller waiting through a ring cycle for nobody.
+- **The model already supported this; we were conflating its two axes.** `AgentPresence.is_available`
+  already requires `system_state is AVAILABLE` **and** `agent_intent is READY`. The bug was
+  never the data model — it was letting a form submission drive the platform axis.
+- **It makes the headline metric truer.** Shrinking ACW is one of this product's most credible
+  claims (the AI drafts the wrap-up). Measuring only "time in our form" would let us shrink the
+  number without shrinking the agent's actual work. Measuring end-of-call to declared-ready
+  captures the real thing, including the other systems — which is also what workforce planning
+  actually wants to know.
+- **Known risk, deliberately not solved by auto-ready:** an agent who walks away and never
+  clicks Ready. That is handled by *surfacing* it — a long-ACW indicator, supervisor visibility,
+  a nudge after a threshold — never by the platform asserting an availability nobody confirmed.
+- **Scope:** this changes the **agent presence** model only. `CallState` is untouched — the
+  call's own lifecycle (`WRAP_UP → RATING → CLOSED`) is independent of whether the agent is
+  ready for the next one, and always was.

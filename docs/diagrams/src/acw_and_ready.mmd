@@ -1,0 +1,39 @@
+%% HANDWRITTEN. Checked against D45
+flowchart TB
+    END["the call ends"]:::in
+    END --> ACW["<b>AFTER_CALL_WORK</b><br/>no new call is offered"]:::acw
+
+    ACW --> W1["edit the AI-drafted summary"]:::step
+    W1 --> W2["pick a disposition, add follow-ups"]:::step
+    W2 --> SAVE["<b>SAVE</b>"]:::save
+    SAVE --> REC[("call record CLOSED<br/>our system's work is finished")]:::store
+
+    SAVE -.-> STILL["<b>but the agent may not be free.</b><br/>Another internal tool. A paper form.<br/>A colleague to ask. A note to write."]:::note
+    STILL --> OTHER["work in systems we do not own"]:::other
+    OTHER --> READY
+
+    REC --> READY{"<b>the agent clicks READY</b><br/>the ONLY thing that ends ACW"}:::gate
+    READY --> AVAIL["<b>AVAILABLE</b> - offerable again"]:::ok
+
+    TIMER["<b>the ACW timer</b><br/>may auto-SAVE the record, flagged as timer-ended,<br/>so a call cannot hang open forever.<br/><b>It must NEVER auto-ready the agent.</b>"]:::warn
+    TIMER -.-> SAVE
+
+    WHY["<b>why auto-ready is actively worse.</b> Marking an agent<br/>available while they are mid-task in another system means<br/>the next caller rings an empty desk for a full offer timeout,<br/>then gets re-matched - RONA. A slightly worse utilisation<br/>number is far cheaper than a caller waiting for nobody."]:::key
+
+    METRIC["<b>and it makes the headline metric TRUE.</b> Shrinking ACW is<br/>one of this product's most credible claims. Measuring only<br/>time-in-our-form would let us shrink the number without<br/>shrinking the agent's actual work. End-of-call to<br/>declared-ready measures the real thing."]:::note
+
+    RISK["<b>the risk we accept:</b> an agent who walks away and never<br/>clicks Ready. Handled by SURFACING it - a long-ACW indicator,<br/>supervisor visibility, a nudge after a threshold - never by<br/>the platform asserting an availability nobody confirmed."]:::note
+
+    ONE["<b>still one click in the common case:</b><br/>the workstation offers <b>Save &amp; Ready</b> together.<br/>They only separate when the agent needs them to."]:::ok
+
+    classDef in fill:#1f6feb,stroke:#0b3d91,color:#fff
+    classDef acw fill:#fff4e6,stroke:#e8a33d,color:#4a2f00
+    classDef step fill:#eef4ff,stroke:#5b8def,color:#0b2545
+    classDef save fill:#eef4ff,stroke:#5b8def,color:#0b2545
+    classDef store fill:#e9f7ef,stroke:#2f9e5f,color:#08361d
+    classDef other fill:#f5f5f5,stroke:#999,color:#333
+    classDef gate fill:#1f6feb,stroke:#0b3d91,color:#fff
+    classDef ok fill:#e9f7ef,stroke:#2f9e5f,color:#08361d
+    classDef warn fill:#fdecea,stroke:#d93025,color:#5c1a13
+    classDef key fill:#1f6feb,stroke:#0b3d91,color:#fff
+    classDef note fill:#fffbe6,stroke:#d4a72c,color:#4a3800

@@ -23,6 +23,7 @@ renders whatever `.mmd` files are present.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import shutil
@@ -34,6 +35,33 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "docs" / "diagrams" / "src"
 OUT = ROOT / "docs" / "diagrams"
+
+#: Records the hash of each `.mmd` at the moment its SVG was rendered.
+#:
+#: `--check` used to compare mtimes, which cried wolf: re-running `gen_diagrams.py` rewrites
+#: every source file, so all 45 looked stale even when not one byte had changed. A check that
+#: reports false alarms gets ignored, which is worse than no check. Hashes only flag diagrams
+#: whose *content* has actually moved.
+MANIFEST = OUT / ".render-manifest.json"
+
+
+def source_hash(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def load_manifest() -> dict[str, str]:
+    if not MANIFEST.exists():
+        return {}
+    try:
+        data = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def save_manifest(entries: dict[str, str]) -> None:
+    MANIFEST.write_text(json.dumps(entries, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
 
 #: Shared look, so 40-odd diagrams read as one set rather than forty stylings.
 MERMAID_CONFIG = {
@@ -139,13 +167,16 @@ def main() -> int:
         raise SystemExit(f"no .mmd files in {SRC}")
 
     if args.check:
+        manifest = load_manifest()
         stale = []
         for source in sources:
             svg = OUT / f"{source.stem}.svg"
             if not svg.exists():
                 stale.append(f"{source.stem}: never rendered")
-            elif svg.stat().st_mtime < source.stat().st_mtime:
-                stale.append(f"{source.stem}: source is newer than the SVG")
+            elif source.stem not in manifest:
+                stale.append(f"{source.stem}: rendered before hashes were tracked - re-render")
+            elif manifest[source.stem] != source_hash(source):
+                stale.append(f"{source.stem}: source changed since the SVG was rendered")
         for line in stale:
             print(f"  STALE {line}")
         print(f"\n{len(sources) - len(stale)}/{len(sources)} up to date")
@@ -169,7 +200,14 @@ def main() -> int:
             print(f"browser: {browser}")
 
         print(f"rendering {len(sources)} diagrams -> {OUT.relative_to(ROOT)}\n")
-        failures = [s.name for s in sources if not render(mmdc, s, config_path, puppeteer_path)]
+        manifest = load_manifest()
+        failures = []
+        for source in sources:
+            if render(mmdc, source, config_path, puppeteer_path):
+                manifest[source.stem] = source_hash(source)
+            else:
+                failures.append(source.name)
+        save_manifest(manifest)
 
     print(f"\n{len(sources) - len(failures)}/{len(sources)} rendered")
     if failures:

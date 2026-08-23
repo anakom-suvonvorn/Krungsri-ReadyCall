@@ -95,6 +95,14 @@ React workstation with the softphone in it · web customer simulator · menu-fir
 - **Assurance goes UP mid-call** (`D42`) — and promotion must be a **re-render, not a re-fetch**.
   The assembler is deliberately not gated; keep it that way. **Gate at the wire, server-side** —
   never send the full brief and hide fields in React.
+- **Keypad capture is UNTYPED** (`D44`). Never assume the caller holds a particular document.
+  A lookup returns evidence (`matched` / `not matched`); it must never promote assurance by
+  itself — a match cannot tell the policyholder from a relative holding their papers. And
+  because we do not know what the digits are, treat raw captures as sensitive by default.
+- **Saving the wrap-up form is NOT "ready"** (`D45`). It closes the call record. Only the
+  person clicking Ready ends `AFTER_CALL_WORK`. The timer may auto-save; it must never
+  auto-ready — an agent marked available while working elsewhere means the next caller rings
+  an empty desk (RONA).
 - **Never ask a leading identity question.** "ขอทราบชื่อผู้ติดต่อ", not "ใช่คุณ X ไหมคะ" — naming
   the customer first both leaks that the number belongs to them and weakens the check.
 - **Never hardcode an insurance literal in `services/`** — it goes in `config/` (`D28`).
@@ -106,7 +114,7 @@ React workstation with the softphone in it · web customer simulator · menu-fir
 
 ## Diagrams (visual walkthroughs)
 
-`docs/diagrams/` — **44 diagrams** with explanations, in nine themed pages. Start at
+`docs/diagrams/` — **45 diagrams** with explanations, in nine themed pages. Start at
 `docs/diagrams/README.md`. Roughly a quarter are **generated from source** (the transition
 table, the domain pack, the pydantic models, the adapters on disk), so they cannot drift;
 `tests/unit/test_diagrams.py` fails if a committed one falls behind the code.

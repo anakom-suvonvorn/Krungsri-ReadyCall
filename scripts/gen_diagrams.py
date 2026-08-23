@@ -342,10 +342,12 @@ def agent_state() -> None:
     ]
     for a, b in itertools.pairwise(order):
         lines.append(f"        {a.name} --> {b.name}")
-    lines.append(
-        f"        {AgentSystemState.AFTER_CALL_WORK.name} --> {AgentSystemState.AVAILABLE.name}"
-    )
-    offering, available = AgentSystemState.OFFERING.name, AgentSystemState.AVAILABLE.name
+    acw, available = AgentSystemState.AFTER_CALL_WORK.name, AgentSystemState.AVAILABLE.name
+    # D45: saving the wrap-up form closes the call record; it does NOT make the agent
+    # offerable. Only the person clicking Ready ends ACW, because the rest of their
+    # post-call work happens in systems we do not own.
+    lines.append(f"        {acw} -- {q('the PERSON clicks Ready (D45)')} --> {available}")
+    offering = AgentSystemState.OFFERING.name
     lines.append(f"        {offering} -- declined / RONA --> {available}")
     lines.append("    end")
     lines.append('    subgraph person["agent_intent - set by the PERSON"]')
@@ -356,11 +358,20 @@ def agent_state() -> None:
     eligible = q("offerable = AVAILABLE and intent in (ready, last_call)")
     lines.append(f"    sys -.-> ELIGIBLE{{{eligible}}}:::gate")
     lines.append("    person -.-> ELIGIBLE")
+    why = lbl(
+        "Why two axes? Because 'the platform has no work for you'",
+        "and 'I am ready for another caller' are different facts.",
+        "Conflating them is how a form submission ends up asserting",
+        "an availability nobody confirmed - and the next caller",
+        "rings an empty desk for a full offer timeout. (D45)",
+    )
+    lines.append(f"    NOTE[{why}]:::note")
     lines.append("    classDef gate fill:#1f6feb,stroke:#0b3d91,color:#fff")
+    lines.append("    classDef note fill:#fffbe6,stroke:#d4a72c,color:#4a3800")
     write(
         "agent_state",
         "\n".join(lines),
-        src="readycall.domain.enums.AgentSystemState + AgentIntent (D33)",
+        src="readycall.domain.enums.AgentSystemState + AgentIntent (D33, D45)",
     )
 
 

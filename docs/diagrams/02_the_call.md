@@ -127,10 +127,21 @@ Two things worth knowing.
 which wire the audio arrived on tells us who spoke — a hard ML problem replaced by a
 plumbing decision.
 
-**The keypad stays live** (`D43`). Rather than asking the customer to read a policy number
-aloud over a mobile connection — the single worst case for accuracy — the agent asks them to
-*type* it. When the typed value matches a policy we already hold, assurance promotes
-automatically. More on that in [Identity](03_identity.md#33-the-keypad-is-also-a-verifier).
+**The keypad stays live** (`D43`, `D44`). Rather than asking the customer to read a number
+aloud over a mobile connection — the single worst case for accuracy — the agent has them
+*type* it.
+
+Two things the diagram is careful about, both from `D44`:
+
+- **The capture is untyped.** The agent does not ask for "your policy number" and build the
+  feature around that; they ask for whatever number the caller actually has, and raw digits
+  land on screen. We cannot assume anyone is holding a particular document.
+- **A match never promotes assurance on its own.** An optional lookup renders *matched / not
+  matched* as evidence, and the agent still attests. A daughter holding her father's documents
+  can type his policy number perfectly — auto-promoting would file her as the verified
+  policyholder.
+
+More in [Identity](03_identity.md#33-the-keypad-is-a-tool-not-an-oracle).
 
 ---
 
@@ -145,6 +156,11 @@ produces agents who are permanently "available" and permanently behind.
 The summary is **pre-filled, never auto-saved**. The agent edits and owns the record — an AI
 that silently writes the customer file is a liability, an AI that saves the agent ninety
 seconds of typing is a feature.
+
+**Saving the form and being ready are two different things** (`D45`). Saving closes the call
+record — that is *our* system's work finishing. But an agent's remaining work usually lives
+somewhere we do not own: another internal tool, a paper form, a colleague to ask. So only the
+person clicking **Ready** ends after-call work. See [Agents](06_agents_and_matching.md#64-when-after-call-work-actually-ends).
 
 Both sides rate the call (`D27`). The agent rating is the part people skip, and it is how we
 find out whether the brief was actually any good — without it we would be optimising a
