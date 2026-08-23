@@ -123,7 +123,11 @@ print("\n".join("  " + f for f in found) if found else "  none")
 # --- last-updated dates -------------------------------------------------------------------
 print("\nLAST UPDATED DATES")
 for path in sorted(DOCS.glob("*.md")):
-    m = re.search(r"_Last updated: ([\d-]+)\._", path.read_text(encoding="utf-8"))
+    # Not anchored to a leading `_`: DATA_MODEL and INTEGRATIONS carry a status first
+    # ("_Status: **design only**. Last updated: ..._"), and matching only the bare form
+    # reported them as MISSING when the date was right there. An audit that cries wolf
+    # gets ignored, which is worse than not having one.
+    m = re.search(r"Last updated: ([\d-]+)\.", path.read_text(encoding="utf-8"))
     print(f"  {path.name:24} {m.group(1) if m else 'MISSING'}")
 
 # --- open questions still marked open -----------------------------------------------------
