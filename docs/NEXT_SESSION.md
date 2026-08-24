@@ -1,7 +1,7 @@
 # NEXT_SESSION
 
 _The live working state. READ THIS FIRST every session. Keep it short and current._
-_Last updated: 2026-08-24._
+_Last updated: 2026-08-25._
 
 ---
 
@@ -12,7 +12,7 @@ believe it, why they are calling, everything we hold about them assembled before
 is answered, which agent should take it and why — and now **the desk actually rings, a
 human accepts, and the screen is already right**.
 
-Verified 2026-08-24: **307 tests pass**, `ruff check` + `ruff format --check` clean,
+Verified 2026-08-24: **308 tests pass**, `ruff check` + `ruff format --check` clean,
 `mypy --strict` clean over 81 files, all scenarios replay byte-identically, 50/50 diagrams
 current. The whole workstation flow was also driven by hand in a browser.
 
@@ -66,6 +66,17 @@ recommended-action chain written down (`D56`) · `other` challenge + a **named**
 computed server-side (`D59`) · attestation locks with an explicit amend (`D60`) · timers
 anchored to server timestamps · the ACW bar lives outside the wrap-up form.
 
+## Designed but NOT built (read before touching these areas)
+
+- **`D63` — call transfer.** One filtered roster menu covering all three needs (named agent /
+  department / seniority), with *"let the system choose"* walking the same list in fit order.
+  The caller moves **last**: an acceptance notifies the *original* agent, who wraps up with the
+  customer and presses Release. A busy receiver can *accept and queue at the front*. Lands with
+  P6; reuses the offer handshake, `D52` exclusion, presence and the brief almost wholesale.
+- **`D64` — the live matching board.** Callers left, agents right, edges coloured by fit,
+  hard-filter exclusions drawn differently from low scores. All the data is already in
+  `matching_decisions`. Unscheduled; it would have caught `B4` on sight.
+
 ## Next steps (in order)
 
 1. **P2c — the database layer** (`D39`). It did **not** land with P2b and that is the
@@ -92,7 +103,7 @@ anchored to server timestamps · the ACW bar lives outside the wrap-up form.
 | Q15 | Matching weights are guesses | Tune against real volumes; `--compare` exists to re-measure |
 | **Q16** | **A keypad lookup confirms a policy number at L1.** The caller supplied the digits and the agent must not read them aloud below L2 — but it is a confirmation oracle. Designed this way in `D44`; worth a second look. | Allowed |
 | **Q17** | **Commit `apps/workstation/dist/`?** It is gitignored, so a fresh clone has no workstation until `npm run build` runs — and on a venue with no internet, `npm install` is what fails. | Not committed |
-| **Q18** | **"Not this person" is a one-way door.** It clears the customer exactly as `D42` asks, but leaves the agent with nobody to attach the call to, and customer search does not exist (`D32` defers lookup). A rejected call stays anonymous for its duration. A test asserts this so it fails the day search lands. | Accepted for now |
+| **Q18** | **"Not this person" is a one-way door.** It clears the customer exactly as `D42` asks, but leaves the agent with nobody to attach the call to, and customer search does not exist (`D32` defers lookup). A rejected call stays anonymous for its duration. A test asserts this so it fails the day search lands. **Now visible rather than silent (`D61`)**: the two forward outcomes are disabled with the reason in the tooltip instead of answering 400. | Accepted for now |
 | **Q19** | **`config/playbooks/` does not exist** but is in the folder map. Actions live in `_PLAYBOOKS` in `builder.py` (`D56`). Moving them out is a P4 task. | Deferred to P4 |
 
 Resolved: rating is an event (`D46`) · single project (`D34`) · Asterisk · RTX 3050 · Claude
@@ -126,6 +137,12 @@ menu-first flow (`D37`).
   feature and protects nothing.
 - **Never speak a name below L2** (`D55`). The screen shows it; the opening line asks an
   **open** question. A leading question is weaker verification — anyone can answer "yes".
+- **Third party does NOT promote to L3** (`D42`, `D62`). It is not a bug and it has a test.
+  A relative holding the documents is not the policyholder; promoting would write into the
+  disclosure log that the policyholder was verified. Context attaches, disclosure stays locked.
+- **The identity control re-locks after EVERY attestation** (`D61`). The client learns a new
+  one landed from `attestation_count`, which only grows. Watching `attested_outcome` misses a
+  confirmed→confirmed correction, and a lock that opens once is worse than no lock.
 - **`agent_intent` is a standing instruction, never a live status** (`D59`). It is not
   deselected around a call. Mid-call only `ready`/`last_call`/`draining` are declarable.
   `LAST_CALL` is **spent** when that call ends. Use `intent_reason` to tell the three routes

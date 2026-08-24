@@ -285,6 +285,16 @@ export function IdentityPanel({
   const [relationship, setRelationship] = useState("");
   const [reopened, setReopened] = useState(false);
 
+  // Re-lock as soon as a new attestation lands. `reopened` is local, so without a
+  // server-side signal to reset on it stayed true for the rest of the call: one press of
+  // *amend* and the three outcomes could be cycled freely, silently appending a row to the
+  // disclosure log each time. `attestation_count` only ever grows (amending appends,
+  // `D60`), which makes it exactly the edge to listen for.
+  const attestationCount = identity?.attestation_count ?? 0;
+  useEffect(() => {
+    setReopened(false);
+  }, [attestationCount]);
+
   if (!identity) {
     return (
       <div className="panel">
@@ -299,6 +309,14 @@ export function IdentityPanel({
   const disabled = busy || !callId || locked;
   const needNote = challenge === "other" && !challengeNote.trim();
   const thirdPartyReady = callerName.trim().length > 0 && relationship.trim().length > 0;
+  // After *ไม่ใช่บุคคลนี้* there is no proposed customer left to confirm or to act for, so
+  // the server refuses both with a 400 (`attestation.py`). Customer search is not built
+  // yet (`Q18`), so this is a real dead end for the rest of the call — and it must LOOK
+  // like one. A live-looking button that always errors reads as a broken screen.
+  const noCustomer = identity.customer_id === null;
+  const noCustomerHint = noCustomer
+    ? "ไม่มีลูกค้าที่ระบบเสนอไว้แล้ว — ต้องค้นหาลูกค้าก่อน (ยังไม่มีในระบบ)"
+    : undefined;
 
   return (
     <div className="panel">
@@ -337,6 +355,12 @@ export function IdentityPanel({
               {identity.third_party_name} · {identity.relationship}
             </div>
           )}
+          {attestationCount > 1 && (
+            <div className="faint">แก้ไขแล้ว {attestationCount - 1} ครั้ง · เก็บทุกรายการไว้</div>
+          )}
+          {/* Always offered once anything has been attested — including after a rejection.
+              An agent who pressed the wrong button must never be trapped by it; the
+              correction appends, so both statements survive (`D60`). */}
           {!reopened && (
             <button className="ghost" style={{ marginTop: 8 }} onClick={() => setReopened(true)}>
               แก้ไขการยืนยัน
@@ -385,7 +409,8 @@ export function IdentityPanel({
         )}
         <button
           className="primary"
-          disabled={disabled || needNote}
+          disabled={disabled || needNote || noCustomer}
+          title={noCustomerHint}
           onClick={() =>
             onAttest({
               outcome: "confirmed",
@@ -400,6 +425,13 @@ export function IdentityPanel({
 
         <div style={{ borderTop: "1px solid var(--line)", paddingTop: 10 }}>
           <div className="field-label">ผู้ดำเนินการแทน (ต้องกรอกทั้งสองช่อง)</div>
+          {/* Says out loud what `D42` decided, because the screen looked like a bug
+              otherwise: third party is NOT a promotion. The case context attaches so the
+              agent can see which policy this is about; disclosure stays locked, because a
+              relative holding the documents is not the policyholder. */}
+          <div className="faint" style={{ marginBottom: 6 }}>
+            บันทึกว่าเป็นผู้ดำเนินการแทน — ยังไม่เปิดเผยรายละเอียดกรมธรรม์ และจะมีขั้นตอนตรวจสอบสิทธิ์
+          </div>
           <div className="stack">
             <input
               placeholder="ชื่อ-นามสกุลผู้ติดต่อ"
@@ -414,7 +446,8 @@ export function IdentityPanel({
               disabled={disabled}
             />
             <button
-              disabled={disabled || !thirdPartyReady}
+              disabled={disabled || !thirdPartyReady || noCustomer}
+              title={noCustomerHint}
               onClick={() =>
                 onAttest({
                   outcome: "third_party",

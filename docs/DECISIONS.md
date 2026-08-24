@@ -1,7 +1,7 @@
 # DECISIONS
 
 _Significant engineering decisions and their rationale. Append new ones at the bottom; never silently reverse one without a new entry explaining why._
-_Last updated: 2026-08-24._
+_Last updated: 2026-08-25._
 
 Format per entry: **Problem → Decision → Reasoning → Alternatives → Tradeoffs → Future.**
 
@@ -1197,3 +1197,174 @@ _`D49` added 2026-08-24, during P2a._
   attach the call to, and customer search does not exist yet (`D32` puts lookup in a later
   phase). A rejected call therefore stays anonymous for its duration. Asserted by a test, so
   the day search lands, that test fails and points at the gap.
+
+## D61. The identity control is a cycle, not a latch: locked after every attestation, always reopenable
+- **Problem:** `D60` locked the control after an attestation and added an amend path. Two
+  things were wrong with how that landed, both found by an agent clicking around:
+  1. **`reopened` was client-local state that nothing ever reset.** One press of
+     *แก้ไขการยืนยัน* unlocked the three outcomes for the rest of the call, so an agent could
+     cycle Confirmed → Third party → Confirmed freely, silently appending a row to the
+     disclosure log on every click. The lock was a latch that opened once and stayed open.
+  2. **After *ไม่ใช่บุคคลนี้* the two other buttons still looked pressable** and answered
+     `400` on every click, because there is no longer a proposed customer to confirm or to
+     act for. A live-looking control that always errors reads as a broken screen.
+- **Decision — one shape for all three outcomes, with no dead ends:**
+  - Any attestation — **including a rejection** — locks all three outcomes and greys them.
+  - **แก้ไขการยืนยัน is always available** once anything has been attested. An agent who
+    pressed the wrong button must never be trapped by it.
+  - Reopening unlocks all three; the next attestation **re-locks** them. The client learns
+    that a new attestation landed from **`attestation_count`**, a server field that only ever
+    grows, since amending appends (`D60`) rather than overwriting.
+  - Where an outcome is genuinely impossible — confirm or third-party with no customer —
+    the button is **disabled with the reason in its tooltip**, not left live to fail.
+- **Reasoning:** the lock exists so a signed statement is not a toggle, and the amend path
+  exists so a mistake is not permanent. Those two only coexist if the lock **re-arms**. A
+  latch that opens once gives the appearance of an audit control while providing none — which
+  is worse than no lock, because the screen says the question is settled.
+- **Why the count rather than the outcome:** amending *confirmed → confirmed with a different
+  challenge* is a legitimate correction that changes no other field. Watching
+  `attested_outcome` would miss it, and the control would stay unlocked exactly when an agent
+  is fixing something.
+- **`Q18` is now visible instead of silent.** Rejection remains a one-way door for *this call*
+  — the two forward outcomes stay disabled until customer search exists — but the door is now
+  labelled. The test that pins the limitation is unchanged; the screen simply stopped lying
+  about it.
+- **Enforced server-side.** The `409` on a stray click is the rule; the disabled button is the
+  courtesy. Verified by driving the live API: attest → `409` → amend → `409` again, which is
+  the re-arming the first implementation lacked.
+
+## D62. Third party does not promote, and the screen now says so out loud
+- **Problem:** reported as a bug — *"confirmation via third party doesn't move up to L3"*. It
+  is not a bug; it is `D42`, and `attestation.py` carries the comment *"Deliberately NOT
+  promoted"* with `test_a_third_party_does_not_unlock_disclosure` pinning it. But a rule that
+  an experienced user of the screen reads as a malfunction is a **presentation** failure, and
+  worth fixing as one.
+- **Why it must not promote:** the third button exists precisely because a daughter calling
+  about her father is neither *confirmed* nor *wrong*. Promoting her to `L3_VERIFIED` would
+  write into the disclosure log that **the policyholder was verified**, which is the false
+  record the third outcome was invented to prevent. Holding the documents is not being the
+  person. What third party buys is the **case context** — the agent can see which policy this
+  is about — plus an authority-check step; disclosure stays locked.
+- **Decision:** behaviour unchanged; the panel states the consequence *before* the button is
+  pressed — *"บันทึกว่าเป็นผู้ดำเนินการแทน — ยังไม่เปิดเผยรายละเอียดกรมธรรม์ และจะมีขั้นตอนตรวจสอบสิทธิ์"* —
+  rather than leaving the agent to infer it from a badge that did not move.
+- **The general rule this is an instance of:** where the system deliberately does *less* than
+  a user expects, the screen has to say so at the point of action. Silence is indistinguishable
+  from a fault, and the cost is that someone eventually "fixes" the safeguard.
+- **Future:** if Krungsri's process defines a verified-representative status (a recorded power
+  of attorney, a registered representative on the policy), that is a **fourth** outcome with
+  its own evidence requirements — not a promotion of this one. `Q13` already tracks that
+  `Policy` has no `representatives` field.
+
+## D63. Call transfer is one filtered menu, a consulted handshake, and the caller moves last
+_Designed 2026-08-25 from the user's specification. **Not built** — it lands with P6, when
+live-call transcription and the wrap-up loop make a warm handover meaningful. Written down now
+because the shape is decided and the pieces it needs are being built before then._
+
+- **Problem:** `CallState.TRANSFERRED` exists and `ARCHITECTURE.md` §9 lists transfer among the
+  call controls, but nothing says *how a transfer is chosen, offered, accepted, or aborted*.
+  The obvious three features — transfer to a **named agent**, to a **department**, or **up to a
+  senior** — look like three screens, and building them as three would triple the state machine
+  for one underlying operation.
+- **Decision, and the collapse is the point: one menu.** The agent opens a transfer panel
+  showing the roster **filtered** by product line / department, seniority, and skill. From that
+  one filtered list they may either:
+  - **pick a specific agent**, or
+  - press **"let the system choose"**, which walks the same filtered list in fit order.
+
+  Transfer-to-department and transfer-to-a-senior are then not separate features at all — they
+  are *this menu with a filter set and the system choosing*. Three requirements, one surface,
+  one state machine.
+
+### What the transferring agent sees
+- **Live presence per candidate**, because choosing blind is how a call lands on an empty desk:
+  `system_state`, `agent_intent`, current load, and — for someone on a call — a rough
+  *expected free* (`D22`'s call-progress estimate, which P6 introduces anyway).
+- **A required reason for the transfer.** The receiving agent decides on the reason **plus the
+  existing brief** (`D7`) — which is exactly the pitch's own thesis applied internally: the
+  second agent should not have to re-interview the customer either.
+
+### The handshake, and the two rules that make it humane
+1. **The caller does not move when the transfer is *offered*.** They stay in the original
+   agent's call, talking, unaware. Only an acceptance changes anything. This is `D21`'s
+   offer-window insight reused: the seconds spent deciding are seconds the conversation
+   continues, not dead air on hold.
+2. **The caller does not move when the transfer is *accepted* either.** Acceptance notifies the
+   **original** agent, who then wraps up with the customer — *"I'm putting you through to
+   คุณสุดา in claims now"* — and presses **Release** to actually move them. Transferring on the
+   receiver's click would cut the first agent off mid-sentence, which is precisely the jarring
+   experience a warm transfer exists to avoid.
+
+So the caller's leg moves exactly once, on a deliberate press by the person currently talking
+to them.
+
+### Receiving an offer
+- **Free** → *Accept* and take the call when released.
+- **On a call** → *Accept and queue at the front*. They finish their current conversation; the
+  transferred caller is the next thing they get, ahead of the pool. That is a legitimate
+  priority: this caller has already spoken to someone and been told they are being handed over.
+- **Decline**, which notifies the sender and names them.
+
+### When the system chooses
+It walks the filtered list **most-appropriate first** (the existing fit function, `D22`),
+offering to one agent at a time. A decline moves to the next. **The hard filters still apply** —
+language at the required CEFR level (`D38`), skill, licence — because "the system picked them"
+must never mean a conversation neither party can hold. If the whole filtered list declines, the
+sender is told **"every transfer attempt was declined"** and keeps the call. The customer never
+learns any of this happened.
+
+### Why not the obvious alternatives
+- **Blind transfer** (push the caller into another queue and hang up) — this is what call
+  centres do today and the reason people hate being transferred: the context dies, the caller
+  re-explains, and nobody owns the outcome. It stays available as an escape hatch, never a
+  default.
+- **Transfer to a queue rather than a person** — a special case of "system chooses" with the
+  filter set to the queue's skill, so it needs no separate mechanism.
+- **Auto-accept on the receiving side** — rejected for the same reason `D33` rejected it for
+  inbound offers: it hands a call to a desk that may be empty, and the caller pays the timeout.
+- **Letting the receiver's Accept move the caller immediately** — the jarring cut described
+  above, and it also removes the only moment where the customer can be *told* what is happening.
+
+### What it will reuse rather than invent
+Almost all of it exists. The offer/accept handshake and its timeout (`D33`), RONA (`D51`),
+exclusion of an agent who declined (`D52` — a declined transfer must not be re-offered to the
+same person by the auto-walk), presence with both axes, the socket with per-agent sequencing,
+and the brief itself. The genuinely new pieces are: a **transfer offer** distinct from a queue
+offer, the **front-of-queue** commitment for a busy receiver, the **filtered roster view** with
+live presence, and `CallState.TRANSFERRED` finally being entered by something.
+
+- **Open questions to settle when it is built:** does a transfer offer time out, and if so does
+  the auto-walk treat a timeout like a decline (probably yes, `D52`'s reasoning)? Can the
+  sender cancel a pending offer? Does the receiver see the *full* brief before accepting, or
+  the reduced offer-card view (`D53`'s gate applies to them too — they are a different agent,
+  and assurance is a property of the call, so it travels)? Does a front-of-queue commitment
+  survive the receiver going to lunch?
+
+## D64. A live matching board is the debug surface the matcher has earned
+_Idea captured 2026-08-25 from the user. **Not scheduled** — P8 or a spare afternoon. Recorded
+because it is cheap, and because it would have caught `B4` on sight._
+
+- **Problem:** the matcher already persists everything about every decision (`D18`, `D22`) —
+  every candidate, every term, the chosen pair, the exclusions, the rejected deferrals — and
+  the only way to look at it is `scripts/run_matching.py`, a wall of text you have to read
+  carefully to spot a contradiction. `B4` sat in that output for a while: twelve callers told
+  *"no qualified agent"* directly above a listed qualified agent.
+- **The idea:** a bipartite board. **Callers as nodes on the left, agents on the right**, edges
+  drawn between them, live.
+  - Click a node for its detail — the caller's queue, intent, wait, urgency terms; the agent's
+    skills, load, presence, current call.
+  - **Edges coloured by fit**, so a good match and a desperate one look different at a glance.
+  - **Distinguish the two kinds of pairing**: currently *in call* versus *matched and still
+    waiting*. They are different facts and the picture should not merge them.
+  - Show the **unplaced** callers with which of the two reasons applies (`D50`), and the
+    **excluded** edges (`already_offered`, skill, language) as something visibly different from
+    a low score — because `D22` says a hard filter is not a bad score, and a picture that draws
+    them the same way teaches the opposite.
+- **Why it is worth building:** this system's product claim is *explainability* — "why did it
+  choose that agent?" is a question a judge will ask. A board that answers it in one frame is
+  worth more than a paragraph, and it is the same data already in `matching_decisions`, so
+  there is nothing to instrument. It is also a genuine **debugging** tool: contradictions
+  between a label and its evidence are visible spatially in a way they are not in a log.
+- **Constraint carried over:** it is a **debug/supervisor** view, so it shows customer identity
+  at whatever the disclosure gate permits (`D53`) — a board showing every caller's name to
+  anyone who opens it would be a second `B5` with a nicer layout.

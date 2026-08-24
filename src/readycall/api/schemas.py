@@ -301,6 +301,12 @@ class IdentityOut(ApiModel):
     attested_outcome: str | None = None
     third_party_name: str | None = None
     relationship: str | None = None
+    #: How many attestations this call has accumulated. Amending **appends** (`D60`), so
+    #: this only ever grows, and the client needs it: the panel's "reopened for editing"
+    #: flag is local, and without a server-side signal that a new attestation landed it
+    #: had nothing to reset itself on — so one press of *amend* unlocked the control for
+    #: the rest of the call, which is the opposite of what `D60` decided.
+    attestation_count: int = 0
 
 
 class CaptureOut(ApiModel):

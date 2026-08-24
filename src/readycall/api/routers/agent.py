@@ -653,6 +653,7 @@ async def _snapshot(container: Any, agent_id: str) -> WorkstationSnapshot:
                 attested_outcome=str(latest.outcome) if latest else None,
                 third_party_name=latest.caller_name if latest else None,
                 relationship=latest.relationship if latest else None,
+                attestation_count=len(history),
             )
         # Rendered for the CURRENT assurance level, server-side (`D42`). A locked field
         # is absent from the payload, not hidden by the client.

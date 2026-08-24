@@ -316,6 +316,52 @@ def test_attesting_locks_the_control_until_it_is_reopened(client: Any) -> None:
     )
 
 
+def test_amending_appends_and_the_count_lets_the_panel_re_lock(client: Any) -> None:
+    """The signal the workstation re-locks on, and why it has to come from the server.
+
+    The panel's "reopened for editing" flag is local state. Without a server-side edge to
+    reset it on, one press of *amend* left the control unlocked for the rest of the call —
+    so all three outcomes could be cycled freely, appending a disclosure row per click.
+    `attestation_count` grows on every attestation *including* amendments (`D60` appends,
+    never overwrites), which is precisely the edge the client needs.
+
+    A third amendment is also asserted, because the bug only showed up on the second one.
+    """
+    call_id = take_a_call(client)
+
+    first = client.post(
+        f"/v1/agent/calls/{call_id}/identity",
+        json={"outcome": "confirmed", "challenge": "date_of_birth"},
+    )
+    assert first.json()["identity"]["attestation_count"] == 1
+
+    second = client.post(
+        f"/v1/agent/calls/{call_id}/identity",
+        json={
+            "outcome": "third_party",
+            "caller_name": "สุดา ใจดี",
+            "relationship": "ลูกสาว",
+            "amend": True,
+        },
+    )
+    assert second.json()["identity"]["attestation_count"] == 2
+
+    # Still locked after the amendment: a further click without `amend` must be refused,
+    # which is the server-side half of the same rule (a disabled button is only a courtesy).
+    stray = client.post(
+        f"/v1/agent/calls/{call_id}/identity",
+        json={"outcome": "confirmed", "challenge": "policy_number"},
+    )
+    assert stray.status_code == 409, "the control must re-lock after an amendment, not stay open"
+
+    third = client.post(
+        f"/v1/agent/calls/{call_id}/identity",
+        json={"outcome": "confirmed", "challenge": "policy_number", "amend": True},
+    )
+    assert third.json()["identity"]["attestation_count"] == 3, "corrections accumulate"
+    assert third.json()["identity"]["may_disclose_policy_details"] is True
+
+
 def test_rejecting_the_guess_is_currently_a_one_way_door(client: Any) -> None:
     """A recorded limitation, not an accident (`Q18`).
 

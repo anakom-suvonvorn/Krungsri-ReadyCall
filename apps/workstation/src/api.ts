@@ -59,6 +59,8 @@ export type Identity = {
   attested_outcome: string | null;
   third_party_name: string | null;
   relationship: string | null;
+  /** Grows by one per attestation, amendments included — the signal the panel re-locks on. */
+  attestation_count: number;
 };
 
 export type Capture = {
