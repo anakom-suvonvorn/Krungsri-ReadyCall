@@ -231,10 +231,122 @@ def test_a_third_party_does_not_unlock_disclosure(client: Any) -> None:
     call_id = take_a_call(client)
     body = client.post(
         f"/v1/agent/calls/{call_id}/identity",
-        json={"outcome": "third_party", "relationship": "ลูกสาว"},
+        json={"outcome": "third_party", "caller_name": "สุดา ใจดี", "relationship": "ลูกสาว"},
     ).json()
     assert body["identity"]["may_disclose_policy_details"] is False
     assert body["identity"]["authority_check_required"] is True
+    assert body["identity"]["third_party_name"] == "สุดา ใจดี"
+
+
+def test_a_third_party_must_be_named(client: Any) -> None:
+    """`D57`: the disclosure log has to say WHO was on the phone.
+
+    "somebody who is not the policyholder called" is not a record anyone can act on.
+    """
+    call_id = take_a_call(client)
+    unnamed = client.post(
+        f"/v1/agent/calls/{call_id}/identity",
+        json={"outcome": "third_party", "relationship": "ลูกสาว"},
+    )
+    assert unnamed.status_code == 400
+    no_relationship = client.post(
+        f"/v1/agent/calls/{call_id}/identity",
+        json={"outcome": "third_party", "caller_name": "สุดา ใจดี"},
+    )
+    assert no_relationship.status_code == 400
+
+
+def test_other_is_a_valid_challenge_but_needs_saying_what_it_was(client: Any) -> None:
+    """`D57`: real verification does not fit a four-item dropdown.
+
+    Recognised the voice from last week, read a claim reference off an SMS, transferred
+    from a branch that already checked ID. A closed list forces all of those into the
+    nearest lie — but a free-text `other` with nothing written in it is the unfalsifiable
+    audit row `D42` exists to prevent, so the note is required.
+    """
+    call_id = take_a_call(client)
+    blank = client.post(
+        f"/v1/agent/calls/{call_id}/identity",
+        json={"outcome": "confirmed", "challenge": "other", "challenge_note": "   "},
+    )
+    assert blank.status_code == 400
+
+    body = client.post(
+        f"/v1/agent/calls/{call_id}/identity",
+        json={
+            "outcome": "confirmed",
+            "challenge": "other",
+            "challenge_note": "โอนสายจากสาขาที่ตรวจบัตรประชาชนแล้ว",
+        },
+    ).json()
+    assert body["identity"]["assurance"] == "l3_verified"
+
+
+def test_attesting_locks_the_control_until_it_is_reopened(client: Any) -> None:
+    """`D60`. An attestation is a signed statement, not a toggle.
+
+    It does not lock forever, though: an agent who confirmed and then realised they were
+    speaking to the policyholder's daughter must be able to correct it. Reopening is
+    explicit and appends a correction, so both statements survive in the log.
+    """
+    call_id = take_a_call(client)
+    client.post(
+        f"/v1/agent/calls/{call_id}/identity",
+        json={"outcome": "confirmed", "challenge": "date_of_birth"},
+    )
+
+    second = client.post(
+        f"/v1/agent/calls/{call_id}/identity",
+        json={"outcome": "third_party", "caller_name": "สุดา ใจดี", "relationship": "ลูกสาว"},
+    )
+    assert second.status_code == 409, "a stray second click must not rewrite the record"
+
+    amended = client.post(
+        f"/v1/agent/calls/{call_id}/identity",
+        json={
+            "outcome": "third_party",
+            "caller_name": "สุดา ใจดี",
+            "relationship": "ลูกสาว",
+            "amend": True,
+        },
+    )
+    assert amended.status_code == 200
+    assert amended.json()["identity"]["may_disclose_policy_details"] is False, (
+        "correcting downward has to actually re-lock disclosure"
+    )
+
+
+def test_rejecting_the_guess_is_currently_a_one_way_door(client: Any) -> None:
+    """A recorded limitation, not an accident (`Q18`).
+
+    "Not this person" clears the customer, which is exactly what `D42` asks for — nothing
+    should re-propose a wrong ANI match. But it leaves the agent with nobody to attach the
+    call to, and there is no customer-search feature yet (`D32` puts past-customer lookup
+    in a later phase). So a rejected call stays anonymous for its duration.
+
+    Asserted so that the day search lands, this test fails and points at the gap.
+    """
+    call_id = take_a_call(client)
+    client.post(f"/v1/agent/calls/{call_id}/identity", json={"outcome": "not_this_person"})
+    blocked = client.post(
+        f"/v1/agent/calls/{call_id}/identity",
+        json={"outcome": "confirmed", "challenge": "date_of_birth", "amend": True},
+    )
+    assert blocked.status_code == 400
+    assert "never proposed" in blocked.json()["detail"]
+
+
+def test_the_snapshot_says_the_identity_was_attested(client: Any) -> None:
+    """So the panel can lock itself without keeping its own copy of what happened."""
+    call_id = take_a_call(client)
+    assert client.get("/v1/agent/me").json()["identity"]["attested"] is False
+    client.post(
+        f"/v1/agent/calls/{call_id}/identity",
+        json={"outcome": "confirmed", "challenge": "policy_number"},
+    )
+    identity = client.get("/v1/agent/me").json()["identity"]
+    assert identity["attested"] is True
+    assert identity["attested_outcome"] == "confirmed"
 
 
 def test_rejecting_the_guess_drops_to_anonymous(client: Any) -> None:
@@ -249,8 +361,15 @@ def test_rejecting_the_guess_drops_to_anonymous(client: Any) -> None:
 # --- keypad capture (D44) -------------------------------------------------------------
 
 
-def test_a_capture_never_returns_its_digits(client: Any) -> None:
-    """The inverted default: we do not know what these digits are, so they are sensitive."""
+def test_the_agent_sees_the_digits_and_the_log_does_not(client: Any) -> None:
+    """`D58`. `D44`'s inverted default is "masked in transcripts and logs" — not masked
+    from the agent.
+
+    The agent asked the caller to key these digits and has to read them back or act on
+    them. The first implementation masked them on the agent's own screen too, which
+    deleted the feature and protected nothing: `••••••••12` is not a policy number
+    anybody can use.
+    """
     call_id = take_a_call(client)
     capture = client.post(f"/v1/agent/calls/{call_id}/capture").json()
     for digit in "2025004512":
@@ -258,10 +377,19 @@ def test_a_capture_never_returns_its_digits(client: Any) -> None:
             f"/v1/agent/captures/{capture['capture_id']}/keys", json={"digits": digit}
         ).json()
 
-    assert "digits" not in body
-    assert body["masked"].endswith("12")
-    assert body["masked"].count("•") == 8
+    assert body["digits"] == "2025004512", "the agent's own panel shows the real digits"
+    assert body["masked"] == "••••••••12", "...and the masked form travels everywhere else"
     assert body["length"] == 10
+
+
+def test_discarding_leaves_nothing_in_either_form(client: Any) -> None:
+    call_id = take_a_call(client)
+    capture = client.post(f"/v1/agent/calls/{call_id}/capture").json()
+    client.post(f"/v1/agent/captures/{capture['capture_id']}/keys", json={"digits": "12345"})
+    body = client.post(f"/v1/agent/captures/{capture['capture_id']}/discard").json()
+    assert body["digits"] == ""
+    assert body["masked"] == ""
+    assert body["length"] == 0
 
 
 def test_a_lookup_returns_evidence_and_changes_nothing(client: Any) -> None:
@@ -369,7 +497,10 @@ def test_a_rejected_identity_takes_the_policy_back_off_the_screen(client: Any) -
     )
     assert client.get("/v1/agent/me").json()["brief"]["relevant_policy"] is not None
 
-    client.post(f"/v1/agent/calls/{call_id}/identity", json={"outcome": "not_this_person"})
+    client.post(
+        f"/v1/agent/calls/{call_id}/identity",
+        json={"outcome": "not_this_person", "amend": True},
+    )
     body = client.get("/v1/agent/me").json()
     raw = json.dumps(body, ensure_ascii=False)
     assert "HL-2024-000811" not in raw
@@ -386,3 +517,114 @@ def test_actions_needing_assurance_are_absent_not_disabled(client: Any) -> None:
     )
     at_l3 = client.get("/v1/agent/me").json()["brief"]["actions_th"]
     assert len(at_l3) >= len(at_l1)
+
+
+# --- the spoken line, and the step before every other step (D55) ------------------
+
+
+def test_the_opening_line_never_names_an_unverified_caller(client: Any) -> None:
+    """`D55`, and it is drawn in `diagrams/src/identity_promotion.mmd`.
+
+    Two reasons, and the second is the stronger one. Greeting someone by name tells
+    whoever is holding that phone that the number belongs to that person. And a leading
+    question is weaker verification: "ใช่คุณภัทธีราไหมคะ" can be answered "yes" by
+    anybody, while "ขอทราบชื่อผู้ติดต่อด้วยค่ะ" has to be produced.
+
+    The name is still on screen. It is just not in the sentence the agent reads out.
+    """
+    call_id = take_a_call(client)
+    brief = client.get("/v1/agent/me").json()["brief"]
+
+    assert "ภัทธีรา" not in (brief["suggested_opening_th"] or "")
+    assert "ขอทราบชื่อผู้ติดต่อ" in brief["suggested_opening_th"]
+    assert brief["customer"]["display_name_th"].startswith("ภัทธีรา"), (
+        "the agent can still see who we think it is"
+    )
+
+    client.post(
+        f"/v1/agent/calls/{call_id}/identity",
+        json={"outcome": "confirmed", "challenge": "date_of_birth"},
+    )
+    after = client.get("/v1/agent/me").json()["brief"]
+    assert "ภัทธีรา" in after["suggested_opening_th"], "once verified, greet them by name"
+
+
+def test_verify_identity_is_prepended_as_action_zero(client: Any) -> None:
+    """Below L2 the agent is never blocked — they are told what to do first."""
+    call_id = take_a_call(client)
+    actions = client.get("/v1/agent/me").json()["brief"]["actions_th"]
+    assert actions[0] == "ยืนยันตัวตนผู้ติดต่อก่อนให้ข้อมูลกรมธรรม์"
+
+    client.post(
+        f"/v1/agent/calls/{call_id}/identity",
+        json={"outcome": "confirmed", "challenge": "date_of_birth"},
+    )
+    after = client.get("/v1/agent/me").json()["brief"]["actions_th"]
+    assert after[0] != "ยืนยันตัวตนผู้ติดต่อก่อนให้ข้อมูลกรมธรรม์"
+    assert len(after) > len(actions) - 1, "and the L2-gated steps come back"
+
+
+# --- what the screen is allowed to offer (D59) -----------------------------------
+
+
+def test_the_server_says_which_status_buttons_are_legal(client: Any) -> None:
+    """The workstation renders permissions; it does not guess them."""
+    sign_in_agent(client, "A006")
+    available = client.post("/v1/agent/state", json={"agent_intent": "ready"}).json()
+    assert set(available["declarable"]) == {
+        "ready",
+        "break",
+        "lunch",
+        "training",
+        "admin",
+        "last_call",
+        "draining",
+    }
+
+    place_call(client, intent_code="health.ipd.preauth", ignore_hours=True)
+    offer = client.get("/v1/agent/me").json()["offer"]
+    on_call = client.post(f"/v1/agent/offers/{offer['assignment_id']}/accept").json()
+    assert set(on_call["presence"]["declarable"]) == {"ready", "last_call", "draining"}
+
+    refused = client.post("/v1/agent/state", json={"agent_intent": "lunch"})
+    assert refused.status_code == 400, "you cannot be at lunch while talking to a customer"
+
+
+def test_a_spent_last_call_is_distinguishable_from_a_fresh_sign_in(client: Any) -> None:
+    """Both are `not_ready`, and they want opposite things on screen (`D59`).
+
+    Without a reason the wrap-up panel offers "Save & Ready" as the primary button to an
+    agent who has just told us they are finishing — making the fastest click the one that
+    undoes what they said.
+    """
+    fresh = sign_in_agent(client, "A006")
+    assert fresh["agent_intent"] == "not_ready"
+    assert fresh["intent_reason"] == "signed_in"
+
+    client.post("/v1/agent/state", json={"agent_intent": "ready"})
+    placed = place_call(client, intent_code="health.ipd.preauth", ignore_hours=True)
+    offer = client.get("/v1/agent/me").json()["offer"]
+    client.post(f"/v1/agent/offers/{offer['assignment_id']}/accept")
+    client.post("/v1/agent/state", json={"agent_intent": "last_call"})
+    client.post(f"/v1/agent/calls/{placed['call_session_id']}/end", json={})
+
+    after = client.get("/v1/agent/me").json()["presence"]
+    assert after["agent_intent"] == "not_ready"
+    assert after["intent_reason"] == "last_call_fulfilled"
+
+
+def test_the_timers_are_anchored_to_server_timestamps(client: Any, clock: ManualClock) -> None:
+    """So a browser refresh mid-call shows the true elapsed time, not zero."""
+    sign_in_agent(client, "A006")
+    client.post("/v1/agent/state", json={"agent_intent": "ready"})
+    placed = place_call(client, intent_code="health.ipd.preauth", ignore_hours=True)
+    offer = client.get("/v1/agent/me").json()["offer"]
+    client.post(f"/v1/agent/offers/{offer['assignment_id']}/accept")
+
+    snapshot = client.get("/v1/agent/me").json()
+    assert snapshot["call_answered_at"], "the call timer needs an anchor, not a mount time"
+
+    clock.advance(90)
+    client.post(f"/v1/agent/calls/{placed['call_session_id']}/end", json={})
+    wrapping = client.get("/v1/agent/me").json()["presence"]
+    assert wrapping["acw_since"], "and so does the ACW timer"

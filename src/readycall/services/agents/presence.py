@@ -49,6 +49,29 @@ DECLARABLE: frozenset[AgentIntent] = frozenset(
     }
 )
 
+#: The subset that still means something **while a call is in progress** (`D59`).
+#:
+#: `agent_intent` is a **standing instruction**, not a momentary status — "keep sending me
+#: calls", "this one, then stop", "no new ones". Read that way, only the forward-looking
+#: three can change mid-call: an agent may well decide halfway through a conversation that
+#: this is their last. `BREAK` / `LUNCH` / `TRAINING` / `ADMIN` describe what you are doing
+#: *now*, and what you are doing now is talking to a customer.
+DECLARABLE_ON_CALL: frozenset[AgentIntent] = frozenset(
+    {AgentIntent.READY, AgentIntent.LAST_CALL, AgentIntent.DRAINING}
+)
+
+#: Display order for the status control. Kept beside the sets that filter it so the screen
+#: and the rules cannot drift apart.
+MENU_ORDER: tuple[AgentIntent, ...] = (
+    AgentIntent.READY,
+    AgentIntent.BREAK,
+    AgentIntent.LUNCH,
+    AgentIntent.TRAINING,
+    AgentIntent.ADMIN,
+    AgentIntent.LAST_CALL,
+    AgentIntent.DRAINING,
+)
+
 
 @dataclass(frozen=True, slots=True)
 class PresenceView:
@@ -58,6 +81,24 @@ class PresenceView:
     offerable: bool
     acw_seconds: float | None = None
     long_acw: bool = False
+    #: When after-call work started. The client ticks its own timer from this anchor
+    #: rather than waiting for a push, so the number moves every second instead of
+    #: whenever something else happens to refresh the snapshot.
+    acw_since: datetime | None = None
+    #: Which intents may be declared **right now**. Computed here so the workstation
+    #: renders permissions rather than guessing them — the same reason `offerable` is
+    #: derived server-side and not recomputed in React.
+    declarable: tuple[AgentIntent, ...] = ()
+    #: True while in after-call work: the standing instruction is still whatever it was,
+    #: but the agent owes us a declaration before they are available again (`D45`). The
+    #: screen uses this to stop showing the old instruction as though it were current,
+    #: which is what made the status control look broken after saving a wrap-up.
+    awaiting_declaration: bool = False
+    #: Why the current intent is what it is — the `reason` of the state-log row that set
+    #: it. `NOT_READY` alone is ambiguous: it means "just signed in", "missed an offer"
+    #: (RONA) and "your last call is finished" (`D59`), and those want three different
+    #: things on screen. Without this the workstation cannot tell them apart.
+    intent_reason: str = ""
 
 
 class PresenceService:
@@ -108,7 +149,33 @@ class PresenceService:
             ),
             acw_seconds=acw,
             long_acw=acw is not None and acw >= self._long_acw_after_s,
+            acw_since=self._acw_since.get(agent_id),
+            declarable=self.declarable_intents(agent_id),
+            awaiting_declaration=presence.in_after_call_work,
+            intent_reason=self._intent_reason(agent_id),
         )
+
+    def _intent_reason(self, agent_id: str) -> str:
+        """The reason from the newest state-log row that moved this agent's intent."""
+        current = self._presence.get(agent_id)
+        if current is None:
+            return ""
+        for row in reversed(self._log):
+            if row.agent_id == agent_id and row.agent_intent is current.agent_intent:
+                return row.reason
+        return ""
+
+    def declarable_intents(self, agent_id: str) -> tuple[AgentIntent, ...]:
+        """What this agent may declare at this moment, in menu order (`D59`)."""
+        presence = self._presence.get(agent_id)
+        if presence is None or presence.system_state is AgentSystemState.OFFLINE:
+            return ()
+        allowed = (
+            DECLARABLE_ON_CALL
+            if presence.system_state in {AgentSystemState.ON_CALL, AgentSystemState.OFFERING}
+            else DECLARABLE
+        )
+        return tuple(intent for intent in MENU_ORDER if intent in allowed)
 
     def acw_elapsed_s(self, agent_id: str) -> float | None:
         started = self._acw_since.get(agent_id)
@@ -168,6 +235,9 @@ class PresenceService:
         presence = self._require(agent_id)
         if presence.system_state is AgentSystemState.OFFLINE:
             raise PermanentError(f"agent {agent_id} is offline; sign in first")
+        if intent not in self.declarable_intents(agent_id):
+            # Mid-call only the forward-looking instructions mean anything (`D59`).
+            raise PermanentError(f"{intent} cannot be declared while {presence.system_state}")
 
         update: dict[str, object] = {"agent_intent": intent, "since": self._clock.now()}
         acw_seconds: float | None = None
@@ -212,15 +282,25 @@ class PresenceService:
         """Media disconnected. The ACW clock starts **here** (`D45`), not at a form."""
         presence = self._require(agent_id)
         self._acw_since[agent_id] = disconnected_at or self._clock.now()
-        updated = presence.model_copy(
-            update={
-                "system_state": AgentSystemState.AFTER_CALL_WORK,
-                "since": self._acw_since[agent_id],
-                "current_load": max(presence.current_load - 1, 0),
-            }
-        )
+        update: dict[str, object] = {
+            "system_state": AgentSystemState.AFTER_CALL_WORK,
+            "since": self._acw_since[agent_id],
+            "current_load": max(presence.current_load - 1, 0),
+        }
+        fulfilled = presence.agent_intent is AgentIntent.LAST_CALL
+        if fulfilled:
+            # `LAST_CALL` is the one standing instruction with a built-in end condition:
+            # "finish the current call, THEN stop taking new ones" (`D59`). That call has
+            # just ended, so the instruction is spent. It becomes `NOT_READY` rather than
+            # any concrete state, because the platform still must not assert what the
+            # person is doing (`D45`) — only that they are no longer asking for calls.
+            update["agent_intent"] = AgentIntent.NOT_READY
+        updated = presence.model_copy(update=update)
         await self._commit(
-            updated, set_by="platform", reason="media_disconnected", call_session_id=call_session_id
+            updated,
+            set_by="platform",
+            reason="last_call_fulfilled" if fulfilled else "media_disconnected",
+            call_session_id=call_session_id,
         )
         return updated
 
@@ -351,4 +431,4 @@ class PresenceService:
         )
 
 
-__all__ = ["DECLARABLE", "PresenceService", "PresenceView"]
+__all__ = ["DECLARABLE", "DECLARABLE_ON_CALL", "MENU_ORDER", "PresenceService", "PresenceView"]

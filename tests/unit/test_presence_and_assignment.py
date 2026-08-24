@@ -406,3 +406,85 @@ async def test_signing_out_mid_call_is_refused(
     await presence.begin_call("A001", call_session_id="call_1")
     with pytest.raises(PermanentError):
         await presence.sign_out("A001")
+
+
+# --- the standing-instruction model (D59) ------------------------------------------------
+
+
+async def test_only_forward_looking_intents_can_be_declared_mid_call(
+    presence: PresenceService,
+) -> None:
+    """`agent_intent` is a standing instruction, not a status (`D59`).
+
+    An agent may decide mid-conversation that this is their last call. They cannot be at
+    lunch, because what they are doing right now is talking to a customer.
+    """
+    await presence.sign_in("A001", session_id="s1")
+    await presence.declare("A001", AgentIntent.READY)
+    await presence.begin_call("A001", call_session_id="call_1")
+
+    assert set(presence.declarable_intents("A001")) == {
+        AgentIntent.READY,
+        AgentIntent.LAST_CALL,
+        AgentIntent.DRAINING,
+    }
+    await presence.declare("A001", AgentIntent.LAST_CALL)
+    with pytest.raises(PermanentError, match="cannot be declared while"):
+        await presence.declare("A001", AgentIntent.LUNCH)
+
+
+async def test_last_call_is_spent_when_that_call_ends(
+    presence: PresenceService, clock: ManualClock
+) -> None:
+    """The one standing instruction with a built-in end condition (`D59`).
+
+    "Finish the current call, then stop" — so when the call ends it has been carried out,
+    and leaving it set would mean the agent silently stays un-offerable under an
+    instruction that has already been honoured. It becomes `NOT_READY`, never a concrete
+    state, because the platform still may not assert what the person is doing (`D45`).
+    """
+    await presence.sign_in("A001", session_id="s1")
+    await presence.declare("A001", AgentIntent.READY)
+    await presence.begin_call("A001", call_session_id="call_1")
+    await presence.declare("A001", AgentIntent.LAST_CALL)
+
+    await presence.begin_after_call_work("A001", call_session_id="call_1")
+    who = presence.get("A001")
+    assert who is not None
+    assert who.agent_intent is AgentIntent.NOT_READY
+    closing = presence.state_log("A001")[-1]
+    assert closing.reason == "last_call_fulfilled"
+    assert closing.set_by == "platform"
+
+
+async def test_draining_survives_a_call(presence: PresenceService) -> None:
+    """DRAINING has no end condition — it means "no new callers" until the person says so."""
+    await presence.sign_in("A001", session_id="s1")
+    await presence.declare("A001", AgentIntent.READY)
+    await presence.begin_call("A001", call_session_id="call_1")
+    await presence.declare("A001", AgentIntent.DRAINING)
+    await presence.begin_after_call_work("A001", call_session_id="call_1")
+
+    who = presence.get("A001")
+    assert who is not None
+    assert who.agent_intent is AgentIntent.DRAINING
+
+
+async def test_after_call_work_asks_for_a_declaration(
+    presence: PresenceService, clock: ManualClock
+) -> None:
+    """The screen must stop showing the old instruction as if it were current.
+
+    That is what made the status control look broken: saving a wrap-up left `พร้อมรับสาย`
+    highlighted while the agent was, correctly, still in after-call work.
+    """
+    await presence.sign_in("A001", session_id="s1")
+    await presence.declare("A001", AgentIntent.READY)
+    await presence.begin_call("A001", call_session_id="call_1")
+    await presence.begin_after_call_work("A001", call_session_id="call_1")
+
+    view = presence.view("A001")
+    assert view is not None
+    assert view.awaiting_declaration is True
+    assert view.acw_since is not None, "the client ticks its own clock from this anchor"
+    assert len(view.declarable) == 7, "every intent is meaningful once the call has ended"

@@ -15,8 +15,16 @@ evidence, never an action** — it never changes assurance, never unlocks a fiel
 writes to the identity record. Promotion stays the agent's three-way control (`D42`).
 
 **The safe default inverts** (`D44`): because we do not know what the digits *are*, a raw
-capture is treated as potentially sensitive. It is masked everywhere except the agent's
-own screen, never logged in full, and discardable with one click.
+capture is treated as potentially sensitive. Read that clause precisely, because the first
+implementation over-applied it — `D44` says *"masked in transcripts and logs, short
+retention, discardable with one click"*. **Transcripts and logs. Not the agent.**
+
+The agent is the person the digits were captured *for*. They asked the caller to key them,
+they are on the call, and they have to read them back or act on them. Masking them on the
+agent's own screen deletes the feature and keeps none of the protection: `••••••••11` is
+not a policy number anybody can use. What must never happen is those digits landing in a
+transcript, a log line, an analytics event, or long-term storage — and that is exactly
+where `mask()` is applied (`D58`).
 """
 
 from __future__ import annotations
@@ -32,8 +40,8 @@ from readycall.logging import get_logger
 
 log = get_logger(__name__)
 
-#: Digits kept visible when masking. Enough to tell two captures apart on a busy screen,
-#: not enough to be worth exfiltrating.
+#: Digits kept visible when masking. Enough to tell two captures apart in a log, not
+#: enough to be worth exfiltrating.
 _VISIBLE_TAIL = 2
 
 
@@ -44,7 +52,10 @@ class CaptureState(StrEnum):
 
 
 def mask(digits: str, *, tail: int = _VISIBLE_TAIL) -> str:
-    """`••••••4512`. The only representation allowed outside the agent's own screen."""
+    """`••••••4512`. For logs, transcripts and storage — **never** for the agent's screen.
+
+    The agent sees `Capture.digits`. This is what everything else sees (`D58`).
+    """
     if not digits:
         return ""
     if len(digits) <= tail:
@@ -68,6 +79,7 @@ class Capture:
 
     @property
     def masked(self) -> str:
+        """For logs and transcripts. The agent's panel renders `digits` (`D58`)."""
         return mask(self.digits)
 
     @property

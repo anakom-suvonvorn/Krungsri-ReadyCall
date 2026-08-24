@@ -272,6 +272,17 @@ async def attest_identity(
 ) -> WorkstationSnapshot:
     """The three-way control. Promotion is a **re-render, not a re-fetch** (`D42`)."""
     await _require_active_call(container, call_session_id, who)
+    if container.attestations.history(call_session_id) and not body.amend:
+        # The control LOCKS after an attestation, and the server enforces it rather than
+        # trusting a disabled button (`D60`). But it does not lock *forever*: an agent who
+        # pressed "not this person" and then had the caller produce ID must be able to
+        # confirm. Reopening is an explicit, separate action that appends a correction to
+        # the disclosure log — both statements survive, which is the honest record and the
+        # reason this is not just an editable field.
+        raise HTTPException(
+            status_code=409,
+            detail="identity is already attested on this call; reopen it to amend",
+        )
     try:
         outcome = AttestationOutcome(body.outcome)
     except ValueError:
@@ -288,6 +299,8 @@ async def attest_identity(
             current=current,
             outcome=outcome,
             challenge=body.challenge,
+            challenge_note=body.challenge_note,
+            caller_name=body.caller_name,
             relationship=body.relationship,
             note=body.note,
         )
@@ -326,12 +339,19 @@ async def capture_keys(
     except PermanentError as exc:
         raise _bad_request(exc) from exc
     out = _capture_out(capture)
-    # The live panel needs the digits themselves; nothing else ever does.
-    await container.hub.send(
-        who.agent_id,
-        "capture",
-        {**out.model_dump(mode="json"), "digits": capture.digits},
-    )
+    await container.hub.send(who.agent_id, "capture", out.model_dump(mode="json"))
+    return out
+
+
+@router.post("/captures/{capture_id}/backspace", response_model=CaptureOut)
+async def backspace_capture(capture_id: str, who: AgentDep, container: ContainerDep) -> CaptureOut:
+    """Callers mistype. Without this the only correction is discard-and-start-again."""
+    try:
+        capture = container.captures.backspace(capture_id)
+    except PermanentError as exc:
+        raise _bad_request(exc) from exc
+    out = _capture_out(capture)
+    await container.hub.send(who.agent_id, "capture", out.model_dump(mode="json"))
     return out
 
 
@@ -492,6 +512,9 @@ def _capture_out(capture: Capture) -> CaptureOut:
         capture_id=capture.capture_id,
         state=str(capture.state),
         length=capture.length,
+        # The agent's own screen gets the real digits (`D58`); `masked` is what logs and
+        # transcripts get. A discarded capture has none of either, by construction.
+        digits=capture.digits,
         masked=capture.masked,
         labelled_as=capture.labelled_as,
         lookups=tuple(
@@ -556,7 +579,11 @@ async def _presence_out(container: Any, agent_id: str) -> AgentPresenceOut:
             for skill in agent.skills
         ),
         acw_seconds=view.acw_seconds,
+        acw_since=view.acw_since,
         long_acw=view.long_acw,
+        declarable=tuple(str(intent) for intent in view.declarable),
+        awaiting_declaration=view.awaiting_declaration,
+        intent_reason=view.intent_reason,
     )
 
 
@@ -605,12 +632,15 @@ async def _snapshot(container: Any, agent_id: str) -> WorkstationSnapshot:
         )
 
     active_id = await _active_call_id(container, agent_id)
+    answered_at = None
     identity_out: IdentityOut | None = None
     brief: dict[str, Any] | None = None
     captures: tuple[CaptureOut, ...] = ()
     if active_id:
         resolution = container.identity_for_call.get(active_id)
         if resolution is not None:
+            history = container.attestations.history(active_id)
+            latest = history[-1] if history else None
             identity_out = IdentityOut(
                 assurance=str(resolution.assurance),
                 customer_id=resolution.customer_id,
@@ -619,11 +649,17 @@ async def _snapshot(container: Any, agent_id: str) -> WorkstationSnapshot:
                 authority_check_required=bool(
                     resolution.evidence.get("authority_check_required", False)
                 ),
+                attested=latest is not None,
+                attested_outcome=str(latest.outcome) if latest else None,
+                third_party_name=latest.caller_name if latest else None,
+                relationship=latest.relationship if latest else None,
             )
         # Rendered for the CURRENT assurance level, server-side (`D42`). A locked field
         # is absent from the payload, not hidden by the client.
         brief = await container.render_brief(active_id)
         captures = tuple(_capture_out(c) for c in container.captures.for_call(active_id))
+        live = await container.calls.get(active_id)
+        answered_at = getattr(live, "answered_at", None)
 
     return WorkstationSnapshot(
         presence=presence,
@@ -634,6 +670,7 @@ async def _snapshot(container: Any, agent_id: str) -> WorkstationSnapshot:
         captures=captures,
         queues=tuple(_queues_out(container)),
         server_time=container.clock.now(),
+        call_answered_at=answered_at,
     )
 
 

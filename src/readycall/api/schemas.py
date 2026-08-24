@@ -204,7 +204,21 @@ class AgentPresenceOut(ApiModel):
     skills: tuple[AgentSkillOut, ...] = ()
     #: Present only while in after-call work. Counts up from the media disconnect (`D45`).
     acw_seconds: float | None = None
+    #: The anchor the client ticks its own clock from, so the number moves every second
+    #: instead of only when something else refreshes the snapshot.
+    acw_since: datetime | None = None
     long_acw: bool = False
+    #: Which intents may be declared right now (`D59`). The server decides; the screen
+    #: greys out the rest rather than letting a click fail with a 400.
+    declarable: tuple[str, ...] = ()
+    #: True while in after-call work. The standing instruction is unchanged underneath,
+    #: but the agent owes a declaration, so the control must not render the old choice as
+    #: though it were current.
+    awaiting_declaration: bool = False
+    #: Why the intent is what it is: `signed_in`, `rona_missed_offer`,
+    #: `last_call_fulfilled`, `agent_declared`. `not_ready` alone cannot distinguish
+    #: "just arrived" from "your last call is done", and those need different screens.
+    intent_reason: str = ""
 
 
 class DeclareStateRequest(ApiModel):
@@ -257,8 +271,18 @@ class AttestIdentityRequest(ApiModel):
     challenge: str | None = Field(
         default=None, max_length=64, description="required for `confirmed`; the NAME only"
     )
+    #: Required when `challenge == "other"` — what the agent actually did, in their words.
+    #: Real verification does not fit a closed list (`D57`).
+    challenge_note: str | None = Field(default=None, max_length=500)
+    #: Required for `third_party`: who is actually on the phone. The disclosure log has to
+    #: name them, not merely record that somebody-not-the-policyholder called.
+    caller_name: str | None = Field(default=None, max_length=128)
     relationship: str | None = Field(default=None, max_length=64)
     note: str | None = Field(default=None, max_length=500)
+    #: Deliberately re-attesting after an earlier attestation on this call. The client
+    #: sets it only when the agent explicitly reopens the control, so a double-click
+    #: cannot silently rewrite a disclosure record (`D60`).
+    amend: bool = False
 
 
 class IdentityOut(ApiModel):
@@ -268,15 +292,34 @@ class IdentityOut(ApiModel):
     may_disclose_policy_details: bool
     #: Set when a third party was declared: the workstation shows an authority-check step.
     authority_check_required: bool = False
+    #: True once the agent has attested anything on this call. The control then locks —
+    #: all three outcomes, including the one that was chosen. An attestation is a signed
+    #: statement in a disclosure log, not a toggle (`D60`).
+    attested: bool = False
+    #: What they attested, for the panel to show back: confirmed / not_this_person /
+    #: third_party.
+    attested_outcome: str | None = None
+    third_party_name: str | None = None
+    relationship: str | None = None
 
 
 class CaptureOut(ApiModel):
-    """Never carries the digits. `masked` is the only representation that leaves here
-    for anything but the agent's own live panel (`D44`)."""
+    """What the agent's own panel renders — **including the digits** (`D58`).
+
+    `D44`'s inverted default is *"masked in transcripts and logs"*, and the first
+    implementation over-read it into "masked everywhere", which deleted the feature: the
+    agent asked the caller to key these digits and has to read them back. `masked` is
+    carried alongside for anything that is not the agent's live screen.
+
+    This is a different question from the disclosure gate (`D53`). That governs what *we*
+    reveal from the bank's records; these digits are the caller's own input, typed a
+    second ago, to the person they are speaking to.
+    """
 
     capture_id: str
     state: str
     length: int
+    digits: str
     masked: str
     labelled_as: str | None = None
     lookups: tuple[dict[str, Any], ...] = ()
@@ -322,6 +365,9 @@ class WorkstationSnapshot(ApiModel):
     captures: tuple[CaptureOut, ...] = ()
     queues: tuple[QueueOut, ...] = ()
     server_time: datetime | None = None
+    #: When the current call was answered. The call timer is drawn from this, so a browser
+    #: refresh mid-call shows the true elapsed time instead of restarting from zero.
+    call_answered_at: datetime | None = None
 
 
 class PlaceCallRequest(ApiModel):

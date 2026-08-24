@@ -44,10 +44,19 @@ class AttestationOutcome(StrEnum):
 
 
 #: Challenges that count for promotion to L3. `Q12` — confirm these with Krungsri; they
-#: are a config list rather than a hardcoded set for exactly that reason.
-KNOWN_CHALLENGES: frozenset[str] = frozenset(
+#: are a list rather than a hardcoded set for exactly that reason.
+NAMED_CHALLENGES: frozenset[str] = frozenset(
     {"date_of_birth", "citizen_id_last4", "policy_number", "recent_claim_amount"}
 )
+
+#: The escape hatch, and the more important half (`D44`, `D57`). Real verification does not
+#: fit a closed list: the caller was recognised by voice from last week's call, produced a
+#: claim reference from an SMS, was verified at a branch and transferred in, answered a
+#: question about a recent transaction. A four-item dropdown forces every one of those into
+#: the nearest lie. With `other`, the agent types what they actually did — and `D44` argued
+#: this should have been the *first* mode built, not the last.
+OTHER_CHALLENGE = "other"
+CHALLENGES: frozenset[str] = NAMED_CHALLENGES | {OTHER_CHALLENGE}
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,10 +69,17 @@ class Attestation:
     at: datetime
     #: Only for CONFIRMED. Which challenge was asked — never the answer itself.
     challenge: str | None = None
+    #: Required when `challenge == "other"`: what the agent actually did, in their words.
+    #: An `other` with no explanation is an unfalsifiable audit row, which is the thing
+    #: `D42` exists to prevent, so the service refuses it.
+    challenge_note: str | None = None
     #: Only for NOT_THIS_PERSON: who we had wrongly proposed.
     rejected_customer_id: str | None = None
-    #: Only for THIRD_PARTY: free text, e.g. "daughter". Not a closed list on purpose —
-    #: the relationships that turn up are not enumerable in advance.
+    #: Only for THIRD_PARTY. **Both are required** (`D57`): the log has to say who was on
+    #: the phone, not merely that somebody-not-the-policyholder was.
+    caller_name: str | None = None
+    #: Free text, e.g. "ลูกสาว". Not a closed list on purpose — the relationships that
+    #: turn up are not enumerable in advance.
     relationship: str | None = None
     note: str | None = None
 
@@ -98,6 +114,8 @@ class AttestationService:
         current: IdentityResolution,
         outcome: AttestationOutcome,
         challenge: str | None = None,
+        challenge_note: str | None = None,
+        caller_name: str | None = None,
         relationship: str | None = None,
         note: str | None = None,
     ) -> tuple[IdentityResolution, Attestation]:
@@ -115,8 +133,12 @@ class AttestationService:
                 # The challenge is the evidence. "Confirmed" with no basis recorded is
                 # exactly the unfalsifiable audit row `D42` exists to prevent.
                 raise PermanentError("confirming an identity requires naming the challenge used")
-            if challenge not in KNOWN_CHALLENGES:
+            if challenge not in CHALLENGES:
                 raise PermanentError(f"unknown challenge {challenge!r}")
+            if challenge == OTHER_CHALLENGE and not (challenge_note or "").strip():
+                raise PermanentError(
+                    "challenge 'other' requires a note saying how identity was established"
+                )
             resolution = current.model_copy(
                 update={
                     "assurance": AssuranceLevel.L3_VERIFIED,
@@ -127,8 +149,10 @@ class AttestationService:
                         "agent_confirmed_by": agent_id,
                         # The challenge NAME, never the answer. Knowing we asked for a
                         # date of birth is auditable; storing the date of birth is a
-                        # liability we have no reason to take on.
+                        # liability we have no reason to take on. The `other` note is the
+                        # agent's own description of what they did, so it is kept as-is.
                         "challenge": challenge,
+                        "challenge_note": challenge_note,
                     },
                 }
             )
@@ -155,6 +179,10 @@ class AttestationService:
         else:  # THIRD_PARTY
             if current.customer_id is None:
                 raise PermanentError("a third party must be acting for *someone*")
+            if not (caller_name or "").strip():
+                raise PermanentError("a third party must be named — who is on the phone?")
+            if not (relationship or "").strip():
+                raise PermanentError("a third party must state their relationship to the customer")
             resolution = current.model_copy(
                 update={
                     # Deliberately NOT promoted. The case context attaches so the agent
@@ -169,7 +197,8 @@ class AttestationService:
                     "evidence": {
                         **current.evidence,
                         "third_party_declared_by": agent_id,
-                        "relationship": relationship or "unspecified",
+                        "third_party_name": caller_name,
+                        "relationship": relationship,
                         "authority_check_required": True,
                     },
                 }
@@ -181,9 +210,11 @@ class AttestationService:
             outcome=outcome,
             at=now,
             challenge=challenge,
+            challenge_note=challenge_note,
             rejected_customer_id=(
                 current.customer_id if outcome is AttestationOutcome.NOT_THIS_PERSON else None
             ),
+            caller_name=caller_name,
             relationship=relationship,
             note=note,
         )
@@ -199,4 +230,11 @@ class AttestationService:
         return resolution, record
 
 
-__all__ = ["KNOWN_CHALLENGES", "Attestation", "AttestationOutcome", "AttestationService"]
+__all__ = [
+    "CHALLENGES",
+    "NAMED_CHALLENGES",
+    "OTHER_CHALLENGE",
+    "Attestation",
+    "AttestationOutcome",
+    "AttestationService",
+]

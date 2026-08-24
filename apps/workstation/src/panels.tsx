@@ -1,32 +1,49 @@
 /**
  * The panels. Presentational: they render what the server said and call back on click.
  *
- * The one rule worth stating loudly — **nothing here decides what may be shown.** The
- * brief arrives already rendered for the current assurance level (`D42`), so a locked
- * field is *absent from the payload*, not hidden by a conditional in this file. If you
- * ever find yourself writing `assurance >= L2 ? show : hide` in here, the gate has
- * quietly moved to the wrong side of the wire.
+ * Two rules, and both were broken once:
+ *
+ * 1. **Nothing here decides what may be shown.** The brief arrives already gated for the
+ *    current assurance level (`D42`, `D53`), so a locked field is *absent from the
+ *    payload*. If you write `assurance >= L2 ? show : hide` in this file, the gate has
+ *    moved to the wrong side of the wire — and that exact bug shipped (`B5`).
+ * 2. **Nothing here decides what may be pressed.** `presence.declarable` comes from the
+ *    server (`D59`). A control that cannot be used is rendered `disabled` so it *looks*
+ *    unusable — refusing the click silently reads as a broken button.
  */
 
 import { useEffect, useState } from "react";
 import type { Brief, Capture, Identity, Offer, Presence, Queue } from "./api";
 
+/** Named challenges plus the escape hatch (`D57`). `other` is not a fallback for a
+ *  missing case — it is the case: recognised the voice from last week, read a claim
+ *  reference off an SMS, transferred in from a branch that already checked ID. */
 const CHALLENGES = [
   { value: "date_of_birth", label: "วันเกิด" },
   { value: "citizen_id_last4", label: "เลขบัตรประชาชน 4 ตัวท้าย" },
   { value: "policy_number", label: "เลขกรมธรรม์" },
   { value: "recent_claim_amount", label: "ยอดเคลมล่าสุด" },
+  { value: "other", label: "อื่น ๆ (ระบุเอง)" },
 ];
 
-const INTENTS: { value: string; label: string }[] = [
-  { value: "ready", label: "พร้อมรับสาย" },
-  { value: "break", label: "พัก" },
-  { value: "lunch", label: "พักกลางวัน" },
-  { value: "training", label: "อบรม" },
-  { value: "admin", label: "งานเอกสาร" },
-  { value: "last_call", label: "สายสุดท้าย" },
-  { value: "draining", label: "ไม่รับสายใหม่" },
-];
+const INTENT_LABEL: Record<string, string> = {
+  not_ready: "ยังไม่พร้อม",
+  ready: "พร้อมรับสาย",
+  break: "พัก",
+  lunch: "พักกลางวัน",
+  training: "อบรม",
+  admin: "งานเอกสาร",
+  last_call: "สายสุดท้าย",
+  draining: "ไม่รับสายใหม่",
+};
+
+const SYSTEM_LABEL: Record<string, string> = {
+  offline: "ออกจากระบบ",
+  available: "ว่าง",
+  offering: "กำลังเสนอสาย",
+  on_call: "อยู่ระหว่างสนทนา",
+  after_call_work: "งานหลังจบสาย",
+};
 
 const URGENCY_LABEL: Record<string, string> = {
   low: "ไม่เร่งด่วน",
@@ -42,15 +59,34 @@ const ASSURANCE_LABEL: Record<string, { text: string; tone: string }> = {
   l3_verified: { text: "L3 · ยืนยันตัวตนแล้ว", tone: "ok" },
 };
 
-function mmss(seconds: number): string {
+/** `not_ready` is reached three different ways and each wants a different sentence
+ *  (`D59`). Without `intent_reason` the screen cannot tell them apart. */
+const REASON_HINT: Record<string, string> = {
+  signed_in: "คุณเข้าสู่ระบบแล้วแต่ยังไม่ได้กด “พร้อมรับสาย” — ระบบจะไม่ส่งสายให้จนกว่าคุณจะกดเอง",
+  rona_missed_offer:
+    "มีสายที่เสนอให้แล้วไม่มีการตอบรับ ระบบจึงหยุดส่งสายชั่วคราว — กดสถานะใหม่เมื่อพร้อม",
+  last_call_fulfilled: "สายสุดท้ายของคุณจบแล้ว — เลือกสถานะถัดไปเองเมื่อพร้อม",
+};
+
+const OUTCOME_LABEL: Record<string, string> = {
+  confirmed: "ยืนยันแล้วว่าเป็นเจ้าของกรมธรรม์",
+  third_party: "ผู้ดำเนินการแทน",
+  not_this_person: "ไม่ใช่บุคคลนี้",
+};
+
+export function mmss(seconds: number): string {
   const s = Math.max(0, Math.floor(seconds));
   return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 }
 
-/** A ticker that runs in the client purely for display. Never a source of truth: the
- *  server owns every deadline, and a browser tab that was throttled in the background
- *  would otherwise "expire" an offer the server still considers live. */
-function useTicker(active: boolean): number {
+/**
+ * A once-per-second re-render, for timers only.
+ *
+ * Every timer on this screen is drawn from a **server timestamp** plus the browser clock,
+ * never from a counter the client increments. That is why the call timer now survives a
+ * refresh: it is `now - call_answered_at`, not "seconds since this component mounted".
+ */
+export function useSecondTicker(active: boolean): number {
   const [, setTick] = useState(0);
   useEffect(() => {
     if (!active) return;
@@ -58,6 +94,12 @@ function useTicker(active: boolean): number {
     return () => window.clearInterval(id);
   }, [active]);
   return Date.now();
+}
+
+export function elapsedSince(iso: string | null | undefined, now: number): number | null {
+  if (!iso) return null;
+  const started = Date.parse(iso);
+  return Number.isNaN(started) ? null : (now - started) / 1000;
 }
 
 // --- the offer card -------------------------------------------------------
@@ -73,11 +115,15 @@ export function OfferCard({
   onDecline: (reason: string) => void;
   busy: boolean;
 }) {
-  const now = useTicker(offer !== null);
+  const now = useSecondTicker(offer !== null);
   if (!offer) return <div className="scrim hidden" />;
 
-  const elapsed = (now - Date.parse(offer.offered_at)) / 1000;
-  const left = Math.max(0, offer.timeout_s - elapsed);
+  const left = Math.max(0, offer.timeout_s - (elapsedSince(offer.offered_at, now) ?? 0));
+  // At zero the server has already timed the offer out (RONA) and a `offer_revoked` push
+  // is on its way. Hiding the card immediately rather than waiting for it stops the agent
+  // from pressing Accept on a call that has already gone to somebody else — the click
+  // would fail, and a failed Accept looks like the system dropped a caller.
+  if (left <= 0) return <div className="scrim hidden" />;
 
   return (
     <div className="scrim">
@@ -90,8 +136,6 @@ export function OfferCard({
             </div>
           </div>
           <div className="spacer" />
-          {/* Counting down is the client's only clock, and it is decoration: when it hits
-              zero the server has already decided (RONA) and will tell us. */}
           <div className="countdown">{Math.ceil(left)}</div>
         </div>
 
@@ -145,6 +189,13 @@ export function PresencePanel({
   onDeclare: (intent: string) => void;
   busy: boolean;
 }) {
+  const allowed = new Set(presence.declarable);
+  // While in after-call work the standing instruction is unchanged underneath, but the
+  // agent owes us a declaration (`D45`). Showing the old choice still highlighted is what
+  // made this control look broken after saving a wrap-up: "I'm marked Ready, so why am I
+  // not getting calls?" — because Ready is what they said BEFORE the call.
+  const showActive = !presence.awaiting_declaration;
+
   return (
     <div className="panel">
       <h2>สถานะของฉัน</h2>
@@ -155,31 +206,51 @@ export function PresencePanel({
       <div className="row" style={{ marginTop: 6 }}>
         <span className={`badge ${presence.offerable ? "ok" : "warn"}`}>
           <i className="dot" />
-          {presence.system_state}
+          {SYSTEM_LABEL[presence.system_state] ?? presence.system_state}
         </span>
-        <span className="badge">{presence.agent_intent}</span>
+        <span className="badge">
+          {INTENT_LABEL[presence.agent_intent] ?? presence.agent_intent}
+        </span>
       </div>
 
-      {presence.agent_intent === "not_ready" && (
+      {presence.awaiting_declaration ? (
         <p className="faint" style={{ marginTop: 8 }}>
-          คุณเข้าสู่ระบบแล้วแต่ยังไม่ได้กด “พร้อมรับสาย” — ระบบจะไม่ส่งสายให้จนกว่าคุณจะกดเอง
+          สายจบแล้ว — เลือกสถานะถัดไปเพื่อจบงานหลังสาย ระบบจะไม่ตั้งให้เอง
+          <br />
+          {REASON_HINT[presence.intent_reason] ??
+            `(ก่อนรับสายคุณตั้งไว้เป็น “${INTENT_LABEL[presence.agent_intent] ?? presence.agent_intent}”)`}
         </p>
-      )}
+      ) : presence.agent_intent === "not_ready" ? (
+        <p className="faint" style={{ marginTop: 8 }}>
+          {REASON_HINT[presence.intent_reason] ??
+            "คุณเข้าสู่ระบบแล้วแต่ยังไม่ได้กด “พร้อมรับสาย” — ระบบจะไม่ส่งสายให้จนกว่าคุณจะกดเอง"}
+        </p>
+      ) : null}
 
-      <div className="stack" style={{ marginTop: 10 }}>
-        <div className="row">
-          {INTENTS.map((intent) => (
+      <div className="row" style={{ marginTop: 10 }}>
+        {Object.entries(INTENT_LABEL)
+          .filter(([value]) => value !== "not_ready")
+          .map(([value, label]) => (
             <button
-              key={intent.value}
-              className={presence.agent_intent === intent.value ? "on" : ""}
-              onClick={() => onDeclare(intent.value)}
-              disabled={busy}
+              key={value}
+              className={showActive && presence.agent_intent === value ? "on" : ""}
+              onClick={() => onDeclare(value)}
+              disabled={busy || !allowed.has(value)}
+              title={
+                allowed.has(value)
+                  ? undefined
+                  : "เลือกไม่ได้ขณะนี้ — ระหว่างสนทนาเปลี่ยนได้เฉพาะคำสั่งล่วงหน้า"
+              }
             >
-              {intent.label}
+              {label}
             </button>
           ))}
-        </div>
       </div>
+      {presence.system_state === "on_call" && (
+        <div className="hint">
+          ระหว่างสนทนาเปลี่ยนได้เฉพาะ พร้อมรับสาย / สายสุดท้าย / ไม่รับสายใหม่
+        </div>
+      )}
 
       <div style={{ marginTop: 12 }}>
         <div className="faint">ทักษะ</div>
@@ -195,7 +266,7 @@ export function PresencePanel({
   );
 }
 
-// --- identity (D42) -------------------------------------------------------
+// --- identity (D42, D57, D60) ---------------------------------------------
 
 export function IdentityPanel({
   identity,
@@ -209,7 +280,10 @@ export function IdentityPanel({
   busy: boolean;
 }) {
   const [challenge, setChallenge] = useState(CHALLENGES[0].value);
+  const [challengeNote, setChallengeNote] = useState("");
+  const [callerName, setCallerName] = useState("");
   const [relationship, setRelationship] = useState("");
+  const [reopened, setReopened] = useState(false);
 
   if (!identity) {
     return (
@@ -219,6 +293,12 @@ export function IdentityPanel({
       </div>
     );
   }
+
+  // An attestation is a signed statement in a disclosure log, not a toggle (`D60`).
+  const locked = identity.attested && !reopened;
+  const disabled = busy || !callId || locked;
+  const needNote = challenge === "other" && !challengeNote.trim();
+  const thirdPartyReady = callerName.trim().length > 0 && relationship.trim().length > 0;
 
   return (
     <div className="panel">
@@ -230,74 +310,155 @@ export function IdentityPanel({
           : "ยังเปิดเผยรายละเอียดกรมธรรม์ไม่ได้"}
       </div>
 
-      {identity.authority_check_required && (
-        <div className="rationale" style={{ borderLeftColor: "var(--warn)" }}>
-          ผู้ติดต่อแจ้งว่าดำเนินการแทนเจ้าของกรมธรรม์ — ตรวจสอบสิทธิ์ในการดำเนินการก่อน
+      {/* The spoken half of action 0. Never a leading question: naming the customer first
+          both tells whoever holds the phone that the number is theirs, and is weaker
+          verification — anyone can say "yes" (`D55`). */}
+      {!identity.attested && (
+        <div className="rationale" style={{ borderLeftColor: "var(--info)" }}>
+          <div className="faint">ถามแบบปลายเปิด อย่าถามนำ</div>
+          <div>“ขอทราบชื่อผู้ติดต่อด้วยค่ะ”</div>
         </div>
       )}
 
+      {identity.attested && (
+        <div
+          className={`attested ${
+            identity.attested_outcome === "confirmed"
+              ? ""
+              : identity.attested_outcome === "third_party"
+                ? "locked-warn"
+                : "locked-bad"
+          }`}
+        >
+          <div className="faint">บันทึกไว้แล้ว</div>
+          <div>{OUTCOME_LABEL[identity.attested_outcome ?? ""] ?? identity.attested_outcome}</div>
+          {identity.third_party_name && (
+            <div className="faint">
+              {identity.third_party_name} · {identity.relationship}
+            </div>
+          )}
+          {!reopened && (
+            <button className="ghost" style={{ marginTop: 8 }} onClick={() => setReopened(true)}>
+              แก้ไขการยืนยัน
+            </button>
+          )}
+          {reopened && (
+            <div className="hint">
+              การแก้ไขจะถูกบันทึกเพิ่มในประวัติ ไม่ได้ลบรายการเดิม
+            </div>
+          )}
+        </div>
+      )}
+
+      {identity.authority_check_required && (
+        <div className="rationale" style={{ borderLeftColor: "var(--warn)" }}>
+          ผู้ติดต่อดำเนินการแทนเจ้าของกรมธรรม์ — ตรวจสอบสิทธิ์ในการดำเนินการก่อน
+        </div>
+      )}
+
+      {/* Three outcomes, three buttons, one click each (`D42`, drawn in
+          identity_promotion.mmd). Third party is NOT "third party, then confirm" — it is
+          its own path, and forcing it through Confirm would write into the audit log that
+          the policyholder was verified when they were not. */}
       <div className="stack" style={{ marginTop: 12 }}>
-        <div className="faint">ยืนยันด้วยคำถาม</div>
-        <select value={challenge} onChange={(e) => setChallenge(e.target.value)}>
-          {CHALLENGES.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+        <div>
+          <div className="field-label">ยืนยันด้วยวิธีใด</div>
+          <select
+            value={challenge}
+            onChange={(e) => setChallenge(e.target.value)}
+            disabled={disabled}
+          >
+            {CHALLENGES.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        {challenge === "other" && (
+          <input
+            placeholder="ระบุว่ายืนยันตัวตนด้วยวิธีใด"
+            value={challengeNote}
+            onChange={(e) => setChallengeNote(e.target.value)}
+            disabled={disabled}
+          />
+        )}
         <button
           className="primary"
-          disabled={busy || !callId}
-          onClick={() => onAttest({ outcome: "confirmed", challenge })}
+          disabled={disabled || needNote}
+          onClick={() =>
+            onAttest({
+              outcome: "confirmed",
+              challenge,
+              challenge_note: challengeNote || null,
+              amend: reopened,
+            })
+          }
         >
           ยืนยันว่าใช่บุคคลนี้
         </button>
 
-        <input
-          placeholder="ความสัมพันธ์ เช่น ลูกสาว"
-          value={relationship}
-          onChange={(e) => setRelationship(e.target.value)}
-        />
-        <button
-          disabled={busy || !callId}
-          onClick={() => onAttest({ outcome: "third_party", relationship })}
-        >
-          เป็นผู้ดำเนินการแทน
-        </button>
+        <div style={{ borderTop: "1px solid var(--line)", paddingTop: 10 }}>
+          <div className="field-label">ผู้ดำเนินการแทน (ต้องกรอกทั้งสองช่อง)</div>
+          <div className="stack">
+            <input
+              placeholder="ชื่อ-นามสกุลผู้ติดต่อ"
+              value={callerName}
+              onChange={(e) => setCallerName(e.target.value)}
+              disabled={disabled}
+            />
+            <input
+              placeholder="ความสัมพันธ์ เช่น ลูกสาว"
+              value={relationship}
+              onChange={(e) => setRelationship(e.target.value)}
+              disabled={disabled}
+            />
+            <button
+              disabled={disabled || !thirdPartyReady}
+              onClick={() =>
+                onAttest({
+                  outcome: "third_party",
+                  caller_name: callerName,
+                  relationship,
+                  amend: reopened,
+                })
+              }
+            >
+              ยืนยันว่าเป็นผู้ดำเนินการแทน
+            </button>
+          </div>
+        </div>
 
         <button
           className="danger"
-          disabled={busy || !callId}
-          onClick={() => onAttest({ outcome: "not_this_person" })}
+          disabled={disabled}
+          onClick={() => onAttest({ outcome: "not_this_person", amend: reopened })}
         >
           ไม่ใช่บุคคลนี้
         </button>
-        {/* Three outcomes, never two. Forcing a daughter calling for her father into
-            "confirmed" would put a verification that never happened into the audit log,
-            which is the only reason the log exists (`D42`). */}
       </div>
     </div>
   );
 }
 
-// --- keypad capture (D44) -------------------------------------------------
+// --- keypad capture (D44, D58) --------------------------------------------
 
 export function CapturePanel({
   capture,
-  liveDigits,
   callId,
   onStart,
   onKey,
+  onBackspace,
   onStop,
   onDiscard,
   onLookup,
   busy,
 }: {
   capture: Capture | null;
-  liveDigits: string;
   callId: string | null;
   onStart: () => void;
   onKey: (digit: string) => void;
+  onBackspace: () => void;
   onStop: () => void;
   onDiscard: () => void;
   onLookup: (kind: string) => void;
@@ -309,10 +470,14 @@ export function CapturePanel({
       <h2>รับตัวเลขจากปุ่มกด</h2>
       <p className="faint">
         กดเริ่ม แล้วให้ลูกค้ากดตัวเลขอะไรก็ได้ที่มีอยู่ตรงหน้า — เลขกรมธรรม์ เลขเคลม
-        หรืออย่างอื่น ระบบไม่เดาว่าคืออะไร
+        เลขบัตรประชาชน หรืออย่างอื่น ระบบไม่เดาว่าคืออะไร
       </p>
 
-      <div className="digits mono">{open ? liveDigits || "…" : (capture?.masked ?? "")}</div>
+      {/* The agent sees the real digits. `D44`'s inverted default is "masked in
+          transcripts and logs" — the agent is the person the capture was made FOR, and
+          they have to read these back. Masking them here deletes the feature and protects
+          nothing (`D58`). */}
+      <div className="digits mono">{capture?.digits || (open ? "…" : "")}</div>
 
       <div className="row" style={{ marginTop: 8 }}>
         {!open && (
@@ -324,6 +489,9 @@ export function CapturePanel({
           <>
             <button onClick={onStop} disabled={busy}>
               หยุด
+            </button>
+            <button onClick={onBackspace} disabled={busy || !capture?.length}>
+              ลบทีละตัว
             </button>
             <button className="danger" onClick={onDiscard} disabled={busy}>
               ทิ้งตัวเลข
@@ -346,7 +514,9 @@ export function CapturePanel({
 
       {capture && capture.state !== "open" && capture.length > 0 && (
         <div className="stack" style={{ marginTop: 10 }}>
-          <div className="faint">ตรวจสอบว่าเลขนี้ตรงกับอะไร (ไม่เปลี่ยนระดับการยืนยันตัวตน)</div>
+          <div className="faint">
+            เทียบว่าเลขนี้ตรงกับอะไร — เป็นเพียงหลักฐาน ไม่เปลี่ยนระดับการยืนยันตัวตน
+          </div>
           <div className="row">
             <button onClick={() => onLookup("policy_number")} disabled={busy}>
               เทียบเลขกรมธรรม์
@@ -362,13 +532,17 @@ export function CapturePanel({
             <div key={index} className={`badge ${lookup.matched ? "ok" : "bad"}`}>
               {lookup.kind}: {lookup.matched ? "ตรงกัน" : "ไม่ตรง"}
               {lookup.matched_value ? ` · ${lookup.matched_value}` : ""}
+              {lookup.detail ? ` · ${lookup.detail}` : ""}
             </div>
           ))}
           {capture.lookups.length > 0 && (
-            <div className="faint">
-              ผลการเทียบเป็นเพียงหลักฐาน ไม่ใช่การยืนยันตัวตน — ต้องกดยืนยันเองที่แผงด้านบน
+            <div className="hint">
+              ต้องกดยืนยันตัวตนเองที่แผงด้านบน — ผลการเทียบไม่ได้ยืนยันว่าใครถือโทรศัพท์อยู่
             </div>
           )}
+          <button className="ghost danger" onClick={onDiscard} disabled={busy}>
+            ทิ้งตัวเลขนี้
+          </button>
         </div>
       )}
     </div>
@@ -409,6 +583,9 @@ export function BriefPanel({ brief }: { brief: Brief }) {
           {brief.customer ? (
             <>
               {brief.customer.display_name_th}
+              {brief.disclosure_locked && (
+                <span className="faint"> · ยังไม่ยืนยันตัวตน อย่าเอ่ยชื่อก่อนถาม</span>
+              )}
               {brief.customer.is_vulnerable && (
                 <span className="badge warn" style={{ marginLeft: 8 }}>
                   ต้องดูแลเป็นพิเศษ
@@ -433,14 +610,10 @@ export function BriefPanel({ brief }: { brief: Brief }) {
                 {brief.relevant_policy.sum_insured
                   ? ` · ทุนประกัน ${brief.relevant_policy.sum_insured.toLocaleString()} บาท`
                   : ""}
-                {brief.other_policy_count > 0
-                  ? ` · อีก ${brief.other_policy_count} ฉบับ`
-                  : ""}
+                {brief.other_policy_count > 0 ? ` · อีก ${brief.other_policy_count} ฉบับ` : ""}
               </div>
             </>
           ) : (
-            /* Not "hidden": the server did not send it. The row says so rather than
-               rendering an empty value that looks like missing data (`D42`). */
             <em className="locked">
               {brief.disclosure_locked
                 ? "ปกปิดจนกว่าจะยืนยันตัวตน"
@@ -480,7 +653,7 @@ export function BriefPanel({ brief }: { brief: Brief }) {
       {brief.actions_th.length > 0 && (
         <>
           <div className="faint" style={{ marginTop: 10 }}>
-            สิ่งที่ควรทำ
+            สิ่งที่ควรทำ · จาก playbook ของ intent นี้ ไม่ใช่ AI เขียน
           </div>
           <ol className="actions">
             {brief.actions_th.map((action, index) => (
@@ -522,7 +695,7 @@ export function QueueStrip({ queues }: { queues: Queue[] }) {
       <h2>คิว</h2>
       {queues.map((queue) => (
         <div className="queue" key={queue.queue_id}>
-          <span className={`dot`} style={{ color: queue.is_open ? "var(--ok)" : "var(--bad)" }} />
+          <span className="dot" style={{ color: queue.is_open ? "var(--ok)" : "var(--bad)" }} />
           <span>{queue.label_th}</span>
           <div className="spacer" />
           {queue.is_open ? (
@@ -540,23 +713,19 @@ export function QueueStrip({ queues }: { queues: Queue[] }) {
   );
 }
 
-// --- wrap-up (D45) --------------------------------------------------------
+// --- wrap-up (D45, D59) ---------------------------------------------------
 
 export function WrapupPanel({
-  callId,
-  acwSeconds,
-  longAcw,
+  presence,
   saved,
   onSave,
-  onSaveAndReady,
+  onSaveAndDeclare,
   busy,
 }: {
-  callId: string | null;
-  acwSeconds: number | null;
-  longAcw: boolean;
+  presence: Presence;
   saved: boolean;
   onSave: (payload: Record<string, unknown>) => void;
-  onSaveAndReady: (payload: Record<string, unknown>) => void;
+  onSaveAndDeclare: (payload: Record<string, unknown>, intent: string) => void;
   busy: boolean;
 }) {
   const [disposition, setDisposition] = useState("advice_given");
@@ -569,18 +738,21 @@ export function WrapupPanel({
     was_edited: notes.trim().length > 0,
   });
 
+  // The one-click combination only makes sense if "ready" is where the agent is actually
+  // going. Two cases where it is not, and they look identical without `intent_reason`:
+  // after a LAST_CALL the standing instruction has been spent (`D59`), and while DRAINING
+  // they explicitly asked for no new callers. Offering "Save & Ready" in either case
+  // makes the fastest button the one that undoes what they just told us.
+  const lastCallSpent = presence.intent_reason === "last_call_fulfilled";
+  const draining = presence.agent_intent === "draining";
+  const canOfferReady = presence.declarable.includes("ready") && !draining && !lastCallSpent;
+
   return (
     <div className="panel">
       <h2>สรุปหลังจบสาย</h2>
-      <div className="row">
-        <span className={`badge ${longAcw ? "warn" : "info"}`}>
-          ACW {acwSeconds === null ? "—" : mmss(acwSeconds)}
-        </span>
-        {saved && <span className="badge ok">บันทึกแล้ว</span>}
-      </div>
+      {saved && <span className="badge ok">บันทึกแล้ว</span>}
       <p className="faint">
-        เวลานี้เริ่มนับตั้งแต่วางสาย และจะหยุดเมื่อคุณเลือกสถานะถัดไปเท่านั้น —
-        ระบบไม่ตั้งเป็นพร้อมรับสายให้เอง
+        การบันทึกจะปิด “บันทึกของสายนี้” เท่านั้น — งานหลังสายจะจบเมื่อคุณเลือกสถานะถัดไป
       </p>
 
       <div className="stack" style={{ marginTop: 8 }}>
@@ -607,22 +779,35 @@ export function WrapupPanel({
           ต้องติดตามต่อ
         </label>
         <div className="row">
-          <button onClick={() => onSave(payload())} disabled={busy || !callId || saved}>
+          <button onClick={() => onSave(payload())} disabled={busy || saved}>
             บันทึก
           </button>
-          {/* Two requests behind one button, deliberately (`D45`): saving closes the call
-              RECORD, declaring ends after-call work, and either may happen alone. */}
-          <button
-            className="primary"
-            onClick={() => onSaveAndReady(payload())}
-            disabled={busy || !callId}
-          >
-            บันทึกแล้วพร้อมรับสาย
-          </button>
+          {canOfferReady && (
+            <button
+              className="primary"
+              onClick={() => onSaveAndDeclare(payload(), "ready")}
+              disabled={busy}
+            >
+              บันทึกแล้วพร้อมรับสาย
+            </button>
+          )}
+          {draining && (
+            <button
+              className="primary"
+              onClick={() => onSaveAndDeclare(payload(), "draining")}
+              disabled={busy}
+            >
+              บันทึกแล้วกลับสู่โหมดไม่รับสายใหม่
+            </button>
+          )}
         </div>
+        {lastCallSpent && (
+          <div className="hint">
+            คุณตั้งไว้ว่าสายนั้นเป็น “สายสุดท้าย” และสายจบแล้ว — บันทึกได้เลย
+            แล้วเลือกสถานะถัดไปเองที่แผงสถานะ
+          </div>
+        )}
       </div>
     </div>
   );
 }
-
-export { mmss };

@@ -1,15 +1,20 @@
 /**
  * The workstation shell (`D32`): one browser tab, and the call happens inside it.
  *
- * The softphone is **stubbed** here. Mute, hold and hangup move UI state and call the
- * server's call-control endpoints where they exist; the WebRTC/SIP leg lands at P5. That
- * split is on purpose — the states, the handshake and the screen are the parts that need
- * designing, and none of them change when real audio arrives underneath.
+ * The softphone is **stubbed**. Mute and hold move UI state; hangup calls the server. The
+ * WebRTC/SIP leg lands at P5, and none of the states or the handshake change when it does.
  *
- * State discipline: the server's snapshot is the truth, and every mutation returns a new
- * one. The socket pushes changes the client did not cause (an offer, a presence change
- * made elsewhere). The client keeps exactly one piece of state the server does not have —
- * the live digits of an open capture — because those are deliberately never stored (`D44`).
+ * Three rules this file has to hold, each of which it broke once:
+ *
+ * 1. **The server owns state; this owns presentation.** Every mutation returns a fresh
+ *    snapshot. Nothing is recomputed here that the server already decided — not
+ *    `offerable`, not what the brief may show (`D53`), not which status buttons are legal
+ *    (`D59`).
+ * 2. **Timers are drawn from server timestamps**, never from "seconds since mount". That
+ *    is why the call timer survives a refresh now.
+ * 3. **A background refresh must not disable the UI.** Marking the app `busy` on
+ *    socket-driven refreshes made every button grey out and come back once a second —
+ *    which is the "flickering" that looked like a React problem and was not.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -25,93 +30,108 @@ import {
   PresencePanel,
   QueueStrip,
   WrapupPanel,
+  elapsedSince,
   mmss,
+  useSecondTicker,
 } from "./panels";
 
 export default function App() {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [liveDigits, setLiveDigits] = useState("");
   const [muted, setMuted] = useState(false);
   const [held, setHeld] = useState(false);
   const [savedCalls, setSavedCalls] = useState<Set<string>>(new Set());
-  const [callStarted, setCallStarted] = useState<number | null>(null);
-  const [, forceTick] = useState(0);
 
   const signedIn = snapshot !== null;
+  const now = useSecondTicker(signedIn);
 
   // --- talking to the server ---------------------------------------------
 
-  const run = useCallback(async <T,>(work: () => Promise<T>): Promise<T | null> => {
-    setBusy(true);
-    setError(null);
-    try {
-      return await work();
-    } catch (exc) {
-      // A 401 means the session went away (server restart, expiry). Drop to the sign-in
-      // screen rather than leaving a dead workstation that silently does nothing.
-      if (exc instanceof ApiError && exc.status === 401) {
-        setSnapshot(null);
-        return null;
-      }
-      setError(exc instanceof Error ? exc.message : String(exc));
-      return null;
-    } finally {
-      setBusy(false);
+  const handleFailure = useCallback((exc: unknown) => {
+    // A 401 means the session went away (server restart, expiry). Drop to the sign-in
+    // screen rather than leaving a dead workstation that silently does nothing.
+    if (exc instanceof ApiError && exc.status === 401) {
+      setSnapshot(null);
+      return;
     }
+    setError(exc instanceof Error ? exc.message : String(exc));
   }, []);
 
-  const refresh = useCallback(async () => {
-    const next = await run(() => api.me());
-    if (next) setSnapshot(next);
-  }, [run]);
+  /** A user-initiated action: shows progress, surfaces errors, disables controls. */
+  const run = useCallback(
+    async <T,>(work: () => Promise<T>): Promise<T | null> => {
+      setBusy(true);
+      setError(null);
+      try {
+        return await work();
+      } catch (exc) {
+        handleFailure(exc);
+        return null;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [handleFailure],
+  );
+
+  /**
+   * A background re-read. **Deliberately does not touch `busy`.**
+   *
+   * The socket pushes several messages a second during an active call, and routing each
+   * one through `run()` toggled `busy` on and off — greying every control for a frame,
+   * over and over. That was the flicker.
+   */
+  const quietRefresh = useCallback(async () => {
+    try {
+      setSnapshot(await api.me());
+    } catch (exc) {
+      handleFailure(exc);
+    }
+  }, [handleFailure]);
 
   useEffect(() => {
-    // Try to resume: the cookie outlives a reload, so an agent who refreshes mid-call
-    // lands back on the call rather than at a login form (`D32`'s resilience clause).
-    api
-      .me()
-      .then(setSnapshot)
-      .catch(() => setSnapshot(null));
-  }, []);
+    // Resume: the cookie outlives a reload, so an agent who refreshes mid-call lands back
+    // on the call rather than at a login form (`D32`'s resilience clause).
+    void quietRefresh();
+  }, [quietRefresh]);
 
   const onSocketMessage = useCallback(
     (message: SocketMessage) => {
       if (message.type === "capture") {
-        const payload = message.payload as unknown as Capture;
-        // The only thing the client knows that the server does not keep: the digits.
-        if (typeof payload.digits === "string") setLiveDigits(payload.digits);
+        // Patch just this capture rather than re-reading everything: keystrokes arrive
+        // fast, and a full snapshot per digit is both wasteful and jumpy.
+        const incoming = message.payload as unknown as Capture;
+        setSnapshot((prior) =>
+          prior === null
+            ? prior
+            : {
+                ...prior,
+                captures: prior.captures.some((c) => c.capture_id === incoming.capture_id)
+                  ? prior.captures.map((c) =>
+                      c.capture_id === incoming.capture_id ? incoming : c,
+                    )
+                  : [...prior.captures, incoming],
+              },
+        );
         return;
       }
-      // Everything else changes something the snapshot describes, and the snapshot is
-      // cheap. Re-fetching rather than patching keeps one source of truth.
-      void refresh();
+      void quietRefresh();
     },
-    [refresh],
+    [quietRefresh],
   );
 
   const socketStatus = useSocket(signedIn, onSocketMessage, setSnapshot);
 
-  // A once-a-second re-render so the ACW and call timers move. Values come from the
-  // server; this only redraws them.
-  useEffect(() => {
-    const id = window.setInterval(() => forceTick((n) => n + 1), 1000);
-    return () => window.clearInterval(id);
-  }, []);
-
   const previousState = useRef<string | null>(null);
   useEffect(() => {
     const state = snapshot?.presence.system_state ?? null;
-    if (state === "on_call" && previousState.current !== "on_call") setCallStarted(Date.now());
     if (state !== "on_call") {
       setMuted(false);
       setHeld(false);
     }
     previousState.current = state;
   }, [snapshot?.presence.system_state]);
-
-  // --- sign-in -----------------------------------------------------------
 
   if (!signedIn) return <SignIn onDone={setSnapshot} />;
 
@@ -121,6 +141,11 @@ export default function App() {
   const onCall = presence.system_state === "on_call";
   const wrapping = presence.system_state === "after_call_work";
 
+  // Both drawn from server timestamps, so a refresh mid-call shows the true elapsed time.
+  const callSeconds = elapsedSince(snapshot.call_answered_at, now);
+  const acwSeconds = elapsedSince(presence.acw_since, now);
+  const longAcw = presence.long_acw || (acwSeconds !== null && acwSeconds >= 45);
+
   return (
     <div className="shell">
       <header className="topbar">
@@ -129,7 +154,7 @@ export default function App() {
         </div>
         <span className="badge">{presence.display_name}</span>
         <span className={`badge ${presence.offerable ? "ok" : "warn"}`}>
-          {presence.system_state} · {presence.agent_intent}
+          {presence.offerable ? "รับสายได้" : "ยังไม่รับสาย"}
         </span>
         <div className="spacer" />
         <span
@@ -138,11 +163,31 @@ export default function App() {
           }`}
         >
           <i className="dot" />
-          {socketStatus === "live" ? "เชื่อมต่อแล้ว" : socketStatus === "connecting" ? "กำลังเชื่อมต่อ" : "ขาดการเชื่อมต่อ"}
+          {socketStatus === "live"
+            ? "เชื่อมต่อแล้ว"
+            : socketStatus === "connecting"
+              ? "กำลังเชื่อมต่อ"
+              : "ขาดการเชื่อมต่อ"}
         </span>
-        <DemoCallButton onPlaced={refresh} disabled={busy} skills={presence.skills} />
+        <DemoCallButton
+          onPlaced={quietRefresh}
+          // A test caller can only be placed when this agent could actually receive one.
+          // Pressing it while un-offerable used to place a call that then sat unmatched,
+          // which looks exactly like a routing bug.
+          disabled={busy || !presence.offerable || offer !== null}
+          reason={
+            offer !== null
+              ? "มีสายที่กำลังเสนออยู่แล้ว"
+              : presence.offerable
+                ? undefined
+                : "กด “พร้อมรับสาย” ก่อน จึงจะรับสายทดสอบได้"
+          }
+          skills={presence.skills}
+        />
         <button
           className="ghost"
+          disabled={busy || onCall}
+          title={onCall ? "วางสายก่อนออกจากระบบ" : undefined}
           onClick={() => run(() => api.signOut()).then(() => setSnapshot(null))}
         >
           ออกจากระบบ
@@ -155,9 +200,10 @@ export default function App() {
             presence={presence}
             busy={busy}
             onDeclare={(intent) =>
-              run(() => api.declare(intent)).then((updated) => {
-                if (updated) void refresh();
-              })
+              run(async () => {
+                await api.declare(intent);
+                return api.me();
+              }).then((next) => next && setSnapshot(next))
             }
           />
           <QueueStrip queues={queues} />
@@ -167,9 +213,7 @@ export default function App() {
           <BriefPanel brief={brief} />
           {wrapping && callId && (
             <WrapupPanel
-              callId={callId}
-              acwSeconds={presence.acw_seconds}
-              longAcw={presence.long_acw}
+              presence={presence}
               saved={savedCalls.has(callId)}
               busy={busy}
               onSave={(payload) =>
@@ -180,10 +224,12 @@ export default function App() {
                   }
                 })
               }
-              onSaveAndReady={(payload) =>
+              // Two requests behind one button, deliberately (`D45`): saving closes the
+              // call RECORD, declaring ends after-call work, and either may happen alone.
+              onSaveAndDeclare={(payload, intent) =>
                 run(async () => {
                   if (!savedCalls.has(callId)) await api.saveWrapup(callId, payload);
-                  await api.declare("ready");
+                  await api.declare(intent);
                   return api.me();
                 }).then((next) => {
                   if (next) {
@@ -208,52 +254,64 @@ export default function App() {
           />
           <CapturePanel
             capture={latestCapture}
-            liveDigits={liveDigits}
             callId={callId}
             busy={busy}
             onStart={() =>
-              callId &&
-              run(() => api.startCapture(callId)).then(() => {
-                setLiveDigits("");
-                void refresh();
-              })
+              callId && run(() => api.startCapture(callId)).then(() => void quietRefresh())
             }
-            // NOT optimistic. The first version appended the digit locally as well as
-            // taking the socket's push, and the two compounded: typing 2024000811
-            // showed 20240008111 while the server held ten digits. An agent reads these
-            // off the screen and acts on them, so a digit that is not there is far worse
-            // than a hundred milliseconds of latency. One writer: the server.
+            // Not optimistic. The client used to append the digit locally as well as
+            // taking the socket push, and the two compounded — typing 2024000811 showed
+            // 20240008111. One writer: the server.
             onKey={(digit) =>
               openCapture && void run(() => api.sendKeys(openCapture.capture_id, digit))
             }
+            onBackspace={() =>
+              openCapture &&
+              run(() => api.backspaceCapture(openCapture.capture_id)).then(
+                () => void quietRefresh(),
+              )
+            }
             onStop={() =>
               openCapture &&
-              run(() => api.stopCapture(openCapture.capture_id)).then(() => void refresh())
+              run(() => api.stopCapture(openCapture.capture_id)).then(() => void quietRefresh())
             }
             onDiscard={() =>
-              openCapture &&
-              run(() => api.discardCapture(openCapture.capture_id)).then(() => {
-                setLiveDigits("");
-                void refresh();
-              })
+              latestCapture &&
+              run(() => api.discardCapture(latestCapture.capture_id)).then(
+                () => void quietRefresh(),
+              )
             }
             onLookup={(kind) =>
               latestCapture &&
               run(() => api.lookupCapture(latestCapture.capture_id, kind)).then(
-                () => void refresh(),
+                () => void quietRefresh(),
               )
             }
           />
         </div>
       </div>
 
+      {/* The ACW banner lives HERE, not inside the wrap-up form. Saving the form closes
+          the call record (`D45`) and used to unmount the only visible ACW timer with it,
+          while the agent was still — correctly — in after-call work. */}
+      {wrapping && (
+        <div className={`acw-bar ${longAcw ? "long" : ""}`}>
+          <span className="badge info">งานหลังจบสาย</span>
+          <span className="timer">{mmss(acwSeconds ?? 0)}</span>
+          <span className="faint">
+            นับตั้งแต่วางสาย — จะหยุดเมื่อคุณเลือกสถานะถัดไปเท่านั้น
+          </span>
+          {longAcw && <span className="badge warn">ใช้เวลานานกว่าปกติ</span>}
+          <div className="spacer" />
+          {savedCalls.has(callId ?? "") && <span className="badge ok">บันทึกสรุปแล้ว</span>}
+        </div>
+      )}
+
       <footer className="callbar">
         <span className="stub">softphone: stubbed until P5</span>
         {onCall && callId ? (
           <>
-            <span className="timer">
-              {mmss(callStarted ? (Date.now() - callStarted) / 1000 : 0)}
-            </span>
+            <span className="timer">{mmss(callSeconds ?? 0)}</span>
             <button className={muted ? "on" : ""} onClick={() => setMuted((m) => !m)}>
               {muted ? "เปิดไมค์" : "ปิดไมค์"}
             </button>
@@ -272,9 +330,7 @@ export default function App() {
             </button>
           </>
         ) : (
-          <span className="faint">
-            {wrapping ? "กำลังสรุปหลังจบสาย" : "ไม่มีสายที่กำลังสนทนา"}
-          </span>
+          <span className="faint">{wrapping ? "" : "ไม่มีสายที่กำลังสนทนา"}</span>
         )}
       </footer>
 
@@ -382,10 +438,12 @@ function intentForSkills(skills: { skill_code: string }[]): string {
 function DemoCallButton({
   onPlaced,
   disabled,
+  reason,
   skills,
 }: {
   onPlaced: () => void;
   disabled: boolean;
+  reason?: string;
   skills: { skill_code: string }[];
 }) {
   const [pending, setPending] = useState(false);
@@ -393,7 +451,7 @@ function DemoCallButton({
     <button
       className="ghost"
       disabled={disabled || pending}
-      title="DEMO: stands in for telephony until P5"
+      title={reason ?? "DEMO: stands in for telephony until P5"}
       onClick={async () => {
         setPending(true);
         try {
@@ -401,8 +459,7 @@ function DemoCallButton({
             intent_code: intentForSkills(skills),
             caller_number: "0812345678",
             waited_s: 40,
-            // DEMO: rehearsals happen at 2 a.m., when most queues are shut. Marked here
-            // and in the request schema; production has no such flag.
+            // DEMO: rehearsals happen at 2 a.m., when most queues are shut (`D54`).
             ignore_hours: true,
           });
           onPlaced();

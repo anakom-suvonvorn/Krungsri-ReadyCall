@@ -83,7 +83,7 @@ class BriefBuilder:
             entities=(),
             recommended_actions=self._actions(spec, may_disclose=may_disclose),
             next_best_action=None,
-            suggested_opening_th=self._opening(snapshot, spec),
+            suggested_opening_th=self._opening(snapshot, spec, may_disclose=may_disclose),
             urgency=urgency,
             snapshot=snapshot,
             identity=identity,
@@ -172,10 +172,27 @@ class BriefBuilder:
         return tuple(actions)
 
     @staticmethod
-    def _opening(snapshot: ContextSnapshot, spec: IntentSpec) -> str:
+    def _opening(snapshot: ContextSnapshot, spec: IntentSpec, *, may_disclose: bool) -> str:
+        """The line the agent says out loud — and below L2 it must not contain a name.
+
+        `D55`. The screen may show "ภัทธีรา เสรีวัฒนชัย"; the agent may not *say* it until
+        identity is established, for two reasons and the second is the stronger one:
+
+        1. Greeting someone by name confirms to whoever is holding that phone that the
+           number belongs to that person. A small leak, and free to avoid.
+        2. **A leading question is weaker verification.** "ใช่คุณภัทธีราไหมคะ" can be
+           answered "ใช่ครับ" by anybody. "ขอทราบชื่อผู้ติดต่อด้วยค่ะ" has to be
+           *produced* — it is the difference between recognition and recall, and only one
+           of them is evidence.
+
+        This is the spoken half of action 0 (*ยืนยันตัวตนผู้ติดต่อก่อนให้ข้อมูลกรมธรรม์*),
+        and it is drawn in `diagrams/src/identity_promotion.mmd`, which has said so since
+        `D42` was written.
+        """
         customer = snapshot.payload.customer
-        if customer is None:
-            return f"สวัสดีค่ะ ทราบว่าท่านติดต่อเรื่อง{spec.label_th} ขอทราบชื่อและเบอร์ติดต่อก่อนนะคะ"
+        if customer is None or not may_disclose:
+            # Note what is deliberately absent even when `customer` exists: their name.
+            return f"สวัสดีค่ะ ยินดีให้บริการเรื่อง{spec.label_th} ขอทราบชื่อผู้ติดต่อด้วยค่ะ"
         return f"สวัสดีค่ะ {customer.polite_name_th} ทราบว่าติดต่อเรื่อง{spec.label_th} ยินดีช่วยดูแลค่ะ"
 
 

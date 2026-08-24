@@ -21,7 +21,15 @@ export type Presence = {
   max_concurrent: number;
   skills: { skill_code: string; label_th: string; proficiency: number }[];
   acw_seconds: number | null;
+  /** The anchor the client ticks its own ACW clock from (`D59`). */
+  acw_since: string | null;
   long_acw: boolean;
+  /** Which intents may be declared right now. The server decides (`D59`). */
+  declarable: string[];
+  /** True while in after-call work: a declaration is owed before going available. */
+  awaiting_declaration: boolean;
+  /** signed_in | rona_missed_offer | last_call_fulfilled | agent_declared (`D59`). */
+  intent_reason: string;
 };
 
 export type Offer = {
@@ -46,12 +54,21 @@ export type Identity = {
   method: string;
   may_disclose_policy_details: boolean;
   authority_check_required: boolean;
+  /** Once true the control locks — all three outcomes (`D60`). */
+  attested: boolean;
+  attested_outcome: string | null;
+  third_party_name: string | null;
+  relationship: string | null;
 };
 
 export type Capture = {
   capture_id: string;
   state: string;
   length: number;
+  /** The real digits — for the agent's own panel. `D44`'s inverted default is "masked in
+   *  transcripts and logs", and the agent is the person the capture was made for (`D58`). */
+  digits: string;
+  /** What everything that is not this panel sees. */
   masked: string;
   labelled_as: string | null;
   lookups: {
@@ -60,8 +77,6 @@ export type Capture = {
     matched_value: string | null;
     detail: string | null;
   }[];
-  /** Only ever present on the live socket push, never on a REST body (`D44`). */
-  digits?: string;
 };
 
 export type Queue = {
@@ -114,6 +129,8 @@ export type Snapshot = {
   captures: Capture[];
   queues: Queue[];
   server_time: string | null;
+  /** When the current call was answered, so the call timer survives a page refresh. */
+  call_answered_at: string | null;
 };
 
 export class ApiError extends Error {
@@ -174,6 +191,8 @@ export const api = {
     call<Capture>("POST", `/v1/agent/captures/${captureId}/keys`, { digits }),
   stopCapture: (captureId: string) =>
     call<Capture>("POST", `/v1/agent/captures/${captureId}/stop`),
+  backspaceCapture: (captureId: string) =>
+    call<Capture>("POST", `/v1/agent/captures/${captureId}/backspace`),
   discardCapture: (captureId: string) =>
     call<Capture>("POST", `/v1/agent/captures/${captureId}/discard`),
   lookupCapture: (captureId: string, kind: string) =>
