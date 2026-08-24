@@ -12,9 +12,13 @@ believe it, why they are calling, everything we hold about them assembled before
 is answered, which agent should take it and why — and now **the desk actually rings, a
 human accepts, and the screen is already right**.
 
-Verified 2026-08-24: **292 tests pass**, `ruff check` + `ruff format --check` clean,
+Verified 2026-08-24: **307 tests pass**, `ruff check` + `ruff format --check` clean,
 `mypy --strict` clean over 81 files, all scenarios replay byte-identically, 50/50 diagrams
 current. The whole workstation flow was also driven by hand in a browser.
+
+**A review pass on 2026-08-24 fixed six reported faults (`B6`, `D55`–`D60`), and three of
+them were decisions the docs already contained.** Read `B6` before touching the workstation
+— the lesson is about reading `.mmd` sources, not about React.
 
 ```bash
 uv sync --extra web
@@ -49,11 +53,18 @@ a `SessionResolver`, never the request body (`D4`).
 Hungarian solver** (`D49`) · guard rails · a `MatchingDecision` per call **including
 non-assignments**, saying **which** of the two unplaced reasons applies (`D50`).
 
-**P2b — the workstation.** `services/agents/` (presence with both axes, the offer handshake,
-dispatch) · `services/queues/hours.py` + `queue_hours.yaml` · `services/capture/keypad.py`
-(`D44`) · `services/identity/attestation.py` (`D42`) · `api/realtime.py` (per-agent
-sequencing, replay-on-reconnect) · `api/routers/agent.py` · **React workstation** at
-`/workstation` (`D32`) · `POST /v1/demo/calls` standing in for telephony.
+**P2b — the workstation.** `services/agents/` (presence, the offer handshake, dispatch) ·
+`services/queues/hours.py` + `queue_hours.yaml` · `services/capture/keypad.py` (`D44`) ·
+`services/identity/attestation.py` (`D42`) · `api/realtime.py` (per-agent sequencing,
+replay-on-reconnect) · `api/routers/agent.py` · **React workstation** at `/workstation`
+(`D32`) · `POST /v1/demo/calls` standing in for telephony.
+
+**P2b review pass.** The opening line asks an **open question** below L2 (`D55`) · the
+recommended-action chain written down (`D56`) · `other` challenge + a **named** third party
+(`D57`) · the agent sees the digits, `mask()` is for logs (`D58`) · `agent_intent` is a
+**standing instruction** with `declarable` / `awaiting_declaration` / `intent_reason`
+computed server-side (`D59`) · attestation locks with an explicit amend (`D60`) · timers
+anchored to server timestamps · the ACW bar lives outside the wrap-up form.
 
 ## Next steps (in order)
 
@@ -76,11 +87,13 @@ sequencing, replay-on-reconnect) · `api/routers/agent.py` · **React workstatio
 | Q8 | Typhoon model ids / licence / pricing | Verify against live docs when writing the adapter |
 | Q9 | `OFFER_TIMEOUT_S=20`, ACW thresholds | Guesses; tune against how a real agent works |
 | Q11 | Language menu wording when English lands | `preferred` vs `acceptable` modelled (`D38`) |
-| Q12 | Which challenges count for promotion to L3 | 4 in `KNOWN_CHALLENGES`; confirm with Krungsri |
+| Q12 | Which challenges count for promotion to L3 | 4 named + `other` free text (`D57`); confirm the named list with Krungsri |
 | Q13 | Does a third-party caller need a named representative | Assume yes; `Policy` has no `representatives` field yet |
 | Q15 | Matching weights are guesses | Tune against real volumes; `--compare` exists to re-measure |
 | **Q16** | **A keypad lookup confirms a policy number at L1.** The caller supplied the digits and the agent must not read them aloud below L2 — but it is a confirmation oracle. Designed this way in `D44`; worth a second look. | Allowed |
 | **Q17** | **Commit `apps/workstation/dist/`?** It is gitignored, so a fresh clone has no workstation until `npm run build` runs — and on a venue with no internet, `npm install` is what fails. | Not committed |
+| **Q18** | **"Not this person" is a one-way door.** It clears the customer exactly as `D42` asks, but leaves the agent with nobody to attach the call to, and customer search does not exist (`D32` defers lookup). A rejected call stays anonymous for its duration. A test asserts this so it fails the day search lands. | Accepted for now |
+| **Q19** | **`config/playbooks/` does not exist** but is in the folder map. Actions live in `_PLAYBOOKS` in `builder.py` (`D56`). Moving them out is a P4 task. | Deferred to P4 |
 
 Resolved: rating is an event (`D46`) · single project (`D34`) · Asterisk · RTX 3050 · Claude
 + Typhoon compared · React workstation with the softphone in it · web customer simulator ·
@@ -108,6 +121,20 @@ menu-first flow (`D37`).
 - **An ANI match is probable, not verified** (`D20`). **Assurance goes UP and DOWN mid-call**
   (`D42`) — promotion is a **re-render, not a re-fetch**.
 - **Keypad capture is UNTYPED** (`D44`). A lookup returns evidence; only the agent attests.
+- **`mask()` is for logs and transcripts, NOT for the agent** (`D58`). The agent asked the
+  caller to key those digits and has to read them back. Masking their own screen deletes the
+  feature and protects nothing.
+- **Never speak a name below L2** (`D55`). The screen shows it; the opening line asks an
+  **open** question. A leading question is weaker verification — anyone can answer "yes".
+- **`agent_intent` is a standing instruction, never a live status** (`D59`). It is not
+  deselected around a call. Mid-call only `ready`/`last_call`/`draining` are declarable.
+  `LAST_CALL` is **spent** when that call ends. Use `intent_reason` to tell the three routes
+  into `not_ready` apart — they need different screens.
+- **The workstation renders permissions, it never computes them.** `declarable`, `offerable`
+  and what the brief may show are all server decisions. A client that decides will
+  eventually disagree, and the client's copy is the wrong one.
+- **A control that cannot be pressed must LOOK disabled.** Silently refusing a click reads
+  as a broken button.
 - **Saving the wrap-up is NOT "done"** (`D45`). ACW runs from media disconnect until the
   agent declares *any* next state. Nothing is auto-saved and nothing auto-readies.
 - **A rating is NOT a call state** (`D46`).
@@ -116,6 +143,13 @@ menu-first flow (`D37`).
   `chosen_agent_id is None` covers a **third** case: a deliberate `DEFER`.
 - **Don't make UI state optimistic where the value is read aloud.** The keypad panel did, and
   invented a digit the server did not have.
+- **Background refreshes must not set the `busy` flag.** Routing socket pushes through the
+  same helper as user actions greyed the whole UI once a second — that was the "flicker",
+  and it was not React's fault (`B6`).
+- **Timers are `now − server_timestamp`, never "since mount".** Otherwise a refresh mid-call
+  restarts the call clock at zero.
+- **The server must be restarted to pick up Python changes** — the launch config runs
+  uvicorn without `--reload`. Twenty minutes went into "why is `intent_reason` empty".
 - **Never hardcode an insurance literal in `services/`** — it goes in `config/` (`D28`).
 - **Never `datetime.now()` or a raw random id** outside `clock.py`/`ids.py` (`D35`).
 - **`docs/` is excluded from `ruff format`** — the explanations are verbatim records.
@@ -143,7 +177,13 @@ each has a "changes since" section. Write one per phase as it lands.
 
 - `P0_foundations.md` · `P1_context.md` · `P1b_http_layer.md` · `P2a_matching.md`
 - `P2b_workstation.md` — the two axes, the handshake, after-call work, the socket, queue
-  hours, and **the two bugs found by running it** (the disclosure leak and the invented digit).
+  hours, the disclosure leak and the invented digit — plus a **"changes since"** section
+  covering the `D55`–`D60` review pass and where recommended actions come from.
+
+**Before changing identity, capture or presence, open the `.mmd` sources**, not just the
+prose. `diagrams/src/identity_promotion.mmd` carries the open-question rule and the
+three-parallel-paths shape, and neither is restated anywhere else. Skipping that cost three
+of the six faults in `B6`.
 
 ## Before any `/compact`
 

@@ -249,4 +249,59 @@ the line. The test call picks an intent the signed-in agent can actually handle,
 
 _Append here rather than editing above._
 
-- (nothing yet)
+### 2026-08-24 — a review pass that mostly re-read the docs (`B6`, `D55`–`D60`)
+
+Six reported faults. Three of them were decisions that **already existed** and had been
+implemented from a summary rather than from the source. Recording that plainly, because the
+pattern is the lesson: `diagrams/src/identity_promotion.mmd` is handwritten, marked *checked
+against D42*, and contains both the open-question rule and the three-parallel-paths shape.
+Reading it would have prevented half of this.
+
+- **The opening line must not name an unverified caller (`D55`).** Section 7 above shows
+  `สวัสดีค่ะ คุณภัทธีรา…` at L3 — correct. At **L1** the same builder produced the same
+  sentence, which is not. It now reads *"สวัสดีค่ะ ยินดีให้บริการเรื่อง… ขอทราบชื่อผู้ติดต่อ
+  ด้วยค่ะ"*. Naming first tells whoever holds the phone that the number is theirs, **and** a
+  leading question is weaker verification: "is this Khun X?" can be answered yes by anybody;
+  "may I have your name?" has to be produced.
+- **Third party is its own path, one click (`D42`, re-read).** It required pressing
+  *Confirmed* afterwards, which is the exact binary the third button exists to avoid — the
+  audit log would have said the policyholder was verified. It now takes a **name and a
+  relationship**, both required (`D57`), and commits on its own.
+- **`other` is a real challenge (`D57`).** `D44` said the free-text mode should be built
+  *first*; it was built last. Verification does not fit a four-item dropdown.
+- **The agent sees the digits (`D58`).** `D44` says masked *"in transcripts and logs"* —
+  which the first implementation read as "everywhere", hiding the caller's own keystrokes
+  from the person who asked for them. `mask()` is for the log line; `digits` is for the panel.
+- **`agent_intent` is a standing instruction (`D59`).** This is the section 1 model, stated
+  properly. It is never deselected; mid-call only `READY`/`LAST_CALL`/`DRAINING` can change;
+  `LAST_CALL` is **spent** when that call ends. `awaiting_declaration` stops the screen
+  showing the pre-call instruction as if it were current — which is why "I'm marked
+  พร้อมรับสาย but I get no calls" happened. `intent_reason` separates the three routes into
+  `not_ready`, so the wrap-up panel stops offering **Save & Ready** to someone who just said
+  they are finishing.
+- **An attestation locks the control (`D60`)**, with an explicit amend that appends a
+  correction rather than overwriting.
+
+### And three plain UI bugs from the same pass
+
+- **The ACW timer was a prop of the wrap-up form**, so saving the form unmounted it —
+  removing the only visible clock while the agent was still, correctly, in after-call work.
+  It now has its own bar in the shell, which is also the honest place for it: after-call work
+  is not a property of the form.
+- **Both timers counted from component mount**, so a refresh mid-call restarted the call at
+  `00:00`. They are now `now − server_timestamp` (`call_answered_at`, `acw_since`). Verified:
+  `01:02` after a refresh, not zero.
+- **The flicker was not React.** Every socket push ran through the same helper as user
+  actions, which sets a `busy` flag that disables every control — so during an active call
+  the whole UI greyed out and came back about once a second. Background refreshes now use a
+  path that touches no flag. Measured after: **0 disabled-state changes across 3 s idle.**
+
+### Where the recommended actions come from (`D56`)
+
+Asked directly, and worth having in one place: `intents.yaml` gives each intent a **playbook
+name** → the playbook is an ordered list of `(Thai text, required assurance)` → filtered
+against the caller's level → **below L2 a verify-identity step is inserted at position 0**.
+It lives in `_PLAYBOOKS` in `services/brief/builder.py` today; `config/playbooks/` is the P4
+destination and **does not exist yet**, despite appearing in the folder map. Hand-written,
+static, no AI — because this is the version that must never fail, and even at P4 the model
+may only rank and select from the playbook, never write a step (`D16`).

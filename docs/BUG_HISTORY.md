@@ -174,6 +174,63 @@ Format per entry:
   leak what it has a field for. And test the *bytes*: an assertion about rendered text cannot
   see a field the renderer never mentions.
 
+## B6. Six workstation faults, one root cause: the docs were not read closely enough
+
+- **Symptoms:** a page of user-reported problems after the first workstation demo. Listed
+  because the *pattern* matters more than any single one:
+  1. the suggested opening greeted an **unverified** caller by name;
+  2. *Third party* required pressing *Confirmed* afterwards, making it two steps;
+  3. keypad digits were **masked from the agent** who had just captured them;
+  4. identity buttons stayed live after an attestation;
+  5. the ACW timer sat inside the wrap-up form and vanished when the form was saved, while
+     the agent was still in after-call work;
+  6. the call timer restarted at `00:00` after a browser refresh, and the whole UI flickered
+     roughly once a second.
+- **Root cause — for 1, 2 and 3, the same one: the answer was already written down.**
+  - `diagrams/src/identity_promotion.mmd` is handwritten and marked *"checked against D42"*.
+    It contains a node reading *"agent asks an **OPEN** question — ขอทราบชื่อผู้ติดต่อด้วยค่ะ"*
+    and a note: *"never ask a leading question. 'ใช่คุณ X ไหมคะ' both leaks that the number
+    belongs to them AND is weaker verification — anyone can answer yes."* It also draws
+    **three parallel edges** from `agent presses one of THREE`, not a two-step path.
+  - `D44` says raw captures are *"masked in transcripts and logs"*. It was implemented as
+    "masked everywhere", including from the agent.
+  - `D44` also says *"'the agent handles it' is the default and the only mode we build
+    first"*. The named challenges shipped and the free-text escape hatch did not — exactly
+    inverted.
+- **The other three are ordinary UI faults, and each had a specific cause:**
+  - The ACW timer was a prop of `WrapupPanel`, so saving the wrap-up unmounted the component
+    and took the only visible clock with it. It now lives in its own bar in the shell.
+  - Both timers counted from **component mount** rather than from a server timestamp, so a
+    refresh reset them. `call_answered_at` and `acw_since` are now sent and the client
+    computes `now - anchor`.
+  - The flicker was **not** React. Every socket push was routed through the same helper as
+    user actions, which sets a `busy` flag that disables every control — so during an active
+    call the entire UI greyed out and came back about once a second. Background refreshes now
+    use a separate path that touches no flag. Measured after: **0 disabled-state changes over
+    3 s idle**, previously roughly one per second.
+- **Investigation:** the user reported all six from ten minutes of using the screen. Every
+  one was reproducible immediately; none was subtle. What made them expensive was that three
+  of them were re-litigating decisions that already existed in `docs/`, which is precisely
+  what that directory is for.
+- **Fix:** `D55` (open question), `D57` (other + named third party), `D58` (masking is for
+  logs), `D59` (standing-instruction presence model), `D60` (attestation locks and amends),
+  plus the UI corrections above. 307 tests pass, including new ones asserting the opening
+  line contains no name below L2 and that action 0 is prepended.
+- **Verification:** driven by hand in a browser. The opening reads *"…ขอทราบชื่อผู้ติดต่อ
+  ด้วยค่ะ"* at L1 and greets by name only after attestation; the three identity buttons
+  disable together with an amend button; digits show as `2024000811` on screen while the log
+  line carries `••••••••11`; the ACW bar survives saving and keeps ticking; the call timer
+  read `01:02` after a mid-call refresh instead of `00:00`.
+- **Lesson, and it is a process one rather than a technical one.** `CLAUDE.md` says to read
+  the relevant doc **before** changing an area, and states the reason: *"if a future you with
+  no memory would need it to avoid re-learning, it belongs in the docs."* The docs held the
+  answers; the implementation was written from a summary of them. **A decision that exists
+  but is not read is worth the same as one that was never written** — and it is worse than
+  never writing it, because the team believes the question is settled.
+- **Concretely, for next time:** when touching identity, read `03_identity.md` **and open the
+  `.mmd` sources**. The generated diagrams carry rules that are not restated in prose
+  anywhere else, and `identity_promotion.mmd` alone would have prevented three of these six.
+
 ---
 
 ## Areas where bugs are expected (write them up when they happen)

@@ -43,7 +43,7 @@ services doing real work - only the *edges* (phone, speech, AI, the bank's data,
 are still fakes. An agent signs in at `/workstation`, a caller arrives, the desk rings, the brief is
 already there, and the disclosure gate moves when the agent attests.
 
-Verified on 2026-08-24: **292 tests pass**, `ruff check` and `ruff format --check` clean,
+Verified on 2026-08-24: **307 tests pass**, `ruff check` and `ruff format --check` clean,
 `mypy --strict` clean over 81 source files, and all three scenarios replay byte-identically.
 
 ```
@@ -114,7 +114,11 @@ FullProject/
 │  ├─ queue_hours.yaml       # opening hours + holidays per queue
 │  ├─ dids.yaml              # printed phone numbers → product line + queue (D19)
 │  ├─ voice_prompts.yaml     # every spoken line, as Thai text (D24)
-│  └─ playbooks/             # per-intent recommended-action playbooks
+│  └─ playbooks/             # per-intent recommended-action playbooks. NOT YET REAL (Q19):
+│                            #   the steps live in _PLAYBOOKS in services/brief/builder.py
+│                            #   until P4. The chain is intent -> playbook name -> ordered
+│                            #   (Thai text, required assurance) -> filtered by level ->
+│                            #   verify-identity inserted at 0 below L2 (D56).
 ├─ prompts/                  # versioned prompt files (never inline in code)
 │  └─ th/ intent_classify.v1.md  summarize_intake.v1.md  suggested_opening.v1.md  ...
 ├─ src/readycall/

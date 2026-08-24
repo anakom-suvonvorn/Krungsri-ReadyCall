@@ -1051,3 +1051,149 @@ _`D49` added 2026-08-24, during P2a._
   on **New Year's Day**, so every `business` queue is closed under a default test clock.
   Documented on the class rather than changed, because scenario replays are byte-compared
   against golden output built on that epoch.
+
+## D55. The agent never speaks a name they have not verified
+- **Problem:** `BriefBuilder._opening()` produced *"สวัสดีค่ะ คุณภัทธีรา ทราบว่าติดต่อเรื่อง…"*
+  at **every** assurance level, including `L1_PROBABLE`, where all we have is a caller-ID
+  match. The rest of the brief was carefully gated; the one line the agent reads *out loud*
+  was not.
+- **Decision:** below `L2_STRONG` the suggested opening contains **no name and no detail** —
+  it is an open question: *"สวัสดีค่ะ ยินดีให้บริการเรื่อง{intent} ขอทราบชื่อผู้ติดต่อด้วยค่ะ"*.
+  The screen still shows who we think it is. Only the spoken sentence changes.
+- **Reasoning, and the second one is the stronger:**
+  1. Greeting someone by name **confirms to whoever is holding that phone** that the number
+     belongs to that person. Small, and free to avoid.
+  2. **A leading question is weaker verification.** *"ใช่คุณภัทธีราไหมคะ"* can be answered
+     *"ใช่ครับ"* by anybody. *"ขอทราบชื่อผู้ติดต่อด้วยค่ะ"* has to be **produced**. That is
+     the difference between recognition and recall, and only one of them is evidence.
+- **This was already in the docs.** `diagrams/src/identity_promotion.mmd` — handwritten and
+  marked "checked against D42" — contains both the open question and a note saying a leading
+  question "both leaks that the number belongs to them AND is weaker verification". The
+  diagram was right and the code did not match it, which is the failure mode `CLAUDE.md`'s
+  read-the-docs-first rule exists to prevent.
+- **Scope:** the *opening line* only. The summary keeps the name, the customer panel keeps
+  the name, the matcher keeps everything. None of that is spoken.
+- **Future:** when speech lands (P3), the same rule governs any AI-suggested phrasing — a
+  model must not be able to put a name into a sentence the agent reads before L2.
+
+## D56. Where the recommended actions come from, written down because it keeps being asked
+- **Problem:** "what source are you determining the recommended actions from" is a fair
+  question that the code answered only by being read. Worth stating once, plainly.
+- **The chain:** `config/intents.yaml` gives each intent a **playbook name** → the playbook
+  is an ordered list of `(Thai text, required assurance)` → the list is filtered against the
+  caller's current level → **if below L2, a verify-identity step is inserted at position 0**.
+- **Where it physically lives today:** `_PLAYBOOKS` in `services/brief/builder.py`, a
+  hand-written dict. `config/playbooks/` is the P4 destination and does not exist yet; the
+  docs have listed it in the folder map for a while, which reads as though it were there.
+- **Hand-written, static, deterministic, no AI** — because this is the version that must
+  never fail: it is what an agent gets when the caller declines recording, when STT is down,
+  and when the LLM times out. Even at P4 the rule holds: **the model may rank and select
+  from the playbook; it may never write a step.** An invented instruction in an insurance
+  call is a compliance incident, not a bad suggestion (`D16`).
+- **Action 0 is not decoration.** It is the on-screen half of `D42`'s identity control and
+  the reason the agent is never *blocked* below L2 — they are told what to do first.
+
+## D57. "Other" is a first-class verification method, and a third party must be named
+- **Problem:** two gaps in `D42`'s control, both of which force an agent to record something
+  untrue.
+  1. The challenge list was closed: DOB, last 4 of citizen id, policy number, recent claim
+     amount. Real verification does not fit that. The caller was recognised by voice from
+     last week; they read a claim reference off an SMS; they were transferred from a branch
+     that already checked ID; they answered a question about a recent transaction. Every one
+     of those forces the nearest lie from a four-item dropdown.
+  2. *Third party acting for them* recorded a **relationship** but not a **name** — so the
+     disclosure log said "somebody who is not the policyholder called", which nobody can act
+     on later.
+- **Decision:** add `other` to the challenge list with a **required free-text note**; require
+  **both** `caller_name` and `relationship` for a third-party attestation. All four are
+  rejected server-side when missing, not merely disabled in the UI.
+- **`D44` said this first and it was implemented backwards.** *"'The agent handles it' is the
+  default and the only mode we build first. Named lookups are added afterwards, one at a
+  time, as they prove worth automating."* The named challenges shipped and the escape hatch
+  did not — exactly inverted.
+- **Why the note is required:** an `other` with nothing written in it is the unfalsifiable
+  audit row `D42` exists to prevent. The list is a convenience; the note is the evidence.
+- **Tradeoff:** free text cannot be aggregated. Accepted — a true sentence nobody can chart
+  beats a false category everybody can.
+
+## D58. Masking protects the log, not the agent
+- **Problem:** `D44` says a raw keypad capture is *"masked in transcripts and logs, short
+  retention, discardable with one click"*. The implementation read that as "masked
+  everywhere" and returned only `••••••••11` to the workstation — **including to the agent
+  who had just asked the caller to key it.**
+- **Why that is not a small mistake:** it deletes the feature and keeps none of the
+  protection. The whole valuable part of the primitive is *getting digits across a lossy line
+  accurately*; the agent has to read them back, compare them to a letter, or type them into
+  another system. And `••••••••11` is not a policy number anybody can misuse, so hiding it
+  from the one person entitled to see it buys nothing.
+- **Decision:** `Capture.digits` goes to the agent's own panel. `Capture.masked` is what
+  goes **everywhere else** — log lines, transcripts, analytics, anything persisted. The
+  service already logs only `length` and `masked`; the API now sends both and the panel
+  renders the real one.
+- **This is a different question from the disclosure gate** (`D53`). That governs what *we*
+  reveal from the bank's records to someone whose identity is unproven. These digits are the
+  caller's own input, typed seconds ago, to the person they are speaking to. Conflating the
+  two produced a screen that hid the caller's own keystrokes from the agent while the same
+  response carried the customer's date of birth (`B5`, before it was fixed).
+- **Unchanged:** untyped capture, lookups as evidence only, one-click discard, and the
+  inverted storage default. Only the audience for `mask()` is corrected.
+
+## D59. `agent_intent` is a standing instruction, not a momentary status
+- **Problem:** the status control behaved confusingly in a way that produced a page of
+  half-formed questions — should the selection be deselected when a call starts? re-selected
+  after the wrap-up is saved? saved and restored around a call? What is `LAST_CALL` supposed
+  to *do* when the last call ends? The confusion was real and the model had a genuine hole.
+- **Decision — one framing settles all of it.** `agent_intent` is a **standing instruction**:
+  *keep sending me calls* / *this one, then stop* / *no new ones* / *I am away*. It is not
+  "what I am doing this second". Read that way:
+  - **It is never deselected.** Not when a call starts, not when a wrap-up is saved. It
+    persists because the instruction persists.
+  - **`offerable` stays `AVAILABLE` + `READY`.** Unchanged.
+  - **Mid-call, only the forward-looking three may change**: `READY`, `LAST_CALL`,
+    `DRAINING`. An agent may well decide halfway through a conversation that this is their
+    last. They cannot be at lunch, because what they are doing right now is talking to a
+    customer. Enforced server-side (`DECLARABLE_ON_CALL`), and the screen greys the rest.
+  - **`LAST_CALL` is the one instruction with a built-in end condition**, so it is **spent**
+    when that call disconnects. It becomes `NOT_READY` — never a concrete state, because the
+    platform still may not assert what the person is doing (`D45`) — logged as
+    `set_by=platform, reason=last_call_fulfilled`.
+  - **`DRAINING` has no end condition** and simply persists.
+- **`awaiting_declaration` fixes the thing that actually looked broken.** In after-call work
+  the standing instruction is unchanged underneath, but the agent owes a declaration (`D45`).
+  The screen therefore stops rendering the old choice as *active* and asks for the next one.
+  That is why "I'm marked พร้อมรับสาย but I'm not getting calls" happened: ready was what
+  they said **before** the call. No deselect-and-restore machinery is needed — only an
+  honest presentation of a state that was already correct.
+- **`intent_reason` earns its place immediately.** `NOT_READY` is reached three ways —
+  `signed_in`, `rona_missed_offer`, `last_call_fulfilled` — and they want three different
+  screens. Without it the wrap-up panel offers **Save & Ready** as the primary button to an
+  agent who has just told us they are finishing, making the fastest click the one that undoes
+  what they said. With it: `LAST_CALL` spent → only **Save**; `DRAINING` → *Save & stay
+  draining*; otherwise → *Save & Ready*.
+- **Alternatives rejected:** *deselect on call start and restore afterwards* — needs a
+  shadow copy of the instruction, and every bug in it silently changes an agent's
+  availability. *A separate "next state" field* — two fields meaning almost the same thing,
+  and the log then has to explain which one was true. *Freeze the control during a call* —
+  loses the legitimate mid-call "this is my last one".
+- **The screen renders permissions, it does not compute them.** `presence.declarable` comes
+  from the server, same reason `offerable` does. A client that decides what is legal will
+  eventually disagree with the server, and the client's copy will be the wrong one.
+
+## D60. An attestation locks the control, and correcting it is a separate, recorded act
+- **Problem:** after pressing *Confirmed*, every identity button stayed live. Pressing again
+  silently rewrote a disclosure record, and nothing on screen said the question was settled.
+- **Decision:** once anything has been attested on a call, all three outcomes **lock**, the
+  panel shows what was recorded, and a distinct **แก้ไขการยืนยัน** reopens it. Re-attesting
+  requires an explicit `amend` flag; without it the server answers **409**.
+- **Reasoning:** an attestation is a signed statement in a disclosure log, not a toggle. But
+  it must not be a *trap* either — an agent who confirmed and then realised they were talking
+  to the policyholder's daughter has to be able to correct it. Reopening **appends**; both
+  statements survive, which is a better record than either a silent overwrite or a locked
+  mistake.
+- **Enforced server-side.** A disabled button is a courtesy to the agent; the 409 is the
+  rule. Anything that can be clicked twice will be.
+- **Known one-way door (`Q18`):** *Not this person* clears the customer — exactly what `D42`
+  asks, so nothing re-proposes a wrong ANI match — but it leaves the agent with nobody to
+  attach the call to, and customer search does not exist yet (`D32` puts lookup in a later
+  phase). A rejected call therefore stays anonymous for its duration. Asserted by a test, so
+  the day search lands, that test fails and points at the gap.
