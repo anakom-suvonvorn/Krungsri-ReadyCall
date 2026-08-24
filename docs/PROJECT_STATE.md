@@ -43,7 +43,7 @@ services doing real work - only the *edges* (phone, speech, AI, the bank's data,
 are still fakes. An agent signs in at `/workstation`, a caller arrives, the desk rings, the brief is
 already there, and the disclosure gate moves when the agent attests.
 
-Verified on 2026-08-24: **307 tests pass**, `ruff check` and `ruff format --check` clean,
+Verified on 2026-08-24: **308 tests pass**, `ruff check` and `ruff format --check` clean,
 `mypy --strict` clean over 81 source files, and all three scenarios replay byte-identically.
 
 ```
@@ -309,10 +309,10 @@ performing by hand, i.e. what the next services take over (`D36`).
 
 | | |
 |---|---|
-| Source files | 70 (`src/` + `tests/` + `scripts/` + `mock/`) |
-| Tests | 225, all passing, ~5 s |
+| Source files | 108 (`src/` 81 + `tests/` + `scripts/` + `mock/`) |
+| Tests | 308, all passing, ~8 s |
 | Ports defined | 8 (telephony, stt, llm, tts, core_data, event_bus, blob_storage, agent_directory) |
-| Adapters | 8 fakes/nulls + a caching/circuit-breaking decorator; no real vendor adapter yet |
+| Adapters | 9 fakes/nulls + a caching/circuit-breaking decorator; no real vendor adapter yet |
 | Call states | 15, transition table self-validated (the rating is an event, not a state — `D46`) |
 | Event types | 19 |
 | Scenarios | 3 (in-app happy path, cold-call motor claim, fully degraded) |
@@ -336,6 +336,9 @@ enforced by a lint check.
 
 ## 10. What comes next
 
-**P1b — the HTTP layer**: `POST /v1/calls/intents`, app context events, and the web customer
-simulator that talks to the same public API the real app would. Then **P2** — the matching engine and
-the agent workstation, which is also when the Postgres/Alembic layer lands (`D39`). See `PLAN.md`.
+**P2c — the database layer** (`D39`), and it is the biggest outstanding debt: presence, assignments
+and `agent_state_log` all live in memory, so a restart loses a shift. Postgres + SQLAlchemy 2.0 +
+Alembic; `infra/docker-compose.yml` and the schema/role SQL already exist, and the seams it plugs
+into (`CallSessionRepository`, `PresenceService`, `AssignmentService`) are already Protocol-shaped
+or dict-backed behind one class each. Then **P3** (voice/IVR/intake) and **P4** (analysis and brief
+v2+). See `PLAN.md`, and `NEXT_SESSION.md` for the live state.

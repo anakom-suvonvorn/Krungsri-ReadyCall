@@ -81,6 +81,15 @@ patterns = [
     (r"(\d+)\s+diagrams", "svgs"),
     (r"(\d+)\s+rendered", "svgs"),
     (r"(\d+)/(\d+)\s+up to date", None),
+    # A table cell puts the noun FIRST — `| Tests | 307, all passing |` — which none of the
+    # prose patterns above can see. That blind spot let `PROJECT_STATE.md` §8 go on claiming
+    # 225 tests and 70 source files across three completed phases without the audit noticing,
+    # which is exactly the drift this script exists to catch.
+    (r"\|\s*Tests\s*\|\s*(\d+)", "tests"),
+    (r"\|\s*Call states\s*\|\s*(\d+)", "call_states"),
+    (r"\|\s*Event types\s*\|\s*(\d+)", "event_types"),
+    (r"\|\s*Diagrams\s*\|\s*(\d+)", "svgs"),
+    (r"\|\s*Ports defined\s*\|\s*(\d+)", "ports"),
 ]
 
 print("\nNUMERIC CLAIMS THAT DISAGREE WITH THE CODE")
