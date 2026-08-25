@@ -412,6 +412,11 @@ Facts about *this laptop* rather than the repo, so a fresh session does not redi
   want the numbering to actually move.
 - **Never hardcode an insurance literal in `services/`** — it goes in `config/` (`D28`).
 - **Never `datetime.now()` or a raw random id** outside `clock.py`/`ids.py` (`D35`).
+- **`README.md` is the setup/run contract and must not rot.** It is the first thing anyone sees on
+  GitHub, and it was badly stale once already (it still said *"Status: planning. No code yet."*
+  after six phases had landed, and pointed at the abandoned `DemoProject/`). Anything that changes
+  how a piece is installed or started belongs there in the same commit — one section per piece,
+  each saying what else has to be running alongside it.
 - **`docs/` is excluded from `ruff format`** — the explanations are verbatim records.
 - Python is pinned **3.11**: PEP 695 generics are a syntax error; use `Generic[T]`.
 - Windows: paths have spaces (quote them); heredocs with apostrophes fail — use the Write tool.
