@@ -6,10 +6,10 @@
 <!--
   Krungsri ReadyCall - the agent workstation, wired.
 
-  This is the READABLE copy of docs/explanations/P2b_workstation_client.md. Same content,
-  same audit, laid out for a screen. Open it in any browser; it needs no server and no
-  build step. Google Fonts are linked but every face has a real fallback stack, so it
-  reads correctly with no internet - which matters, because the venue may not have any.
+  READABLE copy of docs/explanations/P2b_workstation_client.md. Same content, same audit,
+  laid out for a screen. Opens in any browser; no server, no build step. Google Fonts are
+  linked but every face has a real fallback stack, so it reads with no internet - which
+  matters, because the venue may not have any.
 
   Keep the two in step. The markdown is the greppable, diffable copy and is what a future
   session should read; this one is what a human should look at.
@@ -499,12 +499,13 @@
         <tr><td class="id">presence.long_acw</td><td><span class="owner o-server">config</span></td><td>The "running long" warning <span class="m-client">(also recomputed client-side — see §06)</span></td></tr>
         <tr><td class="id">offer</td><td><span class="owner o-server">matcher</span></td><td>The whole offer card: queue, intent, urgency, accrued wait, assurance, rationale</td></tr>
         <tr><td class="id">active_call_session_id</td><td><span class="owner o-server">state</span></td><td>Whether there is a call to attest against, capture into, or wrap up</td></tr>
-        <tr><td class="id">identity</td><td><span class="owner o-server">attestation</span></td><td>Assurance badge, lock state, amend count, whether disclosure is open</td></tr>
-        <tr><td class="id">brief</td><td><span class="owner o-server">gated DTO</span></td><td>Everything in the brief panel. A locked field is <b>absent from the payload</b>, not hidden</td></tr>
+        <tr><td class="id">identity</td><td><span class="owner o-server">attestation</span></td><td>Assurance badge, lock state, amend count, <b>which outcomes may be pressed</b> (<code>D71</code>), and <code>may_act_on_policy</code> vs <code>may_see_record</code> (<code>D74</code>)</td></tr>
+        <tr><td class="id">brief</td><td><span class="owner o-server">gated DTO</span></td><td>Everything in the brief panel. From L1 it carries the record; at <b>L0</b> it carries nothing, and the DTO still has no field for the raw snapshot (<code>D74</code>)</td></tr>
         <tr><td class="id">captures[]</td><td><span class="owner o-server">capture svc</span></td><td>The digits, the mask, the lookups. The client appends nothing of its own</td></tr>
-        <tr><td class="id">queues[]</td><td><span class="owner o-server">hours + pool</span></td><td>Queue strip: open/closed, waiting count, longest wait</td></tr>
+        <tr><td class="id">queues[]</td><td><span class="owner o-server">hours + pool</span></td><td>Queue strip: open/closed, waiting count, longest wait, and <code>mine</code> — whether this agent could take it (<code>D70</code>)</td></tr>
+        <tr><td class="id">challenges[]</td><td><span class="owner o-server">config</span></td><td>The verification dropdown, from <code>challenges.yaml</code>, so the panel cannot offer what the server refuses (<code>D72</code>)</td></tr>
         <tr><td class="id">call_answered_at</td><td><span class="owner o-server">clock</span></td><td>The anchor the call timer counts from, so a refresh does not reset it</td></tr>
-        <tr><td class="id">server_time</td><td><span class="owner o-server">clock</span></td><td><b>Nothing. It is declared and never read</b> — see §06</td></tr>
+        <tr><td class="id">server_time</td><td><span class="owner o-server">clock</span></td><td>The skew every timer corrects by — sampled <b>once per snapshot</b>, never per render (<code>B8</code>)</td></tr>
       </tbody>
     </table>
   </div>
@@ -983,9 +984,12 @@ config.py:181 acw_long_after_s: float = <b>45.0</b></div>
       to get wrong and are not wrong:
     </p>
     <ul class="tight">
-      <li><b>The disclosure gate is structural.</b> <code>BriefOut</code> has no field for a
-        policy number until assurance permits one, so there is nowhere for a leak to hide. The
-        client could not render what it does not receive even if a component tried.</li>
+      <li><b>The gate is structural, and it moved rather than went away.</b>
+        <code>D74</code> opened display to the agent from L1 — showing a bank employee the
+        record they were routed is internal processing, not disclosure — and gates what the
+        agent may <em>say and do</em> instead. The mechanism is unchanged: <code>BriefOut</code>
+        still cannot carry the raw snapshot, and <b>L0 carries nothing</b>, which is where the
+        byte-level regression test now points.</li>
       <li><b>No identity is ever asserted by the client.</b> No request carries an
         <code>agent_id</code>; it comes from a cookie the JavaScript cannot read.</li>
       <li><b>Permission is never computed on this side.</b> <code>offerable</code> and

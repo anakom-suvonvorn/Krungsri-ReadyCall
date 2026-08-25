@@ -74,8 +74,8 @@ update path, which is why the UI stays coherent after any click without a follow
 | `active_call_session_id` | Which call can still be acted on (`IN_CALL` or `WRAP_UP` only) |
 | `wrapup_call_session_id` | Which call is being wrapped — **outlives the record closing** (`D68`) |
 | `wrapup_saved` | Whether the record was saved (`D68`) |
-| `identity` | Assurance badge, lock state, `attestation_count`, disclosure flag, and **`attestable`** — which of the three outcomes may be pressed (`D71`) |
-| `brief` | The whole brief panel. A locked field is **absent from the payload** |
+| `identity` | Assurance badge, lock state, `attestation_count`, **`attestable`** (which outcomes may be pressed, `D71`), `may_act_on_policy` and `may_see_record` (`D74`) |
+| `brief` | The whole brief panel. From L1 it carries the record; at L0 it carries nothing, and the DTO still has no field for the raw snapshot (`D74`) |
 | `captures[]` | Digits, mask, and the tiered lookup results |
 | `queues[]` | Queue depth, each flagged `mine` for this agent's skills (`D70`) |
 | `call_answered_at` | The anchor the call timer counts from |
@@ -239,6 +239,24 @@ Worth stating as plainly as the faults:
 ## Changes since this was written
 
 _Append here rather than editing above._
+
+### 2026-08-25 (later) — the disclosure model changed underneath this page
+
+**`D74` reversed the gating this document described.** Where §2 said the brief withheld the
+policy below L2, it now shows the whole record from **L1** and gates what the agent may
+*say and do* instead. The mechanism is unchanged — the wire DTO stays, and it still has no
+field for the raw `ContextSnapshot` — so `B5` remains structurally impossible; what changed
+is which fields it fills at which level. **L0 carries nothing**, which is where the
+byte-level regression test now points.
+
+Two other corrections to the ledger above:
+
+- **`attestable` and `system_verified`** joined `identity` (`D71`). Which of the three
+  outcomes may be pressed is now a server decision, like `declarable`, rather than the
+  client inferring it from whether a customer is attached.
+- **`challenges[]`** joined the snapshot (`D72`). The verification dropdown renders a list
+  from `config/challenges.yaml` instead of a hardcoded array, so it cannot offer an option
+  the server would refuse.
 
 ### 2026-08-25 — the audit's own fixes, and one it caused
 

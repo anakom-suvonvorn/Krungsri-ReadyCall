@@ -12,13 +12,26 @@ believe it, why they are calling, everything we hold about them assembled before
 is answered, which agent should take it and why — and now **the desk actually rings, a
 human accepts, and the screen is already right**.
 
-Verified 2026-08-24: **369 tests pass**, `ruff check` + `ruff format --check` clean,
-`mypy --strict` clean over 81 files, all scenarios replay byte-identically, 50/50 diagrams
-current. The whole workstation flow was also driven by hand in a browser.
+Verified **2026-08-25**: **369 tests pass** (82 of them the store contract suite across
+three backends), `ruff check` + `ruff format --check` clean, `mypy --strict` clean over 93
+files, all scenarios replay byte-identically, 50/50 diagrams current. The workstation flow
+was driven by hand in a browser; the database was verified against a live Postgres
+container.
 
-**A review pass on 2026-08-24 fixed six reported faults (`B6`, `D55`–`D60`), and three of
-them were decisions the docs already contained.** Read `B6` before touching the workstation
-— the lesson is about reading `.mmd` sources, not about React.
+### The three sessions of review since P2b, in one place
+
+Most of the recent work came from the user driving the screen and reporting what was wrong.
+The pattern is worth knowing before reading any of it:
+
+1. **`B6` (2026-08-24)** — six faults, **three of which were decisions the docs already
+   contained**. The lesson is about reading `.mmd` sources, not about React.
+2. **`B7`** — RONA, re-matching and heartbeat expiry were all written, all correct, and
+   **called by nothing**. An ignored offer stranded the agent in `OFFERING` for the shift.
+3. **`B8`** — the clock-skew fix from `D68` **froze every timer it was meant to correct**,
+   because the correction was sampled in the same tick as the value it corrected.
+
+All three are the same family as `B3` and `B4`: *a confident, plausible, wrong result that
+no test could see.* When something looks fine, check that it is actually running.
 
 ```bash
 uv sync --extra web
@@ -62,12 +75,30 @@ non-assignments**, saying **which** of the two unplaced reasons applies (`D50`).
 replay-on-reconnect) · `api/routers/agent.py` · **React workstation** at `/workstation`
 (`D32`) · `POST /v1/demo/calls` standing in for telephony.
 
+**P2c — persistence (part).** SQLAlchemy 2.0 async + Alembic (URL from `Settings`) ·
+`call_sessions` + `call_state_transitions` + `agent_state_log` · Postgres repositories
+behind the P0 interfaces, returning **domain models** (`D77`) · **one contract suite across
+in-memory / SQLite / Postgres** (`D75`) · presence rebuilt from the log, never stored twice
+(`D76`). Verified on a live container. **Not yet persisted:** assignments, attestations,
+captures, the waiting pool, `matching_decisions`; and `Container` still builds the
+in-memory stores unconditionally.
+
 **P2b review pass.** The opening line asks an **open question** below L2 (`D55`) · the
 recommended-action chain written down (`D56`) · `other` challenge + a **named** third party
 (`D57`) · the agent sees the digits, `mask()` is for logs (`D58`) · `agent_intent` is a
 **standing instruction** with `declarable` / `awaiting_declaration` / `intent_reason`
 computed server-side (`D59`) · attestation locks with an explicit amend (`D60`) · timers
 anchored to server timestamps · the ACW bar lives outside the wrap-up form.
+
+**P2b second review pass (`D61`–`D74`).** The attestation control **re-locks after every
+amend** (`D61`) · third party **is** verified and the outcome keeps the log honest (`D65`,
+reversing `D62`) · lookups walk a ladder and say **which rung matched**, both eras (`D66`,
+`D67`) · the server says what it knows — `wrapup_saved`, clock skew, no client-side
+thresholds (`D68`) · the offer card carries a **gated brief preview** (`D69`) · the queue
+strip splits **mine / all** (`D70`) · `attestable` is a server decision and a rejection is
+**reversible** (`D71`) · the challenge list moved to `config/challenges.yaml` and is served
+(`D72`) · **assurance gates what the agent may SAY and DO, not what they may SEE** (`D74`,
+reversing `D20`'s display gating).
 
 ## Designed but NOT built (read before touching these areas)
 
