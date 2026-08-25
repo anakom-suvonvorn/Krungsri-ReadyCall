@@ -1632,3 +1632,83 @@ _Raised by the user. Design correction to `D22`; deferral is still stubbed off u
   call progress means the deferral logic improves as the AI-drafted wrap-up improves.
 - **Not implemented.** Deferral stays off until P6 brings the data. Recorded now because
   `D22`'s wording would otherwise be built from as written.
+
+## D74. Assurance gates what the agent may SAY and DO, not what they may SEE
+_Reverses the disclosure gating in `D20` and narrows `D42`/`D53`. Both stay in place so the
+reasoning remains visible. This is the largest reversal in the project so far, so the
+argument is written out fully._
+
+- **Problem, as put by the user, and it is three separate points:**
+  1. **`เลขกรมธรรม์` is itself one of the verification challenges.** The system was hiding
+     from the agent the very number it offered them a button to check a caller against.
+  2. **Hiding it changes nothing about the outcome.** If the caller turns out to be the
+     wrong person the data is not used, and the caller never learns what we knew, because
+     the agent never says it.
+  3. **The ladder was being asked the wrong question.** Its purpose is *how sure are we
+     that this is who we think it is* — a confidence signal — and it had been overloaded
+     into *what may appear on an employee's screen*.
+- **Decision:** the agent sees the whole record from **`L1_PROBABLE`** upward: name, policy
+  number, sum insured, coverage table, recent contact. `L0` shows nothing — **not as a
+  restriction but because at `L0` there is genuinely nobody to show**. What assurance gates
+  is what the agent may *say and do*, which was always the real control surface:
+  - `may_act_on_policy` (renamed from `may_disclose_policy_details`) still requires `L2`;
+  - the playbook still omits steps whose `requires_assurance` is unmet (`D56`) — *"read the
+    policy number back to them"* is not offered at `L1`;
+  - **`D55` is untouched**: the suggested opening still contains no name below `L2`.
+- **The distinction that makes this correct rather than merely convenient.** Under PDPA,
+  *disclosure* means revealing personal data to the data subject or a third party. Showing
+  the record to the bank's own agent, who was routed this call in order to serve it, is
+  **internal processing under the controller's existing lawful basis** — it is not a
+  disclosure event at all. The disclosure event is the sentence the agent speaks. We had
+  been applying a disclosure control to a processing step, which cost the agent the
+  information they needed and protected nobody.
+- **It is also how verification actually works.** An agent asks *"ขอทราบเลขกรมธรรม์ 4 ตัวท้ายค่ะ"*
+  and compares the answer to the record. With the record hidden they cannot compare — so
+  the previous design made the *keypad lookup* (`D44`, `D66`) the only route to a check the
+  agent should have been able to do by eye, and made a system with less information than
+  the human sitting in front of it.
+- **What the previous design was actually defending against, and the better answer.** The
+  real risk is an agent reading details to someone who has not proved who they are — a
+  social-engineering call. Hiding the screen is defence-in-depth against *agent error*, and
+  it is a weak one: it does not stop an agent reading aloud what they can see at `L3`, and
+  it does stop a careful agent verifying efficiently at `L1`. The controls that address the
+  actual risk are the ones now doing the work: **an open-question opening with no name
+  (`D55`), a verify-identity step at position 0 (`D56`), and actions withheld until `L2`.**
+  Those constrain behaviour at the point where data leaves the building.
+- **Alternatives considered:**
+  - *Show it masked (`HL-****-**0811`).* Rejected: enough to compare a suffix against, not
+    enough to compare a full number, and it produces the `D58` mistake again — a mask that
+    protects nothing while deleting the feature, this time from the person the record was
+    fetched for.
+  - *Show it behind a "reveal" click with an audit entry.* Genuinely tempting, and the
+    right answer if the agent were ever a plausible adversary. Rejected for now because it
+    adds a click to every single call to defend against an employee who could equally read
+    it after clicking, and because the read is **already logged** either way.
+  - *Keep the gate and add "verify by eye" as a separate permitted action at L1.* This is
+    the previous design with an exception carved out, which is the same thing with more
+    rules.
+- **What did NOT change, and this matters — `B5` must stay impossible:**
+  - The **wire DTO stays** (`D53`). It was never the policy; it is the *mechanism*. `BriefOut`
+    still cannot carry the raw `ContextSnapshot`, so the class of bug where a domain model
+    quietly serialises everything hanging off it remains structurally unavailable. What
+    changed is which fields it fills at which level.
+  - **`L0` carries nothing**, verified on the raw bytes, including after an agent rejects a
+    match — at which point the frozen snapshot still holds the old policy and the *rendered
+    Thai sentence* must therefore be gated on the identity rather than the payload. That
+    was a live leak introduced while making this change and caught by the existing test:
+    the structured fields were correctly `null` while `summary_th` still carried the policy
+    number. `B5` with the two halves swapped.
+  - **Every read is still audited** (`ARCHITECTURE.md` §18). With display opened up, the log
+    is now the primary control rather than a secondary one, and it should be treated as
+    load-bearing when `P7` implements it.
+  - **Genuinely secret values stay masked regardless of level**: a full citizen id is never
+    rendered (`D43`), and raw keypad captures stay masked in transcripts and logs (`D44`,
+    `D58`).
+- **Consequence for the pitch, which improves.** "We hide data until verification" is a
+  weaker story than the true one: **"the agent sees what the bank already knows, every read
+  is logged, and what the agent may *say* and *do* is gated by how certain we are."** The
+  first sounds cautious and inconveniences the wrong person; the second describes a control
+  that binds at the point where harm actually occurs.
+- **`Q20` (new):** should a reveal-on-click with a per-field audit entry come back at `P7`,
+  for the most sensitive fields only? The answer depends on Krungsri's own agent-desktop
+  policy, which we do not have. Recorded rather than guessed.

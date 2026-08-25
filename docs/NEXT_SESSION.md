@@ -104,6 +104,7 @@ anchored to server timestamps · the ACW bar lives outside the wrap-up form.
 | **Q16** | **A keypad lookup confirms a policy number at L1.** The caller supplied the digits and the agent must not read them aloud below L2 — but it is a confirmation oracle. Designed this way in `D44`; worth a second look. | Allowed |
 | **Q17** | **Commit `apps/workstation/dist/`?** It is gitignored, so a fresh clone has no workstation until `npm run build` runs — and on a venue with no internet, `npm install` is what fails. | Not committed |
 | **Q18** | **"Not this person" is a one-way door.** It clears the customer exactly as `D42` asks, but leaves the agent with nobody to attach the call to, and customer search does not exist (`D32` defers lookup). A rejected call stays anonymous for its duration. A test asserts this so it fails the day search lands. **Now visible rather than silent (`D61`)**: the two forward outcomes are disabled with the reason in the tooltip instead of answering 400. | Accepted for now |
+| **Q20** | **Should a reveal-on-click with a per-field audit entry come back at P7**, for the most sensitive fields only? `D74` opened display to the agent; the honest answer depends on Krungsri's own agent-desktop policy, which we do not have. | Not for now; every read is logged |
 | **Q19** | **`config/playbooks/` does not exist** but is in the folder map. Actions live in `_PLAYBOOKS` in `builder.py` (`D56`). Moving them out is a P4 task. | Deferred to P4 |
 
 Resolved: rating is an event (`D46`) · single project (`D34`) · Asterisk · RTX 3050 · Claude
@@ -113,6 +114,18 @@ menu-first flow (`D37`).
 ## Things to be careful about (live landmines)
 
 - **Never edit the reference folders** (`scamprojectthing/ProjectCode`, `music-backlog-adder`).
+- **Assurance gates what the agent may SAY and DO, never what they may SEE** (`D74`).
+  The agent sees the whole record from L1 — they need it to verify the caller at all, and
+  showing a bank employee the record they were routed is internal processing, not
+  disclosure. **L0 renders nothing**, because at L0 there is nobody to render. The controls
+  that bind: no name in the opening below L2 (`D55`), playbook steps gated by
+  `requires_assurance` (`D56`), `may_act_on_policy` false below L2, every read audited.
+  Reverses `D20`'s display gating; `D53`'s DTO **stays** — it was the mechanism, not the
+  policy.
+- **Gate a rendered sentence on the IDENTITY, not on the payload.** After a rejection the
+  frozen snapshot still holds the old policy, so `summary_th` will happily print a number
+  the structured fields correctly withheld — a live leak caught mid-change, and `B5` with
+  its two halves swapped.
 - **NEVER serialise a domain model where a permission boundary exists** (`D53`, `B5`). It
   shipped a real leak: `CaseBrief.model_dump()` sent policy numbers and coverage figures to
   a call at L1. Use a wire DTO, and **test the raw bytes** — an assertion on rendered text

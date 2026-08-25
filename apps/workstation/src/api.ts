@@ -57,7 +57,11 @@ export type Identity = {
   assurance: string;
   customer_id: string | null;
   method: string;
-  may_disclose_policy_details: boolean;
+  /** May the agent ACT on the policy — say a number aloud, confirm a figure, change
+   *  something. Not about what they can see; that is `may_see_record` (`D74`). */
+  may_act_on_policy: boolean;
+  /** Is there an identified customer to render at all. False only at L0. */
+  may_see_record: boolean;
   authority_check_required: boolean;
   /** Once true the control locks — all three outcomes (`D60`). */
   attested: boolean;

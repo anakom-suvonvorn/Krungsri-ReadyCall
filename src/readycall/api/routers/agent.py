@@ -666,7 +666,8 @@ async def _snapshot(container: Any, agent_id: str) -> WorkstationSnapshot:
                 assurance=str(resolution.assurance),
                 customer_id=resolution.customer_id,
                 method=str(resolution.method),
-                may_disclose_policy_details=resolution.may_disclose_policy_details,
+                may_act_on_policy=resolution.may_act_on_policy,
+                may_see_record=resolution.may_see_record,
                 authority_check_required=bool(
                     resolution.evidence.get("authority_check_required", False)
                 ),

@@ -121,7 +121,7 @@ Identity is not binary. Each level unlocks more of the screen, and the level is 
 | Level | How reached | Agent screen shows |
 |---|---|---|
 | **L0 anonymous** | No ANI match, or withheld number | Nothing personal. IVR offers identification. |
-| **L1 probable** | ANI matches `customer_phones` | Name + masked details, banner *"identity not verified — please confirm"*. **No policy numbers, no coverage figures.** |
+| **L1 probable** | ANI matches `customer_phones` | **The whole record**, with a standing *"identity not verified"* banner. The agent may not read it aloud, confirm a figure, or change anything until L2 (`D74`). |
 | **L2 strong** | ANI match **and** a pending app intent from that customer within N minutes | Full context, flagged as inferred |
 | **L3 verified** | In-app WebRTC token, or IVR verification (DOB / last 4 of citizen ID / policy number) | Everything |
 
@@ -843,7 +843,12 @@ budget degrades (§16) rather than delaying.
 
 - **Consent-first.** Explicit consent before any analysis; **health data requires a separate consent**;
   every use is tied to a recorded lawful basis.
-- **Assurance-gated disclosure.** Policy numbers and coverage figures are not rendered below L2/L3 (§3).
+- **Assurance-gated *action*, not assurance-gated display (`D74`).** The agent sees the record
+  from L1 — showing it to the bank's own employee is internal processing, not disclosure, and
+  they need it to verify the caller at all. What assurance gates is what the agent may **say
+  and do**: no name in the suggested opening below L2 (`D55`), playbook steps withheld until
+  their `requires_assurance` is met (`D56`), and `may_act_on_policy` false below L2. L0 renders
+  nothing, because at L0 there is nobody to render.
   **The gate is the shape of what is serialised, not a rule about it** (`D53`). The agent API sends
   wire DTOs, never domain models: `BriefOut` has *no field* for a policy number until the level
   permits one. This is not theoretical tidiness — returning `CaseBrief.model_dump()` shipped the

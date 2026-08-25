@@ -203,7 +203,14 @@ class TestBriefBuilder:
     async def test_a_probable_caller_does_not(
         self, assembler: ContextAssembler, builder: BriefBuilder
     ) -> None:
-        """`D20`: a borrowed phone must not surrender somebody's policy number."""
+        """`D74`: an L1 caller IS shown, and what is withheld is permission to act.
+
+        This test used to assert the opposite — that the policy number was hidden below
+        L2. `D74` reversed that: the agent is the bank's own employee, showing them the
+        record is internal processing rather than disclosure, and they need the number in
+        order to check what the caller tells them against it. What stays gated is what the
+        agent may SAY and DO, which is `recommended_actions` and `may_act_on_policy`.
+        """
         snapshot = await assembler.build(customer_id="C000001", product_code="KS-HEALTH-A")
         brief = builder.build_context_only(
             call_session_id="call_1",
@@ -212,7 +219,8 @@ class TestBriefBuilder:
             intent_code="health.ipd.preauth",
             product_line=ProductLine.HEALTH,
         )
-        assert "HL-2024-000811" not in (brief.summary_th or "")
+        assert "HL-2024-000811" in (brief.summary_th or ""), "the agent can see it"
+        assert "ยังไม่ยืนยันตัวตน" in (brief.summary_th or ""), "and is told they cannot use it yet"
         assert brief.degraded is DegradationReason.LOW_ASSURANCE
         # A verify-identity step is prepended, and L2-gated steps are dropped.
         assert brief.recommended_actions[0].order == 0

@@ -340,7 +340,7 @@ def test_an_authorised_third_party_is_verified_but_recorded_as_a_third_party(
     ).json()
     identity = body["identity"]
     assert identity["assurance"] == "l3_verified"
-    assert identity["may_disclose_policy_details"] is True
+    assert identity["may_act_on_policy"] is True
     assert identity["attested_outcome"] == "third_party", (
         "the level rises; the RECORD still says who was actually on the phone"
     )
@@ -478,7 +478,7 @@ def test_amending_appends_and_the_count_lets_the_panel_re_lock(client: Any) -> N
         json={"outcome": "confirmed", "challenge": "policy_number", "amend": True},
     )
     assert third.json()["identity"]["attestation_count"] == 3, "corrections accumulate"
-    assert third.json()["identity"]["may_disclose_policy_details"] is True
+    assert third.json()["identity"]["may_act_on_policy"] is True
 
 
 def test_a_rejection_can_be_taken_back(client: Any) -> None:
@@ -643,28 +643,55 @@ def test_the_queue_strip_says_when_a_closed_queue_reopens(client: Any) -> None:
 # --- the disclosure gate is the SHAPE of the payload (D42) ------------------------
 
 
-def test_the_l1_payload_does_not_contain_what_l1_may_not_see(client: Any) -> None:
-    """The regression guard for a real leak.
+def test_an_l0_payload_carries_nothing_about_anybody(client: Any) -> None:
+    """The regression guard for a real leak (`B5`), repointed by `D74` at the level that
+    still withholds.
 
     `render_brief` used to return `CaseBrief.model_dump()`. The domain object embeds the
     whole frozen `ContextSnapshot`, so the response carried the policy number, the sum
     insured, every coverage figure and the customer's date of birth — in the *same body*
-    that said `may_disclose_policy_details: false`.
+    that said disclosure was locked.
 
-    Asserting on rendered Thai lines would not have caught it, because those were
-    correctly gated. Only searching the raw bytes does.
+    `D74` opened L1: the agent is the bank's own employee and needs the record to do the
+    verifying. What did **not** change is the mechanism or the floor. **L0 still carries
+    nothing**, and the DTO still has no field for the raw snapshot — so the class of bug
+    `B5` was remains structurally impossible, and this test still proves it. It has to
+    search the raw bytes, because an assertion about rendered Thai cannot see a field the
+    renderer never mentions.
     """
     call_id = take_a_call(client)
+    # Reject the match: assurance drops to L0 and there is nobody left to show.
+    client.post(f"/v1/agent/calls/{call_id}/identity", json={"outcome": "not_this_person"})
+
     body = client.get("/v1/agent/me").json()
-    assert body["identity"]["assurance"] == "l1_probable"
-    assert body["identity"]["may_disclose_policy_details"] is False
+    assert body["identity"]["assurance"] == "l0_anonymous"
+    assert body["identity"]["may_act_on_policy"] is False
 
     raw = json.dumps(body, ensure_ascii=False)
-    for secret in ("HL-2024-000811", "policy_no", "sum_insured", "coverages", "dob"):
-        assert secret not in raw, f"{secret!r} must not cross the wire at L1"
-    assert body["brief"]["disclosure_locked"] is True
+    for secret in ("HL-2024-000811", "sum_insured", "coverages", "dob", "ภัทธีรา"):
+        assert secret not in raw, f"{secret!r} must not cross the wire at L0"
     assert body["brief"]["relevant_policy"] is None
-    assert call_id
+    assert body["brief"]["customer"] is None
+
+
+def test_l1_shows_the_record_but_withholds_permission(client: Any) -> None:
+    """`D74`, and the distinction the whole decision turns on.
+
+    The number is on screen — the agent cannot check a caller's answer against something
+    they cannot see — while `may_act_on_policy` stays false and the L2-gated playbook
+    steps stay out of the list. Seeing is not saying.
+    """
+    take_a_call(client)
+    body = client.get("/v1/agent/me").json()
+    assert body["identity"]["assurance"] == "l1_probable"
+
+    assert body["brief"]["relevant_policy"] is not None, "the agent can see it"
+    assert body["brief"]["relevant_policy"]["policy_no"] == "HL-2024-000811"
+    assert body["identity"]["may_act_on_policy"] is False, "and may not act on it yet"
+    assert body["brief"]["disclosure_locked"] is True
+    assert body["brief"]["actions_th"][0].startswith("ยืนยันตัวตน"), (
+        "the first thing to do is still verify (`D56`)"
+    )
 
 
 def test_promotion_is_a_re_render_that_reveals_the_policy(client: Any) -> None:
@@ -862,8 +889,12 @@ def test_the_offer_preview_is_gated_like_the_brief(client: Any) -> None:
     body = client.get("/v1/agent/me")
     offer = body.json()["offer"]
     assert offer["assurance"] == "l1_probable"
-    assert "HL-2024-000811" not in body.text, "the preview must not leak what the brief hides"
-    assert "sum_insured" not in body.text
+    # `D74` opened L1, so the preview may name the caller and summarise their policy. What
+    # the test still proves is that the preview is built from the SAME gated DTO the panel
+    # renders, rather than reaching into `CaseBrief` — which is how `B5` happened, and
+    # would happen again in a new place. The proof is that the two agree.
+    assert offer["customer_name_th"], "L1 shows who we think it is"
+    assert offer["summary_th"]
     # The brief panel itself is still null here: it renders only once the call is taken,
     # which is why the preview had to exist at all rather than being read off the brief.
     assert body.json()["brief"] is None

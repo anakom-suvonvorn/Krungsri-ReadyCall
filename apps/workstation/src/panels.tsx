@@ -370,9 +370,11 @@ export function IdentityPanel({
       <h2>ตัวตนผู้ติดต่อ</h2>
       <AssuranceBadge assurance={identity.assurance} />
       <div className="faint" style={{ marginTop: 6 }}>
-        {identity.may_disclose_policy_details
-          ? "เปิดเผยรายละเอียดกรมธรรม์ได้"
-          : "ยังเปิดเผยรายละเอียดกรมธรรม์ไม่ได้"}
+        {identity.may_act_on_policy
+          ? "ยืนยันตัวตนแล้ว — อ้างอิง/ดำเนินการกับกรมธรรม์ได้"
+          : identity.may_see_record
+            ? "ดูข้อมูลได้ แต่ยังไม่ยืนยันตัวตน — ยังบอกเลข ยืนยันตัวเลข หรือแก้ไขข้อมูลกับผู้ติดต่อไม่ได้"
+            : "ยังไม่ทราบว่าเป็นใคร"}
       </div>
 
       {/* The spoken half of action 0. Never a leading question: naming the customer first
@@ -822,14 +824,14 @@ export function QueueStrip({ queues }: { queues: Queue[] }) {
           onClick={() => setShowAll(false)}
           title="เฉพาะคิวที่คุณมีทักษะรับได้"
         >
-          ของฉัน ({mine.length})
+          ของฉัน <span className="count">({mine.length})</span>
         </button>
         <button
           className={showAll ? "ghost on" : "ghost"}
           onClick={() => setShowAll(true)}
           title="ทุกคิวในระบบ รวมคิวที่คุณรับไม่ได้"
         >
-          ทั้งหมด ({queues.length})
+          ทั้งหมด <span className="count">({queues.length})</span>
         </button>
       </div>
 

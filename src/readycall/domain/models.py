@@ -239,9 +239,32 @@ class IdentityResolution(DomainModel):
     evidence: dict[str, Any] = Field(default_factory=dict)
 
     @property
-    def may_disclose_policy_details(self) -> bool:
-        """A borrowed phone must not surrender someone's policy numbers."""
+    def may_act_on_policy(self) -> bool:
+        """Whether the agent may **do** things with the policy: read a number aloud,
+        confirm a figure, change a detail, process a claim (`D74`).
+
+        This is deliberately *not* about what the agent can see. Showing a bank employee
+        the record they were routed to is internal processing, and it is how every real
+        contact centre verifies a caller in the first place; the risk lives in what leaves
+        the agent's mouth and what gets changed in the system, not on their screen.
+        """
         return self.assurance.at_least(AssuranceLevel.L2_STRONG)
+
+    @property
+    def may_see_record(self) -> bool:
+        """Whether there is an identified customer to show at all.
+
+        `L0` is the only level that shows nothing, and not as a restriction — at `L0` the
+        system genuinely has nobody to show.
+        """
+        return self.assurance.at_least(AssuranceLevel.L1_PROBABLE) and self.customer_id is not None
+
+    @property
+    def may_disclose_policy_details(self) -> bool:
+        """Deprecated alias of `may_act_on_policy`, kept so nothing silently changes
+        meaning while callers migrate. `D74` split one flag into two because it was being
+        asked two different questions."""
+        return self.may_act_on_policy
 
 
 class CallIntent(DomainModel):

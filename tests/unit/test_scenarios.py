@@ -152,12 +152,16 @@ async def test_cold_call_resolves_identity_from_ani_only() -> None:
     assert identity is not None
     assert identity.assurance is AssuranceLevel.L1_PROBABLE
     assert identity.method is IdentityMethod.ANI
-    assert not identity.may_disclose_policy_details
+    assert not identity.may_act_on_policy, "inference is not verification (`D20`)"
+    assert identity.may_see_record, "but the agent still sees who we think it is (`D74`)"
 
-    # The brief must therefore withhold the policy number and prepend a verify step.
+    # The brief therefore SHOWS the policy - the agent needs it to check what the caller
+    # tells them - and withholds permission to use it, plus a verify step at position 0
+    # (`D74`). The number being on screen and the number being usable are different
+    # things, and only the second one is what L1 restricts.
     assert run.brief is not None
-    assert "HL-" not in (run.brief.summary_th or "")
-    assert "MT-" not in (run.brief.summary_th or "")
+    assert "MT-2025-004512" in (run.brief.summary_th or "")
+    assert "ยังไม่ยืนยันตัวตน" in (run.brief.summary_th or "")
     assert run.brief.recommended_actions[0].order == 0
     assert run.brief.degraded is DegradationReason.LOW_ASSURANCE
 

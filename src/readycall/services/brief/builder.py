@@ -67,7 +67,13 @@ class BriefBuilder:
             # A motor-claims DID raises the floor before anyone has said a word.
             urgency = urgency_floor
 
-        may_disclose = identity.may_disclose_policy_details
+        may_disclose = identity.may_act_on_policy
+        # Whether there is anyone to show at all (`D74`). At L0 the frozen snapshot may
+        # still hold a policy from a match the agent has since REJECTED, so this gate has
+        # to come from the identity rather than from the payload — otherwise the rendered
+        # Thai sentence leaks what the structured fields correctly withheld, which is `B5`
+        # with the two halves swapped.
+        may_see = identity.may_see_record
         if not may_disclose and degraded is DegradationReason.NONE:
             degraded = DegradationReason.LOW_ASSURANCE
 
@@ -79,7 +85,7 @@ class BriefBuilder:
             built_at=self._clock.now(),
             intent=intent,
             confidence=None,  # no number until speech and calibration exist (D13)
-            summary_th=self._summary(snapshot, spec, may_disclose=may_disclose),
+            summary_th=self._summary(snapshot, spec, may_disclose=may_disclose, may_see=may_see),
             entities=(),
             recommended_actions=self._actions(spec, may_disclose=may_disclose),
             next_best_action=None,
@@ -128,19 +134,28 @@ class BriefBuilder:
             source="dtmf" if from_menu else "product_line_default",
         )
 
-    def _summary(self, snapshot: ContextSnapshot, spec: IntentSpec, *, may_disclose: bool) -> str:
+    def _summary(
+        self,
+        snapshot: ContextSnapshot,
+        spec: IntentSpec,
+        *,
+        may_disclose: bool,
+        may_see: bool,
+    ) -> str:
         """A factual Thai sentence assembled from fields. No model, so no invention."""
-        customer = snapshot.payload.customer
+        customer = snapshot.payload.customer if may_see else None
         who = customer.polite_name_th if customer else "ผู้ติดต่อ (ยังไม่ระบุตัวตน)"
         parts = [f"{who} ติดต่อเรื่อง{spec.label_th}"]
 
-        policy = snapshot.payload.relevant_policy
-        if policy and may_disclose:
-            parts.append(f"กรมธรรม์ {policy.policy_no}")
-        elif policy:
-            parts.append("มีกรมธรรม์ที่เกี่ยวข้อง (ยังไม่ยืนยันตัวตน)")
+        policy = snapshot.payload.relevant_policy if may_see else None
+        if policy:
+            # The number is shown whatever the level (`D74`). What changes below L2 is the
+            # standing note that it may not be spoken or acted on yet — the agent needs
+            # the number precisely so they can check what the caller tells them against it.
+            suffix = "" if may_disclose else " (ยังไม่ยืนยันตัวตน — ยังใช้/อ้างอิงกับผู้ติดต่อไม่ได้)"
+            parts.append(f"กรมธรรม์ {policy.policy_no}{suffix}")
 
-        previous = snapshot.payload.previous_inquiry
+        previous = snapshot.payload.previous_inquiry if may_see else None
         if previous:
             parts.append(f"ติดต่อครั้งล่าสุดเรื่อง {previous}")
 

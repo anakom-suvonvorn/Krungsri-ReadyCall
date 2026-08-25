@@ -172,16 +172,28 @@ textarea {
   flex-wrap: nowrap;
 }
 
+/* The heading NEVER shrinks. It is three characters, and making it the flexible one
+   clipped it to "คิ" — Thai has no safe truncation point mid-word, so an ellipsis on a
+   short label is worse than the overflow it was meant to prevent. The pills give up the
+   space instead. */
 .queue-head h2 {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  flex: none;
   white-space: nowrap;
 }
 
 .queue-head button {
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
   white-space: nowrap;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+/* The count is the first thing worth dropping when space runs out, and it costs nothing:
+   the same number is in the list directly below. */
+.queue-head .count {
+  opacity: 0.65;
+  font-variant-numeric: tabular-nums;
 }
 
 .stack {

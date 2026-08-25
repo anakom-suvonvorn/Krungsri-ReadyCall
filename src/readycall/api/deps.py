@@ -42,7 +42,7 @@ from readycall.api.security import (
 from readycall.clock import Clock, SystemClock
 from readycall.config import CoreDataProviderName, Settings
 from readycall.domain import events as ev
-from readycall.domain.enums import AssuranceLevel, ProductLine
+from readycall.domain.enums import ProductLine
 from readycall.domain.models import CaseBrief, IdentityResolution
 from readycall.domainpack import DomainPack
 from readycall.logging import get_logger
@@ -370,8 +370,11 @@ def _brief_out(brief: CaseBrief, identity: IdentityResolution) -> BriefOut:
     """
     snapshot = brief.snapshot
     payload = snapshot.payload if snapshot else None
-    known = identity.assurance.at_least(AssuranceLevel.L1_PROBABLE)
-    disclose = identity.may_disclose_policy_details
+    # `D74`: the agent sees the record from L1. What assurance gates is what they may SAY
+    # and DO, which is `actions_th` below and `may_act_on_policy` on the wire. L0 still
+    # shows nothing, because at L0 there is nobody to show.
+    known = identity.may_see_record
+    disclose = identity.may_act_on_policy
 
     customer_out: BriefCustomerOut | None = None
     if known and payload and payload.customer:
@@ -383,7 +386,7 @@ def _brief_out(brief: CaseBrief, identity: IdentityResolution) -> BriefOut:
         )
 
     policy_out: BriefPolicyOut | None = None
-    if disclose and payload and payload.relevant_policy:
+    if known and payload and payload.relevant_policy:
         policy = payload.relevant_policy
         policy_out = BriefPolicyOut(
             policy_no=policy.policy_no,

@@ -306,7 +306,14 @@ class IdentityOut(ApiModel):
     assurance: str
     customer_id: str | None
     method: str
-    may_disclose_policy_details: bool
+    #: Whether the agent may **act** on the policy: read a number aloud, confirm a figure,
+    #: change a detail, process a claim (`D74`). Renamed from `may_disclose_policy_details`
+    #: because it was being asked two different questions — what may be *shown* to the
+    #: agent, and what may be *done* with it. Only the second is gated above L1.
+    may_act_on_policy: bool
+    #: Whether there is an identified customer to render at all. False only at L0, and not
+    #: as a restriction: at L0 the system genuinely has nobody to show.
+    may_see_record: bool = False
     #: Set when a third party was declared: the workstation shows an authority-check step.
     authority_check_required: bool = False
     #: True once the agent has attested anything on this call. The control then locks —
