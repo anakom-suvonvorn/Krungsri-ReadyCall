@@ -248,6 +248,11 @@ confident, plausible, wrong result nobody looked at.* `B9` just adds a new hidin
 
 ## Where to go from here
 
+- **`../reading/persistence.html`** — a **readable, interactive twin** of this page. Open it
+  in a browser, no build step. It carries a *restart simulator*: build up an ordinary shift,
+  pull the plug, and watch each fact resolve to survived or gone **with its reason**. That is
+  the closest this subsystem gets to something you can poke at, which is most of why it
+  exists. This page and that one must be updated together.
 - `explanations/P2c_persistence.md` — the same material at length, with the alternatives
   that were rejected and why. Part 2 covers this phase.
 - `DECISIONS.md` `D75`–`D79` — the decisions themselves.

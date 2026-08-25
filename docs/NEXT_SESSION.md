@@ -290,7 +290,9 @@ menu-first flow (`D37`).
 
 `docs/diagrams/` — diagrams with explanations, in themed pages. Start at
 `docs/diagrams/README.md`. **`11_persistence.md` is the page for the invisible half** —
-what is stored, what is derived, and what a restart does, drawn rather than described. Twelve are **generated from source**, so they cannot drift;
+what is stored, what is derived, and what a restart does, drawn rather than described. Its
+readable twin `docs/reading/persistence.html` has a **restart simulator** you can click
+through; the two must be updated together. Twelve are **generated from source**, so they cannot drift;
 `tests/unit/test_diagrams.py` fails if a committed one falls behind.
 
 ```bash

@@ -1,0 +1,933 @@
+<title>What Survives a Restart</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&family=JetBrains+Mono:wght@400;500;700&display=swap">
+
+<style>
+  :root {
+    --paper:      #fbfaf7;
+    --paper-2:    #f3f1ea;
+    --ink:        #16181d;
+    --ink-soft:   #4a4d55;
+    --ink-faint:  #7d8089;
+    --rule:       #ddd8cd;
+    --rule-soft:  #eae6dc;
+    --persist:    #1d6b4f;
+    --persist-bg: #e6f0ea;
+    --ephemeral:  #8d8880;
+    --ephem-bg:   #edeae4;
+    --signal:     #b8420f;
+    --signal-bg:  #fbeee7;
+    --shadow:     rgba(22,24,29,.07);
+
+    --f-display: "Fraunces", Georgia, serif;
+    --f-body:    "Newsreader", Georgia, serif;
+    --f-mono:    "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper:      #14161a;
+      --paper-2:    #1b1e23;
+      --ink:        #eceae4;
+      --ink-soft:   #b3b0a8;
+      --ink-faint:  #85837c;
+      --rule:       #32363d;
+      --rule-soft:  #262a30;
+      --persist:    #5cc39a;
+      --persist-bg: #16302a;
+      --ephemeral:  #8b8880;
+      --ephem-bg:   #23262b;
+      --signal:     #f0885a;
+      --signal-bg:  #2e1d15;
+      --shadow:     rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper:      #14161a;
+    --paper-2:    #1b1e23;
+    --ink:        #eceae4;
+    --ink-soft:   #b3b0a8;
+    --ink-faint:  #85837c;
+    --rule:       #32363d;
+    --rule-soft:  #262a30;
+    --persist:    #5cc39a;
+    --persist-bg: #16302a;
+    --ephemeral:  #8b8880;
+    --ephem-bg:   #23262b;
+    --signal:     #f0885a;
+    --signal-bg:  #2e1d15;
+    --shadow:     rgba(0,0,0,.35);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--f-body);
+    font-size: 18px;
+    line-height: 1.65;
+    margin: 0;
+    padding: 0 1.25rem 6rem;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 43rem; margin: 0 auto; }
+  .bleed { max-width: 62rem; margin-inline: auto; }
+
+  /* ---- masthead ---- */
+  header.masthead {
+    max-width: 43rem; margin: 0 auto;
+    padding: 4.5rem 0 2rem;
+    border-bottom: 1px solid var(--rule);
+  }
+  .eyebrow {
+    font-family: var(--f-mono);
+    font-size: .7rem;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin: 0 0 1.4rem;
+  }
+  h1 {
+    font-family: var(--f-display);
+    font-weight: 600;
+    font-size: clamp(2.4rem, 7vw, 3.9rem);
+    line-height: 1.02;
+    letter-spacing: -.02em;
+    margin: 0 0 1.1rem;
+    text-wrap: balance;
+  }
+  .standfirst {
+    font-size: 1.18rem;
+    color: var(--ink-soft);
+    margin: 0 0 1.6rem;
+    text-wrap: pretty;
+  }
+  .byline {
+    font-family: var(--f-mono);
+    font-size: .74rem;
+    color: var(--ink-faint);
+    display: flex; flex-wrap: wrap; gap: .4rem 1.2rem;
+  }
+
+  h2 {
+    font-family: var(--f-display);
+    font-weight: 600;
+    font-size: clamp(1.5rem, 3.6vw, 2rem);
+    line-height: 1.15;
+    letter-spacing: -.015em;
+    margin: 3.6rem 0 .3rem;
+    text-wrap: balance;
+  }
+  h2 .num {
+    display: block;
+    font-family: var(--f-mono);
+    font-size: .7rem;
+    font-weight: 500;
+    letter-spacing: .16em;
+    color: var(--ink-faint);
+    margin-bottom: .55rem;
+  }
+  h3 {
+    font-family: var(--f-display);
+    font-weight: 600;
+    font-size: 1.12rem;
+    margin: 2.2rem 0 .4rem;
+    letter-spacing: -.01em;
+  }
+  p { margin: 0 0 1.1rem; text-wrap: pretty; }
+  strong { font-weight: 600; }
+  em { font-style: italic; }
+  code {
+    font-family: var(--f-mono);
+    font-size: .84em;
+    background: var(--paper-2);
+    border: 1px solid var(--rule-soft);
+    border-radius: 3px;
+    padding: .08em .34em;
+    overflow-wrap: anywhere;
+  }
+  a { color: var(--persist); text-underline-offset: 2px; }
+
+  .lede {
+    font-size: 1.06rem;
+    border-left: 2px solid var(--rule);
+    padding-left: 1.1rem;
+    color: var(--ink-soft);
+    margin: 0 0 1.6rem;
+  }
+
+  .pull {
+    font-family: var(--f-display);
+    font-size: 1.28rem;
+    line-height: 1.35;
+    font-weight: 500;
+    color: var(--ink);
+    border-top: 2px solid var(--ink);
+    border-bottom: 1px solid var(--rule);
+    padding: 1.1rem 0;
+    margin: 2.2rem 0;
+    text-wrap: pretty;
+  }
+
+  .aside {
+    background: var(--paper-2);
+    border: 1px solid var(--rule-soft);
+    border-radius: 5px;
+    padding: 1.1rem 1.25rem;
+    margin: 1.8rem 0;
+    font-size: .96rem;
+  }
+  .aside > :last-child { margin-bottom: 0; }
+  .aside .tag {
+    font-family: var(--f-mono);
+    font-size: .68rem;
+    letter-spacing: .13em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    display: block;
+    margin-bottom: .5rem;
+  }
+  .aside.warn { background: var(--signal-bg); border-color: var(--signal); }
+  .aside.warn .tag { color: var(--signal); }
+
+  /* ---- generic panel used by the interactives ---- */
+  .panel {
+    background: var(--paper-2);
+    border: 1px solid var(--rule);
+    border-radius: 7px;
+    padding: 1.4rem;
+    margin: 2rem auto 2.4rem;
+    box-shadow: 0 1px 2px var(--shadow);
+  }
+  .panel-head {
+    display: flex; flex-wrap: wrap; align-items: baseline;
+    justify-content: space-between; gap: .6rem;
+    margin-bottom: 1rem;
+    padding-bottom: .75rem;
+    border-bottom: 1px solid var(--rule);
+  }
+  .panel-head h3 { margin: 0; font-size: 1.05rem; }
+  .panel-head .hint {
+    font-family: var(--f-mono);
+    font-size: .7rem;
+    color: var(--ink-faint);
+    letter-spacing: .05em;
+  }
+
+  button {
+    font-family: var(--f-mono);
+    font-size: .78rem;
+    font-weight: 500;
+    letter-spacing: .02em;
+    color: var(--ink);
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    border-radius: 5px;
+    padding: .5rem .8rem;
+    cursor: pointer;
+    transition: background .12s, border-color .12s, transform .06s;
+    text-align: left;
+  }
+  button:hover:not(:disabled) { border-color: var(--ink-faint); background: var(--paper); }
+  button:active:not(:disabled) { transform: translateY(1px); }
+  button:disabled { opacity: .38; cursor: default; }
+  button:focus-visible { outline: 2px solid var(--persist); outline-offset: 2px; }
+  button.done { border-color: var(--persist); color: var(--persist); }
+  button.danger {
+    border-color: var(--signal); color: var(--signal);
+    font-weight: 700; letter-spacing: .09em; text-transform: uppercase;
+  }
+  button.danger:hover:not(:disabled) { background: var(--signal-bg); }
+
+  .controls { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1rem; }
+  .controls button { flex: 1 1 12rem; }
+
+  .board {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+    gap: .6rem;
+  }
+  .fact {
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--rule);
+    border-radius: 5px;
+    background: var(--paper);
+    padding: .7rem .85rem;
+    opacity: .32;
+    transition: opacity .3s, border-color .3s, background .3s, transform .3s;
+  }
+  .fact.live { opacity: 1; border-left-color: var(--ink-faint); }
+  .fact.survived {
+    opacity: 1;
+    border-left-color: var(--persist);
+    background: var(--persist-bg);
+  }
+  .fact.lost {
+    opacity: .68;
+    border-left-color: var(--ephemeral);
+    background: var(--ephem-bg);
+  }
+  .fact .name {
+    font-family: var(--f-mono);
+    font-size: .77rem;
+    font-weight: 700;
+    display: block;
+    margin-bottom: .18rem;
+  }
+  .fact .val {
+    font-size: .88rem;
+    color: var(--ink-soft);
+    display: block;
+    line-height: 1.4;
+  }
+  .fact .verdict {
+    font-family: var(--f-mono);
+    font-size: .66rem;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    display: none;
+    margin-top: .5rem;
+    padding-top: .45rem;
+    border-top: 1px dashed var(--rule);
+  }
+  .fact.survived .verdict, .fact.lost .verdict { display: block; }
+  .fact.survived .verdict { color: var(--persist); }
+  .fact.lost .verdict { color: var(--ephemeral); }
+  .fact .verdict .why {
+    display: block;
+    font-family: var(--f-body);
+    font-size: .82rem;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--ink-soft);
+    margin-top: .3rem;
+    line-height: 1.4;
+  }
+
+  .status {
+    font-family: var(--f-mono);
+    font-size: .76rem;
+    color: var(--ink-faint);
+    margin: 1rem 0 0;
+    padding-top: .8rem;
+    border-top: 1px solid var(--rule);
+    min-height: 1.4em;
+  }
+  .status b { color: var(--ink); font-weight: 700; }
+
+  /* ---- stored vs derived explorer ---- */
+  .cols { display: grid; grid-template-columns: 1fr; gap: 1.2rem; }
+  @media (min-width: 46rem) { .cols { grid-template-columns: 1.05fr 1fr; } }
+  .col-title {
+    font-family: var(--f-mono);
+    font-size: .68rem;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin: 0 0 .6rem;
+    padding-bottom: .4rem;
+    border-bottom: 1px solid var(--rule);
+  }
+  .chip {
+    display: block; width: 100%;
+    font-family: var(--f-mono);
+    font-size: .76rem;
+    padding: .48rem .7rem;
+    margin-bottom: .38rem;
+    border-radius: 4px;
+    border: 1px solid var(--rule);
+    background: var(--paper);
+    transition: all .16s;
+  }
+  .chip.tbl { border-left: 3px solid var(--persist); }
+  .chip.der { border-left: 3px solid var(--ephemeral); }
+  .chip.dim { opacity: .3; }
+  .chip.hot { border-color: var(--persist); background: var(--persist-bg); }
+  .chip small { display: block; font-family: var(--f-body); font-size: .8rem; color: var(--ink-soft); margin-top: .1rem; }
+  .explain {
+    margin-top: 1rem; padding-top: .9rem;
+    border-top: 1px solid var(--rule);
+    font-size: .92rem; color: var(--ink-soft);
+    min-height: 3.2em;
+  }
+
+  /* ---- tables ---- */
+  .tablewrap { overflow-x: auto; margin: 1.6rem 0; }
+  table { border-collapse: collapse; width: 100%; font-size: .9rem; }
+  th, td { text-align: left; padding: .55rem .75rem; border-bottom: 1px solid var(--rule-soft); vertical-align: top; }
+  th {
+    font-family: var(--f-mono); font-size: .68rem; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--ink-faint);
+    border-bottom: 1px solid var(--rule);
+  }
+  td code { background: none; border: none; padding: 0; }
+  tbody tr:last-child td { border-bottom: none; }
+
+  pre {
+    font-family: var(--f-mono);
+    font-size: .78rem;
+    line-height: 1.6;
+    background: var(--paper-2);
+    border: 1px solid var(--rule-soft);
+    border-left: 3px solid var(--rule);
+    border-radius: 5px;
+    padding: .9rem 1.1rem;
+    overflow-x: auto;
+    margin: 1.4rem 0;
+  }
+  pre .ok { color: var(--persist); font-weight: 700; }
+
+  ul { padding-left: 1.15rem; margin: 0 0 1.1rem; }
+  li { margin-bottom: .5rem; }
+
+  footer {
+    max-width: 43rem; margin: 4.5rem auto 0;
+    padding-top: 1.6rem;
+    border-top: 1px solid var(--rule);
+    font-size: .88rem;
+    color: var(--ink-faint);
+  }
+  footer code { font-size: .8em; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+
+<header class="masthead">
+  <p class="eyebrow">Krungsri ReadyCall · P2c</p>
+  <h1>What Survives a&nbsp;Restart</h1>
+  <p class="standfirst">
+    Every other part of this system has a screen you can point at. This one runs when nothing
+    is looking, is invisible when it works, and announces itself only by coming back wrong.
+    So here it is, made visible.
+  </p>
+  <p class="byline">
+    <span>25 Aug 2026</span>
+    <span>9 tables · 441 tests</span>
+    <span>D75 – D79 · B9</span>
+  </p>
+</header>
+
+<main class="wrap">
+
+  <h2><span class="num">01 — the problem</span>A shift lived in a dictionary</h2>
+
+  <p class="lede">
+    Until this phase, everything the contact centre knew about the current moment lived in
+    Python variables. Agents' declared status. Which caller was waiting and how long. Who had
+    already declined a call. What an agent had attested about a caller's identity. All of it
+    in memory, in one process.
+  </p>
+
+  <p>
+    Which is fine until the process ends — a deploy, a crash, a laptop going to sleep mid-demo.
+    Then every agent came back silently <code>NOT_READY</code>, whatever they had actually
+    declared, and every call in flight ceased to exist. An agent who had properly excused
+    themselves for lunch was reported for the rest of the day as someone who had gone quiet.
+  </p>
+
+  <p>
+    The obvious fix is "add a database". The interesting part is that this turns out to be
+    two separate questions, and only one of them is about SQL: <strong>what deserves to be
+    written down</strong>, and <strong>what should simply be worked out again</strong>.
+  </p>
+
+  <h2><span class="num">02 — try it</span>Pull the plug</h2>
+
+  <p>
+    Build up an ordinary shift, then restart the server. Each fact resolves to
+    <span style="color:var(--persist);font-weight:600">survived</span> or
+    <span style="color:var(--ephemeral);font-weight:600">gone</span> — with the reason, because
+    in every case the reason is a decision somebody made on purpose.
+  </p>
+</main>
+
+<section class="bleed panel" aria-labelledby="sim-h">
+  <div class="panel-head">
+    <h3 id="sim-h">Restart simulator</h3>
+    <span class="hint">click through, then restart</span>
+  </div>
+
+  <div class="controls" id="sim-controls"></div>
+  <div class="board" id="sim-board"></div>
+  <p class="status" id="sim-status">Nothing has happened yet. Start a shift above.</p>
+</section>
+
+<main class="wrap">
+
+  <p>
+    The split is not arbitrary and it is not a limitation to be fixed later. Everything in the
+    right-hand state is something the system <em>genuinely does not know</em> after a restart,
+    and inventing it would be worse than admitting it.
+  </p>
+
+  <div class="pull">
+    The person's axis survives, because they said it. The platform's axis does not, because
+    after a restart the platform knows nothing.
+  </div>
+
+  <p>
+    Agents carry two independent states in this system: <strong>what the platform has given
+    them to do</strong> (offline, available, on a call, in after-call work) and <strong>what
+    they themselves have declared</strong> (ready, break, lunch, last call). That distinction
+    was introduced for a different reason entirely — to tell <em>"they chose break"</em> apart
+    from <em>"nobody picked up"</em> in a shift report.
+  </p>
+
+  <p>
+    A restart is the first time it had to do real work. <em>Lunch</em> comes back because a
+    person said it. <code>ON_CALL</code> does not, because there is no socket, no offer and no
+    conversation — restoring it would assert a call that is not happening and let the matcher
+    route work to a desk that is not there.
+  </p>
+
+  <div class="aside">
+    <span class="tag">the one exception, and why</span>
+    <p>
+      <code>READY</code> and <code>LAST_CALL</code> are excluded from the carry-forward even
+      though they are the person's own words. They are the only two values that make the
+      platform <em>send someone a call</em>, and after a restart we cannot know whether that
+      person came back. Everything else — break, lunch, training, admin — is already a way of
+      saying <em>not me</em>, so carrying it forward is safe as well as truthful.
+    </p>
+  </div>
+
+  <h2><span class="num">03 — the rule</span>Stored, or worked out again</h2>
+
+  <p>
+    Nine tables exist. Four more things look like they should be tables and deliberately are
+    not. The rule that decides it:
+  </p>
+
+  <div class="pull">
+    A table records something a person or a service <em>did</em>. Anything computable from
+    those records is derived.
+  </div>
+
+  <p>
+    Click a derived item below to see where it actually comes from.
+  </p>
+</main>
+
+<section class="bleed panel" aria-labelledby="der-h">
+  <div class="panel-head">
+    <h3 id="der-h">Stored vs derived</h3>
+    <span class="hint">click anything on the right</span>
+  </div>
+  <div class="cols">
+    <div>
+      <p class="col-title">9 tables — somebody did this</p>
+      <div id="tbl-list"></div>
+    </div>
+    <div>
+      <p class="col-title">not tables, on purpose</p>
+      <div id="der-list"></div>
+      <p class="explain" id="der-explain">
+        Each of these is computed from a table that already exists. A second copy would be a
+        second thing that can disagree — and the copy is always the one that ends up wrong.
+      </p>
+    </div>
+  </div>
+</section>
+
+<main class="wrap">
+
+  <p>
+    The waiting pool is the clearest case. A <code>queue_entries</code> table would be a second
+    answer to <em>"is this caller waiting?"</em>, and the call's own state is already the first.
+    Keep both and they drift; one of them starts lying and nothing notices.
+  </p>
+
+  <p>
+    <strong>Accrued wait is the one worth dwelling on.</strong> It is recomputed from
+    <code>queued_at</code> rather than restored from a counter. So a caller who sat through our
+    outage comes back <em>more</em> urgent, not reset to zero — being pushed down the queue
+    because the server restarted is precisely the outcome the urgency scoring exists to prevent.
+  </p>
+
+  <h2><span class="num">04 — the shape</span>Write down, read from memory</h2>
+
+  <p>
+    The instinctive way to add persistence is to have services read from the database. That was
+    rejected, and not for performance folklore. Several of these services are read
+    <em>inside the matcher tick</em>, which runs every second against a 50 ms budget:
+  </p>
+
+  <pre>AssignmentService.excluded_agents(call)   <span style="color:var(--ink-faint)">← inside the matcher tick, every second</span>
+AttestationService.history(call)          <span style="color:var(--ink-faint)">← on every workstation refresh</span>
+DispatchService.waiting()                 <span style="color:var(--ink-faint)">← on every tick</span></pre>
+
+  <p>
+    Making those await a query puts a network round trip in the middle of routing a live call,
+    and ripples <code>async</code> through every route that reads. So instead: <strong>write
+    through on every change, read from memory, rebuild at startup.</strong>
+  </p>
+
+  <p>Three things make that honest rather than merely convenient:</p>
+
+  <ul>
+    <li><strong>One writer, one process.</strong> The usual reason to read through is that
+      somebody else might have written. Nobody else can.</li>
+    <li><strong>The same choice was already made for presence</strong>, with its reasoning
+      written down. Doing it differently for the other five stores would leave two durability
+      models in one codebase — worse than either.</li>
+    <li><strong>There is a stated trigger to revisit it:</strong> the moment two processes need
+      to see the same call. At that point the in-memory copy stops being a projection and
+      becomes a cache with an invalidation problem, which wants a different answer entirely.</li>
+  </ul>
+
+  <div class="aside">
+    <span class="tag">the tradeoff, stated rather than hidden</span>
+    <p>
+      If a write fails after the in-memory change, the two disagree for one process lifetime.
+      The next restart corrects it, because <strong>the durable record is what gets rebuilt
+      from</strong> — never the other way round. That direction is the whole safety property.
+    </p>
+  </div>
+
+  <h2><span class="num">05 — the order</span>What restore does, in sequence</h2>
+
+  <p>
+    The order is the design, not an implementation detail. Live calls load first, because every
+    other store is then loaded <em>for those calls</em> — a bounded read rather than a full
+    table scan, which is why none of these stores needs a "load everything" method at all.
+  </p>
+
+  <div class="tablewrap">
+    <table>
+      <thead>
+        <tr><th style="width:2.5rem">#</th><th>step</th><th>why it is not bookkeeping</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>1</code></td><td>live calls</td><td>bounds everything after it; a closed call is history, and history is answered with SQL</td></tr>
+        <tr><td><code>2</code></td><td>assignments</td><td>rebuilds the set of agents who already declined — without it the matcher offers the same caller to the same silent desk forever</td></tr>
+        <tr><td><code>3</code></td><td>attestations</td><td>restores the count that re-locks the identity control; an empty history would silently unlock a settled question</td></tr>
+        <tr><td><code>4</code></td><td>captures, wrap-ups, last decision</td><td>the offer card renders the matcher's rationale, and a restored offer with no explanation is the one screen here that cannot say why it is showing you something</td></tr>
+        <tr><td><code>5</code></td><td>the waiting pool</td><td>computed from the calls themselves — not read from anywhere</td></tr>
+        <tr><td><code>6</code></td><td>presence</td><td>last, because it is a projection of a log rather than a reload of rows</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    Step 2 is the one that looks like housekeeping and is not. Forget it and every individual
+    decision the matcher makes stays perfectly defensible while the caller watches one agent
+    fail to answer, indefinitely.
+  </p>
+
+  <h2><span class="num">06 — the exception</span>The digits we refuse to keep</h2>
+
+  <p>
+    Everywhere else in this codebase, the safe move is to record what happened. Keypad capture
+    inverts that, and the reason is that capture is <strong>untyped</strong>: the agent starts
+    it, the caller keys whatever they happen to be holding, the agent stops it. Nobody has said
+    what the digits <em>are</em>.
+  </p>
+
+  <p>
+    So until something identifies them, they could be a policy number, a national ID, or a card
+    number — and an unidentified number is treated as sensitive:
+  </p>
+
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>always written</th><th>written only once named</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>masked</code> = <code>••••••0811</code><br><code>digit_count</code> = <code>10</code><br>every lookup and its outcome</td>
+          <td><code>digits</code> = <code>2024000811</code></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    "Named" means a lookup matched, or the agent labelled it — at which point the digits
+    <em>are</em> a policy or claim number, which is not a secret and is worth having on the
+    record. The consequence is deliberate: <strong>a restart mid-capture returns the fact that
+    a capture happened and how long it was, never the value.</strong> The retention policy asks
+    for short-lived and one-click-discardable, and a durable copy of an unknown number is the
+    opposite of both.
+  </p>
+
+  <div class="aside">
+    <span class="tag">a different question from the disclosure gate</span>
+    <p>
+      Masking protects the <em>log</em>, never the agent. These are the caller's own keystrokes,
+      typed seconds ago, to the person they are speaking to — an earlier version hid them from
+      the agent who had just asked for them, which deleted the feature and protected nobody.
+    </p>
+  </div>
+
+  <h2><span class="num">07 — the proof</span>Ending a process on purpose</h2>
+
+  <p>
+    Each store has round-trip tests. Those are necessary and <em>not sufficient</em>: a previous
+    bug in this project was three services that were individually correct and called by nothing
+    at all. Per-component tests passed the whole time.
+  </p>
+
+  <p>
+    So the real test boots an app, works through the actual HTTP API, <strong>throws the app
+    away</strong>, boots a second one on the same storage, and asks it what it knows. The only
+    thing crossing that boundary is the database — no shared objects, nothing that could answer
+    from a cache it happens to still be holding.
+  </p>
+
+  <p>
+    Then re-checked outside the test framework, because a test client is still one Python
+    process: two real server processes against a real database, the first one killed mid-shift.
+  </p>
+
+  <pre><span class="ok">PASS</span>  the call itself came back
+<span class="ok">PASS</span>  the attested identity came back
+<span class="ok">PASS</span>  last_call did NOT carry across
+<span class="ok">PASS</span>  the brief still renders
+<span class="ok">PASS</span>  the Thai summary is identical</pre>
+
+  <h2><span class="num">08 — the bugs</span>Two things this found, neither about databases</h2>
+
+  <h3>A column nobody ever wrote to</h3>
+  <p>
+    <code>CallSession.identity</code> had existed since the first phase. Nothing ever populated
+    it — the live value lived only in a dictionary. So a restored call had no identity, so the
+    brief renderer returned nothing, so <strong>the agent's screen was blank on a call they
+    were in the middle of.</strong> The column was right, the model was right, and the write was
+    simply absent. Findable only by restarting and looking.
+  </p>
+
+  <h3>An entire package that was never committed</h3>
+  <div class="aside warn">
+    <span class="tag">B9</span>
+    <p>
+      The <code>.gitignore</code> contained <code>models/</code>, under a heading meaning machine-learning
+      weights. A gitignore pattern with no internal slash matches a directory of that name at
+      <em>any depth</em> — so it also matched <code>src/readycall/db/models/</code>, and the entire
+      database model package was never committed. The previous phase looked completely landed.
+      A fresh clone had no tables at all.
+    </p>
+    <p>
+      Every check this project runs — tests, type checking, linting, the migration, the live
+      database verification — reads the <strong>working tree</strong>. Not one of them is a
+      statement about what the repository actually contains.
+    </p>
+  </div>
+
+  <p>
+    Both belong to a family this project keeps meeting: <em>a confident, plausible, wrong result
+    that nobody looked at.</em> A timer that measured zero. A matcher that said "nobody is
+    qualified" directly above a qualified agent. Three services with no driver. A clock
+    correction that cancelled itself out.
+  </p>
+
+  <div class="pull">
+    When something looks fine, check that it is actually running — and now, that it is actually
+    committed.
+  </div>
+
+</main>
+
+<footer class="wrap">
+  <p>
+    A readable twin of <code>docs/diagrams/11_persistence.md</code>. The diagrams there carry the
+    same material; the long-form reasoning and every rejected alternative are in
+    <code>docs/explanations/P2c_persistence.md</code> and decisions <code>D75</code>–<code>D79</code>.
+    Both must be updated together.
+  </p>
+</footer>
+
+<script>
+(function () {
+  "use strict";
+
+  /* Each action creates facts. Each fact knows whether it survives, and why.
+     The "why" is the point of the whole page — every verdict is a decision. */
+  const FACTS = [
+    { id: "intent",    step: 1, name: "agent_intent",       val: "lunch",
+      survives: true,  why: "agent_state_log — the person said it, so it is a record" },
+    { id: "sysstate",  step: 1, name: "system_state",       val: "available",
+      survives: false, why: "the platform has given them nothing to do: no socket, no offer, no call" },
+    { id: "heartbeat", step: 1, name: "heartbeat",          val: "3s ago",
+      survives: false, why: "liveness is a property of a live socket, never a durable fact" },
+
+    { id: "call",      step: 2, name: "call_sessions",      val: "call_01M0…  in_call",
+      survives: true,  why: "the spine — everything else hangs off this id" },
+    { id: "timeline",  step: 2, name: "state transitions",  val: "6 rows, with timings",
+      survives: true,  why: "append-only; this is what makes the timeline demonstrable" },
+    { id: "pool",      step: 2, name: "the waiting pool",   val: "1 caller, waited 12s",
+      survives: true,  why: "not a table — recomputed from calls in queued/matched" },
+    { id: "wait",      step: 2, name: "accrued wait",       val: "12s → and counting",
+      survives: true,  why: "recomputed from queued_at, so an outage makes them MORE urgent" },
+    { id: "decision",  step: 2, name: "matching_decisions", val: "A006, fit 0.90",
+      survives: true,  why: "every candidate and every score term — including the ones not chosen" },
+    { id: "excluded",  step: 2, name: "already-declined",   val: "{ A002 }",
+      survives: true,  why: "rebuilt from assignments — without it the same desk is re-offered forever" },
+
+    { id: "identity",  step: 3, name: "assurance",          val: "L3_VERIFIED",
+      survives: true,  why: "written onto the call itself, not just held in memory" },
+    { id: "attest",    step: 3, name: "attestation_count",  val: "1",
+      survives: true,  why: "append-only disclosure log — this is what re-locks the control" },
+    { id: "snapshot",  step: 3, name: "context_snapshot",   val: "frozen Customer360",
+      survives: true,  why: "without it the brief renders nothing and the screen is blank" },
+
+    { id: "capnamed",  step: 4, name: "capture (named)",    val: "2024000811",
+      survives: true,  why: "a lookup matched it — it is a policy number, not a secret" },
+    { id: "capraw",    step: 4, name: "capture (unnamed)",  val: "551209…",
+      survives: false, why: "untyped digits could be a national ID; only the mask and the length are kept" },
+  ];
+
+  const ACTIONS = [
+    { step: 1, label: "1 · sign in, declare lunch" },
+    { step: 2, label: "2 · a caller arrives, gets matched" },
+    { step: 3, label: "3 · accept, verify who they are" },
+    { step: 4, label: "4 · capture digits on the keypad" },
+  ];
+
+  const board    = document.getElementById("sim-board");
+  const controls = document.getElementById("sim-controls");
+  const status   = document.getElementById("sim-status");
+
+  let done = new Set();
+  let crashed = false;
+
+  FACTS.forEach(function (f) {
+    const el = document.createElement("div");
+    el.className = "fact";
+    el.id = "fact-" + f.id;
+    el.innerHTML =
+      '<span class="name"></span><span class="val"></span>' +
+      '<span class="verdict"><span class="label"></span><span class="why"></span></span>';
+    el.querySelector(".name").textContent = f.name;
+    el.querySelector(".val").textContent = f.val;
+    el.querySelector(".verdict .why").textContent = f.why;
+    board.appendChild(el);
+  });
+
+  ACTIONS.forEach(function (a) {
+    const b = document.createElement("button");
+    b.textContent = a.label;
+    b.addEventListener("click", function () {
+      if (crashed) return;
+      done.add(a.step);
+      b.classList.add("done");
+      b.disabled = true;
+      render();
+      const n = FACTS.filter(function (f) { return done.has(f.step); }).length;
+      status.innerHTML = "<b>" + n + "</b> facts now live in this process. " +
+        (done.size === ACTIONS.length
+          ? "That is an ordinary shift. Now pull the plug."
+          : "Keep going, or restart now to see what would survive.");
+      restart.disabled = false;
+    });
+    controls.appendChild(b);
+  });
+
+  const restart = document.createElement("button");
+  restart.className = "danger";
+  restart.textContent = "⏻ restart the server";
+  restart.disabled = true;
+  restart.addEventListener("click", function () {
+    if (crashed) { reset(); return; }
+    crashed = true;
+    render();
+    const live = FACTS.filter(function (f) { return done.has(f.step); });
+    const kept = live.filter(function (f) { return f.survives; }).length;
+    status.innerHTML = "Process ended, new process started, <b>restore() ran</b>. " +
+      "<b>" + kept + "</b> of " + live.length + " facts came back. " +
+      "The rest are things the system genuinely does not know any more — inventing them " +
+      "would be worse than admitting it.";
+    restart.textContent = "↺ run it again";
+  });
+  controls.appendChild(restart);
+
+  function reset() {
+    crashed = false;
+    done = new Set();
+    restart.textContent = "⏻ restart the server";
+    restart.disabled = true;
+    Array.prototype.forEach.call(controls.querySelectorAll("button"), function (b) {
+      if (b !== restart) { b.disabled = false; b.classList.remove("done"); }
+    });
+    status.textContent = "Nothing has happened yet. Start a shift above.";
+    render();
+  }
+
+  function render() {
+    FACTS.forEach(function (f) {
+      const el = document.getElementById("fact-" + f.id);
+      const live = done.has(f.step);
+      el.className = "fact" +
+        (!live ? "" : crashed ? (f.survives ? " survived" : " lost") : " live");
+      el.querySelector(".verdict .label").textContent = f.survives ? "survived" : "gone";
+    });
+  }
+
+  render();
+
+  /* ---- stored vs derived ---- */
+  const TABLES = [
+    ["call_sessions", "the spine — state, queue, identity, timings"],
+    ["call_state_transitions", "the timeline, append-only"],
+    ["context_snapshots", "the frozen record the brief renders from"],
+    ["agent_state_log", "every presence change, and who set it"],
+    ["assignments", "the offer handshake, every timestamp measured"],
+    ["call_wrapups", "what the agent wrote — only ever written by a person"],
+    ["identity_attestations", "the disclosure log, append-only"],
+    ["keypad_captures", "digits keyed, and what was made of them"],
+    ["matching_decisions", "why this agent — including the calls not assigned"],
+  ];
+
+  const DERIVED = [
+    ["current presence", "agent_state_log",
+     "The newest row per agent. Two places recording one fact will disagree, and the log is the one that can also answer “what was true at 14:03”."],
+    ["the waiting pool", "call_sessions",
+     "Calls sitting in queued or matched. A separate table would be a second answer to “is this caller waiting?” — and the call’s own state is already the first."],
+    ["the live identity", "call_sessions",
+     "The identity column on the call. It already exists and is already durable; a second home for it would only create a way for the two to differ."],
+    ["accrued wait", "call_sessions",
+     "Recomputed from queued_at. A stored counter would reset a caller who sat through the outage; recomputing makes them more urgent, which is the point of urgency scoring."],
+  ];
+
+  const tblList  = document.getElementById("tbl-list");
+  const derList  = document.getElementById("der-list");
+  const explain  = document.getElementById("der-explain");
+  const defaultText = explain.textContent;
+
+  TABLES.forEach(function (t) {
+    const el = document.createElement("div");
+    el.className = "chip tbl";
+    el.dataset.table = t[0];
+    el.innerHTML = "<span></span><small></small>";
+    el.querySelector("span").textContent = t[0];
+    el.querySelector("small").textContent = t[1];
+    tblList.appendChild(el);
+  });
+
+  let active = null;
+  DERIVED.forEach(function (d) {
+    const b = document.createElement("button");
+    b.className = "chip der";
+    b.innerHTML = "<span></span><small></small>";
+    b.querySelector("span").textContent = d[0];
+    b.querySelector("small").textContent = "← " + d[1];
+    b.addEventListener("click", function () {
+      const same = active === d[0];
+      active = same ? null : d[0];
+      explain.textContent = same ? defaultText : d[2];
+      Array.prototype.forEach.call(derList.children, function (c) {
+        c.classList.toggle("hot", !same && c === b);
+      });
+      Array.prototype.forEach.call(tblList.children, function (c) {
+        c.classList.toggle("hot", !same && c.dataset.table === d[1]);
+        c.classList.toggle("dim", !same && c.dataset.table !== d[1]);
+      });
+    });
+    derList.appendChild(b);
+  });
+})();
+</script>
