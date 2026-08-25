@@ -13,18 +13,7 @@
  */
 
 import { useEffect, useState } from "react";
-import type { Brief, Capture, Identity, Offer, Presence, Queue } from "./api";
-
-/** Named challenges plus the escape hatch (`D57`). `other` is not a fallback for a
- *  missing case — it is the case: recognised the voice from last week, read a claim
- *  reference off an SMS, transferred in from a branch that already checked ID. */
-const CHALLENGES = [
-  { value: "date_of_birth", label: "วันเกิด" },
-  { value: "citizen_id_last4", label: "เลขบัตรประชาชน 4 ตัวท้าย" },
-  { value: "policy_number", label: "เลขกรมธรรม์" },
-  { value: "recent_claim_amount", label: "ยอดเคลมล่าสุด" },
-  { value: "other", label: "อื่น ๆ (ระบุเอง)" },
-];
+import type { Brief, Capture, Challenge, Identity, Offer, Presence, Queue } from "./api";
 
 const INTENT_LABEL: Record<string, string> = {
   not_ready: "ยังไม่พร้อม",
@@ -312,16 +301,21 @@ export function PresencePanel({
 
 export function IdentityPanel({
   identity,
+  challenges,
   callId,
   onAttest,
   busy,
 }: {
   identity: Identity | null;
+  /** From `config/challenges.yaml` via the snapshot (`D72`) — never a local copy. The
+   *  server refuses any code not in this list, so a hardcoded array here would eventually
+   *  offer an option that fails on submit, which the agent cannot diagnose. */
+  challenges: Challenge[];
   callId: string | null;
   onAttest: (payload: Record<string, unknown>) => void;
   busy: boolean;
 }) {
-  const [challenge, setChallenge] = useState(CHALLENGES[0].value);
+  const [challenge, setChallenge] = useState("");
   const [challengeNote, setChallengeNote] = useState("");
   const [callerName, setCallerName] = useState("");
   const [relationship, setRelationship] = useState("");
@@ -349,24 +343,27 @@ export function IdentityPanel({
   // An attestation is a signed statement in a disclosure log, not a toggle (`D60`).
   const locked = identity.attested && !reopened;
   const disabled = busy || !callId || locked;
-  const needNote = challenge === "other" && !challengeNote.trim();
+  // Which challenge needs an explanation is config, not a client guess (`D72`).
+  const selected = challenges.find((c) => c.code === challenge) ?? challenges[0];
+  const needNote = Boolean(selected?.requires_note) && !challengeNote.trim();
   const thirdPartyReady = callerName.trim().length > 0 && relationship.trim().length > 0;
   // After *ไม่ใช่บุคคลนี้* there is no proposed customer left to confirm or to act for, so
   // the server refuses both with a 400 (`attestation.py`). Customer search is not built
   // yet (`Q18`), so this is a real dead end for the rest of the call — and it must LOOK
   // like one. A live-looking button that always errors reads as a broken screen.
-  // With no proposed customer there is nothing to confirm, nothing to act *for*, and
-  // nothing to reject either — so all three are greyed, not just the first two. This covers
-  // both routes into that state: a caller who was never identified (L0 from the start), and
-  // one whose match the agent rejected, which clears the customer by design (`D42`).
-  // Customer search does not exist yet (`Q18`), so on this call it is a dead end, and it has
-  // to look like one rather than answering 400 on every click.
-  const noCustomer = identity.customer_id === null;
-  const noCustomerHint = noCustomer
-    ? identity.attested_outcome === "not_this_person"
-      ? "ปฏิเสธการจับคู่แล้ว — ระบบไม่มีลูกค้าให้ยืนยัน ต้องค้นหาลูกค้าก่อน (ยังไม่มีในระบบ)"
-      : "ยังไม่ทราบว่าเป็นใคร — ไม่มีข้อมูลให้ยืนยันหรือปฏิเสธ ต้องค้นหาลูกค้าก่อน (ยังไม่มีในระบบ)"
-    : undefined;
+  // WHICH outcomes are legal comes from the server (`D71`), like `declarable` does — the
+  // client renders permissions, it never computes them. Three cases behind this list:
+  // nobody was ever proposed (nothing to assert about nobody); the call arrived already
+  // authenticated on an app token (only the third-party question is still open); or
+  // everything is available, **including after a rejection**, because a rejection is not a
+  // one-way door.
+  const can = (outcome: string) => identity.attestable.includes(outcome);
+  const lockedHint =
+    identity.attestable.length === 0
+      ? "ยังไม่ทราบว่าเป็นใคร — ไม่มีข้อมูลให้ยืนยันหรือปฏิเสธ ต้องค้นหาลูกค้าก่อน (ยังไม่มีในระบบ)"
+      : identity.system_verified
+        ? "ยืนยันตัวตนผ่านแอปแล้ว — ไม่ต้องยืนยันซ้ำ"
+        : undefined;
 
   return (
     <div className="panel">
@@ -424,7 +421,10 @@ export function IdentityPanel({
         </div>
       )}
 
-      {identity.authority_check_required && (
+      {/* Driven by evidence the server clears when an amendment changes the outcome, so
+          it no longer says "acting on behalf" about a call just confirmed as the
+          policyholder themself (`D71`). */}
+      {identity.authority_check_required && identity.attested_outcome === "third_party" && (
         <div className="rationale" style={{ borderLeftColor: "var(--warn)" }}>
           ผู้ติดต่อดำเนินการแทนเจ้าของกรมธรรม์ (เจ้าหน้าที่ตรวจสอบสิทธิ์แล้ว) —
           บันทึกทุกอย่างในนามผู้ดำเนินการแทน ไม่ใช่เจ้าของกรมธรรม์
@@ -439,18 +439,18 @@ export function IdentityPanel({
         <div>
           <div className="field-label">ยืนยันด้วยวิธีใด</div>
           <select
-            value={challenge}
+            value={selected?.code ?? ""}
             onChange={(e) => setChallenge(e.target.value)}
             disabled={disabled}
           >
-            {CHALLENGES.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
+            {challenges.map((option) => (
+              <option key={option.code} value={option.code}>
+                {option.label_th}
               </option>
             ))}
           </select>
         </div>
-        {challenge === "other" && (
+        {selected?.requires_note && (
           <input
             placeholder="ระบุว่ายืนยันตัวตนด้วยวิธีใด"
             value={challengeNote}
@@ -460,12 +460,12 @@ export function IdentityPanel({
         )}
         <button
           className="primary"
-          disabled={disabled || needNote || noCustomer}
-          title={noCustomerHint}
+          disabled={disabled || needNote || !can("confirmed")}
+          title={can("confirmed") ? undefined : lockedHint}
           onClick={() =>
             onAttest({
               outcome: "confirmed",
-              challenge,
+              challenge: selected?.code,
               challenge_note: challengeNote || null,
               amend: reopened,
             })
@@ -476,13 +476,17 @@ export function IdentityPanel({
 
         <div style={{ borderTop: "1px solid var(--line)", paddingTop: 10 }}>
           <div className="field-label">ผู้ดำเนินการแทน (ต้องกรอกทั้งสองช่อง)</div>
-          {/* The label carries the agent's obligation, because the button *is* the
-              authority check (`D65`). Pressing it says two things at once: this person may
-              act for the policyholder, and I have satisfied myself of that. There is no
-              second step, and there was never a control for one. */}
+          {/* Two different sentences, because the button means two different things
+              (`D71`). Normally it IS the authority check: pressing it says both "this
+              person may act for the policyholder" and "I satisfied myself of that", which
+              is why the label carries the obligation (`D65`). But when the call arrived on
+              an app token the account holder already authenticated, so the agent is not
+              vouching for anything — they are recording that somebody else is operating
+              the session, which is the only fact still unknown. */}
           <div className="faint" style={{ marginBottom: 6 }}>
-            กดเมื่อตรวจสอบแล้วว่ามีสิทธิ์ดำเนินการแทน — ระบบจะบันทึกว่าเป็น “ผู้ดำเนินการแทน”
-            ไม่ใช่เจ้าของกรมธรรม์
+            {identity.system_verified
+              ? "ยืนยันตัวตนผ่านแอปแล้ว — บันทึกเพิ่มได้ว่ามีผู้อื่นดำเนินการแทนเจ้าของบัญชี"
+              : "กดเมื่อตรวจสอบแล้วว่ามีสิทธิ์ดำเนินการแทน — ระบบจะบันทึกว่าเป็น “ผู้ดำเนินการแทน” ไม่ใช่เจ้าของกรมธรรม์"}
           </div>
           <div className="stack">
             <input
@@ -498,8 +502,8 @@ export function IdentityPanel({
               disabled={disabled}
             />
             <button
-              disabled={disabled || !thirdPartyReady || noCustomer}
-              title={noCustomerHint}
+              disabled={disabled || !thirdPartyReady || !can("third_party")}
+              title={can("third_party") ? undefined : lockedHint}
               onClick={() =>
                 onAttest({
                   outcome: "third_party",
@@ -509,15 +513,15 @@ export function IdentityPanel({
                 })
               }
             >
-              ยืนยันว่ามีสิทธิ์ดำเนินการแทน
+              {identity.system_verified ? "บันทึกว่ามีผู้ดำเนินการแทน" : "ยืนยันว่ามีสิทธิ์ดำเนินการแทน"}
             </button>
           </div>
         </div>
 
         <button
           className="danger"
-          disabled={disabled || noCustomer}
-          title={noCustomerHint}
+          disabled={disabled || !can("not_this_person")}
+          title={can("not_this_person") ? undefined : lockedHint}
           onClick={() => onAttest({ outcome: "not_this_person", amend: reopened })}
         >
           ไม่ใช่บุคคลนี้
@@ -810,7 +814,7 @@ export function QueueStrip({ queues }: { queues: Queue[] }) {
 
   return (
     <div className="panel">
-      <div className="row">
+      <div className="queue-head">
         <h2 style={{ margin: 0 }}>คิว</h2>
         <div className="spacer" />
         <button
@@ -840,8 +844,11 @@ export function QueueStrip({ queues }: { queues: Queue[] }) {
           </span>
           <div className="spacer" />
           {queue.is_open ? (
-            <span className="mono muted">
-              {queue.waiting} รอ · {mmss(queue.longest_wait_s)}
+            // The time is the LONGEST wait in this queue, not an average and not
+            // necessarily the next caller out: matching is global and urgency-weighted
+            // (`D22`), so a newer caller at an accident scene can legitimately go first.
+            <span className="mono muted" title="เวลารอของคนที่รอนานที่สุดในคิวนี้">
+              {queue.waiting} รอ · รอนานสุด {mmss(queue.longest_wait_s)}
             </span>
           ) : (
             <span className="faint">

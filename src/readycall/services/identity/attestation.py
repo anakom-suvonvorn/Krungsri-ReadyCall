@@ -49,20 +49,18 @@ class AttestationOutcome(StrEnum):
     THIRD_PARTY = "third_party"
 
 
-#: Challenges that count for promotion to L3. `Q12` — confirm these with Krungsri; they
-#: are a list rather than a hardcoded set for exactly that reason.
-NAMED_CHALLENGES: frozenset[str] = frozenset(
-    {"date_of_birth", "citizen_id_last4", "policy_number", "recent_claim_amount"}
-)
-
-#: The escape hatch, and the more important half (`D44`, `D57`). Real verification does not
-#: fit a closed list: the caller was recognised by voice from last week's call, produced a
-#: claim reference from an SMS, was verified at a branch and transferred in, answered a
-#: question about a recent transaction. A four-item dropdown forces every one of those into
-#: the nearest lie. With `other`, the agent types what they actually did — and `D44` argued
-#: this should have been the *first* mode built, not the last.
+#: The `other` code is special-cased in one place — the note requirement — so it is named
+#: rather than string-literalled at the check. Everything else about the challenge list now
+#: comes from `config/challenges.yaml` (`D72`), which is the single source of truth the
+#: workstation also renders from.
 OTHER_CHALLENGE = "other"
-CHALLENGES: frozenset[str] = NAMED_CHALLENGES | {OTHER_CHALLENGE}
+
+#: Fallback for callers that construct the service without a domain pack (tests of the
+#: service in isolation). Production always passes the config-loaded list, so this is a
+#: default, never a second copy to keep in step.
+DEFAULT_CHALLENGES: frozenset[str] = frozenset(
+    {"date_of_birth", "citizen_id_last4", "policy_number", "recent_claim_amount", OTHER_CHALLENGE}
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,14 +92,25 @@ class Attestation:
 class _CallIdentityState:
     attestations: list[Attestation] = field(default_factory=list)
     rejected_customer_ids: set[str] = field(default_factory=set)
+    #: What the resolver proposed before any agent touched it. Kept so a **rejection can be
+    #: taken back** (`D71`): *ไม่ใช่บุคคลนี้* clears the customer, and without this there is
+    #: nothing left to restore, so a mis-click would strand the call at L0 for good. A
+    #: mis-press is not rare, and neither is "I thought this was a stranger, then they
+    #: explained they are the daughter".
+    original: IdentityResolution | None = None
 
 
 class AttestationService:
     """Applies an agent's attestation to a call's identity, and records why."""
 
-    def __init__(self, *, clock: Clock) -> None:
+    def __init__(self, *, clock: Clock, challenges: frozenset[str] | None = None) -> None:
         self._clock = clock
         self._by_call: dict[str, _CallIdentityState] = {}
+        #: From `config/challenges.yaml` (`D72`). The service refuses anything not in it,
+        #: which is precisely why the workstation must render the same list rather than
+        #: keep its own — an option the screen offers and the server refuses is a dead end
+        #: the agent cannot diagnose.
+        self._challenges = challenges if challenges is not None else DEFAULT_CHALLENGES
 
     def history(self, call_session_id: str) -> tuple[Attestation, ...]:
         state = self._by_call.get(call_session_id)
@@ -111,6 +120,53 @@ class AttestationService:
         """Never re-propose someone the agent has explicitly rejected on this call."""
         state = self._by_call.get(call_session_id)
         return frozenset(state.rejected_customer_ids) if state else frozenset()
+
+    def attestable(
+        self, call_session_id: str, current: IdentityResolution
+    ) -> tuple[AttestationOutcome, ...]:
+        """Which outcomes this call may be given **right now** (`D71`).
+
+        The server decides, and the screen renders the answer, for the same reason
+        `declarable` works that way (`D59`): a client that computes it would need its own
+        copy of the rules and would eventually disagree.
+
+        Three cases, and the middle one is the interesting one:
+
+        * **Nobody was ever proposed** — an unrecognised number, `L0` from the first
+          second. There is nothing to confirm, nothing to reject, and nobody to act on
+          behalf of, so the whole control is inert until customer search exists (`Q18`).
+        * **The system verified them itself** — the call came in on an app token, so
+          authentication already happened and the agent adds nothing by re-asserting it.
+          The one question still open is whether the person holding the phone is the
+          account holder or somebody helping them, so *third party* stays live and is the
+          only thing offered.
+        * **Everything else**, including after a rejection: all three. A rejection is
+          explicitly **not** a one-way door — a mis-click, or a caller who only explains on
+          the second try that they are the daughter, must be able to come back.
+
+        Note what does *not* qualify as system-verified: `IVR_VERIFY`. Keying the last four
+        of a citizen id is a knowledge check, and a family member standing in the same room
+        knows those digits. App auth is possession of an authenticated session; the two are
+        not the same strength and must not be collapsed.
+        """
+        state = self._by_call.get(call_session_id)
+        original = state.original if state and state.original is not None else current
+
+        if original.customer_id is None and current.customer_id is None:
+            return ()
+        if original.method is IdentityMethod.APP_TOKEN:
+            return (AttestationOutcome.THIRD_PARTY,)
+        return (
+            AttestationOutcome.CONFIRMED,
+            AttestationOutcome.THIRD_PARTY,
+            AttestationOutcome.NOT_THIS_PERSON,
+        )
+
+    def system_verified(self, call_session_id: str, current: IdentityResolution) -> bool:
+        """True when authentication happened before the agent ever saw the call."""
+        state = self._by_call.get(call_session_id)
+        original = state.original if state and state.original is not None else current
+        return original.method is IdentityMethod.APP_TOKEN
 
     def attest(
         self,
@@ -127,7 +183,28 @@ class AttestationService:
     ) -> tuple[IdentityResolution, Attestation]:
         """Return the new resolution **and** the log row. Both, always, together."""
         state = self._by_call.setdefault(call_session_id, _CallIdentityState())
+        if state.original is None:
+            state.original = current
         now = self._clock.now()
+
+        # Taking a rejection back (`D71`). *ไม่ใช่บุคคลนี้* clears the customer, so the
+        # resolution the agent is amending FROM has nobody in it — and a mis-click, or a
+        # caller who only explained on the second attempt that they are the daughter,
+        # would otherwise be stuck at L0 for the rest of the call with no way home. The
+        # proposal is restored from what the resolver originally found; it is not invented.
+        if (
+            outcome is not AttestationOutcome.NOT_THIS_PERSON
+            and current.customer_id is None
+            and state.original.customer_id is not None
+        ):
+            current = state.original
+            state.rejected_customer_ids.discard(str(current.customer_id))
+            log.info(
+                "identity rejection withdrawn",
+                call_session_id=call_session_id,
+                agent_id=agent_id,
+                customer_id=current.customer_id,
+            )
 
         if outcome is AttestationOutcome.CONFIRMED:
             if current.customer_id is None:
@@ -139,7 +216,7 @@ class AttestationService:
                 # The challenge is the evidence. "Confirmed" with no basis recorded is
                 # exactly the unfalsifiable audit row `D42` exists to prevent.
                 raise PermanentError("confirming an identity requires naming the challenge used")
-            if challenge not in CHALLENGES:
+            if challenge not in self._challenges:
                 raise PermanentError(f"unknown challenge {challenge!r}")
             if challenge == OTHER_CHALLENGE and not (challenge_note or "").strip():
                 raise PermanentError(
@@ -159,6 +236,14 @@ class AttestationService:
                         # agent's own description of what they did, so it is kept as-is.
                         "challenge": challenge,
                         "challenge_note": challenge_note,
+                        # Amending third-party -> confirmed has to CLEAR the third-party
+                        # facts, or the panel keeps saying "acting on behalf of the
+                        # policyholder" about a call the agent has just confirmed IS the
+                        # policyholder. Evidence is carried forward wholesale, so anything
+                        # an earlier outcome set has to be explicitly retired here.
+                        "authority_check_required": False,
+                        "third_party_name": None,
+                        "relationship": None,
                     },
                 }
             )
@@ -242,8 +327,7 @@ class AttestationService:
 
 
 __all__ = [
-    "CHALLENGES",
-    "NAMED_CHALLENGES",
+    "DEFAULT_CHALLENGES",
     "OTHER_CHALLENGE",
     "Attestation",
     "AttestationOutcome",

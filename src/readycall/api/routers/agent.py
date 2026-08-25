@@ -33,6 +33,7 @@ from readycall.api.schemas import (
     CaptureLabelRequest,
     CaptureLookupRequest,
     CaptureOut,
+    ChallengeOut,
     DeclareStateRequest,
     DeclineOfferRequest,
     EndCallRequest,
@@ -674,6 +675,10 @@ async def _snapshot(container: Any, agent_id: str) -> WorkstationSnapshot:
                 third_party_name=latest.caller_name if latest else None,
                 relationship=latest.relationship if latest else None,
                 attestation_count=len(history),
+                attestable=tuple(
+                    str(o) for o in container.attestations.attestable(active_id, resolution)
+                ),
+                system_verified=container.attestations.system_verified(active_id, resolution),
             )
         # Rendered for the CURRENT assurance level, server-side (`D42`). A locked field
         # is absent from the payload, not hidden by the client.
@@ -691,6 +696,10 @@ async def _snapshot(container: Any, agent_id: str) -> WorkstationSnapshot:
         brief=brief,
         captures=captures,
         queues=tuple(_queues_out(container, agent_skills=agent_skills)),
+        challenges=tuple(
+            ChallengeOut(code=c.code, label_th=c.label_th, requires_note=c.requires_note)
+            for c in container.pack.challenges.values()
+        ),
         server_time=container.clock.now(),
         call_answered_at=answered_at,
         wrapup_call_session_id=wrapping_id,

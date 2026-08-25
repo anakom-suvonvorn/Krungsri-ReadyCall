@@ -297,10 +297,15 @@ def active_call(client: Any) -> str:
     return str(client.get("/v1/agent/me").json()["active_call_session_id"])
 
 
-def take_a_call(client: Any, intent_code: str = "health.ipd.preauth") -> str:
+def take_a_call(
+    client: Any,
+    intent_code: str = "health.ipd.preauth",
+    caller_number: str = "0812345678",
+) -> str:
+    """Sign in, go ready, take the call. `caller_number` chooses whether ANI matches."""
     sign_in_agent(client, "A006")
     client.post("/v1/agent/state", json={"agent_intent": "ready"})
-    place_call(client, intent_code=intent_code, caller_number="0812345678")
+    place_call(client, intent_code=intent_code, caller_number=caller_number)
     offer = client.get("/v1/agent/me").json()["offer"]
     client.post(f"/v1/agent/offers/{offer['assignment_id']}/accept")
     return active_call(client)
@@ -476,24 +481,57 @@ def test_amending_appends_and_the_count_lets_the_panel_re_lock(client: Any) -> N
     assert third.json()["identity"]["may_disclose_policy_details"] is True
 
 
-def test_rejecting_the_guess_is_currently_a_one_way_door(client: Any) -> None:
-    """A recorded limitation, not an accident (`Q18`).
+def test_a_rejection_can_be_taken_back(client: Any) -> None:
+    """`D71`, which deliberately reverses the one-way door `Q18` recorded.
 
-    "Not this person" clears the customer, which is exactly what `D42` asks for — nothing
-    should re-propose a wrong ANI match. But it leaves the agent with nobody to attach the
-    call to, and there is no customer-search feature yet (`D32` puts past-customer lookup
-    in a later phase). So a rejected call stays anonymous for its duration.
+    A rejection used to strand the call at `L0` for good, because it clears the customer
+    and there was nothing left to restore. That punishes the two cases that actually
+    happen: a mis-click, and a caller who only explains on the second attempt that they
+    are the policyholder's daughter.
 
-    Asserted so that the day search lands, this test fails and points at the gap.
+    The restored proposal is the one the resolver originally found. It is not invented,
+    and the rejection stays in the log — amending appends (`D60`), so the record shows the
+    agent rejected the match and then withdrew that.
     """
     call_id = take_a_call(client)
-    client.post(f"/v1/agent/calls/{call_id}/identity", json={"outcome": "not_this_person"})
-    blocked = client.post(
+    rejected = client.post(
+        f"/v1/agent/calls/{call_id}/identity", json={"outcome": "not_this_person"}
+    ).json()
+    assert rejected["identity"]["assurance"] == "l0_anonymous"
+    assert rejected["identity"]["customer_id"] is None
+    assert "confirmed" in rejected["identity"]["attestable"], (
+        "the way back has to be offered, or a mis-click ends the call at L0"
+    )
+
+    restored = client.post(
         f"/v1/agent/calls/{call_id}/identity",
         json={"outcome": "confirmed", "challenge": "date_of_birth", "amend": True},
     )
-    assert blocked.status_code == 400
-    assert "never proposed" in blocked.json()["detail"]
+    assert restored.status_code == 200
+    identity = restored.json()["identity"]
+    assert identity["assurance"] == "l3_verified"
+    assert identity["customer_id"] is not None, "the original proposal comes back"
+    assert identity["attestation_count"] == 2, "both statements survive in the log"
+
+
+def test_a_caller_who_was_never_identified_has_nothing_to_attest(client: Any) -> None:
+    """The one case that IS locked from the start (`D71`).
+
+    With nobody proposed there is nothing to confirm, nothing to reject, and nobody to act
+    on behalf of. The control is inert rather than offering three buttons that all fail,
+    and it stays that way until customer search exists (`Q18`).
+    """
+    call_id = take_a_call(client, caller_number="0899999999")
+    identity = client.get("/v1/agent/me").json()["identity"]
+    assert identity["assurance"] == "l0_anonymous"
+    assert identity["customer_id"] is None
+    assert identity["attestable"] == [], "nothing to assert about nobody"
+
+    refused = client.post(
+        f"/v1/agent/calls/{call_id}/identity",
+        json={"outcome": "confirmed", "challenge": "date_of_birth"},
+    )
+    assert refused.status_code == 400
 
 
 def test_the_snapshot_says_the_identity_was_attested(client: Any) -> None:
@@ -829,3 +867,46 @@ def test_the_offer_preview_is_gated_like_the_brief(client: Any) -> None:
     # The brief panel itself is still null here: it renders only once the call is taken,
     # which is why the preview had to exist at all rather than being read off the brief.
     assert body.json()["brief"] is None
+
+
+def test_the_challenge_list_is_served_not_hardcoded(client: Any) -> None:
+    """`D72`. One source of truth, the same shape as menus.yaml serving app and IVR (`D48`).
+
+    The list lived in two hand-kept places — a frozenset in the service and an array in the
+    React panel — and the service *refuses* anything not in its copy. So a drift means the
+    screen offers an option that fails on submit, which an agent cannot diagnose. `Q12`
+    says the list is going to change, so the drift was scheduled rather than hypothetical.
+    """
+    take_a_call(client)
+    served = client.get("/v1/agent/me").json()["challenges"]
+    assert served, "the workstation has to be told what it may offer"
+
+    codes = {c["code"] for c in served}
+    assert "other" in codes, "the escape hatch is a first-class option (`D57`)"
+    assert all(c["label_th"] for c in served), "the screen renders labels, not codes"
+
+    # The note requirement travels with the option, so the panel does not decide it.
+    other = next(c for c in served if c["code"] == "other")
+    assert other["requires_note"] is True
+
+
+def test_every_served_challenge_is_actually_accepted(client: Any) -> None:
+    """The property that makes one source of truth worth having.
+
+    Anything the server tells the workstation to offer must be something the server will
+    then accept. This is the test that fails the day somebody edits `challenges.yaml`
+    without checking, which is exactly when it is needed.
+    """
+    call_id = take_a_call(client)
+    served = client.get("/v1/agent/me").json()["challenges"]
+
+    for spec in served:
+        body: dict[str, Any] = {
+            "outcome": "confirmed",
+            "challenge": spec["code"],
+            "amend": True,
+        }
+        if spec["requires_note"]:
+            body["challenge_note"] = "ยืนยันจากการโทรครั้งก่อน"
+        response = client.post(f"/v1/agent/calls/{call_id}/identity", json=body)
+        assert response.status_code == 200, f"{spec['code']} is offered but refused"

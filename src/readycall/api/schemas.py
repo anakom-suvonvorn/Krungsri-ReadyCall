@@ -324,6 +324,17 @@ class IdentityOut(ApiModel):
     #: had nothing to reset itself on — so one press of *amend* unlocked the control for
     #: the rest of the call, which is the opposite of what `D60` decided.
     attestation_count: int = 0
+    #: Which of the three outcomes may be pressed right now (`D71`). Server-decided, same
+    #: reasoning as `declarable` (`D59`) — a client computing this would need its own copy
+    #: of the rules and would eventually disagree. Empty when nobody was ever proposed
+    #: (`L0` from the first second: nothing to confirm, reject, or act on behalf of);
+    #: `third_party` alone when the call arrived on an app token, because authentication
+    #: already happened and the only open question is who is holding the phone.
+    attestable: tuple[str, ...] = ()
+    #: True when the caller authenticated before the agent saw the call. Changes the
+    #: third-party wording: not "I checked their authority" but "somebody is operating
+    #: this account on the holder's behalf".
+    system_verified: bool = False
 
 
 class CaptureOut(ApiModel):
@@ -380,6 +391,19 @@ class QueueOut(ApiModel):
     mine: bool = False
 
 
+class ChallengeOut(ApiModel):
+    """One verification method, served from `config/challenges.yaml` (`D72`).
+
+    The workstation renders this list rather than keeping its own, so it can never offer an
+    option the server would refuse — which is what two hand-kept copies eventually produce,
+    and `Q12` says this list is going to change.
+    """
+
+    code: str
+    label_th: str
+    requires_note: bool = False
+
+
 class WorkstationSnapshot(ApiModel):
     """Everything the workstation needs to render itself from cold.
 
@@ -394,6 +418,9 @@ class WorkstationSnapshot(ApiModel):
     brief: dict[str, Any] | None = None
     captures: tuple[CaptureOut, ...] = ()
     queues: tuple[QueueOut, ...] = ()
+    #: The verification methods this deployment allows (`D72`). Static per process, sent
+    #: with the snapshot so the panel needs no second round trip to render its dropdown.
+    challenges: tuple[ChallengeOut, ...] = ()
     #: The server's own clock, sent so the client can correct for a browser clock that
     #: disagrees. Every timer is `now - server_timestamp`, which silently assumed the two
     #: agreed; on a laptop whose clock has drifted the call timer is simply wrong, and

@@ -66,6 +66,10 @@ export type Identity = {
   relationship: string | null;
   /** Grows by one per attestation, amendments included — the signal the panel re-locks on. */
   attestation_count: number;
+  /** Which of the three outcomes may be pressed right now. Server-decided (`D71`). */
+  attestable: string[];
+  /** The caller authenticated before the agent saw the call — changes the third-party wording. */
+  system_verified: boolean;
 };
 
 export type Capture = {
@@ -84,6 +88,12 @@ export type Capture = {
     matched_value: string | null;
     detail: string | null;
   }[];
+};
+
+export type Challenge = {
+  code: string;
+  label_th: string;
+  requires_note: boolean;
 };
 
 export type Queue = {
@@ -138,6 +148,9 @@ export type Snapshot = {
   brief: Brief;
   captures: Capture[];
   queues: Queue[];
+  /** The verification methods this deployment allows, from config (`D72`). Rendered
+   *  rather than hardcoded, so the panel can never offer what the server would refuse. */
+  challenges: Challenge[];
   /** The server's clock at the moment this snapshot was built. Timers subtract a
    *  server-minus-browser offset derived from it, so a drifted laptop clock does not
    *  silently make every duration on screen wrong. */
