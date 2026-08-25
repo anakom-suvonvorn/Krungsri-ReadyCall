@@ -7,18 +7,18 @@ _Last updated: 2026-08-25._
 
 ## Where things stand right now
 
-**P0 · P1 · P1b · P2a · P2b · P2c(part) complete.** The system knows who is calling and how much to
+**P0 · P1 · P1b · P2a · P2b · P2c complete.** The system knows who is calling and how much to
 believe it, why they are calling, everything we hold about them assembled before the phone
 is answered, which agent should take it and why — and now **the desk actually rings, a
 human accepts, and the screen is already right**.
 
-Verified **2026-08-25**: **369 tests pass** (82 of them the store contract suite across
-three backends), `ruff check` + `ruff format --check` clean, `mypy --strict` clean over 93
-files, all scenarios replay byte-identically, 50/50 diagrams current. The workstation flow
-was driven by hand in a browser; the database was verified against a live Postgres
-container.
+Verified **2026-08-25**: **440 tests pass** (137 of them store-contract and restart suites
+across three backends), `ruff check` + `ruff format --check` clean, `mypy --strict` clean
+over 100 files, all scenarios replay byte-identically, 50/50 diagrams current. The database
+suites ran against a **live Postgres**, and the restart claim was re-checked outside pytest
+by running two real uvicorn processes and killing the first.
 
-### The three sessions of review since P2b, in one place
+### The four sessions of review since P2b, in one place
 
 Most of the recent work came from the user driving the screen and reporting what was wrong.
 The pattern is worth knowing before reading any of it:
@@ -29,14 +29,19 @@ The pattern is worth knowing before reading any of it:
    **called by nothing**. An ignored offer stranded the agent in `OFFERING` for the shift.
 3. **`B8`** — the clock-skew fix from `D68` **froze every timer it was meant to correct**,
    because the correction was sampled in the same tick as the value it corrected.
+4. **`B9`** — a bare `models/` in `.gitignore` meant the **entire ORM package was never
+   committed**. A whole phase looked landed; a fresh clone had no tables.
 
-All three are the same family as `B3` and `B4`: *a confident, plausible, wrong result that
-no test could see.* When something looks fine, check that it is actually running.
+All four are the same family as `B3` and `B4`: *a confident, plausible, wrong result that
+no test could see.* When something looks fine, check that it is actually running — and,
+since `B9`, check that it is actually **committed**: every other verification in this
+project is a statement about the working tree, not about the repository.
 
 ```bash
 uv sync --extra web
 # Optional: the database path. Everything below works without it.
 docker compose -f infra/docker-compose.yml up -d postgres && uv run alembic upgrade head
+#   then STORAGE_BACKEND=postgres to make a restart survivable (D78)
 uv run pytest -q
 uv run python scripts/run_scenario.py tests/scenarios/anonymous_declined.yaml --quiet
 uv run python scripts/run_matching.py --calls 25 --compare
@@ -47,7 +52,8 @@ uv run python -m readycall.entrypoints.api
 ```
 
 Everything still runs **in memory by default** — no services, no keys, no GPU. Postgres is
-now real and optional: `STORAGE_BACKEND=postgres` switches one factory line (`D75`).
+real, wired and optional: `STORAGE_BACKEND=postgres` switches one factory line
+(`build_storage`, `D75`/`D78`) and the shift then survives a restart.
 
 ## What exists (cumulative)
 
@@ -75,13 +81,13 @@ non-assignments**, saying **which** of the two unplaced reasons applies (`D50`).
 replay-on-reconnect) · `api/routers/agent.py` · **React workstation** at `/workstation`
 (`D32`) · `POST /v1/demo/calls` standing in for telephony.
 
-**P2c — persistence (part).** SQLAlchemy 2.0 async + Alembic (URL from `Settings`) ·
-`call_sessions` + `call_state_transitions` + `agent_state_log` · Postgres repositories
-behind the P0 interfaces, returning **domain models** (`D77`) · **one contract suite across
-in-memory / SQLite / Postgres** (`D75`) · presence rebuilt from the log, never stored twice
-(`D76`). Verified on a live container. **Not yet persisted:** assignments, attestations,
-captures, the waiting pool, `matching_decisions`; and `Container` still builds the
-in-memory stores unconditionally.
+**P2c — persistence (done).** SQLAlchemy 2.0 async + Alembic (URL from `Settings`) ·
+**9 tables** · Postgres stores behind the P0 interfaces, returning **domain models**
+(`D77`) · **one contract suite across in-memory / SQLite / Postgres** (`D75`) ·
+**write-through with an in-memory projection** (`D78`) — services keep their working set,
+write durably, restore at startup · presence, the waiting pool and the live identity are
+**derived, never stored twice** (`D76`, `D78`) · `Container` reads `STORAGE_BACKEND` ·
+a restart is proved by **ending a process**, in pytest and again with real uvicorn.
 
 **P2b review pass.** The opening line asks an **open question** below L2 (`D55`) · the
 recommended-action chain written down (`D56`) · `other` challenge + a **named** third party
@@ -113,19 +119,16 @@ reversing `D20`'s display gating).
 
 ## Next steps (in order)
 
-1. **Finish P2c.** `call_sessions`, `call_state_transitions` and `agent_state_log` are
-   persisted, migrated and verified against a real container. Still in memory:
-   **assignments, attestations, captures, the waiting pool, and `matching_decisions`.**
-   Each is the same pattern repeated — a table, a hand-written mapper, a row in the
-   contract suite — and none needs a new decision. See `explanations/P2c_persistence.md`
-   §8 for the exact list and what a restart costs for each.
-2. **Wire the container to `STORAGE_BACKEND`.** The repositories exist and pass their
-   contract suite, but `Container` still constructs the in-memory ones unconditionally.
-   That is the one line between "the code is written" and "the demo survives a restart" —
-   and writing code with no driver is precisely `B7`.
-3. **P3** — voice/IVR/intake: menu prompts become real audio, VAD, streaming STT, the
-   bake-off on the 3050.
-4. **P4** — analysis and brief v2+ with Claude and Typhoon compared.
+1. **P3** — voice/IVR/intake: menu prompts become real audio, VAD endpointing, streaming
+   Thai STT, and the bake-off on the 3050. This is the biggest remaining block and the one
+   with real hardware risk, so it wants a whole session.
+2. **P4** — analysis and brief v2+ with Claude and Typhoon compared on the golden set.
+3. **Small and worth doing when convenient:**
+   - `call_intents` and `app_context_events` are still in memory. Neither loses anything a
+     restart cares about — an intent expires in 15 minutes and screen events are TTL-pruned
+     — which is why they were left, but the tables are trivial if the demo ever needs them.
+   - **`D64`, the live matching board.** All the data is now durable *and* queryable, which
+     is most of the work; it would have caught `B4` on sight.
 
 `grep -rn "# P2b:" src/` lists the steps a real IVR will drive that the demo endpoint fakes.
 
@@ -202,6 +205,30 @@ menu-first flow (`D37`).
   deselected around a call. Mid-call only `ready`/`last_call`/`draining` are declarable.
   `LAST_CALL` is **spent** when that call ends. Use `intent_reason` to tell the three routes
   into `not_ready` apart — they need different screens.
+- **`git add -A` does not mean it is committed** (`B9`). A bare directory name in
+  `.gitignore` matches at **every depth**, so `models/` swallowed `src/readycall/db/models/`
+  and a whole phase shipped with no ORM package. Every other check this project runs — tests,
+  mypy, ruff, the live database — reads the *working tree*. After adding a package, run
+  `git ls-files <dir>` and confirm it is not empty.
+- **Services write through and read from memory** (`D78`). The store is the durable record;
+  the working set is a projection rebuilt by `restore()` at startup. Do **not** add a read
+  path that queries the database on a hot path — `excluded_agents()` runs inside the matcher
+  tick, and `D39`'s trigger (two processes) has not fired.
+- **Half the state is derived on purpose** (`D78`): current presence ← `agent_state_log`, the
+  waiting pool ← `call_sessions` in `queued`/`matched`, the live identity ←
+  `CallSession.identity`. Adding a table for any of them creates a second answer to a
+  question that already has one.
+- **A restart never restores `system_state`, `READY` or `LAST_CALL`** (`D78`). The platform
+  has given a reconnecting agent nothing to do, and the two intents that invite a call must
+  come from the person. *Lunch* does carry across, because they said it.
+- **Running the Postgres suite drops its tables** — which is why it has **its own database**
+  (`D79`). If `alembic upgrade head` ever no-ops while the app says *"relation does not
+  exist"*, the version table is stamped with nothing behind it:
+  `uv run alembic stamp base && uv run alembic upgrade head`.
+- **Alembic never compares foreign keys** (`D79`). They are unqualified in the model and
+  qualified when reflected, so every run proposed churning every FK — with broken DDL. New
+  tables still get their FKs inline. A correct autogenerate run produces an **empty**
+  migration; that is the check.
 - **A fast test path that enforces LESS than production is a fast path that lies** (`D75`).
   SQLite ignores foreign keys unless asked, so the same contract test passed on SQLite and
   failed on Postgres. `PRAGMA foreign_keys=ON` is set on every SQLite connection now.
@@ -261,8 +288,9 @@ menu-first flow (`D37`).
 
 ## Diagrams (visual walkthroughs)
 
-`docs/diagrams/` — **50 diagrams** with explanations, in ten themed pages. Start at
-`docs/diagrams/README.md`. Twelve are **generated from source**, so they cannot drift;
+`docs/diagrams/` — diagrams with explanations, in themed pages. Start at
+`docs/diagrams/README.md`. **`11_persistence.md` is the page for the invisible half** —
+what is stored, what is derived, and what a restart does, drawn rather than described. Twelve are **generated from source**, so they cannot drift;
 `tests/unit/test_diagrams.py` fails if a committed one falls behind.
 
 ```bash
@@ -282,9 +310,10 @@ each has a "changes since" section. Write one per phase as it lands.
 - `P2b_workstation.md` — the two axes, the handshake, after-call work, the socket, queue
   hours, the disclosure leak and the invented digit — plus a **"changes since"** section
   covering the `D55`–`D60` review pass and where recommended actions come from.
-- `P2c_persistence.md` — the database layer: the seam, three backends against one contract
-  suite, presence as a projection, the migration papercuts, and **exactly what is still in
-  memory**. Read §8 before assuming something is durable.
+- `P2c_persistence.md` — the database layer end to end: the seam, three backends against
+  one contract suite, **what is stored versus what is derived** (`D78`), the redaction rule
+  at rest, the migration papercuts, and how a restart is actually proved. Read §8 before
+  assuming something is or is not durable.
 - `P2b_workstation_client.md` — **the browser tab itself**: its two channels, the full
   server-owned vs client-owned ledger, every endpoint, the socket contract, and the
   audit that produced `B7`, `B8`, `D68` and `D71`. Read this before changing

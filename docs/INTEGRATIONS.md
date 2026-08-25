@@ -3,10 +3,19 @@
 _Every external thing the system touches: the port that hides it, the adapters behind it, and the config that selects one._
 _Status: **mostly design; the persistence stack is real.** Last updated: 2026-08-25._
 
-> **Real as of P2c:** SQLAlchemy 2.0 (async) + Alembic + `asyncpg`, against Postgres 16 in
-> `infra/docker-compose.yml`, verified on a live container. `aiosqlite` is a **test-only**
-> dependency — the fast path that lets the store contract suite run with no container
-> (`D75`), never a deployment target. Everything else on this page is still design.
+> **Real as of P2c (complete):** SQLAlchemy 2.0 (async) + Alembic + `asyncpg`, against
+> Postgres 16 in `infra/docker-compose.yml`, verified on a live container — **nine tables**,
+> and a restart verified by ending a real uvicorn process. `aiosqlite` is a **test-only**
+> dependency: the fast path that lets the store suites run with no container (`D75`), never
+> a deployment target. Everything else on this page is still design.
+>
+> `STORAGE_BACKEND=memory|postgres` picks the set of stores (`build_storage`, `D78`).
+> **`memory` is not "no persistence"** — it builds real in-memory stores, so the
+> write-through path runs on the default configuration and in every test rather than only
+> when somebody starts a container (`B7`).
+>
+> The suite has **its own database**, `readycall_test`, because it drops its tables on
+> teardown (`D79`).
 
 ---
 

@@ -1802,3 +1802,130 @@ argument is written out fully._
   covers it the only way that works — it round-trips a **whole object and compares
   equality**, so a field the mapper forgets fails the test rather than passing field-by-field
   assertions that were themselves written from the mapper.
+
+## D78. Durability is write-through with an in-memory projection, and half the state is derived
+_Completes P2c. Generalises `D76` from presence to every store, and settles what gets a table._
+
+- **Problem:** `D75` landed `call_sessions` and `agent_state_log` and left five things in
+  memory — assignments, attestations, captures, the waiting pool, `matching_decisions` —
+  with a note saying each was "the same pattern repeated". Finishing it exposed a question
+  that pattern did not answer: **does a service read from the database, or from memory?**
+  Every one of these services has synchronous readers on the hot path. `excluded_agents()`
+  runs inside the matcher tick, `history()` renders on every workstation snapshot,
+  `waiting()` is read once a second. Making those `await` a query would put a round trip
+  inside a 50 ms budget (`ARCHITECTURE` §15) and ripple `async` through the routers for it.
+- **Decision — write-through, read from memory, restore at startup.** Each service keeps
+  the working set it already had, gains a store it writes to on every mutation, and gains a
+  `restore()` that rebuilds the working set when the process starts. Reads never touch the
+  database.
+- **Why that is honest here and not merely convenient:**
+  - **There is one writer per store and one process** (`D2`). The classic reason to read
+    through to the database is that somebody else might have written; nobody else can.
+  - **`D76` already made this choice** for presence, and gave the reasoning. Applying it to
+    one store and not the rest would leave two durability models in one codebase.
+  - **The trigger to revisit is `D39`'s, unchanged:** the moment two processes need to see
+    the same call. At that point the working set becomes a cache with an invalidation
+    problem, and the answer is Redis or read-through — not a patch on this.
+- **What gets a table, and what is derived.** This is the half of the decision that will be
+  re-asked, so it is written as a rule: **a table records something a person or a service
+  DID; anything computable from those records is derived.**
+
+  | Stored — somebody did this | Derived, deliberately |
+  |---|---|
+  | `assignments` — an offer was made and resolved | **current presence** ← newest `agent_state_log` row per agent (`D76`) |
+  | `identity_attestations` — an agent stated something | **the waiting pool** ← `call_sessions` in `queued`/`matched` |
+  | `keypad_captures` — a caller keyed digits | **`identity_for_call`** ← `CallSession.identity` |
+  | `matching_decisions` — the matcher decided | **`snapshot_for_call`** ← `CallSession.snapshot_id` |
+  | `context_snapshots` — the assembler froze a payload | **accrued wait** ← recomputed from `queued_at` |
+  | `call_wrapups` — an agent wrote up a call | |
+
+  A waiting-pool table would be a second answer to *"is this caller waiting?"*, and the
+  call's own `state` is the first. Two answers to one question is the `D76` argument again,
+  and it does not get weaker for being about calls instead of agents.
+- **Restore is ordered, and bounded to live calls.** `list_in_states(everything not
+  finished)` first; every other store is then loaded *for those call ids*. That is why no
+  store here needs a "load everything" method: a shift of closed calls is history, history
+  is answered with SQL, and pulling it into a process buys nothing. It is also why the
+  finished states are listed rather than the live ones — a state added later is live until
+  somebody says otherwise, and reloading one call too many is the safe direction to fail.
+- **What deliberately does not come back:**
+  - **`system_state`.** Every agent returns `OFFLINE`. It describes what the *platform* has
+    given the person to do, and after a restart it has given them nothing — no socket, no
+    offer, no call. Restoring `ON_CALL` would assert a conversation that is not happening
+    and let the matcher count a desk that is not there, which is the failure the heartbeat
+    sweep exists to prevent (`B7`) arriving through the back door.
+  - **`READY` and `LAST_CALL`.** Sign-in after a restart carries the standing instruction
+    forward — *lunch* is still lunch — **except** the two that invite a call. This does not
+    weaken `D51`: the platform is not *writing* the person's axis, it is declining to
+    overwrite it, and the write it makes is `OFFLINE → AVAILABLE` on its own axis. What
+    `D51` forbids is inventing a state the person did not choose, and lunch is exactly what
+    they chose. An explicit sign-out ends the shift and the carry-forward with it.
+  - **Unnamed keypad digits**, which were never stored at all (see below).
+  - **Liveness.** A heartbeat is a property of a live socket, not a durable fact.
+- **`D44`'s inverted default becomes a column decision.** Capture is untyped, so an unnamed
+  run of digits could be a citizen id or a card number. The row therefore **always** stores
+  the mask and the digit count — the audit fact that a capture of this length happened —
+  and stores the digits themselves **only once something has named them**: a lookup matched,
+  or the agent labelled them. The visible consequence is correct rather than a limitation:
+  a restart mid-capture returns the fact, not the value. `D44` asks for short retention and
+  one-click discard, and a durable copy of an unknown number is the opposite of both.
+- **The in-memory stores are not stubs, and this is the `B7` lesson applied.** The `memory`
+  backend builds real in-memory implementations rather than skipping the write, so the
+  write-through path runs on the default configuration and in every test. A persistence path
+  exercised only when somebody starts a container is a path nobody runs — the exact shape
+  that produced `B7`, and `D75`'s argument for keeping SQLite in the suite, one level up.
+- **Proved by ending a process, not by asserting.** `tests/integration/test_restart.py`
+  boots an app, works through the real HTTP API, throws the app away, boots a second one on
+  the same storage, and asks it what it knows. **The only thing crossing that boundary is
+  the database** — no shared container, no shared service, nothing that could answer from a
+  cache it happens to still hold. A per-store contract suite would have passed just as
+  happily on `B7`'s three undriven services; this shape is what catches that class.
+  Re-verified outside pytest with two real uvicorn processes against a live Postgres.
+- **Two things this exposed that were not persistence bugs at all:**
+  1. **`CallSession.identity` had existed since P0 and nothing ever wrote it.** The live
+     resolution lived only in a container dict, so a restored call had no identity, so
+     `render_brief` returned `None`, so the agent's screen was blank on a call they were in
+     the middle of. Every write now goes through `Container.set_identity`.
+  2. **Declaring READY does not tick the matcher.** Only placing a call, declining an offer
+     and the sweeper do. Harmless in production, where the sweep runs every second — but any
+     test that turns the sweeper off must drive `sweep_once` itself, or a restored caller
+     sits in a restored pool that nothing ever looks at.
+- **Tradeoff, stated plainly:** the working set and the database can diverge if a write
+  throws after the in-memory mutation. The blast radius is one process lifetime, and the
+  next restore corrects it because the durable record is what gets rebuilt from. The
+  alternative — one transaction spanning both — is what read-through would buy, and it is
+  the thing to build when `D39`'s trigger actually fires.
+
+## D79. Alembic never compares foreign keys, and the test suite gets its own database
+_Two migration papercuts, fixed permanently rather than worked around each time._
+
+- **Problem 1: every autogenerate run proposed churning every existing foreign key.** The
+  model spells a target unqualified (`call_sessions.call_session_id`) and the reflected
+  database spells it qualified (`readycall.call_sessions...`), so the comparison always
+  differs. Two rows of `drop_constraint` + `create_foreign_key` appeared in every migration,
+  changing nothing — and the generated `drop_constraint` **omitted `schema=`**, so it would
+  have looked for the table in `public` and failed. Broken DDL that changes nothing is worse
+  than churn, because it only fails when somebody finally runs it.
+- **Decision:** `include_object` returns `False` for `foreign_key_constraint`. This
+  suppresses only *alterations* — a foreign key on a new table is still emitted inline by
+  `create_table`, which is where they actually get made. Verified rather than assumed: the
+  migration adding P2c's six tables carries all five of its foreign keys, and a second
+  autogenerate run against the migrated database produces an **empty** migration, which is
+  the real test that the models and the schema agree.
+- **Rejected: qualifying the models** (`ForeignKey("readycall.call_sessions...")`). SQLite
+  cannot reference a table in an `ATTACH`ed database, so it would break the container-free
+  test path — and losing that is exactly the trade `D75` refuses to make.
+- **Problem 2: running the suite silently destroyed the dev database.** The Postgres contract
+  tests build their tables with `create_all` and drop them on teardown. Pointed at the
+  database the app uses, that deletes everything **and** leaves `alembic_version` behind,
+  still stamped at head, with no tables under it. `alembic upgrade head` is then a silent
+  no-op and the app dies at startup with *"relation readycall.call_sessions does not
+  exist"*. It cost two debugging detours in one session before the pattern was visible.
+- **Decision:** the suite has its own database, `readycall_test`, created by
+  `infra/postgres/init/02-test-database.sql` and used by default. The dev database is never
+  touched by a test run. Recovery, if it ever happens again:
+  `uv run alembic stamp base && uv run alembic upgrade head`.
+- **Why a whole database rather than a naming convention:** the failure is silent, it looks
+  like a code bug, and it is discovered at startup rather than at the moment of damage. A
+  rule ("do not point the tests at the dev database") is exactly the kind of thing that
+  holds until somebody sets an env var. Separation makes it structurally impossible.

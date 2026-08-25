@@ -353,6 +353,57 @@ Format per entry:
   timing claim about the DOM measured that way is worthless; test the arithmetic directly
   instead, or watch it with human eyes.
 
+## B9. A phase shipped with its database models never committed — `.gitignore` said `models/`
+
+- **Symptoms:** none, locally, for a whole phase. P2c's first half was written, tested
+  against a live Postgres, documented, and committed as
+  *"p2c: persistence for call sessions and the agent state log"*. Every test passed, the
+  migration ran, `psql` showed the rows. **A fresh clone had no `src/readycall/db/models/`
+  at all** — so `import readycall.db.repositories` raises `ModuleNotFoundError`, every
+  `alembic` command fails, and `STORAGE_BACKEND=postgres` cannot start. The default
+  in-memory path keeps working perfectly, which is why nothing complained.
+- **Found by:** running `git status` before committing the *next* phase and noticing that
+  four files I had just edited under `db/models/` were not listed. Not by a test, not by CI
+  — by reading a list and spotting an absence, which is the hardest kind of thing to spot.
+- **Root cause:** `.gitignore` line 31, under a heading that reads `# Models / caches`:
+
+  ```
+  models/
+  ```
+
+  Intended for ML weights. A gitignore pattern containing no slash except a trailing one
+  **matches a directory of that name at any depth**, so it also matched
+  `src/readycall/db/models/` — the ORM package. `git add -A` silently skipped it, and
+  `git status` showed nothing to report, because an ignored file is not "untracked", it is
+  invisible.
+- **Why it survived a full phase, and this is the instructive part:** every check that could
+  have caught it ran against the **working tree**, not against what was committed. Tests,
+  `mypy`, `ruff`, the migration, the live Postgres verification — all of them read files
+  that exist on this laptop. Nothing in the loop ever asked *"does this repository contain
+  what I think it contains?"* CI would have caught it on a fresh checkout; CI was not run on
+  that commit.
+- **Fix:** anchor the pattern to the repository root, where the ML weights actually live:
+
+  ```
+  /models/
+  ```
+
+  Then commit the package that should have been there. Also audited every other source file
+  for the same fault — `find` piped through `git check-ignore --stdin` across `src`,
+  `tests`, `scripts`, `config`, `mock`, `infra` and `apps` — and only
+  `mock/bank_core/generated/*.json` came back, which is correctly ignored.
+- **Verification:** `git check-ignore -v src/readycall/db/models/calls.py` now reports
+  nothing, `git ls-files src/readycall/db/models/` lists all five files, and the six-table
+  migration plus its models are in the same commit as the code that uses them.
+- **Lesson, and it is a new one for this project.** The whole `B3`/`B4`/`B6`/`B7`/`B8`
+  family is *a confident, plausible, wrong result nobody looked at*. This is the same family
+  with a new hiding place: **the gap between the working tree and the repository.** Every
+  verification this project runs is a statement about local files. "It is committed" is a
+  separate claim, and `git add -A` does not make it — an ignore rule outranks it silently.
+- **Concretely, for next time:** after adding a new package, run
+  `git ls-files <dir>` and confirm it is not empty. And treat a bare directory name in
+  `.gitignore` as a bug: `models/`, `data/`, `dist/`, `build/` all match at every depth, and
+  every one of those is also a plausible name for real source. Anchor them.
 ---
 
 ## Areas where bugs are expected (write them up when they happen)

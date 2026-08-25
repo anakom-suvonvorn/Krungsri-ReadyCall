@@ -544,6 +544,17 @@ Each agent is a separate authenticated browser session holding a WebSocket that 
 Presence lives in Redis with a TTL, so a closed laptop drops out automatically; the DB keeps the
 durable record in `agent_state_log`.
 
+> **P2c:** implemented, with one correction to the sentence above. **There is no
+> `agent_presence` table** — current presence is the newest `agent_state_log` row per agent,
+> projected into memory at startup (`D76`). Two places recording one fact will disagree, and
+> the log is the one that answers *"what was true at 14:03"*.
+>
+> A restart therefore costs a socket reconnect rather than a shift. What comes back is the
+> **person's** axis — an agent who said *lunch* is still at lunch — and never the platform's:
+> `system_state` returns `OFFLINE`, because after a restart the platform has genuinely given
+> them nothing to do (`D78`). `READY` and `LAST_CALL` are excluded from the carry-forward for
+> the same reason: they are the two that would invite a call to a desk nobody can see.
+
 ### The offer/accept handshake, and what happens after a call (`D33`)
 
 ```
@@ -861,6 +872,12 @@ budget degrades (§16) rather than delaying.
   raw transactions are never surfaced — only derived, non-sensitive signals.
 - **PII handling.** Detected PII spans in transcripts are masked in the UI by default; reveal is an
   audited action. National ID / card numbers are never rendered in full.
+- **Redaction at rest, not only in transit (`D78`).** `keypad_captures` always stores the
+  mask and the digit count, and stores the **digits only once something has named them** — a
+  lookup that matched, or the agent labelling them. Capture is untyped (`D44`), so an unnamed
+  run of digits could be a citizen id or a card number, and the safe assumption about an
+  unknown number is that it is sensitive. The visible consequence is intended: a restart
+  mid-capture returns the fact that a capture happened, never its value.
 - **Encryption.** TLS in transit (mTLS between services), AES-256 at rest for recordings and
   transcripts, keys in a vault, per-recording key refs.
 - **Retention.** Configurable per artifact (recordings ≪ transcripts ≪ briefs); an erasure job honours
@@ -881,6 +898,11 @@ budget degrades (§16) rather than delaying.
 - **Runtime processes:** `api` (FastAPI/Uvicorn), `orchestrator+workers` (event consumers),
   `media-gateway` (async audio I/O), `stt-worker` (GPU-pinned, batched), all sharing one codebase — a
   **modular monolith with separate entrypoints** (`D2`).
+- **Storage is one env var** (`STORAGE_BACKEND`, `D78`). Services write through to their
+  stores and read from an in-memory working set rebuilt at startup, which is correct while
+  the API is a single process. **The moment a second process needs to see the same call**
+  — `D39`'s own trigger — that working set becomes a cache with an invalidation problem, and
+  the fix is Redis or read-through. That wants its own decision entry, not a patch on this.
 - **Prod:** Kubernetes; STT workers on GPU nodes with a queue; scaling driven by concurrent-call
   count; blue/green for prompt/model changes with the golden-set gate in CI.
 

@@ -127,13 +127,26 @@ render is **0.2 ms** (a re-render of a frozen snapshot, not a fetch — `D42`), 
 20-caller × 3-session run has not been done. The matching engine's own determinism is covered
 by `scripts/run_matching.py --seed`.
 
-**P2c update, 2026-08-25.** The first half landed and is verified against a real
-container: SQLAlchemy 2.0 + Alembic, `call_sessions`, `call_state_transitions` and
-`agent_state_log`, Postgres repositories behind the interfaces P0 already had, and one
-contract suite run against in-memory, SQLite and Postgres (`D75`). Presence is rebuilt
-from the log rather than stored beside it (`D76`). Still in memory: assignments,
-attestations, captures, the waiting pool and `matching_decisions` — and `Container` does
-not yet read `STORAGE_BACKEND`, so the default process is unchanged.
+**P2c — done, 2026-08-25.** Nine tables, one storage factory, and a restart that is
+proved rather than asserted.
+
+- SQLAlchemy 2.0 + Alembic, URL from `Settings`; `call_sessions`,
+  `call_state_transitions`, `agent_state_log`, `assignments`, `identity_attestations`,
+  `keypad_captures`, `matching_decisions`, `context_snapshots`, `call_wrapups`.
+- **Write-through with an in-memory projection** (`D78`). Services keep the working set
+  they already had, write durably on every mutation, and rebuild at startup. Reads never
+  touch the database, because `excluded_agents()` runs inside the matcher tick and `D39`'s
+  trigger — two processes needing one call — has not fired.
+- **Half the state is derived on purpose**: current presence from `agent_state_log`, the
+  waiting pool from `call_sessions`, the live identity from `CallSession.identity`.
+- One contract suite across in-memory, SQLite and Postgres (`D75`), plus
+  `tests/integration/test_restart.py`, which ends a process and starts another on the same
+  storage. Re-verified outside pytest with two real uvicorn processes.
+
+**Exit criteria, met:** a declared *lunch* survives a restart; a waiting caller is still
+waiting with their accrued wait intact; an attested `L3` identity and its disclosure log
+come back; the brief still renders; and an agent who declined is still excluded from
+re-matching (`D52`) rather than being offered the same caller again.
 
 **The database (`D39`) did NOT land with P2b.** Presence, assignments and the state log are
 still in memory. The reason is not oversight: `D39`'s trigger was "two processes need to see

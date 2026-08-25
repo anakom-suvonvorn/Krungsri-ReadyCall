@@ -3,16 +3,26 @@
 _The two databases, every table, and — most importantly — how the bank's half gets swapped out for the real thing on hackathon day._
 _Status: **partly built as of P2c**. Last updated: 2026-08-25._
 
-> **What is real today (`P2c`):** `call_sessions`, `call_state_transitions` and
-> `agent_state_log` exist as SQLAlchemy models with an Alembic migration, verified against a
-> live Postgres. Everything else on this page is still design. Two corrections to what is
-> below, both from building it:
+> **What is real today (`P2c`, complete):** **nine tables** with an Alembic migration,
+> verified against a live Postgres — `call_sessions`, `call_state_transitions`,
+> `agent_state_log`, `assignments`, `identity_attestations`, `keypad_captures`,
+> `matching_decisions`, `context_snapshots`, `call_wrapups`. Everything else on this page is
+> still design. Four corrections to what is below, all from building it:
+>
 > * **There is no `agent_presence` table and there will not be one** — current presence is a
 >   projection of `agent_state_log` (`D76`). Two places recording one fact will disagree.
+> * **`queue_entries` is not a table either.** The waiting pool is `call_sessions` in
+>   `queued`/`matched`, rebuilt at startup (`D78`). A second row saying a caller is waiting
+>   is a second answer to a question the call's own `state` already answers.
 > * The **column vs JSON rule** settled while mapping: anything the matcher, a report or a
 >   query *filters on* is a column; anything only read back whole is JSON (`D77`).
+> * **`keypad_captures` does not always store the digits.** Capture is untyped, so the mask
+>   and the count are always written and the value only once something has named it (`D44`,
+>   `D78`).
 >
-> See `explanations/P2c_persistence.md` §8 for exactly what is still in memory.
+> The rule that decides all of it: **a table records something a person or a service DID;
+> anything computable from those records is derived.** See `explanations/P2c_persistence.md`
+> and `diagrams/11_persistence.md`.
 
 ---
 
@@ -126,7 +136,7 @@ final. The screen renders the latest; the history is what lets us measure how ea
 | `agents` | `agent_id`, `display_name`, `team`, `level`, `licence_flags`, `max_concurrent`, `is_active` |
 | `agent_languages` | `agent_id`, `language` (th/en), `level` (CEFR none/A1…C2/native) — a graded skill, not a yes/no flag, and a **hard filter** in matching (`D38`) |
 | `agent_skills` | `agent_id`, `skill_code` (e.g. `health.ipd`, `motor.claim`), `proficiency` 0–1, `certified_until` |
-| `agent_presence` | `agent_id`, `system_state` (offline/available/offering/on_call/after_call_work), `agent_intent` (ready/break/lunch/training/admin/last_call/draining), `since`, `current_load`, `last_assigned_at`, `session_id`, `sip_endpoint`, `accept_mode` (manual/auto), `heartbeat_at` |
+| ~~`agent_presence`~~ | **Not a table** (`D76`) — the newest `agent_state_log` row per agent. Was to hold: `agent_id`, `system_state` (offline/available/offering/on_call/after_call_work), `agent_intent` (ready/break/lunch/training/admin/last_call/draining), `since`, `current_load`, `last_assigned_at`, `session_id`, `sip_endpoint`, `accept_mode` (manual/auto), `heartbeat_at` |
 | `agent_workstation_sessions` | `session_id`, `agent_id`, `started_at`, `ended_at`, `user_agent`, `sip_registered`, `audio_devices_json`, `self_test_passed_at` — one row per logged-in browser tab (`D32`) |
 | `agent_state_log` | append-only history of presence changes — who was available when, for post-hoc queue analysis |
 | `agent_schedules` | `agent_id`, weekday/date, shift start/end, `queue_ids` — feeds `within_schedule()` |

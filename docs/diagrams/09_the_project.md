@@ -31,7 +31,7 @@ Current position: **P0 and P1 are done, P1b is next.**
 
 ![test layers](test_layers.svg)
 
-369 tests, a few seconds, no services, no keys, no GPU, no network.
+440 tests, under two minutes, no services, no keys, no GPU, no network.
 
 **Contract suites are the unusual layer** and the most valuable one. Every adapter for a port
 must pass the *same* test suite. When the hackathon hands us real data and we write a new

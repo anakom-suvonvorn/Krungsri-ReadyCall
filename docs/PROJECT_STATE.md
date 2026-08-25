@@ -31,7 +31,7 @@ demonstrable slice, so "the demo" is the current state plus a chosen scenario (`
 
 ---
 
-## 2. Status: **P0 · P1 · P1b · P2a · P2b complete · P2c in progress**
+## 2. Status: **P0 · P1 · P1b · P2a · P2b · P2c complete**
 
 The spine runs. A full call lifecycle - arrival, IVR, consent, queue, intake, matching, the offer
 handshake, the live call, wrap-up, rating, closed - executes end to end on fake adapters with no
@@ -43,10 +43,11 @@ services doing real work - only the *edges* (phone, speech, AI, the bank's data,
 are still fakes. An agent signs in at `/workstation`, a caller arrives, the desk rings, the brief is
 already there, and the disclosure gate moves when the agent attests.
 
-Verified on 2026-08-25: **369 tests pass** (355 + 14 skipped — Postgres unreachable without
-the container, plus the FK case the in-memory backend cannot have), `ruff check` and
-`ruff format --check` clean over 120 files, `mypy --strict` clean over **93** source files,
-and all three scenarios replay byte-identically.
+Verified on 2026-08-25: **440 tests pass** (437 + 3 skipped — the FK cases the in-memory
+backend cannot have), `ruff check` and `ruff format --check` clean over 128 files,
+`mypy --strict` clean over **100** source files, and all three scenarios replay
+byte-identically. The database suites ran against a **live Postgres**, and a restart was
+verified outside pytest with two real uvicorn processes.
 
 ```
 $ uv run python scripts/run_scenario.py tests/scenarios/pattheera_ipd.yaml --quiet
@@ -168,6 +169,8 @@ FullProject/
 │  │  ├─ base.py*            #   declarative base, naming convention, Json/Utc types
 │  │  ├─ session.py*         #   engine + session factory. SQLite gets foreign keys ON (D75)
 │  │  ├─ repositories.py*    #   Postgres impls of the seams P0 already had
+│  ├─ stores.py*          #   the other six, one page (D78)
+│  ├─ storage.py*         #   STORAGE_BACKEND -> a set of stores. THE factory line
 │  │  ├─ models/*            #   calls.py, agents.py. Presence is NOT a table (D76)
 │  │  └─ migrations/*        #   alembic; URL from Settings, never alembic.ini
 │  ├─ workers/     orchestrator_worker.py  analysis_worker.py  stt_worker.py  jobs.py
@@ -238,15 +241,19 @@ both eras (`D66`, `D67`) · ☑ gated brief preview on the offer card (`D69`) ·
 split into mine/all (`D70`) · ☐ **Postgres/SQLAlchemy/Alembic** (`D39`) — deferred again;
 see `NEXT_SESSION`
 
-**P2c — persistence** (in progress)
-☑ SQLAlchemy 2.0 async + Alembic, URL from `Settings` (`D75`) · ☑ `call_sessions` +
-`call_state_transitions` + `agent_state_log` with indexes and a real FK · ☑ Postgres
-repositories returning **domain models** (`D77`) · ☑ **one contract suite across three
-backends**, SQLite with foreign keys enforced · ☑ presence rebuilt from the log rather
-than stored twice (`D76`) · ☑ verified against a live container: upgrade, downgrade,
-upgrade, write, read back through a fresh engine · ☐ assignments, attestations,
-captures, the waiting pool, `matching_decisions` · ☐ `Container` wired to
-`STORAGE_BACKEND`
+**P2c — persistence** (done)
+☑ SQLAlchemy 2.0 async + Alembic, URL from `Settings` (`D75`) · ☑ **9 tables**:
+`call_sessions`, `call_state_transitions`, `agent_state_log`, `assignments`,
+`identity_attestations`, `keypad_captures`, `matching_decisions`, `context_snapshots`,
+`call_wrapups` · ☑ Postgres stores returning **domain models** (`D77`) · ☑ **one contract
+suite across three backends**, SQLite with foreign keys enforced · ☑ **write-through with
+an in-memory projection** (`D78`): services keep their working set, write durably, and
+restore at startup · ☑ presence, the waiting pool and the live identity are **derived, not
+stored** (`D76`, `D78`) · ☑ `Container` wired to `STORAGE_BACKEND` · ☑ `D44`'s inverted
+default at rest — unnamed digits are never persisted · ☑ **a restart proved by ending a
+process**, twice: under `TestClient` and with two real uvicorn processes against live
+Postgres · ☑ Alembic no longer churns foreign keys, and the suite has its own database
+(`D79`)
 
 **P3 — voice, IVR & intake v1** ☐ voice-prompt build pipeline + prompt studio · ☐ IVR flow (menu,
 identify, consent, press-1/2, rating) · ☐ media gateway (per-leg fork) · ☐ recording + encryption ·
@@ -326,10 +333,10 @@ performing by hand, i.e. what the next services take over (`D36`).
 
 | | |
 |---|---|
-| Source files | 121 (`src/` 91 + `tests/` + `scripts/` + `mock/`) |
-| Tests | 369, all passing, ~26 s (82 of them the store contract suite across 3 backends) |
+| Source files | 131 (`src/` 98 + `tests/` + `scripts/` + `mock/`) |
+| Tests | 440, all passing, ~85 s (137 of them store contract + restart suites across 3 backends) |
 | Ports defined | 8 (telephony, stt, llm, tts, core_data, event_bus, blob_storage, agent_directory) |
-| Persisted tables | 3 (`call_sessions`, `call_state_transitions`, `agent_state_log`) + Alembic, verified on a live Postgres |
+| Persisted tables | **9** + Alembic, verified on a live Postgres. Presence, the waiting pool and the live identity are deliberately **not** among them (`D78`) |
 | Adapters | 9 fakes/nulls + a caching/circuit-breaking decorator; no real vendor adapter yet |
 | Call states | 15, transition table self-validated (the rating is an event, not a state — `D46`) |
 | Event types | 19 |
@@ -354,9 +361,11 @@ enforced by a lint check.
 
 ## 10. What comes next
 
-**P2c — the database layer** (`D39`), and it is the biggest outstanding debt: presence, assignments
-and `agent_state_log` all live in memory, so a restart loses a shift. Postgres + SQLAlchemy 2.0 +
-Alembic; `infra/docker-compose.yml` and the schema/role SQL already exist, and the seams it plugs
-into (`CallSessionRepository`, `PresenceService`, `AssignmentService`) are already Protocol-shaped
-or dict-backed behind one class each. Then **P3** (voice/IVR/intake) and **P4** (analysis and brief
-v2+). See `PLAN.md`, and `NEXT_SESSION.md` for the live state.
+**P3** — voice, IVR and intake: the menu prompts become real audio, VAD endpointing, streaming
+Thai STT, and the bake-off on the RTX 3050. Then **P4** (analysis and the brief v2+, Claude vs
+Typhoon measured rather than argued).
+
+P2c is done: the system survives a restart, and what it restores is `D78`'s working set rather
+than a re-read of the database on every tick. See `PLAN.md`, `explanations/P2c_persistence.md`
+for the reasoning, `diagrams/11_persistence.md` for the picture, and `NEXT_SESSION.md` for the
+live state.
