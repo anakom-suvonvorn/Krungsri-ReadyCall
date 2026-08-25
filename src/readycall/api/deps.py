@@ -54,6 +54,12 @@ from readycall.services.brief.builder import BriefBuilder
 from readycall.services.call_orchestrator.orchestrator import CallOrchestrator
 from readycall.services.call_orchestrator.repository import InMemoryCallSessionRepository
 from readycall.services.capture.keypad import KeypadCaptureService
+from readycall.services.capture.matching import (
+    DateMatch,
+    DigitMatch,
+    best_digit_match,
+    match_date,
+)
 from readycall.services.context.assembler import ContextAssembler
 from readycall.services.context.store import (
     AppContextEvent,
@@ -74,6 +80,35 @@ log = get_logger(__name__)
 def _digits_of(value: str) -> str:
     """`MT-2025-004512` -> `2025004512`. A caller keys digits; we store formatted ids."""
     return "".join(ch for ch in value if ch.isdigit())
+
+
+def _digit_tier_th(hit: DigitMatch, noun_th: str) -> str:
+    """Say *which rung* matched, in the agent's language (`D66`).
+
+    A bare "matched" hides the difference between the whole number and four trailing
+    digits, and those are very different pieces of evidence for an agent about to attest
+    an identity (`D42`). The screen has to carry the distinction, so the sentence does.
+    """
+    if hit.tier == "exact":
+        return f"{noun_th}ตรงทั้งหมด ({hit.digits} หลัก)"
+    if hit.tier == "suffix":
+        return f"{noun_th}ตรง {hit.digits} ตัวท้าย"
+    if hit.tier == "prefix":
+        return f"{noun_th}ตรง {hit.digits} ตัวแรก"
+    return f"{noun_th}มี {hit.digits} หลักนี้อยู่ภายใน"
+
+
+def _date_tier_th(hit: DateMatch) -> str:
+    era = " (พ.ศ.)" if hit.buddhist_era else ""
+    if hit.tier == "full":
+        return f"วันเดือนปีเกิดตรงทั้งหมด{era}"
+    if hit.tier == "day_month":
+        return "วันและเดือนเกิดตรง (ไม่ได้ระบุปี)"
+    return f"ปีเกิดตรง{era} — เป็นหลักฐานที่อ่อนที่สุด"
+
+
+def _no_digit_match_th(noun_th: str) -> str:
+    return f"ไม่ตรงกับ{noun_th}ใดของลูกค้ารายนี้ (ตรวจทั้งเลขเต็ม ตัวท้าย และตัวแรกแล้ว)"
 
 
 def build_core_data(settings: Settings, clock: Clock) -> CoreDataProvider:
@@ -255,35 +290,39 @@ class Container:
         """
         identity = self.identity_for_call.get(call_session_id)
         if identity is None or identity.customer_id is None or not digits:
-            return False, None, "no customer proposed on this call"
+            return False, None, "ยังไม่มีลูกค้าที่ระบุไว้กับสายนี้"
 
         if kind == "policy_number":
             policies = await self.core.list_policies(identity.customer_id)
-            for policy in policies:
-                # Compare on digits only: a customer keys 2025004512, the stored value is
-                # MT-2025-004512, and a raw equality check would never match anything.
-                if _digits_of(policy.policy_no).endswith(digits):
-                    return True, policy.policy_no, str(policy.line)
-            return False, None, "no policy of this customer ends with those digits"
+            found = best_digit_match(digits, {p.policy_no: p.policy_no for p in policies})
+            if found is None:
+                return False, None, _no_digit_match_th("กรมธรรม์")
+            policy_no, hit = found
+            line = next((str(p.line) for p in policies if p.policy_no == policy_no), "")
+            return True, policy_no, f"{_digit_tier_th(hit, 'เลขกรมธรรม์')} · {line}"
 
         if kind == "claim_number":
+            claims: dict[str, str] = {}
+            details: dict[str, str] = {}
             for policy in await self.core.list_policies(identity.customer_id):
                 for claim in await self.core.list_claims(policy.policy_no):
-                    if _digits_of(claim.claim_id).endswith(digits):
-                        return True, claim.claim_id, f"{claim.kind} · {claim.status}"
-            return False, None, "no claim of this customer ends with those digits"
+                    claims[claim.claim_id] = claim.claim_id
+                    details[claim.claim_id] = f"{claim.kind} · {claim.status}"
+            found = best_digit_match(digits, claims)
+            if found is None:
+                return False, None, _no_digit_match_th("เคลม")
+            claim_id, hit = found
+            return True, claim_id, f"{_digit_tier_th(hit, 'เลขเคลม')} · {details[claim_id]}"
 
         if kind == "date_of_birth":
             customer = await self.core.get_customer(identity.customer_id)
             dob = customer.dob if customer else None
-            if dob is not None and digits in {
-                dob.strftime("%d%m%Y"),
-                dob.strftime("%d%m") + str(dob.year + 543),  # Buddhist era, as printed
-            }:
-                # The OUTCOME only. A challenge answer is never stored (`D42`), which is
-                # why this branch returns no `matched_value`.
-                return True, None, "date of birth matches"
-            return False, None, "no match"
+            dated = match_date(digits, dob) if dob is not None else None
+            if dated is None:
+                return False, None, "ไม่ตรงกับวันเดือนปีเกิด ไม่ว่ารูปแบบใด"
+            # The OUTCOME only, never the answer. A challenge answer is not stored (`D42`),
+            # which is why this branch returns no `matched_value` even on a full match.
+            return True, None, _date_tier_th(dated)
 
         return False, None, f"lookup {kind!r} is not implemented yet"
 
