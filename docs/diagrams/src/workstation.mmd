@@ -1,19 +1,22 @@
-%% HANDWRITTEN. Checked against D32 + D33 + ARCHITECTURE.md S9 + Krungsri.pdf p7
+%% HANDWRITTEN. Checked against D32 + D33 + D45 + D59 + D61 + D63 + D74
+%% + ARCHITECTURE.md S9 + Krungsri.pdf p7
 flowchart TB
     subgraph tab["<b>ONE BROWSER TAB</b> - this IS the phone (D32)"]
         direction TB
-        BAR["<b>TOP BAR</b> - presence control<br/>Available / Break / Lunch / Last call &nbsp;&nbsp;|&nbsp;&nbsp; mic + headset self-test"]:::bar
+        BAR["<b>TOP BAR</b> - the STANDING INSTRUCTION (D59)<br/>Ready / Break / Lunch / Training / Last call &nbsp;&nbsp;|&nbsp;&nbsp; mic + headset self-test<br/><i>not a live status, and not deselected around a call.<br/>Which options are declarable RIGHT NOW is a server decision.</i>"]:::bar
 
         subgraph main["during a live conversation"]
             direction LR
-            LEFT["<b>WHO</b><br/>name + segment<br/>assurance badge<br/><b>identity control:</b><br/>Confirmed / Not this<br/>person / Third party<br/>(D42)"]:::panel
+            LEFT["<b>WHO</b><br/>name + segment<br/>assurance badge<br/><b>identity control (D42):</b><br/>Confirmed / Not this<br/>person / Third party<br/><i>locks after EVERY attestation,<br/>always reopenable (D61)</i>"]:::panel
             MID["<b>WHY + WHAT TO SAY</b><br/>intent + urgency<br/>Thai summary<br/>suggested opening<br/>recommended actions<br/>(re-render on promotion)"]:::panel
-            RIGHT["<b>EVIDENCE</b><br/>live transcript, both sides<br/>policy panel (gated)<br/>provenance: says who,<br/>and how old<br/>keypad capture field (D43)"]:::panel
+            RIGHT["<b>EVIDENCE</b><br/>live transcript, both sides<br/><b>policy panel - SHOWN from L1</b><br/><i>with a note that it may not yet<br/>be spoken or acted on (D74)</i><br/>provenance: says who, and how old<br/>keypad capture field (D43)"]:::panel
         end
 
-        CALLBAR["<b>CALL CONTROL</b> - Accept / Hold / Mute / Transfer / Hang up<br/>SIP.js over WSS, WebRTC through the agent headset"]:::ctl
+        CALLBAR["<b>CALL CONTROL</b> - Accept / Hold / Mute / Hang up &nbsp;<i>(Transfer is designed, D63, not built)</i><br/>SIP.js over WSS, WebRTC through the agent headset &nbsp;<i>(the softphone itself lands at P5)</i>"]:::ctl
         WHY["<b>the timeline is visible on purpose (D18)</b><br/>'context ready at 0.4s, before the phone rang'<br/>If the system cannot explain why it did something,<br/>it is not finished."]:::note
     end
+
+    ACW["<b>after the call, ACW is a real state (D33/D45).</b><br/>Saving the wrap-up is NOT done - after-call work runs<br/>until the agent declares what they are doing next.<br/>Nothing auto-saves and nothing auto-readies."]:::note
 
     NO["<b>what is deliberately NOT here:</b> a desk phone,<br/>a separate softphone app, an install, a second screen<br/>to alt-tab to. The correction that produced this:<br/>the workstation is not an info screen NEXT TO the<br/>phone - it is the call centre."]:::key
 

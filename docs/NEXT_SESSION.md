@@ -412,6 +412,15 @@ Facts about *this laptop* rather than the repo, so a fresh session does not redi
   want the numbering to actually move.
 - **Never hardcode an insurance literal in `services/`** — it goes in `config/` (`D28`).
 - **Never `datetime.now()` or a raw random id** outside `clock.py`/`ids.py` (`D35`).
+- **A `%% HANDWRITTEN` banner is a CLAIM, and hand-drawn diagrams rot.** The generated ones
+  cannot drift; the other 46 can, and a sweep on 2026-08-26 found two still teaching decisions
+  that had been **reversed** (`brief_gating` on `D74`, `identity_promotion` on `D65`) plus a
+  dozen simply overtaken. When you reverse or amend a decision, `grep -n "D74" docs/diagrams/src/*.mmd`
+  and fix every diagram citing it **in the same commit**. A wrong diagram is more convincing
+  than wrong prose.
+- **A semicolon inside a mermaid `Note` breaks a sequence diagram** — it is parsed as a
+  statement separator, and the error points at the *following* line, so it reads like an
+  unrelated syntax problem. Use a full stop.
 - **`README.md` is the setup/run contract and must not rot.** It is the first thing anyone sees on
   GitHub, and it was badly stale once already (it still said *"Status: planning. No code yet."*
   after six phases had landed, and pointed at the abandoned `DemoProject/`). Anything that changes
