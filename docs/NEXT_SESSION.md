@@ -238,9 +238,9 @@ menu-first flow (`D37`).
 
 Facts about *this laptop* rather than the repo, so a fresh session does not rediscover them.
 
-- **Docker works** (v29.2.0) and the Postgres container was **left running** on 2026-08-25
-  after the P3 verification. Stop it with `docker compose -f infra/docker-compose.yml stop
-  postgres`, start it the same way with `up -d`. Everything runs without it; with the
+- **Docker works** (v29.2.0) and the Postgres container is **stopped**, not removed — it was
+  brought up on 2026-08-25 to verify the P3 numbers and stopped again. Bring it back with
+  `docker compose -f infra/docker-compose.yml up -d postgres`. Everything runs without it; with the
   container down the database cases skip (**454 pass, 42 skipped**) and with it up they all
   run (**493 pass, 3 skipped** — the three are FK cases the in-memory backend cannot have).
 - **`readycall_test` exists inside that container's volume.** It was created by hand *and*
