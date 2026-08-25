@@ -1,7 +1,7 @@
 # PROJECT_STATE
 
 _What this project is, what exists, what doesn't, and where everything lives._
-_Last updated: 2026-08-24._
+_Last updated: 2026-08-25._
 
 ---
 
@@ -43,7 +43,7 @@ services doing real work - only the *edges* (phone, speech, AI, the bank's data,
 are still fakes. An agent signs in at `/workstation`, a caller arrives, the desk rings, the brief is
 already there, and the disclosure gate moves when the agent attests.
 
-Verified on 2026-08-24: **308 tests pass**, `ruff check` and `ruff format --check` clean,
+Verified on 2026-08-24: **326 tests pass**, `ruff check` and `ruff format --check` clean,
 `mypy --strict` clean over 81 source files, and all three scenarios replay byte-identically.
 
 ```
@@ -228,8 +228,11 @@ heartbeat sweep (`D51`) · ☑ **offer/accept + RONA + ACW** (`D45`), with re-of
 (`D52`) · ☑ agent WebSocket: per-agent sequencing, replay-on-reconnect, backoff · ☑ **React
 workstation** incl. call-control bar (stubbed softphone) · ☑ identity control (`D42`) ·
 ☑ keypad capture panel (`D44`) · ☑ **the disclosure gate moved to a wire DTO** after it
-leaked (`B5`, `D53`) · ☐ **Postgres/SQLAlchemy/Alembic** (`D39`) — deferred again; see
-`NEXT_SESSION`
+leaked (`B5`, `D53`) · ☑ **the background sweeper** — RONA, re-matching and heartbeat
+expiry finally have a driver (`B7`) · ☑ tiered keypad lookups reporting which rung matched,
+both eras (`D66`, `D67`) · ☑ gated brief preview on the offer card (`D69`) · ☑ queue strip
+split into mine/all (`D70`) · ☐ **Postgres/SQLAlchemy/Alembic** (`D39`) — deferred again;
+see `NEXT_SESSION`
 
 **P3 — voice, IVR & intake v1** ☐ voice-prompt build pipeline + prompt studio · ☐ IVR flow (menu,
 identify, consent, press-1/2, rating) · ☐ media gateway (per-leg fork) · ☐ recording + encryption ·
@@ -309,8 +312,8 @@ performing by hand, i.e. what the next services take over (`D36`).
 
 | | |
 |---|---|
-| Source files | 108 (`src/` 81 + `tests/` + `scripts/` + `mock/`) |
-| Tests | 308, all passing, ~8 s |
+| Source files | 110 (`src/` 82 + `tests/` + `scripts/` + `mock/`) |
+| Tests | 326, all passing, ~14 s |
 | Ports defined | 8 (telephony, stt, llm, tts, core_data, event_bus, blob_storage, agent_directory) |
 | Adapters | 9 fakes/nulls + a caching/circuit-breaking decorator; no real vendor adapter yet |
 | Call states | 15, transition table self-validated (the rating is an event, not a state — `D46`) |

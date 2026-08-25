@@ -46,6 +46,11 @@ export type Offer = {
   waited_s: number;
   assurance: string;
   rationale_th: string | null;
+  /** A preview of the brief, gated exactly as the brief is (`D69`). At L1 the name is
+   *  null and only the reason for the call survives — there is nothing here to leak. */
+  summary_th: string | null;
+  customer_name_th: string | null;
+  first_action_th: string | null;
 };
 
 export type Identity = {
@@ -90,6 +95,9 @@ export type Queue = {
   next_open_at: string | null;
   waiting: number;
   longest_wait_s: number;
+  /** Whether this agent holds the queue's required skill — i.e. whether any of these
+   *  callers could actually reach them. Server-computed (`D70`). */
+  mine: boolean;
 };
 
 /** Mirrors `BriefOut`. Deliberately not `Record<string, unknown>`: the point of the DTO
@@ -130,9 +138,17 @@ export type Snapshot = {
   brief: Brief;
   captures: Capture[];
   queues: Queue[];
+  /** The server's clock at the moment this snapshot was built. Timers subtract a
+   *  server-minus-browser offset derived from it, so a drifted laptop clock does not
+   *  silently make every duration on screen wrong. */
   server_time: string | null;
   /** When the current call was answered, so the call timer survives a page refresh. */
   call_answered_at: string | null;
+  /** Whether the wrap-up record for the call being wrapped has been saved. Server-owned:
+   *  the client used to track this locally and lost it on every refresh. */
+  wrapup_saved: boolean;
+  /** The call in after-call work, which outlives its own record closing (`D45`). */
+  wrapup_call_session_id: string | null;
 };
 
 export class ApiError extends Error {

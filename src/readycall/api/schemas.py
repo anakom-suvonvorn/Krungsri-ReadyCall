@@ -244,6 +244,23 @@ class OfferOut(ApiModel):
     assurance: str = "l0_anonymous"
     #: The one-line Thai rationale from the matcher: *why this agent* (`D22`).
     rationale_th: str | None = None
+    #: A **preview of the brief, gated exactly like the brief itself** (`D69`).
+    #:
+    #: The offer card used to carry only routing metadata — queue, urgency, wait, the
+    #: rationale — so the agent pressed Accept knowing why the call had come to them and
+    #: nothing about what it was *about*. That inverts the product: the pitch's whole claim
+    #: is that the agent is ready before they speak, and the seconds spent reading the card
+    #: are exactly the seconds `D21` set aside for preparing.
+    #:
+    #: These come from the same gated `BriefOut` the panel renders, so nothing here can
+    #: disclose more than the assurance level permits — at `L1` there is no name and no
+    #: policy, only the reason for the call (`D53`, `B5`).
+    summary_th: str | None = None
+    customer_name_th: str | None = None
+    #: The first playbook step, so the card answers "what will I be doing" as well as
+    #: "who is this". Below L2 that is the verify-identity step, which is the right first
+    #: thing to see (`D56`).
+    first_action_th: str | None = None
 
 
 class DeclineOfferRequest(ApiModel):
@@ -354,6 +371,13 @@ class QueueOut(ApiModel):
     next_open_at: datetime | None = None
     waiting: int = 0
     longest_wait_s: float = 0.0
+    #: Whether the signed-in agent holds this queue's required skill, i.e. whether any of
+    #: these callers could actually reach them (`D70`). The strip listed all nine queues
+    #: identically, so a health agent watched motor and life fill up with no way to tell
+    #: which numbers were theirs to act on. Computed here because the client would
+    #: otherwise need its own copy of the skill-to-queue mapping, and a second copy is a
+    #: second thing that can disagree with the matcher.
+    mine: bool = False
 
 
 class WorkstationSnapshot(ApiModel):
@@ -370,10 +394,24 @@ class WorkstationSnapshot(ApiModel):
     brief: dict[str, Any] | None = None
     captures: tuple[CaptureOut, ...] = ()
     queues: tuple[QueueOut, ...] = ()
+    #: The server's own clock, sent so the client can correct for a browser clock that
+    #: disagrees. Every timer is `now - server_timestamp`, which silently assumed the two
+    #: agreed; on a laptop whose clock has drifted the call timer is simply wrong, and
+    #: nobody would suspect the clock. This field existed for exactly that and was read by
+    #: nothing until `D68`.
     server_time: datetime | None = None
     #: When the current call was answered. The call timer is drawn from this, so a browser
     #: refresh mid-call shows the true elapsed time instead of restarting from zero.
     call_answered_at: datetime | None = None
+    #: Whether the wrap-up record for the *current* call has been saved. The client used to
+    #: track this in a local `Set`, which lost it on refresh and — worse — keyed it on a
+    #: call id that becomes `null` the moment saving closes the record, so the confirmation
+    #: never appeared at all. The server has always known this; it just never said (`D68`).
+    wrapup_saved: bool = False
+    #: The call the agent is wrapping up, which survives the record closing. `active_call_
+    #: session_id` deliberately covers only IN_CALL and WRAP_UP, so it drops to `null` on
+    #: save — correct for "which call can I still act on", useless for "what am I wrapping".
+    wrapup_call_session_id: str | None = None
 
 
 class PlaceCallRequest(ApiModel):

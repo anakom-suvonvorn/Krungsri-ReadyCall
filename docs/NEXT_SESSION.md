@@ -12,7 +12,7 @@ believe it, why they are calling, everything we hold about them assembled before
 is answered, which agent should take it and why — and now **the desk actually rings, a
 human accepts, and the screen is already right**.
 
-Verified 2026-08-24: **308 tests pass**, `ruff check` + `ruff format --check` clean,
+Verified 2026-08-24: **326 tests pass**, `ruff check` + `ruff format --check` clean,
 `mypy --strict` clean over 81 files, all scenarios replay byte-identically, 50/50 diagrams
 current. The whole workstation flow was also driven by hand in a browser.
 
@@ -137,9 +137,12 @@ menu-first flow (`D37`).
   feature and protects nothing.
 - **Never speak a name below L2** (`D55`). The screen shows it; the opening line asks an
   **open** question. A leading question is weaker verification — anyone can answer "yes".
-- **Third party does NOT promote to L3** (`D42`, `D62`). It is not a bug and it has a test.
-  A relative holding the documents is not the policyholder; promoting would write into the
-  disclosure log that the policyholder was verified. Context attaches, disclosure stays locked.
+- **Third party DOES promote to L3** (`D65`, reversing `D42`/`D62`). The button asserts the
+  agent checked the caller may act for the policyholder, so the level follows the
+  attestation. What keeps the log honest is the **outcome**, which stays `third_party` with
+  a name and relationship — the record has never said the policyholder was verified, and
+  still does not. The earlier reading confused "keep the log truthful" with "keep the level
+  low", and only the first was ever the requirement.
 - **The identity control re-locks after EVERY attestation** (`D61`). The client learns a new
   one landed from `attestation_count`, which only grows. Watching `attested_outcome` misses a
   confirmed→confirmed correction, and a lock that opens once is worse than no lock.
@@ -147,6 +150,25 @@ menu-first flow (`D37`).
   deselected around a call. Mid-call only `ready`/`last_call`/`draining` are declarable.
   `LAST_CALL` is **spent** when that call ends. Use `intent_reason` to tell the three routes
   into `not_ready` apart — they need different screens.
+- **Anything that must happen because TIME PASSED needs a driver, and needs a test in
+  which only time passes** (`B7`). `expire_offers`, `dispatch.tick` and `presence.sweep`
+  were all written, all correct, and all called by nothing — an ignored offer stranded the
+  agent in `OFFERING` for the shift. `sweep_once()` in `api/app.py` now runs them every
+  `agent_sweep_interval_s`. Every test drove the system through endpoints, and endpoints
+  tick the dispatcher on the way through, so the suite proved the ticking worked without
+  proving anything caused it.
+- **If the server knows it, the server says it** (`D68`). A client that re-derives a server
+  fact creates a second source of truth, and the client's copy is the wrong one. Three
+  shipped at once: `savedCalls`, an unread `server_time`, and a hardcoded ACW threshold.
+- **`active_call_session_id` stops at `WRAP_UP`.** It goes `null` the instant a wrap-up is
+  saved. For "which call am I wrapping up" use `wrapup_call_session_id`, which outlives the
+  record because ACW runs to the agent's declaration (`D45`).
+- **A lookup reports WHICH rung matched** (`D66`), not just true/false — the whole number
+  and four trailing digits are very different evidence for an attestation. Both eras are
+  accepted wherever a year is compared (`D67`).
+- **The offer card carries a gated brief preview** (`D69`), built from `BriefOut`, never
+  from `CaseBrief`. Reaching into the domain model there would reintroduce `B5` in a new
+  place; a test asserts the raw bytes of an L1 offer carry no policy number.
 - **The workstation renders permissions, it never computes them.** `declarable`, `offerable`
   and what the brief may show are all server decisions. A client that decides will
   eventually disagree, and the client's copy is the wrong one.
@@ -196,6 +218,9 @@ each has a "changes since" section. Write one per phase as it lands.
 - `P2b_workstation.md` — the two axes, the handshake, after-call work, the socket, queue
   hours, the disclosure leak and the invented digit — plus a **"changes since"** section
   covering the `D55`–`D60` review pass and where recommended actions come from.
+- `P2b_workstation_client.md` — **the browser tab itself**: its two channels, the full
+  server-owned vs client-owned ledger, all 15 endpoints, the socket contract, and the
+  audit that produced `B7` and `D68`. Read this before changing `apps/workstation/`.
 
 **Before changing identity, capture or presence, open the `.mmd` sources**, not just the
 prose. `diagrams/src/identity_promotion.mmd` carries the open-question rule and the

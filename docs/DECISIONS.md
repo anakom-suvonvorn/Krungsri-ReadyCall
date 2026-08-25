@@ -1368,3 +1368,152 @@ because it is cheap, and because it would have caught `B4` on sight._
 - **Constraint carried over:** it is a **debug/supervisor** view, so it shows customer identity
   at whatever the disclosure gate permits (`D53`) — a board showing every caller's name to
   anyone who opens it would be a second `B5` with a nicer layout.
+
+## D65. A verified third party IS verified — the outcome keeps the record honest, not the level
+_Reverses the level set by `D42` and restated in `D62`. Both are left in place so the
+reasoning stays visible; this entry explains why the earlier one was wrong._
+
+- **Problem:** `D42` held a third party at `L1_PROBABLE`, on the reasoning that a daughter
+  holding her father's documents is not her father. `D62` then defended that and improved
+  the wording. The user overruled both, and was right, for two reasons the earlier entries
+  never addressed:
+  1. **There was no way to finish.** The screen told the agent to *ตรวจสอบสิทธิ์ในการดำเนินการก่อน*
+     and then offered no control to record having done so. No second button, no
+     *ยืนยันสิทธิ์*. The level was therefore stuck at whatever it had been **for the rest of
+     the call** — a dead end shipped as a safeguard.
+  2. **It fights what the ladder is for.** The levels exist to decide *how much context we
+     may put in front of the agent so the call goes well* (`D20`). Holding a caller whose
+     authority the agent has just checked at L1 withholds exactly the information needed to
+     help them — while the agent, who has more evidence than the system does, sits looking
+     at a locked panel.
+- **Decision:** *ยืนยันว่ามีสิทธิ์ดำเนินการแทน* promotes to **`L3_VERIFIED`**, exactly like
+  *Confirmed*. The `AttestationOutcome` stays `THIRD_PARTY` forever, with the caller's name
+  and relationship, and `authority_check_required` is retained as a standing flag on the call.
+- **The honest-log argument survives intact, and this is the crux.** What `D42` was really
+  protecting was the *record*, and the record was never the level — it is the **outcome**.
+  The disclosure log says *"an authorised representative was verified, named สุดา ใจดี,
+  relationship ลูกสาว"*. It has never said, and still does not say, that the policyholder was
+  verified. Those are different facts about different people and they remain distinguishable.
+  The earlier reading conflated "keep the log truthful" with "keep the level low", and only
+  the first of those was ever the requirement.
+- **One button, not two.** A separate authority-confirmation step was considered and
+  rejected: in practice an agent would press both in immediate succession, so it buys a
+  second click and no additional truth. The obligation is carried by the **label** instead —
+  the button says the agent has checked, and the panel says so again above it. That is the
+  same principle as the challenge dropdown on *Confirmed*: the system records what the agent
+  says they did, and the agent is accountable for it.
+- **Not a promotion of the same thing.** If Krungsri later defines a *registered*
+  representative — a recorded power of attorney, a named representative on the policy — that
+  is a **fourth outcome** with its own evidence requirements, not a variant of this one.
+  `Q13` already tracks that `Policy` has no `representatives` field.
+
+## D66. A lookup tries every way of matching and reports which one landed
+- **Problem:** each lookup asked exactly one question — *does a policy number **end** with
+  these digits?* — which silently assumed the agent had asked for the whole number, or at
+  least the tail. Real calls are not like that: *"ขอ 4 ตัวท้ายค่ะ"*, *"ขอ 4 ตัวแรกค่ะ"*,
+  *"ขอปีเกิดค่ะ"*. One fixed comparison answers **no match** to most of those, which is
+  worse than useless — it tells the agent the caller failed a check nobody asked them to pass.
+- **Decision:** every lookup walks a **ladder** from strongest to weakest and returns the
+  strongest hit, carrying the rung it landed on.
+  - digits: `exact` → `suffix` → `prefix` → `contains`, with digit count breaking ties;
+  - dates: `full` → `day_month` → `year`.
+  The screen then says *"เลขกรมธรรม์ตรง 4 ตัวท้าย"* rather than a bare tick.
+- **Reporting the rung is the point, not a nicety.** The rungs are not equally good
+  evidence. Four trailing digits of a policy number is a far weaker claim than the whole
+  number, and an agent deciding whether to attest an identity (`D42`) has to know which one
+  they got. A boolean would flatten that distinction at exactly the moment it matters.
+- **Three digits is the floor.** A ten-digit number has only a hundred possible two-digit
+  endings, so a two-digit "match" happens by chance constantly. A coincidence an agent may
+  reasonably read as confirmation is worse than no answer at all, so the matcher refuses
+  rather than returning something weak.
+- **It lives in `services/capture/matching.py` and knows nothing about insurance** (`D28`):
+  it matches digit strings against digit strings and a date against a date. Which *fields*
+  to feed it stays in the API layer, where the policy and claim concepts already live.
+- **Still evidence, never an action** (`D44`). A stronger rung does not promote anything.
+  The ladder makes the evidence more useful and more precisely described; the agent still
+  attests.
+
+## D67. Both eras are accepted wherever a year is compared
+- **Problem:** the date lookup accepted `ddmmYYYY` in CE and one BE variant. Thai documents
+  disagree with each other — an ID card shows พ.ศ. 2530, the app shows 1987 — and a caller
+  reads whichever is in front of them.
+- **Decision:** every year comparison accepts CE and BE (`BE = CE + 543`), across all
+  orderings, and the result records **which** era was keyed.
+- **Reasoning:** rejecting a correct answer because the caller read their own ID card is a
+  failure we would blame on the caller. And the era they used is a small, free signal about
+  what they are holding.
+- **Deliberately permissive about ordering** (`ddmmyyyy`, `mmddyyyy`, `yyyymmdd`), because
+  insisting on one layout fails honest callers and the ambiguity is cheap to resolve: a
+  string that parses as a valid date under one reading and not the other is not ambiguous.
+
+## D68. Anything the server already knows, the server says
+- **Problem:** three faults with one shape, found by auditing the client against the server.
+  In each case the browser was holding, deriving, or guessing something the server knew:
+  1. **`savedCalls`** — a local `Set` of wrap-ups saved in this tab. It was keyed on
+     `active_call_session_id`, which becomes `null` the instant saving closes the record, so
+     the confirmation badge **never rendered at all**: the agent pressed Save, the form
+     vanished, and nothing acknowledged it. A refresh lost it too.
+  2. **`server_time`** — present in every snapshot, read by nothing. Timers computed
+     `Date.now() − server_timestamp`, silently mixing two clocks. Invisible on one machine;
+     on a laptop whose clock has drifted, every duration on screen is wrong by the offset
+     and nothing points at the clock.
+  3. **`long_acw`** — computed server-side from `acw_long_after_s`, then OR-ed client-side
+     with a hardcoded `45`. `Q9` explicitly expects that threshold to be tuned, at which
+     point the screen would keep warning at the old one.
+- **Decision:** the server sends `wrapup_saved` and `wrapup_call_session_id`; the client
+  applies a `server − browser` skew to every timer; the client's copy of the ACW threshold
+  is deleted. `savedCalls` and the dead `previousState` ref are gone.
+- **The generalisable rule, which is why this is one entry and not three:** *if the server
+  knows it, the server says it.* A client that re-derives a server fact is not saving a round
+  trip — it is creating a second source of truth that will eventually disagree, and the
+  client's copy is always the wrong one. This is the same argument as `D53` (the gate is the
+  shape of the payload) and `D59` (`declarable` is a server decision), applied to plain data.
+- **Why `wrapup_call_session_id` is a separate field from `active_call_session_id`:** they
+  answer different questions. *Which call can I still act on* stops at `WRAP_UP`; *which call
+  am I wrapping up* has to outlive the record closing, because ACW runs to the agent's
+  declaration (`D45`). Conflating them is what produced the missing badge.
+
+## D69. The offer card says what the call is about, not only why it was routed here
+- **Problem:** the card carried routing metadata only — queue, intent label, urgency,
+  accrued wait, assurance, the matcher's rationale. The agent therefore pressed **Accept**
+  knowing why the call had reached *them* and nothing about what it was *for*, and only saw
+  the brief afterwards.
+- **Why that inverts the product:** the entire pitch is that the agent is ready before they
+  speak. `D21` set aside the offer window precisely as preparation time — *"those ~7 seconds
+  while they read who and why"* — and there was nothing to read. `ARCHITECTURE.md` §11 even
+  says the brief arrives *with* the offer; the implementation carried a deliberately reduced
+  card, and the reduction went too far.
+- **Decision:** the card carries a preview — `summary_th`, `customer_name_th`, and the
+  **first playbook action** — built from the same gated `BriefOut` the panel renders.
+- **The gate is the reason this is safe, and it must stay that way.** The preview is not
+  assembled from the raw brief; it is read off the DTO that has no field for a policy number
+  until assurance permits one (`D53`). Reaching into `CaseBrief` here would reintroduce `B5`
+  in a new place. A test asserts the raw bytes of an `L1` offer contain no policy number.
+- **The first action is deliberately included.** Below L2 that is the verify-identity step
+  (`D56`), which is exactly the right first thing for an agent to see before answering.
+- **What it still is not:** the full brief. Coverage tables and provenance stay behind the
+  Accept, because the card is a decision aid, not the workspace.
+
+## D70. The queue strip distinguishes queues this agent can take from ones they cannot
+- **Problem:** the strip listed all nine queues identically. A health agent watched motor
+  and life fill up with no way to tell which numbers were theirs to act on — and, reasonably,
+  read the panel as a list of *callers* rather than a list of *queue depths*.
+- **Decision:** every queue carries `mine` — whether this agent holds its required skill —
+  computed server-side. The strip defaults to the agent's own queues and offers a
+  **ทั้งหมด** view, which greys the ones they cannot take and still shows the depth. When
+  hidden, a one-line footer says how many callers are waiting elsewhere.
+- **Server-computed, for the usual reason:** the client would otherwise need its own copy of
+  the skill-to-queue mapping, and a second copy is a second thing that can disagree with the
+  matcher (`D59`'s rule about permissions, applied to relevance).
+- **Deliberately not built yet — the fuller design, and why it is deferred:** the user
+  proposed three tabs (mine / my department's sub-categories / the whole floor) and a
+  clickable caller list. Two of the three tabs collapse into what shipped: "mine" is skills,
+  "the floor" is `ทั้งหมด`. The middle tab — intent-level breakdown within a line — is
+  genuinely different and genuinely useful to a supervisor, and belongs with the wallboard
+  work, not here.
+- **The caller list carries a disclosure question that must be answered first.** Letting any
+  agent open a waiting caller's details shows one customer's information to someone the call
+  was never assigned to — a `B5`-shaped risk with a nicer layout. The likely answer is that
+  a queue list may show *non-identifying* facts (intent, wait, urgency) to anyone, and
+  identity only to the agent it is offered to. That needs deciding before it is built, so it
+  is not built.

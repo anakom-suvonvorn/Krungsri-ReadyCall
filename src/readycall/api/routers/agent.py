@@ -530,13 +530,21 @@ def _capture_out(capture: Capture) -> CaptureOut:
     )
 
 
-def _queues_out(container: Any) -> list[QueueOut]:
+def _queues_out(container: Any, *, agent_skills: frozenset[str] = frozenset()) -> list[QueueOut]:
+    """Every queue, each flagged with whether **this** agent could take from it (`D70`).
+
+    The strip used to list all nine queues identically, so a health agent watched motor
+    and life fill up and had no way to tell which of those numbers were theirs to act on.
+    The flag is computed here rather than in the client for the usual reason: the client
+    would need the skill-to-queue mapping to work it out, and a second copy of that
+    mapping is a second thing that can disagree with the matcher.
+    """
     now = container.clock.now()
     waiting = container.dispatch.waiting()
     out: list[QueueOut] = []
     for spec in container.pack.queues.values():
         state = container.hours.state(spec.hours, now)
-        mine = [c for c in waiting if c.queue_id == spec.queue_id]
+        queued = [c for c in waiting if c.queue_id == spec.queue_id]
         out.append(
             QueueOut(
                 queue_id=spec.queue_id,
@@ -545,8 +553,9 @@ def _queues_out(container: Any) -> list[QueueOut]:
                 is_open=state.is_open,
                 closed_reason=state.closed_reason,
                 next_open_at=state.next_open_at,
-                waiting=len(mine),
-                longest_wait_s=max((c.total_wait_s for c in mine), default=0.0),
+                waiting=len(queued),
+                longest_wait_s=max((c.total_wait_s for c in queued), default=0.0),
+                mine=spec.required_skill in agent_skills,
             )
         )
     return out
@@ -589,6 +598,7 @@ async def _presence_out(container: Any, agent_id: str) -> AgentPresenceOut:
 
 async def _snapshot(container: Any, agent_id: str) -> WorkstationSnapshot:
     presence = await _presence_out(container, agent_id)
+    agent_skills = frozenset(skill.skill_code for skill in presence.skills)
 
     offer_out: OfferOut | None = None
     # An offer is on THIS agent's screen iff THEIR assignment is still pending. The first
@@ -611,6 +621,13 @@ async def _snapshot(container: Any, agent_id: str) -> WorkstationSnapshot:
         # zero-second wait — beside a rationale that said "เรื่องเร่งด่วน". A card that
         # contradicts its own reason is worse than one with no reason.
         waiting = container.dispatch.waiting_call(open_offer.call_session_id)
+        # A gated preview, so the agent knows what the call is ABOUT before accepting
+        # (`D69`). This is the same `BriefOut` the panel renders, built by the same
+        # assurance-gated path — so at L1 `customer` is absent and there is nothing here
+        # to leak. Reaching into the raw brief instead would reintroduce `B5`.
+        preview = await container.render_brief(open_offer.call_session_id)
+        preview_customer = (preview or {}).get("customer") or {}
+        preview_actions = (preview or {}).get("actions_th") or []
         offer_out = OfferOut(
             assignment_id=open_offer.assignment_id,
             call_session_id=open_offer.call_session_id,
@@ -629,6 +646,9 @@ async def _snapshot(container: Any, agent_id: str) -> WorkstationSnapshot:
             waited_s=waiting.total_wait_s if waiting else 0.0,
             assurance=str(identity.assurance) if identity else "l0_anonymous",
             rationale_th=decision.rationale_th if decision else None,
+            summary_th=(preview or {}).get("summary_th"),
+            customer_name_th=preview_customer.get("display_name_th"),
+            first_action_th=preview_actions[0] if preview_actions else None,
         )
 
     active_id = await _active_call_id(container, agent_id)
@@ -662,6 +682,7 @@ async def _snapshot(container: Any, agent_id: str) -> WorkstationSnapshot:
         live = await container.calls.get(active_id)
         answered_at = getattr(live, "answered_at", None)
 
+    wrapping_id = _wrapping_call_id(container, agent_id)
     return WorkstationSnapshot(
         presence=presence,
         offer=offer_out,
@@ -669,9 +690,14 @@ async def _snapshot(container: Any, agent_id: str) -> WorkstationSnapshot:
         identity=identity_out,
         brief=brief,
         captures=captures,
-        queues=tuple(_queues_out(container)),
+        queues=tuple(_queues_out(container, agent_skills=agent_skills)),
         server_time=container.clock.now(),
         call_answered_at=answered_at,
+        wrapup_call_session_id=wrapping_id,
+        # The server has always known this — it is the key it writes the wrap-up under.
+        # Not saying so forced the client to remember it locally, which lost it on refresh
+        # and never showed it at all once the call id went away on save (`D68`).
+        wrapup_saved=wrapping_id is not None and wrapping_id in container.wrapups,
     )
 
 
@@ -683,6 +709,24 @@ async def _active_call_id(container: Any, agent_id: str) -> str | None:
     ):
         session = await container.calls.get(assignment.call_session_id)
         if session is not None and session.state in live_states:
+            return str(assignment.call_session_id)
+    return None
+
+
+def _wrapping_call_id(container: Any, agent_id: str) -> str | None:
+    """The call this agent is in after-call work for, whether or not its record is closed.
+
+    Deliberately *not* `_active_call_id`, which stops at `WRAP_UP` and so returns `None`
+    the instant a wrap-up is saved and the call goes `CLOSED`. That is the right answer to
+    "which call can I still act on" and the wrong one to "which call am I wrapping up" —
+    and conflating them is why the saved-confirmation never rendered (`D68`). ACW runs
+    from media disconnect until the agent declares a next state (`D45`), so it outlives
+    the record by design.
+    """
+    for assignment in sorted(
+        container.assignments.for_agent(agent_id), key=lambda a: a.offered_at, reverse=True
+    ):
+        if assignment.acw_started_at is not None and assignment.acw_ended_at is None:
             return str(assignment.call_session_id)
     return None
 

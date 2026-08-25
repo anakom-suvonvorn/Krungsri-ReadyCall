@@ -17,13 +17,14 @@
  *    which is the "flickering" that looked like a React problem and was not.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ApiError, api } from "./api";
 import type { Capture, Snapshot } from "./api";
 import { useSocket } from "./useSocket";
 import type { SocketMessage } from "./useSocket";
 import {
   BriefPanel,
+  clockSkewMs,
   CapturePanel,
   IdentityPanel,
   OfferCard,
@@ -41,7 +42,6 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [muted, setMuted] = useState(false);
   const [held, setHeld] = useState(false);
-  const [savedCalls, setSavedCalls] = useState<Set<string>>(new Set());
 
   const signedIn = snapshot !== null;
   const now = useSecondTicker(signedIn);
@@ -123,28 +123,33 @@ export default function App() {
 
   const socketStatus = useSocket(signedIn, onSocketMessage, setSnapshot);
 
-  const previousState = useRef<string | null>(null);
   useEffect(() => {
-    const state = snapshot?.presence.system_state ?? null;
-    if (state !== "on_call") {
+    // The softphone is stubbed, so these are local until P5 brings a real media session
+    // with its own authoritative mute state. Clearing them off-call keeps the buttons
+    // from lying about a call that has ended.
+    if (snapshot?.presence.system_state !== "on_call") {
       setMuted(false);
       setHeld(false);
     }
-    previousState.current = state;
   }, [snapshot?.presence.system_state]);
 
   if (!signedIn) return <SignIn onDone={setSnapshot} />;
 
   const { presence, offer, identity, brief, queues, active_call_session_id: callId } = snapshot;
+  const wrapupCallId = snapshot.wrapup_call_session_id;
   const openCapture = snapshot.captures.find((c) => c.state === "open") ?? null;
   const latestCapture = openCapture ?? snapshot.captures[snapshot.captures.length - 1] ?? null;
   const onCall = presence.system_state === "on_call";
   const wrapping = presence.system_state === "after_call_work";
 
-  // Both drawn from server timestamps, so a refresh mid-call shows the true elapsed time.
-  const callSeconds = elapsedSince(snapshot.call_answered_at, now);
-  const acwSeconds = elapsedSince(presence.acw_since, now);
-  const longAcw = presence.long_acw || (acwSeconds !== null && acwSeconds >= 45);
+  // Drawn from server timestamps AND corrected for a browser clock that disagrees, so a
+  // laptop whose clock has drifted does not quietly show the wrong duration.
+  const skew = clockSkewMs(snapshot.server_time);
+  const callSeconds = elapsedSince(snapshot.call_answered_at, now, skew);
+  const acwSeconds = elapsedSince(presence.acw_since, now, skew);
+  // The server computes this from `acw_long_after_s`. The client used to OR it with its
+  // own hardcoded 45, so tuning the config left the screen warning at the old threshold.
+  const longAcw = presence.long_acw;
 
   return (
     <div className="shell">
@@ -211,32 +216,27 @@ export default function App() {
 
         <div className="col">
           <BriefPanel brief={brief} />
-          {wrapping && callId && (
+          {/* Keyed on the WRAPPING call, not the active one. Saving closes the record, so
+              `active_call_session_id` drops to null at that instant — which used to unmount
+              this panel and take the "saved" confirmation with it (`D68`). */}
+          {wrapping && wrapupCallId && (
             <WrapupPanel
               presence={presence}
-              saved={savedCalls.has(callId)}
+              saved={snapshot.wrapup_saved}
               busy={busy}
               onSave={(payload) =>
-                run(() => api.saveWrapup(callId, payload)).then((next) => {
-                  if (next) {
-                    setSnapshot(next);
-                    setSavedCalls((prior) => new Set(prior).add(callId));
-                  }
-                })
+                run(() => api.saveWrapup(wrapupCallId, payload)).then(
+                  (next) => next && setSnapshot(next),
+                )
               }
               // Two requests behind one button, deliberately (`D45`): saving closes the
               // call RECORD, declaring ends after-call work, and either may happen alone.
               onSaveAndDeclare={(payload, intent) =>
                 run(async () => {
-                  if (!savedCalls.has(callId)) await api.saveWrapup(callId, payload);
+                  if (!snapshot.wrapup_saved) await api.saveWrapup(wrapupCallId, payload);
                   await api.declare(intent);
                   return api.me();
-                }).then((next) => {
-                  if (next) {
-                    setSnapshot(next);
-                    setSavedCalls((prior) => new Set(prior).add(callId));
-                  }
-                })
+                }).then((next) => next && setSnapshot(next))
               }
             />
           )}
@@ -303,7 +303,7 @@ export default function App() {
           </span>
           {longAcw && <span className="badge warn">ใช้เวลานานกว่าปกติ</span>}
           <div className="spacer" />
-          {savedCalls.has(callId ?? "") && <span className="badge ok">บันทึกสรุปแล้ว</span>}
+          {snapshot.wrapup_saved && <span className="badge ok">บันทึกสรุปแล้ว</span>}
         </div>
       )}
 
