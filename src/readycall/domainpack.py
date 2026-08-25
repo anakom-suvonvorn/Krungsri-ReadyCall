@@ -147,6 +147,20 @@ class MenuSettings:
 
 
 @dataclass(frozen=True, slots=True)
+class LanguageMenuSpec:
+    """The language menu (`D38`) — modelled now, Thai-only in behaviour.
+
+    Loaded rather than ignored so its prompt id is part of the referenced set that
+    `voiceprompts` checks. A prompt that only becomes reachable the day someone flips
+    `enabled` is exactly the one nobody notices is missing.
+    """
+
+    enabled: bool
+    prompt: str
+    default: str
+
+
+@dataclass(frozen=True, slots=True)
 class DomainPack:
     intents: dict[str, IntentSpec]
     skills: dict[str, SkillSpec]
@@ -155,6 +169,7 @@ class DomainPack:
     menus: dict[str, MenuSpec]
     challenges: dict[str, ChallengeSpec]
     menu_settings: MenuSettings
+    language_menu: LanguageMenuSpec | None = None
     personalisation_enabled: bool = True
     max_promoted_options: int = 2
     source_dir: Path = field(default=Path("config"))
@@ -233,6 +248,11 @@ class DomainPack:
             completed=intent is not None,
         )
 
+    @property
+    def language_menu_prompt(self) -> str | None:
+        """The prompt id the language menu would play, enabled or not (`D38`)."""
+        return self.language_menu.prompt if self.language_menu else None
+
     def did(self, number: str) -> DidSpec | None:
         return self.dids.get(number)
 
@@ -250,7 +270,9 @@ class DomainPack:
         intents = cls._load_intents(_read(directory / "intents.yaml"))
         skills, queues = cls._load_skills(_read(directory / "skills.yaml"))
         dids = cls._load_dids(_read(directory / "dids.yaml"))
-        menus, settings, personalisation = cls._load_menus(_read(directory / "menus.yaml"))
+        menus, settings, personalisation, language_menu = cls._load_menus(
+            _read(directory / "menus.yaml")
+        )
         challenges = cls._load_challenges(_read(directory / "challenges.yaml"))
 
         pack = cls(
@@ -261,6 +283,7 @@ class DomainPack:
             menus=menus,
             challenges=challenges,
             menu_settings=settings,
+            language_menu=language_menu,
             personalisation_enabled=bool(personalisation.get("enabled", True)),
             max_promoted_options=int(personalisation.get("max_promoted", 2)),
             source_dir=directory,
@@ -353,7 +376,7 @@ class DomainPack:
     @staticmethod
     def _load_menus(
         raw: dict[str, Any],
-    ) -> tuple[dict[str, MenuSpec], MenuSettings, dict[str, Any]]:
+    ) -> tuple[dict[str, MenuSpec], MenuSettings, dict[str, Any], LanguageMenuSpec | None]:
         settings_raw = raw.get("settings") or {}
         settings = MenuSettings(
             barge_in=bool(settings_raw.get("barge_in", True)),
@@ -384,7 +407,17 @@ class DomainPack:
             )
             for menu_id, body in (raw.get("menus") or {}).items()
         }
-        return menus, settings, raw.get("personalisation") or {}
+        language_raw = raw.get("language_menu") or {}
+        language_menu = (
+            LanguageMenuSpec(
+                enabled=bool(language_raw.get("enabled", False)),
+                prompt=str(language_raw["prompt"]),
+                default=str(language_raw.get("default", "th")),
+            )
+            if language_raw.get("prompt")
+            else None
+        )
+        return menus, settings, raw.get("personalisation") or {}, language_menu
 
     # --- validation ------------------------------------------------------------------
 

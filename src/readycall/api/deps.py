@@ -70,6 +70,7 @@ from readycall.services.matching.engine import MatchingEngine
 from readycall.services.matching.scoring import WaitingCall
 from readycall.services.matching.weights import MatchingWeights
 from readycall.services.queues.hours import QueueHours
+from readycall.voiceprompts import load_prompt_pack
 
 log = get_logger(__name__)
 
@@ -136,6 +137,9 @@ class Container:
         self.settings = settings
         self.clock: Clock = clock or SystemClock()
         self.pack = DomainPack.load(settings.config_dir)
+        #: Every spoken line, cross-checked against the menus and numbers that name them
+        #: (`D24`). A dangling prompt id is a silent gap in a call, so it fails here.
+        self.prompts = load_prompt_pack(settings.config_dir, self.pack)
         self.bus = InMemoryEventBus()
         self.core = build_core_data(settings, self.clock)
 

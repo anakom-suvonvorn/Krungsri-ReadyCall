@@ -1,0 +1,219 @@
+# Every line the caller hears, as text (D24).
+#
+# Nothing here is recorded by a human and nothing is synthesised during a call.
+# `scripts/build_prompts.py` renders each line to a clip at BUILD time, cached by
+# hash(text, voice, engine), and the call plays the cached file. So:
+#
+#   - changing wording is a YAML edit plus a re-render, not a studio booking;
+#   - call-time latency is zero and deterministic;
+#   - the whole IVR works with no internet, which is what makes a stage demo safe.
+#
+# WHY A MENU IS NOT ONE CLIP (D80). `D37` says a recognised caller hears their likely
+# options FIRST. That order differs per caller, so a single baked "กด 1 ... กด 2 ..."
+# clip cannot exist. A menu is therefore composed:
+#
+#     <lead-in>  +  one <option> line per option, in the chosen order  +  <reserved hint>
+#
+# The lead-in and the hint are static prompt ids. The option lines are rendered from the
+# `menu.option` template using the `label_th` that already lives in `menus.yaml`, and are
+# cached by their rendered text - so the label exists in exactly one file, and there is no
+# second copy of the menu here to drift out of step with the one that does the routing.
+#
+# The option line carries the number and the plain label and nothing else. Reading a
+# caller's own plate or policy number back at them through a menu is unsettling and makes
+# every option longer, which is the opposite of the point (D37).
+#
+# SLOTS. A prompt that declares `slots` is rendered on first use and cached by its
+# rendered text, so it is warm within minutes of a deployment (D24). A prompt whose text
+# contains `{...}` MUST declare it, and a prompt that declares a slot it never uses is a
+# typo - `tests/unit/test_voice_prompts.py` fails on both.
+
+version: 1
+
+defaults:
+  # Engine-specific. The name is a placeholder until a voice is chosen on a listening
+  # test of these actual lines rather than on a spec sheet (INTEGRATIONS.md 4).
+  voice: th-TH-female-1
+  language: th
+
+# --- which prompt plays at which point of the flow -------------------------------------
+#
+# The IVR service refers to a ROLE; this table says which prompt id fills it. That keeps
+# prompt ids out of `services/` (D28) and lets the guard test check the mapping in both
+# directions: every role resolves to a defined prompt, and every prompt is reachable from
+# either this table, `menus.yaml` or `dids.yaml`.
+flow:
+  recording_notice: notice.recording
+  menu_option: menu.option
+  menu_reserved_hint: menu.reserved_hint
+  no_input: input.none
+  operator: input.operator
+  identify_request: identify.request
+  identify_ok: identify.ok
+  identify_failed: identify.failed
+  queue_position: queue.position
+  queue_hold: queue.hold
+  intake_offer: intake.offer
+  intake_reoffer: intake.reoffer
+  intake_start: intake.start
+  intake_declined: intake.declined
+  intake_done: intake.done
+  voicemail_offer: voicemail.offer
+  voicemail_start: voicemail.start
+  rating_request: rating.request
+  goodbye: call.goodbye
+
+prompts:
+  # --- greetings, one per published number (dids.yaml) ---------------------------------
+  #
+  # The number someone dialled is the first thing we know about them, so the greeting is
+  # the first place that knowledge shows. It is only ever a greeting: the recording notice
+  # is separate and always plays, whichever number was dialled.
+  greeting.general:
+    text_th: "สวัสดีค่ะ ยินดีต้อนรับสู่ศูนย์บริการลูกค้าประกันภัยกรุงศรี"
+
+  greeting.motor_claim:
+    text_th: "สวัสดีค่ะ ศูนย์รับแจ้งเหตุประกันรถยนต์ กรุงศรี"
+    note: >-
+      Dialled from beside a damaged car, so the line names the service rather than
+      welcoming anyone. `dids.yaml` also raises the urgency floor on this number.
+
+  greeting.health:
+    text_th: "สวัสดีค่ะ ศูนย์บริการประกันสุขภาพ กรุงศรี"
+
+  greeting.travel:
+    text_th: "สวัสดีค่ะ ศูนย์บริการประกันเดินทาง กรุงศรี"
+
+  greeting.life:
+    text_th: "สวัสดีค่ะ ศูนย์บริการประกันชีวิตและการออม กรุงศรี"
+
+  # --- the notice that has to come first -----------------------------------------------
+  notice.recording:
+    text_th: "สายนี้อาจมีการบันทึกเสียงเพื่อพัฒนาคุณภาพการให้บริการค่ะ"
+    note: >-
+      Plays before any menu, on every call, and is not the same thing as consent to AI
+      processing - that is a separate scope and a separate keypress (D14).
+
+  # --- menu lead-ins -------------------------------------------------------------------
+  #
+  # Each one is followed by the option lines, composed at render time. Deliberately short:
+  # the caller is waiting to hear the numbers, not the preamble.
+  menu.product_line:
+    text_th: "กรุณาเลือกประเภทประกันที่ท่านต้องการติดต่อ"
+
+  menu.motor_reason:
+    text_th: "กรุณาเลือกเรื่องที่ท่านต้องการติดต่อ เกี่ยวกับประกันรถยนต์"
+
+  menu.health_reason:
+    text_th: "กรุณาเลือกเรื่องที่ท่านต้องการติดต่อ เกี่ยวกับประกันสุขภาพ"
+
+  menu.travel_reason:
+    text_th: "กรุณาเลือกเรื่องที่ท่านต้องการติดต่อ เกี่ยวกับประกันเดินทาง"
+
+  menu.life_reason:
+    text_th: "กรุณาเลือกเรื่องที่ท่านต้องการติดต่อ เกี่ยวกับประกันชีวิต"
+
+  menu.general_reason:
+    text_th: "กรุณาเลือกเรื่องที่ท่านต้องการติดต่อ"
+
+  menu.option:
+    text_th: "กด {key} {label}"
+    slots: [key, label]
+    note: >-
+      The template that makes personalised ordering possible (D80). `label` comes from
+      `menus.yaml`, so the wording of an option lives in exactly one file.
+
+  menu.reserved_hint:
+    text_th: "กด {repeat_key} เพื่อฟังอีกครั้ง กด {operator_key} เพื่อติดต่อเจ้าหน้าที่"
+    slots: [repeat_key, operator_key]
+    note: >-
+      The keys come from `menus.yaml` settings, so the spoken hint cannot disagree with
+      the keys the IVR actually honours. `0` is never a dead end (D37).
+
+  menu.invalid:
+    text_th: "ขออภัยค่ะ ไม่พบหมายเลขที่ท่านเลือก กรุณาลองอีกครั้ง"
+
+  menu.language:
+    text_th: "สำหรับภาษาไทย กด 1 · For English, press 2"
+    note: >-
+      NOT REACHABLE YET - `menus.yaml` has `language_menu.enabled: false` (D38). The line
+      exists because the id is referenced, and the guard test would fail without it.
+
+  # --- when the caller gives us nothing, or asks for a person --------------------------
+  input.none:
+    text_th: "ไม่ได้รับการกดหมายเลขค่ะ กรุณาลองอีกครั้ง"
+
+  input.operator:
+    text_th: "กำลังโอนสายไปยังเจ้าหน้าที่ค่ะ กรุณารอสักครู่"
+
+  # --- optional identification (D20: this is the rung that reaches L3) -----------------
+  identify.request:
+    text_th: "เพื่อความปลอดภัย กรุณากดเลขบัตรประชาชน 4 หลักสุดท้าย แล้วกดเครื่องหมายสี่เหลี่ยม"
+    note: >-
+      Optional, and skipped entirely when the app already verified them. A caller who
+      declines still reaches the right queue - identification buys disclosure, not routing.
+
+  identify.ok:
+    text_th: "ขอบคุณค่ะ ยืนยันตัวตนเรียบร้อยแล้ว"
+
+  identify.failed:
+    text_th: "ขออภัยค่ะ ข้อมูลไม่ตรงกับที่ระบบมีอยู่ เจ้าหน้าที่จะตรวจสอบกับท่านอีกครั้ง"
+    note: >-
+      Says what happens next rather than just refusing. A failed IVR check is not a failed
+      call: the agent verifies on the line instead (D42), so the caller is not turned away.
+
+  # --- the queue -----------------------------------------------------------------------
+  queue.position:
+    text_th: "ขณะนี้ท่านอยู่ในลำดับที่ {position} รอสายประมาณ {wait_minutes} นาที"
+    slots: [position, wait_minutes]
+
+  queue.hold:
+    text_th: "กรุณาถือสายรอสักครู่ค่ะ"
+
+  # --- the intake offer: the enrichment layer, never the routing layer (D37) -----------
+  intake.offer:
+    text_th: >-
+      ระหว่างรอสาย ท่านสามารถเล่าเรื่องที่ต้องการติดต่อไว้ล่วงหน้าได้
+      เจ้าหน้าที่จะเห็นข้อมูลทันทีที่รับสาย
+      กด 1 เพื่อบันทึกข้อความ กด 2 เพื่อรอสายตามปกติ
+    note: >-
+      Press 2 is a first-class outcome, not a failure: the queue was already decided by
+      the menu, so the agent still gets a menu-derived brief (D19, D37).
+
+  intake.reoffer:
+    text_th: >-
+      ท่านยังสามารถเล่าเรื่องที่ต้องการติดต่อไว้ล่วงหน้าได้
+      กด 1 เพื่อบันทึกข้อความ กด 2 เพื่อรอสายตามปกติ
+    note: Offered once more after INTAKE_REOFFER_AFTER_S, then never again.
+
+  intake.start:
+    text_th: "กรุณาเล่าเรื่องที่ต้องการติดต่อหลังเสียงสัญญาณ เมื่อเล่าเสร็จแล้วกด 1 อีกครั้งค่ะ"
+
+  intake.declined:
+    text_th: "ได้ค่ะ กรุณาถือสายรอเจ้าหน้าที่"
+
+  intake.done:
+    text_th: "ขอบคุณค่ะ เจ้าหน้าที่จะเห็นข้อมูลของท่านทันทีที่รับสาย"
+
+  # --- out of hours (D25) --------------------------------------------------------------
+  voicemail.offer:
+    text_th: >-
+      ขณะนี้อยู่นอกเวลาทำการ ท่านสามารถฝากข้อความไว้ได้
+      เจ้าหน้าที่จะติดต่อกลับพร้อมข้อมูลของท่าน
+      กด 1 เพื่อฝากข้อความ กด 2 เพื่อวางสาย
+    note: >-
+      The message runs through the same recording -> STT -> analysis -> brief pipeline, so
+      the callback starts already briefed rather than from nothing (D25).
+
+  voicemail.start:
+    text_th: "กรุณาฝากข้อความหลังเสียงสัญญาณค่ะ"
+
+  # --- after the call ------------------------------------------------------------------
+  rating.request:
+    text_th: "กรุณาให้คะแนนความพึงพอใจ จาก 1 ถึง 5 โดย 5 คือพอใจมากที่สุด"
+    note: >-
+      Collected in the IVR seconds after the agent hangs up, while the agent may still be
+      writing the wrap-up. That concurrency is why a rating is an event, not a state (D46).
+
+  call.goodbye:
+    text_th: "ขอบคุณที่ใช้บริการค่ะ"
