@@ -1,7 +1,7 @@
 # BUG_HISTORY
 
 _Solved bugs and the lessons they bought. **Search this file FIRST when debugging** — the answer may already be here._
-_Last updated: 2026-08-24._
+_Last updated: 2026-08-25._
 
 Format per entry:
 
@@ -230,6 +230,71 @@ Format per entry:
 - **Concretely, for next time:** when touching identity, read `03_identity.md` **and open the
   `.mmd` sources**. The generated diagrams carry rules that are not restated in prose
   anywhere else, and `identity_promotion.mmd` alone would have prevented three of these six.
+
+## B7. An ignored offer stranded the agent for the rest of the shift — nothing drove RONA
+
+- **Symptoms:** reported by the user. Let a test call ring without answering it. At zero the
+  offer card disappears, and from then on the agent is stuck: the status panel reads
+  *กำลังเสนอสาย*, no further call can be offered, `+ สายทดสอบ` is disabled, and there is no
+  control that gets out of it. Signing out and back in is the only escape. The caller,
+  meanwhile, is never re-matched to anybody.
+- **Root cause:** **nothing in the running process ever called `expire_offers()`.** Nor
+  `DispatchService.tick()`, nor `PresenceService.sweep()`. All three were written, tested in
+  isolation, and given no driver:
+
+  ```
+  $ grep -rn "expire_offers" src/ scripts/ tests/ | grep -v "def expire_offers"
+  (nothing)
+  ```
+
+  `expire_offers` even documents itself as *"Runs on a timer in the API process"*. There was
+  no timer. `create_app`'s lifespan built the container, logged `api ready`, and yielded.
+- **Why it looked handled, which is why it survived P2b:** the workstation hides the offer
+  card the moment its countdown reaches zero — deliberately, so an agent cannot press Accept
+  on a call that has already gone elsewhere. So the visible behaviour of a timed-out offer
+  was *exactly right*, and the invisible half never happened. The client was counting down a
+  deadline the server was not enforcing.
+- **What else was silently dead:**
+  - **re-matching.** Even once an offer expires, the caller only moves when a dispatch tick
+    runs. So a decline was re-matched (the endpoint ticks explicitly) but a timeout was not.
+  - **heartbeat expiry.** `agent_presence_ttl_s` exists so a closed laptop drops out of
+    presence. Without a sweep it never did: a dead browser stayed `AVAILABLE` and kept
+    winning matches, which is the *precise* failure RONA exists to prevent, one level down.
+- **Investigation:** the user's description named the state exactly (*"the system still
+  thinks the status is กำลังเสนอสาย"*), so this was one grep. The instructive part is what a
+  test would have needed to catch it: every existing test drove the handshake through HTTP
+  endpoints, and each endpoint ticks the dispatcher itself. Only *time passing with no
+  request* exposes it, and nothing simulated that.
+- **Fix:** `sweep_once()` in `api/app.py`, running `expire_offers` → `presence.sweep` →
+  `dispatch.tick`, driven by a background task started in the lifespan and cancelled on
+  shutdown. Interval is `agent_sweep_interval_s` (default 1.0); `0` disables it, which is
+  what the tests set so they can drive the sweep deterministically against a `ManualClock`.
+  Exceptions inside the loop are logged and swallowed — the loop must survive a bad tick,
+  because it is the thing that recovers from bad ticks.
+- **Verification:** two new tests, plus a live run. The tests advance a `ManualClock` past
+  `offer_timeout_s` and assert the agent leaves `OFFERING`, lands `not_ready` with
+  `intent_reason=rona_missed_offer`, and that a second agent is offered the same caller. A
+  test helper heartbeats the "alive" agents first, because otherwise the presence sweep
+  correctly drops an agent with no socket and masks the thing under test. Live, against the
+  real server with the real timer:
+
+  ```
+  ignoring the offer for 25s (timeout 20s, sweeper every 1s)
+
+  offer         None
+  system_state  available      <- was stuck on offering, forever
+  agent_intent  not_ready
+  intent_reason rona_missed_offer
+  ```
+
+- **Lesson.** A service whose docstring says *"runs on a timer"* is asserting that somebody
+  else does something, and nothing checks that claim. This is the third bug in this project
+  of the same family as `B3` and `B4`: **the code was correct and simply never ran**, and
+  the observable behaviour was plausible enough that nobody looked. The generalisable rule:
+  *anything that must happen because time passed needs a test in which only time passes.*
+  Every test here drove the system through endpoints, and every endpoint helpfully ticked
+  the dispatcher on the way through — so the suite proved the ticking worked without ever
+  proving anything caused it.
 
 ---
 

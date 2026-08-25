@@ -182,6 +182,12 @@ class Settings(BaseSettings):
     acw_supervisor_alert_after_s: float = 300.0
     agent_heartbeat_s: float = 10.0
     agent_presence_ttl_s: float = 30.0
+    #: How often the API process runs the things that happen because **time passed**:
+    #: offer expiry (RONA), re-matching the caller nobody answered, and dropping agents
+    #: whose heartbeat died. Set to 0 to disable, which is what a test wants when it
+    #: drives the sweep itself. `B7`: all three were written expecting this driver and it
+    #: did not exist, so an unanswered offer stranded the agent in `OFFERING` for good.
+    agent_sweep_interval_s: float = 1.0
     agent_session_cookie_name: str = "readycall_agent"
     agent_session_ttl_s: float = 43200.0  # a shift, not an hour
     #: DEMO: enables /v1/agent/demo-login, the staff-side equivalent of the persona

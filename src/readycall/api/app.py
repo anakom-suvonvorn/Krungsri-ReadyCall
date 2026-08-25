@@ -11,6 +11,8 @@ no npm install, no bundler, nothing that can fail five minutes before a demo.
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -34,6 +36,47 @@ SIM_DIR = Path(__file__).resolve().parents[3] / "apps" / "customer_sim"
 WORKSTATION_DIST = Path(__file__).resolve().parents[3] / "apps" / "workstation" / "dist"
 
 
+async def sweep_once(container: Container) -> None:
+    """One pass of the things that must happen *because time passed*, not because a
+    request arrived (`B7`).
+
+    Three services were written expecting a periodic driver and never given one:
+
+    * `DispatchService.expire_offers()` — RONA. Its own docstring said "runs on a timer in
+      the API process", and no timer existed, so an unanswered offer never resolved: the
+      agent sat in `OFFERING` forever, could not be offered anything else, and the caller
+      was never re-matched. The workstation hid the offer card at zero, which made it look
+      like the offer had been dealt with.
+    * `DispatchService.tick()` — re-matching. Once an offer expires the call is `MATCHED`
+      again with no open offer, and the very next tick re-offers it to somebody else, with
+      the agent who missed it excluded (`D52`). Without a driver the caller simply waited.
+    * `PresenceService.sweep()` — heartbeat expiry. A closed laptop is supposed to fall out
+      of presence on a TTL; instead it stayed `AVAILABLE` and kept being chosen.
+
+    Exceptions are logged and swallowed: this loop must survive a bad tick, because the
+    thing it drives is the thing that recovers from bad ticks.
+    """
+    try:
+        expired = await container.dispatch.expire_offers()
+        dropped = await container.presence.sweep()
+        result = await container.dispatch.tick()
+        if expired or dropped or result.offered:
+            log.info(
+                "sweep",
+                offers_expired=len(expired),
+                agents_dropped=len(dropped),
+                re_offered=len(result.offered),
+            )
+    except Exception:
+        log.exception("sweep failed")
+
+
+async def _sweep_forever(container: Container, interval_s: float) -> None:
+    while True:
+        await asyncio.sleep(interval_s)
+        await sweep_once(container)
+
+
 def create_app(settings: Settings | None = None, *, clock: Clock | None = None) -> FastAPI:
     enable_utf8()  # Thai on a cp1252 console kills the process (`B1`)
     settings = settings or get_settings()
@@ -43,14 +86,24 @@ def create_app(settings: Settings | None = None, *, clock: Clock | None = None) 
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         container = Container(settings, clock=clock)
         app.state.container = container
+        sweeper = (
+            asyncio.create_task(_sweep_forever(container, settings.agent_sweep_interval_s))
+            if settings.agent_sweep_interval_s > 0
+            else None
+        )
         log.info(
             "api ready",
             core_data_provider=container.core.name,
             sessions=container.sessions.name,
             demo_login=settings.demo_login_enabled,
             intents=len(container.pack.intents),
+            sweep_every_s=settings.agent_sweep_interval_s,
         )
         yield
+        if sweeper is not None:
+            sweeper.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await sweeper
         # Drain anything still queued so a shutdown mid-request does not silently drop a
         # context prefetch that was already promised to a caller.
         await container.bus.drain()

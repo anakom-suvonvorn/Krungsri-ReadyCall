@@ -39,6 +39,11 @@ def client(clock: ManualClock) -> Any:
         core_fixtures_dir=REPO_ROOT / "mock" / "bank_core" / "fixtures",
         demo_login_enabled=True,
         demo_agent_login_enabled=True,
+        # The sweep is driven explicitly in the tests that care (`sweep_once`), so a real
+        # wall-clock loop cannot make anything here time-dependent. The clock is manual,
+        # so a background sweeper would find nothing to expire anyway - but a test that
+        # asserts on RONA must control exactly when it happens.
+        agent_sweep_interval_s=0,
     )
     with TestClient(create_app(settings, clock=clock)) as test_client:
         yield test_client
@@ -202,6 +207,89 @@ def test_declining_re_offers_to_somebody_else(client: Any) -> None:
     assert placed["call_session_id"]
 
 
+def test_an_unanswered_offer_expires_and_frees_the_agent(client: Any, clock: ManualClock) -> None:
+    """`B7`. Nothing drove RONA, so an ignored offer stranded the agent for good.
+
+    The workstation hides the offer card when its countdown hits zero, which made this
+    look handled: the agent stayed in `OFFERING` with no card, could not be offered
+    anything else, could not place a test call, and the caller was never re-matched. The
+    services were all correct — `expire_offers` even documented itself as running "on a
+    timer in the API process" — and no timer existed.
+    """
+    from readycall.api.app import sweep_once
+
+    sign_in_agent(client, "A006")
+    client.post("/v1/agent/state", json={"agent_intent": "ready"})
+    placed = place_call(client, intent_code="health.ipd.preauth")
+    assert client.get("/v1/agent/me").json()["offer"] is not None
+
+    # Not yet: the offer is still inside its window.
+    clock.advance(5)
+    _sweep(client, sweep_once, alive=("A006",))
+    assert client.get("/v1/agent/me").json()["offer"] is not None, "expired early"
+
+    clock.advance(30)  # past offer_timeout_s = 20
+    _sweep(client, sweep_once, alive=("A006",))
+
+    body = client.get("/v1/agent/me").json()
+    assert body["offer"] is None, "the offer must actually resolve, not merely vanish"
+    assert body["presence"]["system_state"] == "available", (
+        "the agent has to leave OFFERING, or they are stuck there for the shift"
+    )
+    assert body["presence"]["agent_intent"] == "not_ready", (
+        "RONA: an empty desk stops being offered calls (`D33`, `D51`)"
+    )
+    assert body["presence"]["intent_reason"] == "rona_missed_offer"
+    assert placed["call_session_id"]
+
+
+def test_the_caller_nobody_answered_is_re_offered_elsewhere(
+    client: Any, clock: ManualClock
+) -> None:
+    """The other half of `B7`: expiring the offer is useless if nobody re-matches."""
+    from readycall.api.app import sweep_once
+
+    sign_in_agent(client, "A006")
+    client.post("/v1/agent/state", json={"agent_intent": "ready"})
+    second = client.__class__(client.app)
+    second.post("/v1/agent/demo-login", json={"agent_id": "A005"})
+    second.post("/v1/agent/state", json={"agent_intent": "ready"})
+
+    place_call(client, intent_code="health.claim.status")
+    first, other = (
+        (client, second) if client.get("/v1/agent/me").json()["offer"] else (second, client)
+    )
+    assert first.get("/v1/agent/me").json()["offer"] is not None
+
+    clock.advance(30)
+    _sweep(client, sweep_once, alive=("A005", "A006"))
+
+    assert first.get("/v1/agent/me").json()["offer"] is None
+    assert other.get("/v1/agent/me").json()["offer"] is not None, (
+        "the caller must land on another desk, with the silent agent excluded (`D52`)"
+    )
+
+
+def _sweep(client: Any, sweep_once: Any, *, alive: tuple[str, ...] = ()) -> None:
+    """Run one sweep against the app's live container, from a sync test.
+
+    `alive` names the agents whose browser is notionally still open. A real workstation
+    heartbeats over its socket every 10 s; these tests have no socket, so without this the
+    presence sweep would correctly declare the agent gone the moment the clock advances
+    past the TTL - which is a different thing from RONA and would mask it.
+    """
+    import asyncio
+
+    container = client.app.state.container
+
+    async def run() -> None:
+        for agent_id in alive:
+            await container.presence.heartbeat(agent_id)
+        await sweep_once(container)
+
+    asyncio.run(run())
+
+
 # --- identity (D42) -----------------------------------------------------------------------------
 
 
@@ -226,16 +314,38 @@ def test_confirming_an_identity_requires_naming_the_challenge(client: Any) -> No
     assert "challenge" in response.json()["detail"]
 
 
-def test_a_third_party_does_not_unlock_disclosure(client: Any) -> None:
-    """A daughter with her father's documents is not her father."""
+def test_an_authorised_third_party_is_verified_but_recorded_as_a_third_party(
+    client: Any,
+) -> None:
+    """`D65`, which reverses the level and keeps the record.
+
+    The button asserts the agent has checked this person may act for the policyholder, so
+    the level follows the attestation exactly as it does for CONFIRMED — otherwise we
+    withhold the context the agent needs from a caller we have just verified, which is the
+    opposite of what the ladder is for.
+
+    What must NOT change is the outcome. The log says an authorised representative was
+    verified, never that the policyholder was, and the two are different facts about
+    different people.
+    """
     call_id = take_a_call(client)
     body = client.post(
         f"/v1/agent/calls/{call_id}/identity",
         json={"outcome": "third_party", "caller_name": "สุดา ใจดี", "relationship": "ลูกสาว"},
     ).json()
-    assert body["identity"]["may_disclose_policy_details"] is False
-    assert body["identity"]["authority_check_required"] is True
-    assert body["identity"]["third_party_name"] == "สุดา ใจดี"
+    identity = body["identity"]
+    assert identity["assurance"] == "l3_verified"
+    assert identity["may_disclose_policy_details"] is True
+    assert identity["attested_outcome"] == "third_party", (
+        "the level rises; the RECORD still says who was actually on the phone"
+    )
+    assert identity["authority_check_required"] is True, "the flag stays visible all call"
+    assert identity["third_party_name"] == "สุดา ใจดี"
+    assert identity["relationship"] == "ลูกสาว"
+
+    # And the brief must actually open up, or the promotion bought nothing.
+    assert body["brief"]["relevant_policy"] is not None
+    assert body["brief"]["disclosure_locked"] is False
 
 
 def test_a_third_party_must_be_named(client: Any) -> None:
@@ -311,9 +421,13 @@ def test_attesting_locks_the_control_until_it_is_reopened(client: Any) -> None:
         },
     )
     assert amended.status_code == 200
-    assert amended.json()["identity"]["may_disclose_policy_details"] is False, (
-        "correcting downward has to actually re-lock disclosure"
-    )
+    identity = amended.json()["identity"]
+    # Since `D65` both outcomes sit at L3, so what an amendment changes here is the
+    # RECORD, not the level: this call is now on file as an authorised representative
+    # rather than the policyholder, which is the whole reason the third outcome exists.
+    assert identity["attested_outcome"] == "third_party"
+    assert identity["third_party_name"] == "สุดา ใจดี"
+    assert identity["assurance"] == "l3_verified"
 
 
 def test_amending_appends_and_the_count_lets_the_panel_re_lock(client: Any) -> None:
@@ -674,3 +788,44 @@ def test_the_timers_are_anchored_to_server_timestamps(client: Any, clock: Manual
     client.post(f"/v1/agent/calls/{placed['call_session_id']}/end", json={})
     wrapping = client.get("/v1/agent/me").json()["presence"]
     assert wrapping["acw_since"], "and so does the ACW timer"
+
+
+def test_the_offer_card_says_what_the_call_is_about(client: Any) -> None:
+    """`D69`. The agent should not have to accept blind.
+
+    The card used to carry routing metadata only — queue, urgency, wait, rationale — so
+    the agent knew why the call reached them and nothing about what it was for. The
+    preview is built from the same gated `BriefOut` the panel renders, which is the part
+    that matters: it cannot disclose more than the assurance level allows.
+    """
+    sign_in_agent(client, "A006")
+    client.post("/v1/agent/state", json={"agent_intent": "ready"})
+    place_call(client, intent_code="health.ipd.preauth", caller_number="0812345678")
+
+    offer = client.get("/v1/agent/me").json()["offer"]
+    assert offer["summary_th"], "the card has to say what this call is about"
+    assert offer["first_action_th"], "and what to do first"
+
+
+def test_the_offer_preview_is_gated_like_the_brief(client: Any) -> None:
+    """The preview must not become a hole in `B5`'s fix.
+
+    Note which rule applies where, because they are easy to confuse. At `L1_PROBABLE` the
+    ladder permits the name **on screen** — that is what the level is for — while `D55`
+    forbids the agent *speaking* it, which is a fact about the suggested opening, not about
+    the card. What L1 does not permit is the policy, and the assertion that matters is on
+    the raw bytes: an assertion about rendered text cannot see a field a renderer never
+    mentions, which is exactly how `B5` survived every test it had.
+    """
+    sign_in_agent(client, "A006")
+    client.post("/v1/agent/state", json={"agent_intent": "ready"})
+    place_call(client, intent_code="health.ipd.preauth", caller_number="0812345678")
+
+    body = client.get("/v1/agent/me")
+    offer = body.json()["offer"]
+    assert offer["assurance"] == "l1_probable"
+    assert "HL-2024-000811" not in body.text, "the preview must not leak what the brief hides"
+    assert "sum_insured" not in body.text
+    # The brief panel itself is still null here: it renders only once the call is taken,
+    # which is why the preview had to exist at all rather than being read off the brief.
+    assert body.json()["brief"] is None
