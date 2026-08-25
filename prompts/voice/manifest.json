@@ -1,0 +1,740 @@
+{
+  "version": 1,
+  "engine": "null",
+  "default_voice": "th-TH-female-1",
+  "language": "th",
+  "clips": [
+    {
+      "clip_key": "089ec4accedb8a23412e6a129be97d0f",
+      "prompt_id": "call.goodbye",
+      "text": "ขอบคุณที่ใช้บริการค่ะ",
+      "voice": "th-TH-female-1",
+      "slots": {},
+      "duration_ms": 3150.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://348d827938bc05bf"
+    },
+    {
+      "clip_key": "e7625289a393b1eae9e957318fcc2eb5",
+      "prompt_id": "greeting.general",
+      "text": "สวัสดีค่ะ ยินดีต้อนรับสู่ศูนย์บริการลูกค้าประกันภัยกรุงศรี",
+      "voice": "th-TH-female-1",
+      "slots": {},
+      "duration_ms": 8700.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://41323f1e26194929"
+    },
+    {
+      "clip_key": "9413ef2e0adf8e058676d05a4a50daf1",
+      "prompt_id": "greeting.health",
+      "text": "สวัสดีค่ะ ศูนย์บริการประกันสุขภาพ กรุงศรี",
+      "voice": "th-TH-female-1",
+      "slots": {},
+      "duration_ms": 6150.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://612cddf409bb22b2"
+    },
+    {
+      "clip_key": "d8642fd753f4a654ba7adf6bc7e696d1",
+      "prompt_id": "greeting.life",
+      "text": "สวัสดีค่ะ ศูนย์บริการประกันชีวิตและการออม กรุงศรี",
+      "voice": "th-TH-female-1",
+      "slots": {},
+      "duration_ms": 7350.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://5cd63dd7a8aeb7ca"
+    },
+    {
+      "clip_key": "5f5bbc6e7188154d330ff6521a4ed1cd",
+      "prompt_id": "greeting.motor_claim",
+      "text": "สวัสดีค่ะ ศูนย์รับแจ้งเหตุประกันรถยนต์ กรุงศรี",
+      "voice": "th-TH-female-1",
+      "slots": {},
+      "duration_ms": 6900.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://77a6de90838a52b0"
+    },
+    {
+      "clip_key": "9fa7c9a834a1d4a5590108df10202ebb",
+      "prompt_id": "greeting.travel",
+      "text": "สวัสดีค่ะ ศูนย์บริการประกันเดินทาง กรุงศรี",
+      "voice": "th-TH-female-1",
+      "slots": {},
+      "duration_ms": 6300.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://e0e1ff07267571f2"
+    },
+    {
+      "clip_key": "82efbd1d132725ac49f56f48e04aba66",
+      "prompt_id": "identify.failed",
+      "text": "ขออภัยค่ะ ข้อมูลไม่ตรงกับที่ระบบมีอยู่ เจ้าหน้าที่จะตรวจสอบกับท่านอีกครั้ง",
+      "voice": "th-TH-female-1",
+      "slots": {},
+      "duration_ms": 11100.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://c8abd008d7edc1c2"
+    },
+    {
+      "clip_key": "6959fa6ce5e750529399769b59067b60",
+      "prompt_id": "identify.ok",
+      "text": "ขอบคุณค่ะ ยืนยันตัวตนเรียบร้อยแล้ว",
+      "voice": "th-TH-female-1",
+      "slots": {},
+      "duration_ms": 5100.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://498c93e67f06c152"
+    },
+    {
+      "clip_key": "26fb70ad44bc13f38ccef9b8ccc305eb",
+      "prompt_id": "identify.request",
+      "text": "เพื่อความปลอดภัย กรุณากดเลขบัตรประชาชน 4 หลักสุดท้าย แล้วกดเครื่องหมายสี่เหลี่ยม",
+      "voice": "th-TH-female-1",
+      "slots": {},
+      "duration_ms": 12000.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://c9e4b9a279980f7a"
+    },
+    {
+      "clip_key": "be69220d26ddcbd72de238851ead89f7",
+      "prompt_id": "input.none",
+      "text": "ไม่ได้รับการกดหมายเลขค่ะ กรุณาลองอีกครั้ง",
+      "voice": "th-TH-female-1",
+      "slots": {},
+      "duration_ms": 6150.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://74b0e54829fa93f9"
+    },
+    {
+      "clip_key": "72e28e64c2da51901231ea7edcbf0295",
+      "prompt_id": "input.operator",
+      "text": "กำลังโอนสายไปยังเจ้าหน้าที่ค่ะ กรุณารอสักครู่",
+      "voice": "th-TH-female-1",
+      "slots": {},
+      "duration_ms": 6750.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://4e106821cea8bb5f"
+    },
+    {
+      "clip_key": "c297217c8f129ce4523754673a6db23a",
+      "prompt_id": "intake.declined",
+      "text": "ได้ค่ะ กรุณาถือสายรอเจ้าหน้าที่",
+      "voice": "th-TH-female-1",
+      "slots": {},
+      "duration_ms": 4650.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://becad8a3e5a9fb9c"
+    },
+    {
+      "clip_key": "5669ab3b4e19b8681f6d891f7d17aec6",
+      "prompt_id": "intake.done",
+      "text": "ขอบคุณค่ะ เจ้าหน้าที่จะเห็นข้อมูลของท่านทันทีที่รับสาย",
+      "voice": "th-TH-female-1",
+      "slots": {},
+      "duration_ms": 8100.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://6048b733b7c480c2"
+    },
+    {
+      "clip_key": "763ad34e174d86dfebd7968eb74b019b",
+      "prompt_id": "intake.offer",
+      "text": "ระหว่างรอสาย ท่านสามารถเล่าเรื่องที่ต้องการติดต่อไว้ล่วงหน้าได้ เจ้าหน้าที่จะเห็นข้อมูลทันทีที่รับสาย กด 1 เพื่อบันทึกข้อความ กด 2 เพื่อรอสายตามปกติ",
+      "voice": "th-TH-female-1",
+      "slots": {},
+      "duration_ms": 22200.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://744d79154a9db262"
+    },
+    {
+      "clip_key": "96c3565bf053c82437dcc030557b5bee",
+      "prompt_id": "intake.reoffer",
+      "text": "ท่านยังสามารถเล่าเรื่องที่ต้องการติดต่อไว้ล่วงหน้าได้ กด 1 เพื่อบันทึกข้อความ กด 2 เพื่อรอสายตามปกติ",
+      "voice": "th-TH-female-1",
+      "slots": {},
+      "duration_ms": 15000.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://635564fcf72a6979"
+    },
+    {
+      "clip_key": "cab33f22f173524359e72c9aa931a73c",
+      "prompt_id": "intake.start",
+      "text": "กรุณาเล่าเรื่องที่ต้องการติดต่อหลังเสียงสัญญาณ เมื่อเล่าเสร็จแล้วกด 1 อีกครั้งค่ะ",
+      "voice": "th-TH-female-1",
+      "slots": {},
+      "duration_ms": 12150.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://b8fbcb93a884faf0"
+    },
+    {
+      "clip_key": "23ad5bee34bc976ae4d8322b37c17263",
+      "prompt_id": "menu.general_reason",
+      "text": "กรุณาเลือกเรื่องที่ท่านต้องการติดต่อ",
+      "voice": "th-TH-female-1",
+      "slots": {},
+      "duration_ms": 5400.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://292f20774e389568"
+    },
+    {
+      "clip_key": "708d4af3e14674a06babcedc79743b25",
+      "prompt_id": "menu.health_reason",
+      "text": "กรุณาเลือกเรื่องที่ท่านต้องการติดต่อ เกี่ยวกับประกันสุขภาพ",
+      "voice": "th-TH-female-1",
+      "slots": {},
+      "duration_ms": 8700.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://b2738e8b64c2bc57"
+    },
+    {
+      "clip_key": "131d0d6c9fb77f815e8cad6f68072c05",
+      "prompt_id": "menu.invalid",
+      "text": "ขออภัยค่ะ ไม่พบหมายเลขที่ท่านเลือก กรุณาลองอีกครั้ง",
+      "voice": "th-TH-female-1",
+      "slots": {},
+      "duration_ms": 7650.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://8bcfa73b8eddeb3b"
+    },
+    {
+      "clip_key": "d374f2f2cae43e38e887d7aa3de317f8",
+      "prompt_id": "menu.language",
+      "text": "สำหรับภาษาไทย กด 1 · For English, press 2",
+      "voice": "th-TH-female-1",
+      "slots": {},
+      "duration_ms": 6150.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://cd0784716aaa4552"
+    },
+    {
+      "clip_key": "77386e9c8e6325db01fdde6593f5948a",
+      "prompt_id": "menu.life_reason",
+      "text": "กรุณาเลือกเรื่องที่ท่านต้องการติดต่อ เกี่ยวกับประกันชีวิต",
+      "voice": "th-TH-female-1",
+      "slots": {},
+      "duration_ms": 8550.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://7e5db81e7f7d2d3f"
+    },
+    {
+      "clip_key": "e8633d7e2f4b0cbe4e0a0b905d25dd1f",
+      "prompt_id": "menu.motor_reason",
+      "text": "กรุณาเลือกเรื่องที่ท่านต้องการติดต่อ เกี่ยวกับประกันรถยนต์",
+      "voice": "th-TH-female-1",
+      "slots": {},
+      "duration_ms": 8700.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://2f3535d9b4d68669"
+    },
+    {
+      "clip_key": "0b131cf8f5502e626262dff2050637e0",
+      "prompt_id": "menu.option",
+      "text": "กด 3 ติดตามสถานะเคลม",
+      "voice": "th-TH-female-1",
+      "slots": {
+        "key": "3",
+        "label": "ติดตามสถานะเคลม"
+      },
+      "duration_ms": 3000.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://4fed1880ab2f2542"
+    },
+    {
+      "clip_key": "1058981bc0543a41776f7bf246d733ea",
+      "prompt_id": "menu.option",
+      "text": "กด 1 แจ้งเข้ารักษาผู้ป่วยใน",
+      "voice": "th-TH-female-1",
+      "slots": {
+        "key": "1",
+        "label": "แจ้งเข้ารักษาผู้ป่วยใน"
+      },
+      "duration_ms": 4050.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://6393df65985a0641"
+    },
+    {
+      "clip_key": "13a2b74254cdaa003dbacf4fac68cd6b",
+      "prompt_id": "menu.option",
+      "text": "กด 4 เรื่องอื่นๆ",
+      "voice": "th-TH-female-1",
+      "slots": {
+        "key": "4",
+        "label": "เรื่องอื่นๆ"
+      },
+      "duration_ms": 2400.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://00ebe91f0c846bfd"
+    },
+    {
+      "clip_key": "242be7759fe1830385ae7cfd916ad651",
+      "prompt_id": "menu.option",
+      "text": "กด 6 เรื่องอื่นๆ",
+      "voice": "th-TH-female-1",
+      "slots": {
+        "key": "6",
+        "label": "เรื่องอื่นๆ"
+      },
+      "duration_ms": 2400.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://ed2e656eb5e52082"
+    },
+    {
+      "clip_key": "2e1726db320878dd0249e09d84ed9786",
+      "prompt_id": "menu.option",
+      "text": "กด 2 ประกันสุขภาพ",
+      "voice": "th-TH-female-1",
+      "slots": {
+        "key": "2",
+        "label": "ประกันสุขภาพ"
+      },
+      "duration_ms": 2550.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://62e0bbe7cf1b771a"
+    },
+    {
+      "clip_key": "35e26cda71083eba8f3a6eccb146b12c",
+      "prompt_id": "menu.option",
+      "text": "กด 1 สอบถามมูลค่ากรมธรรม์",
+      "voice": "th-TH-female-1",
+      "slots": {
+        "key": "1",
+        "label": "สอบถามมูลค่ากรมธรรม์"
+      },
+      "duration_ms": 3750.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://a1ea6f901c6feed6"
+    },
+    {
+      "clip_key": "3f55cb55846abd2d221b2eb9b3b9b3fc",
+      "prompt_id": "menu.option",
+      "text": "กด 3 แก้ไขข้อมูลส่วนตัว",
+      "voice": "th-TH-female-1",
+      "slots": {
+        "key": "3",
+        "label": "แก้ไขข้อมูลส่วนตัว"
+      },
+      "duration_ms": 3450.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://ae2e639eae31fd15"
+    },
+    {
+      "clip_key": "44ef0e8d88735899c83b9646b10ccf92",
+      "prompt_id": "menu.option",
+      "text": "กด 6 ร้องเรียน",
+      "voice": "th-TH-female-1",
+      "slots": {
+        "key": "6",
+        "label": "ร้องเรียน"
+      },
+      "duration_ms": 2100.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://5b69801441054d53"
+    },
+    {
+      "clip_key": "4ca6bd7c4be0352c8d04dadc15d23a0c",
+      "prompt_id": "menu.option",
+      "text": "กด 2 ยื่นเคลม",
+      "voice": "th-TH-female-1",
+      "slots": {
+        "key": "2",
+        "label": "ยื่นเคลม"
+      },
+      "duration_ms": 1950.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://247295ca6ee4fe46"
+    },
+    {
+      "clip_key": "4f9957829233f46b38689dc4deff157a",
+      "prompt_id": "menu.option",
+      "text": "กด 1 แจ้งอุบัติเหตุ",
+      "voice": "th-TH-female-1",
+      "slots": {
+        "key": "1",
+        "label": "แจ้งอุบัติเหตุ"
+      },
+      "duration_ms": 2850.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://d9717d4502d3c3d9"
+    },
+    {
+      "clip_key": "50c6ef48e47c11934677ba2cdc1e88ff",
+      "prompt_id": "menu.option",
+      "text": "กด 4 สอบถามความคุ้มครอง",
+      "voice": "th-TH-female-1",
+      "slots": {
+        "key": "4",
+        "label": "สอบถามความคุ้มครอง"
+      },
+      "duration_ms": 3450.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://8f00c8f0e029c507"
+    },
+    {
+      "clip_key": "57faee7f58902cdfd772c175997250f7",
+      "prompt_id": "menu.option",
+      "text": "กด 7 เรื่องอื่นๆ",
+      "voice": "th-TH-female-1",
+      "slots": {
+        "key": "7",
+        "label": "เรื่องอื่นๆ"
+      },
+      "duration_ms": 2400.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://fe0bc8d68d227b60"
+    },
+    {
+      "clip_key": "7762b9a024f95c3c53722d3792eff472",
+      "prompt_id": "menu.option",
+      "text": "กด 5 ต่ออายุกรมธรรม์",
+      "voice": "th-TH-female-1",
+      "slots": {
+        "key": "5",
+        "label": "ต่ออายุกรมธรรม์"
+      },
+      "duration_ms": 3000.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://d04f8ecf06961c0f"
+    },
+    {
+      "clip_key": "78fcb9f8df1c9e8cac456de938d98999",
+      "prompt_id": "menu.option",
+      "text": "กด 1 เหตุฉุกเฉินระหว่างเดินทาง",
+      "voice": "th-TH-female-1",
+      "slots": {
+        "key": "1",
+        "label": "เหตุฉุกเฉินระหว่างเดินทาง"
+      },
+      "duration_ms": 4500.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://59c19651be96e75e"
+    },
+    {
+      "clip_key": "796b9ddf32cf095a248dedfc8705d776",
+      "prompt_id": "menu.option",
+      "text": "กด 5 สนใจผลิตภัณฑ์ใหม่",
+      "voice": "th-TH-female-1",
+      "slots": {
+        "key": "5",
+        "label": "สนใจผลิตภัณฑ์ใหม่"
+      },
+      "duration_ms": 3300.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://a171a3fc7b6ffd59"
+    },
+    {
+      "clip_key": "863eec2389ca91728731640cf62618e9",
+      "prompt_id": "menu.option",
+      "text": "กด 2 ขอความช่วยเหลือฉุกเฉิน",
+      "voice": "th-TH-female-1",
+      "slots": {
+        "key": "2",
+        "label": "ขอความช่วยเหลือฉุกเฉิน"
+      },
+      "duration_ms": 4050.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://4b8bac3ca236429a"
+    },
+    {
+      "clip_key": "a01c4336521e9cfdb593398b30f354dc",
+      "prompt_id": "menu.option",
+      "text": "กด 1 การชำระเบี้ยประกัน",
+      "voice": "th-TH-female-1",
+      "slots": {
+        "key": "1",
+        "label": "การชำระเบี้ยประกัน"
+      },
+      "duration_ms": 3450.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://a16baf665709f9fd"
+    },
+    {
+      "clip_key": "a8a9095b6af8dff960715858b06a6173",
+      "prompt_id": "menu.option",
+      "text": "กด 4 ขอเอกสาร",
+      "voice": "th-TH-female-1",
+      "slots": {
+        "key": "4",
+        "label": "ขอเอกสาร"
+      },
+      "duration_ms": 1950.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://8b52dc8733db36bc"
+    },
+    {
+      "clip_key": "afa0098043ee533a2aa3c7b368cd8c53",
+      "prompt_id": "menu.option",
+      "text": "กด 5 โรงพยาบาลในเครือ",
+      "voice": "th-TH-female-1",
+      "slots": {
+        "key": "5",
+        "label": "โรงพยาบาลในเครือ"
+      },
+      "duration_ms": 3150.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://b009a394004b53df"
+    },
+    {
+      "clip_key": "b4e4e96e0a0dbd1ee46241ddea01dce1",
+      "prompt_id": "menu.option",
+      "text": "กด 1 ประกันรถยนต์",
+      "voice": "th-TH-female-1",
+      "slots": {
+        "key": "1",
+        "label": "ประกันรถยนต์"
+      },
+      "duration_ms": 2550.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://183fe7e1f76f1dfa"
+    },
+    {
+      "clip_key": "b63cdb834eef4c17d9421142a6b53ad6",
+      "prompt_id": "menu.option",
+      "text": "กด 5 เรื่องอื่นๆ",
+      "voice": "th-TH-female-1",
+      "slots": {
+        "key": "5",
+        "label": "เรื่องอื่นๆ"
+      },
+      "duration_ms": 2400.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://5fcb5e561c6de1d2"
+    },
+    {
+      "clip_key": "bf87445ff17a71d517a872786b38cac9",
+      "prompt_id": "menu.option",
+      "text": "กด 2 เปลี่ยนผู้รับผลประโยชน์",
+      "voice": "th-TH-female-1",
+      "slots": {
+        "key": "2",
+        "label": "เปลี่ยนผู้รับผลประโยชน์"
+      },
+      "duration_ms": 4200.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://18c767980b35b668"
+    },
+    {
+      "clip_key": "bfe5b26212d625ea402e67a5872887b8",
+      "prompt_id": "menu.option",
+      "text": "กด 2 ยื่นเคลมค่ารักษา",
+      "voice": "th-TH-female-1",
+      "slots": {
+        "key": "2",
+        "label": "ยื่นเคลมค่ารักษา"
+      },
+      "duration_ms": 3150.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://408486191f231986"
+    },
+    {
+      "clip_key": "cc697709d3ca96340a6be64fa2792b86",
+      "prompt_id": "menu.option",
+      "text": "กด 4 ประกันชีวิต",
+      "voice": "th-TH-female-1",
+      "slots": {
+        "key": "4",
+        "label": "ประกันชีวิต"
+      },
+      "duration_ms": 2400.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://26755a0f6f5b4e79"
+    },
+    {
+      "clip_key": "cd8213554eed98313e6084f4895a4c56",
+      "prompt_id": "menu.option",
+      "text": "กด 3 ประกันเดินทาง",
+      "voice": "th-TH-female-1",
+      "slots": {
+        "key": "3",
+        "label": "ประกันเดินทาง"
+      },
+      "duration_ms": 2700.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://d32c15b1646a08f5"
+    },
+    {
+      "clip_key": "db9391ee16d30851429fa3ee78501a43",
+      "prompt_id": "menu.option",
+      "text": "กด 2 ต่ออายุกรมธรรม์",
+      "voice": "th-TH-female-1",
+      "slots": {
+        "key": "2",
+        "label": "ต่ออายุกรมธรรม์"
+      },
+      "duration_ms": 3000.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://a48c95e5c38f89ac"
+    },
+    {
+      "clip_key": "e0a332730988e3c091137332395c2357",
+      "prompt_id": "menu.option",
+      "text": "กด 3 สอบถามความคุ้มครอง",
+      "voice": "th-TH-female-1",
+      "slots": {
+        "key": "3",
+        "label": "สอบถามความคุ้มครอง"
+      },
+      "duration_ms": 3450.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://256f7813f24d0ec1"
+    },
+    {
+      "clip_key": "f1671179f46edd209bb1e63f8086df70",
+      "prompt_id": "menu.option",
+      "text": "กด 3 แจ้งเคลมกรณีเสียชีวิต",
+      "voice": "th-TH-female-1",
+      "slots": {
+        "key": "3",
+        "label": "แจ้งเคลมกรณีเสียชีวิต"
+      },
+      "duration_ms": 3900.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://48c3bfc54549ff1d"
+    },
+    {
+      "clip_key": "f2fedf5472fc065e24842e1bb81f0911",
+      "prompt_id": "menu.product_line",
+      "text": "กรุณาเลือกประเภทประกันที่ท่านต้องการติดต่อ",
+      "voice": "th-TH-female-1",
+      "slots": {},
+      "duration_ms": 6300.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://57d4bb316275c5e1"
+    },
+    {
+      "clip_key": "27b13f20a10c07b86b118ce76e33db36",
+      "prompt_id": "menu.reserved_hint",
+      "text": "กด 9 เพื่อฟังอีกครั้ง กด 0 เพื่อติดต่อเจ้าหน้าที่",
+      "voice": "th-TH-female-1",
+      "slots": {
+        "operator_key": "0",
+        "repeat_key": "9"
+      },
+      "duration_ms": 7350.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://be4d7352f8e479f0"
+    },
+    {
+      "clip_key": "eda40a966c052b036dbcc7b1561a112b",
+      "prompt_id": "menu.travel_reason",
+      "text": "กรุณาเลือกเรื่องที่ท่านต้องการติดต่อ เกี่ยวกับประกันเดินทาง",
+      "voice": "th-TH-female-1",
+      "slots": {},
+      "duration_ms": 8850.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://c81e26b5dd897077"
+    },
+    {
+      "clip_key": "d22458be5d04e25cb747cb2650c51c94",
+      "prompt_id": "notice.recording",
+      "text": "สายนี้อาจมีการบันทึกเสียงเพื่อพัฒนาคุณภาพการให้บริการค่ะ",
+      "voice": "th-TH-female-1",
+      "slots": {},
+      "duration_ms": 8400.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://3ac9d8ccff3160c9"
+    },
+    {
+      "clip_key": "552569ab5a1a6aff7ffd0477a24fdf25",
+      "prompt_id": "queue.hold",
+      "text": "กรุณาถือสายรอสักครู่ค่ะ",
+      "voice": "th-TH-female-1",
+      "slots": {},
+      "duration_ms": 3450.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://2711656ee66ae583"
+    },
+    {
+      "clip_key": "07a1a45e553746d509f5d63c98aed2fa",
+      "prompt_id": "queue.position",
+      "text": "ขณะนี้ท่านอยู่ในลำดับที่ 1 รอสายประมาณ 1 นาที",
+      "voice": "th-TH-female-1",
+      "slots": {
+        "position": "1",
+        "wait_minutes": "1"
+      },
+      "duration_ms": 6750.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://dc58e65b70c43f37"
+    },
+    {
+      "clip_key": "3df98da419470da69cad45f41247bb55",
+      "prompt_id": "queue.position",
+      "text": "ขณะนี้ท่านอยู่ในลำดับที่ 3 รอสายประมาณ 2 นาที",
+      "voice": "th-TH-female-1",
+      "slots": {
+        "position": "3",
+        "wait_minutes": "2"
+      },
+      "duration_ms": 6750.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://76c3358346dc1c4e"
+    },
+    {
+      "clip_key": "556183655c45687e29125f7363fcfe1a",
+      "prompt_id": "queue.position",
+      "text": "ขณะนี้ท่านอยู่ในลำดับที่ 5 รอสายประมาณ 4 นาที",
+      "voice": "th-TH-female-1",
+      "slots": {
+        "position": "5",
+        "wait_minutes": "4"
+      },
+      "duration_ms": 6750.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://86c4680364c671e9"
+    },
+    {
+      "clip_key": "580da12715169943ef891e64a03015b3",
+      "prompt_id": "queue.position",
+      "text": "ขณะนี้ท่านอยู่ในลำดับที่ 4 รอสายประมาณ 3 นาที",
+      "voice": "th-TH-female-1",
+      "slots": {
+        "position": "4",
+        "wait_minutes": "3"
+      },
+      "duration_ms": 6750.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://650bb38bd6b63a8b"
+    },
+    {
+      "clip_key": "c56539f20d6a2d1dc7356f893a71fe7c",
+      "prompt_id": "queue.position",
+      "text": "ขณะนี้ท่านอยู่ในลำดับที่ 2 รอสายประมาณ 1 นาที",
+      "voice": "th-TH-female-1",
+      "slots": {
+        "position": "2",
+        "wait_minutes": "1"
+      },
+      "duration_ms": 6750.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://38ed2ec0493ceaae"
+    },
+    {
+      "clip_key": "d95cd7ce7643b73ef17ac17a583409e6",
+      "prompt_id": "rating.request",
+      "text": "กรุณาให้คะแนนความพึงพอใจ จาก 1 ถึง 5 โดย 5 คือพอใจมากที่สุด",
+      "voice": "th-TH-female-1",
+      "slots": {},
+      "duration_ms": 8850.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://f335c4aa66d0d5ff"
+    },
+    {
+      "clip_key": "02a090eb405f4dcff68979844d361b35",
+      "prompt_id": "voicemail.offer",
+      "text": "ขณะนี้อยู่นอกเวลาทำการ ท่านสามารถฝากข้อความไว้ได้ เจ้าหน้าที่จะติดต่อกลับพร้อมข้อมูลของท่าน กด 1 เพื่อฝากข้อความ กด 2 เพื่อวางสาย",
+      "voice": "th-TH-female-1",
+      "slots": {},
+      "duration_ms": 19350.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://1b197676b63906bb"
+    },
+    {
+      "clip_key": "b5ee7509979fd3039fcedc78e0f33d72",
+      "prompt_id": "voicemail.start",
+      "text": "กรุณาฝากข้อความหลังเสียงสัญญาณค่ะ",
+      "voice": "th-TH-female-1",
+      "slots": {},
+      "duration_ms": 4950.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://61c90b25c2dc177a"
+    }
+  ]
+}

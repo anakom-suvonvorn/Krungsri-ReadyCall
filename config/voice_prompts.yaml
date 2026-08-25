@@ -166,6 +166,15 @@ prompts:
   queue.position:
     text_th: "ขณะนี้ท่านอยู่ในลำดับที่ {position} รอสายประมาณ {wait_minutes} นาที"
     slots: [position, wait_minutes]
+    # Pre-rendered for the shallow end of the queue, which is where nearly every caller
+    # is. Deeper positions render on first use and are cached from then on (D24) - the
+    # point of `warm` is only that the FIRST caller does not pay for it either.
+    warm:
+      - { position: 1, wait_minutes: 1 }
+      - { position: 2, wait_minutes: 1 }
+      - { position: 3, wait_minutes: 2 }
+      - { position: 4, wait_minutes: 3 }
+      - { position: 5, wait_minutes: 4 }
 
   queue.hold:
     text_th: "กรุณาถือสายรอสักครู่ค่ะ"

@@ -86,6 +86,11 @@ class PromptSpec:
     voice: str
     slots: tuple[str, ...] = ()
     note: str | None = None
+    #: Slot values worth rendering at build time, as `((name, value), ...)` sets. A
+    #: dynamic line is cached by its rendered text and so warms up on its own within
+    #: minutes (`D24`) — `warm` just means the first caller does not pay for it either.
+    #: Menu option lines need no entry here: the build derives those from `menus.yaml`.
+    warm: tuple[tuple[tuple[str, str], ...], ...] = ()
 
     @property
     def is_dynamic(self) -> bool:
@@ -207,6 +212,11 @@ class PromptPack:
                 problems.append(f"{prompt_id} uses {{{name}}} but does not declare it")
             for name in sorted(declared - used):
                 problems.append(f"{prompt_id} declares slot {name!r} but never uses it")
+            for entry in spec.warm:
+                if {name for name, _ in entry} != declared:
+                    # A warm set that does not fill the slots renders nothing, and the
+                    # build reports a clip it never produced.
+                    problems.append(f"{prompt_id} has a warm set that does not match its slots")
 
         for role in PromptRole:
             mapped = self.flow.get(role)
@@ -268,6 +278,10 @@ class PromptPack:
                 voice=str(body.get("voice", default_voice)),
                 slots=tuple(str(s) for s in (body.get("slots") or ())),
                 note=str(body["note"]).strip() if body.get("note") else None,
+                warm=tuple(
+                    tuple(sorted((str(k), str(v)) for k, v in (entry or {}).items()))
+                    for entry in (body.get("warm") or ())
+                ),
             )
         if not prompts:
             raise ConfigError(f"{source} defines no prompts")

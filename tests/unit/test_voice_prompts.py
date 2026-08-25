@@ -13,7 +13,11 @@ nobody plays, or a reference somebody deleted.
 
 from __future__ import annotations
 
+import importlib.util
+import json
+import sys
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 
@@ -22,7 +26,20 @@ from readycall.errors import ConfigError
 from readycall.voiceprompts import PromptPack, PromptRole, PromptSpec, clip_key
 from tests.conftest import REPO_ROOT
 
+ROOT = REPO_ROOT
 CONFIG = REPO_ROOT / "config"
+
+
+def _load_builder() -> ModuleType:
+    """Import `scripts/build_prompts.py`, which is a script rather than a package module."""
+    spec = importlib.util.spec_from_file_location(
+        "build_prompts", ROOT / "scripts" / "build_prompts.py"
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["build_prompts"] = module
+    spec.loader.exec_module(module)
+    return module
 
 
 @pytest.fixture(scope="module")
@@ -196,6 +213,44 @@ class TestRendering:
                 line = prompts.say(PromptRole.MENU_OPTION, key=option.key, label=option.label_th)
                 assert option.key in line.text, menu_id
                 assert option.label_th in line.text, menu_id
+
+
+class TestTheBuiltPack:
+    """The committed manifest must describe the prompts that are actually in config.
+
+    Same argument as the generated diagrams: a pack that ships stale is worse than no
+    pack, because the caller hears last week's wording and nothing says so.
+    """
+
+    def test_the_committed_manifest_is_up_to_date(
+        self, prompts: PromptPack, pack: DomainPack
+    ) -> None:
+        builder = _load_builder()
+        path = ROOT / "prompts" / "voice" / "manifest.json"
+        assert path.exists(), "run: uv run python scripts/build_prompts.py"
+        engine_name = json.loads(path.read_text(encoding="utf-8"))["engine"]
+        stale, orphaned = builder.drift(
+            builder.work_list(prompts, pack), builder.load_manifest(path), engine_name
+        )
+        assert not stale, f"lines with no clip: {stale}"
+        assert not orphaned, f"clips nothing plays: {orphaned}"
+
+    def test_a_line_that_says_the_same_words_twice_is_one_clip(
+        self, prompts: PromptPack, pack: DomainPack
+    ) -> None:
+        """ "ติดตามสถานะเคลม" is key 3 in both the motor and the health menu. Rendering it
+        twice would be waste; more importantly, the dedupe is the same mechanism that
+        makes dynamic lines cacheable at all (`D24`)."""
+        builder = _load_builder()
+        lines = builder.work_list(prompts, pack)
+        rendered = [(line.text, line.voice) for line in lines]
+        assert len(rendered) == len(set(rendered))
+
+        total_options = sum(len(menu.options) for menu in pack.menus.values())
+        option_lines = [
+            line for line in lines if line.prompt_id == prompts.id_for(PromptRole.MENU_OPTION)
+        ]
+        assert len(option_lines) < total_options, "no menu labels were shared — check the fixture"
 
 
 class TestTheClipCache:
