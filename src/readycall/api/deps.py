@@ -41,9 +41,10 @@ from readycall.api.security import (
 )
 from readycall.clock import Clock, SystemClock
 from readycall.config import CoreDataProviderName, Settings
+from readycall.db.storage import Storage, build_storage
 from readycall.domain import events as ev
-from readycall.domain.enums import ProductLine
-from readycall.domain.models import CaseBrief, IdentityResolution
+from readycall.domain.enums import CallState, ProductLine, Urgency
+from readycall.domain.models import CallSession, CallWrapup, CaseBrief, IdentityResolution
 from readycall.domainpack import DomainPack
 from readycall.logging import get_logger
 from readycall.ports.core_data import CoreDataProvider
@@ -52,7 +53,6 @@ from readycall.services.agents.dispatch import DispatchService
 from readycall.services.agents.presence import PresenceService
 from readycall.services.brief.builder import BriefBuilder
 from readycall.services.call_orchestrator.orchestrator import CallOrchestrator
-from readycall.services.call_orchestrator.repository import InMemoryCallSessionRepository
 from readycall.services.capture.keypad import KeypadCaptureService
 from readycall.services.capture.matching import (
     DateMatch,
@@ -61,16 +61,13 @@ from readycall.services.capture.matching import (
     match_date,
 )
 from readycall.services.context.assembler import ContextAssembler
-from readycall.services.context.store import (
-    AppContextEvent,
-    InMemoryAppContextStore,
-    InMemorySnapshotStore,
-)
+from readycall.services.context.store import AppContextEvent, InMemoryAppContextStore
 from readycall.services.identity.attestation import AttestationService
 from readycall.services.identity.intents import IntentService
 from readycall.services.identity.resolver import IdentityResolver
 from readycall.services.identity.store import InMemoryCallIntentStore
 from readycall.services.matching.engine import MatchingEngine
+from readycall.services.matching.scoring import WaitingCall
 from readycall.services.matching.weights import MatchingWeights
 from readycall.services.queues.hours import QueueHours
 
@@ -129,15 +126,25 @@ def build_core_data(settings: Settings, clock: Clock) -> CoreDataProvider:
 class Container:
     """Every long-lived object the API uses. One per process."""
 
-    def __init__(self, settings: Settings, *, clock: Clock | None = None) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        *,
+        clock: Clock | None = None,
+        storage: Storage | None = None,
+    ) -> None:
         self.settings = settings
         self.clock: Clock = clock or SystemClock()
         self.pack = DomainPack.load(settings.config_dir)
         self.bus = InMemoryEventBus()
         self.core = build_core_data(settings, self.clock)
 
+        #: Every durable store, chosen by `STORAGE_BACKEND` (`D75`, `D78`). Each service
+        #: below gets its own and writes through to it; nothing reads it on the hot path.
+        self.storage = storage or build_storage(settings)
+
         self.intent_store = InMemoryCallIntentStore()
-        self.snapshots = InMemorySnapshotStore()
+        self.snapshots = self.storage.snapshots
         self.app_context = InMemoryAppContextStore(clock=self.clock)
 
         self.assembler = ContextAssembler(core=self.core, clock=self.clock)
@@ -162,7 +169,7 @@ class Container:
         )
         self.agents = FixtureAgentDirectory(settings.config_dir.parent / "mock/agents/agents.json")
         self.hours = QueueHours.load(settings.config_dir / "queue_hours.yaml")
-        self.calls = InMemoryCallSessionRepository()
+        self.calls = self.storage.calls
         self.orchestrator = CallOrchestrator(repository=self.calls, bus=self.bus, clock=self.clock)
         self.hub = AgentHub(clock=self.clock)
         self.presence = PresenceService(
@@ -170,6 +177,7 @@ class Container:
             bus=self.bus,
             heartbeat_ttl_s=settings.agent_presence_ttl_s,
             long_acw_after_s=settings.acw_long_after_s,
+            state_log=self.storage.agent_state_log,
         )
         self.assignments = AssignmentService(
             orchestrator=self.orchestrator,
@@ -181,6 +189,7 @@ class Container:
                 timeout_s=settings.offer_timeout_s,
                 long_acw_after_s=settings.acw_long_after_s,
             ),
+            store=self.storage.assignments,
         )
         self.matching = MatchingEngine(
             directory=self.agents,
@@ -194,6 +203,7 @@ class Container:
             notifier=self.hub,
             clock=self.clock,
             offer_timeout_s=settings.offer_timeout_s,
+            decisions=self.storage.decisions,
         )
         self.identity = IdentityResolver(
             core=self.core,
@@ -201,11 +211,12 @@ class Container:
             clock=self.clock,
             pending_intent_window_s=settings.intent_ttl_s,
         )
-        self.captures = KeypadCaptureService(clock=self.clock)
+        self.captures = KeypadCaptureService(clock=self.clock, store=self.storage.captures)
         self.attestations = AttestationService(
             clock=self.clock,
             # One source of truth, shared with the workstation (`D72`).
             challenges=frozenset(self.pack.challenges),
+            store=self.storage.attestations,
         )
         self.brief_builder = BriefBuilder(pack=self.pack, clock=self.clock)
 
@@ -214,12 +225,144 @@ class Container:
         self.identity_for_call: dict[str, IdentityResolution] = {}
         #: call_session_id -> the context snapshot the brief is rendered from.
         self.snapshot_for_call: dict[str, str] = {}
-        #: Saved wrap-up forms. Never written by anything but an agent (`D45`).
-        self.wrapups: dict[str, dict[str, object]] = {}
+        #: Saved wrap-up forms, projected from the store. Never written by anything but
+        #: an agent (`D45`) — the *absence* of an entry is meaningful data.
+        self.wrapups: dict[str, CallWrapup] = {}
 
         #: intent_id -> snapshot_id, so an intent can report what the prefetch produced.
         self.snapshot_for_intent: dict[str, str] = {}
         self.bus.subscribe(ev.IntentCreated.name, self._prefetch_context)
+
+    # --- restore (D78) ------------------------------------------------------------------
+
+    #: Call states that are over. Everything else is a call the next tick may act on, and
+    #: is what restore reloads. Deliberately a list of *finished* states rather than of
+    #: live ones: a state added later is live until somebody says otherwise, and the safe
+    #: default is to reload one call too many rather than to silently drop one.
+    FINISHED_STATES = (
+        CallState.CLOSED,
+        CallState.FAILED,
+        CallState.ABANDONED,
+        CallState.VOICEMAIL,
+        CallState.TRANSFERRED,
+    )
+
+    async def restore(self) -> dict[str, int]:
+        """Rebuild the working set from the durable stores. Returns what was reloaded.
+
+        **The order is the design, not an implementation detail.** Live calls come first,
+        because every other store is loaded *for those calls* — a bounded read rather than
+        a full table scan, and the reason none of these stores needs a "load everything"
+        method. Presence comes last, because it is the one thing that is a projection of a
+        log rather than a reload of rows (`D76`).
+
+        What deliberately does **not** come back:
+
+        * **the waiting pool as stored rows.** It is rebuilt from `call_sessions` in
+          `queued`/`matched` — a second table saying who is waiting is a second thing that
+          can disagree with the call's own state.
+        * **`system_state`.** Every agent returns `OFFLINE`, because after a restart the
+          platform has genuinely given them nothing to do (see `PresenceService.restore`).
+        * **unnamed keypad digits**, which were never stored (`D44`).
+
+        On the in-memory backend this reads back what this process itself wrote, so it is
+        a no-op in effect and a fully exercised code path in fact — which is the point of
+        the memory stores existing at all (`B7`).
+        """
+        live = await self.calls.list_in_states(
+            *[s for s in CallState if s not in self.FINISHED_STATES]
+        )
+        call_ids = [s.call_session_id for s in live]
+
+        for session in live:
+            if session.identity is not None:
+                self.identity_for_call[session.call_session_id] = session.identity
+            if session.snapshot_id is not None:
+                self.snapshot_for_call[session.call_session_id] = session.snapshot_id
+
+        restored = {
+            "calls": len(live),
+            "assignments": await self.assignments.restore(call_ids),
+            "attestations": await self.attestations.restore(
+                call_ids, resolutions=self.identity_for_call
+            ),
+            "captures": await self.captures.restore(call_ids),
+            "wrapups": 0,
+            "waiting": 0,
+            "agents": 0,
+        }
+
+        for wrapup in await self.storage.wrapups.for_calls(call_ids):
+            self.wrapups[wrapup.call_session_id] = wrapup
+        restored["wrapups"] = len(self.wrapups)
+
+        decisions = await self.storage.decisions.latest_for_calls(call_ids)
+        pool: list[tuple[CallSession, WaitingCall]] = []
+        for session in live:
+            waiting = self._waiting_call_for(session)
+            if waiting is not None:
+                pool.append((session, waiting))
+        restored["waiting"] = self.dispatch.restore(pool, decisions=decisions)
+        restored["agents"] = await self.presence.restore()
+
+        log.info("restored from storage", backend=self.storage.backend, **restored)
+        return restored
+
+    def _waiting_call_for(self, session: CallSession) -> WaitingCall | None:
+        """Rebuild the matcher's view of a waiting caller from the call itself.
+
+        This is what makes the pool a **projection** rather than a table. Everything the
+        matcher needs is already recorded: the queue on the session, the skill and SLA on
+        the queue spec, the urgency on the intent. Storing a second copy would let the two
+        disagree, and the copy is always the one that ends up wrong.
+        """
+        if session.state not in {CallState.QUEUED, CallState.MATCHED, CallState.OFFERED}:
+            return None
+        if session.queue_id is None:
+            return None
+        spec = self.pack.queues.get(session.queue_id)
+        if spec is None:
+            return None
+        intent_code = session.menu_intent_code
+        # Waiting time is recomputed from `queued_at`, not restored from a counter. The
+        # caller really has been waiting through the restart, and a reset would hand them
+        # to the back of the urgency ordering for our outage.
+        waited = (
+            (self.clock.now() - session.queued_at).total_seconds() if session.queued_at else 0.0
+        )
+        return WaitingCall(
+            call_session_id=session.call_session_id,
+            queue_id=session.queue_id,
+            required_skill=spec.required_skill,
+            intent_code=intent_code or "unknown",
+            intent_urgency=(
+                self.pack.intent(intent_code).default_urgency if intent_code else Urgency.NORMAL
+            ),
+            waiting_s=waited,
+            sla_seconds=spec.sla_seconds,
+            acceptable_languages=session.acceptable_languages,
+            customer_id=session.customer_id,
+        )
+
+    async def aclose(self) -> None:
+        """Release whatever the storage backend holds open."""
+        if self.storage.engine is not None:
+            await self.storage.engine.dispose()
+
+    async def set_identity(self, session: CallSession, resolution: IdentityResolution) -> None:
+        """Record who we think is calling, in memory **and** on the call (`D78`).
+
+        `D42` makes assurance mutable for the whole call, so this is written every time an
+        agent attests. It has to land on `CallSession.identity` and not only in the live
+        dict: the column has existed since P0, and while nothing wrote it a restored call
+        came back with no identity at all — which meant `render_brief` returned `None` and
+        the agent's screen was blank on a call they were in the middle of.
+        """
+        self.identity_for_call[session.call_session_id] = resolution
+        session.identity = resolution
+        if resolution.customer_id is not None:
+            session.customer_id = resolution.customer_id
+        await self.calls.save(session)
 
     async def _prefetch_context(self, event: ev.Event) -> None:
         """`D6`: assembly starts at *tap*, not at *answer*."""

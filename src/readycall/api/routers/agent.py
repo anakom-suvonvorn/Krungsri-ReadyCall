@@ -45,7 +45,7 @@ from readycall.api.schemas import (
 )
 from readycall.api.security import AgentPrincipal, AuthenticationRequired
 from readycall.domain.enums import AgentIntent, CallState, OfferOutcome
-from readycall.domain.models import Assignment
+from readycall.domain.models import Assignment, CallWrapup
 from readycall.errors import PermanentError
 from readycall.logging import get_logger
 from readycall.services.capture.keypad import Capture
@@ -253,11 +253,19 @@ async def save_wrapup(
         )
     except PermanentError as exc:
         raise _bad_request(exc) from exc
-    container.wrapups[call_session_id] = {
-        "disposition": body.disposition,
-        "notes": body.notes,
-        "follow_up_required": body.follow_up_required,
-    }
+    wrapup = CallWrapup(
+        call_session_id=call_session_id,
+        agent_id=who.agent_id,
+        saved_at=container.clock.now(),
+        disposition=body.disposition,
+        notes=body.notes,
+        follow_up_required=body.follow_up_required,
+        was_edited=body.was_edited,
+    )
+    container.wrapups[call_session_id] = wrapup
+    # Durable, because this is a person's statement about a customer's file. Nothing else
+    # in the system may write one (`D45`), so losing it loses the only copy.
+    await container.storage.wrapups.save(wrapup)
     return await _snapshot(container, who.agent_id)
 
 
@@ -272,7 +280,7 @@ async def attest_identity(
     container: ContainerDep,
 ) -> WorkstationSnapshot:
     """The three-way control. Promotion is a **re-render, not a re-fetch** (`D42`)."""
-    await _require_active_call(container, call_session_id, who)
+    session, _assignment = await _require_active_call(container, call_session_id, who)
     if container.attestations.history(call_session_id) and not body.amend:
         # The control LOCKS after an attestation, and the server enforces it rather than
         # trusting a disabled button (`D60`). But it does not lock *forever*: an agent who
@@ -294,7 +302,7 @@ async def attest_identity(
         raise HTTPException(status_code=400, detail="this call has no identity to attest")
 
     try:
-        updated, _record = container.attestations.attest(
+        updated, _record = await container.attestations.attest(
             call_session_id=call_session_id,
             agent_id=who.agent_id,
             current=current,
@@ -308,7 +316,7 @@ async def attest_identity(
     except PermanentError as exc:
         raise _bad_request(exc) from exc
 
-    container.identity_for_call[call_session_id] = updated
+    await container.set_identity(session, updated)
     return await _snapshot(container, who.agent_id)
 
 
@@ -320,7 +328,9 @@ async def start_capture(call_session_id: str, who: AgentDep, container: Containe
     """Start capture. Untyped — the agent has not said what these digits will be."""
     await _require_active_call(container, call_session_id, who)
     try:
-        capture = container.captures.start(call_session_id=call_session_id, agent_id=who.agent_id)
+        capture = await container.captures.start(
+            call_session_id=call_session_id, agent_id=who.agent_id
+        )
     except PermanentError as exc:
         raise _bad_request(exc) from exc
     return _capture_out(capture)
@@ -359,7 +369,7 @@ async def backspace_capture(capture_id: str, who: AgentDep, container: Container
 @router.post("/captures/{capture_id}/stop", response_model=CaptureOut)
 async def stop_capture(capture_id: str, who: AgentDep, container: ContainerDep) -> CaptureOut:
     try:
-        return _capture_out(container.captures.stop(capture_id))
+        return _capture_out(await container.captures.stop(capture_id))
     except PermanentError as exc:
         raise _bad_request(exc) from exc
 
@@ -368,7 +378,7 @@ async def stop_capture(capture_id: str, who: AgentDep, container: ContainerDep) 
 async def discard_capture(capture_id: str, who: AgentDep, container: ContainerDep) -> CaptureOut:
     """One click and the digits are gone — the inverted default of `D44`."""
     try:
-        return _capture_out(container.captures.discard(capture_id))
+        return _capture_out(await container.captures.discard(capture_id))
     except PermanentError as exc:
         raise _bad_request(exc) from exc
 
@@ -378,7 +388,7 @@ async def label_capture(
     capture_id: str, body: CaptureLabelRequest, who: AgentDep, container: ContainerDep
 ) -> CaptureOut:
     try:
-        return _capture_out(container.captures.label(capture_id, body.labelled_as))
+        return _capture_out(await container.captures.label(capture_id, body.labelled_as))
     except PermanentError as exc:
         raise _bad_request(exc) from exc
 
@@ -399,7 +409,7 @@ async def lookup_capture(
     matched, matched_value, detail = await container.lookup_digits(
         capture.call_session_id, kind=body.kind, digits=capture.digits
     )
-    container.captures.record_lookup(
+    await container.captures.record_lookup(
         capture_id, kind=body.kind, matched=matched, matched_value=matched_value, detail=detail
     )
     return _capture_out(capture)

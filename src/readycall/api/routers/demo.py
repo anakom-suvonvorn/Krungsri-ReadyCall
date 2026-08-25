@@ -226,7 +226,7 @@ async def place_call(
             dialled_did=body.did,
         )
 
-    container.identity_for_call[session.call_session_id] = resolution
+    await container.set_identity(session, resolution)
 
     # The context snapshot: reuse the one the app path already built (`D6`), or build one
     # now for a cold call. Reuse is the point - by the time the phone rings, the six reads

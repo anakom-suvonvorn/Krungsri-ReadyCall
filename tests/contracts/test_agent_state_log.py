@@ -23,9 +23,13 @@ from readycall.db.session import create_engine, create_session_factory
 from readycall.domain.enums import AgentIntent, AgentSystemState
 from readycall.domain.models import AgentStateChange
 
+#: A **separate database** from the one the app uses, and that separation is load-bearing.
+#: These suites create their tables with `create_all` and drop them on teardown; pointed at
+#: the dev database that deletes its contents *and* leaves `alembic_version` stamped at head
+#: with no tables behind it, so `alembic upgrade head` becomes a silent no-op (`B9`).
 POSTGRES_URL = os.environ.get(
     "READYCALL_TEST_DATABASE_URL",
-    "postgresql+asyncpg://readycall:readycall@127.0.0.1:5432/readycall",
+    "postgresql+asyncpg://readycall:readycall@127.0.0.1:5432/readycall_test",
 )
 T0 = datetime(2026, 8, 25, 3, 0, tzinfo=UTC)
 

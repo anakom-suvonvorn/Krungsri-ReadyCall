@@ -28,6 +28,7 @@ from readycall.api.security import AuthenticationRequired
 from readycall.clock import Clock
 from readycall.config import Settings, get_settings
 from readycall.console import enable_utf8
+from readycall.db.storage import Storage
 from readycall.logging import configure, get_logger
 
 log = get_logger(__name__)
@@ -77,15 +78,25 @@ async def _sweep_forever(container: Container, interval_s: float) -> None:
         await sweep_once(container)
 
 
-def create_app(settings: Settings | None = None, *, clock: Clock | None = None) -> FastAPI:
+def create_app(
+    settings: Settings | None = None,
+    *,
+    clock: Clock | None = None,
+    storage: Storage | None = None,
+) -> FastAPI:
     enable_utf8()  # Thai on a cp1252 console kills the process (`B1`)
     settings = settings or get_settings()
     configure(log_format=settings.log_format)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        container = Container(settings, clock=clock)
+        container = Container(settings, clock=clock, storage=storage)
         app.state.container = container
+        # **Before the sweeper, and before the first request.** A tick that ran against an
+        # empty working set would re-match callers who already have an offer out and would
+        # see an empty floor, so it would do real damage in the half-second before restore
+        # finished. Restoring first is not tidiness; it is the ordering the sweeper assumes.
+        restored = await container.restore()
         sweeper = (
             asyncio.create_task(_sweep_forever(container, settings.agent_sweep_interval_s))
             if settings.agent_sweep_interval_s > 0
@@ -98,6 +109,8 @@ def create_app(settings: Settings | None = None, *, clock: Clock | None = None) 
             demo_login=settings.demo_login_enabled,
             intents=len(container.pack.intents),
             sweep_every_s=settings.agent_sweep_interval_s,
+            storage=container.storage.backend,
+            restored=restored,
         )
         yield
         if sweeper is not None:
@@ -107,6 +120,7 @@ def create_app(settings: Settings | None = None, *, clock: Clock | None = None) 
         # Drain anything still queued so a shutdown mid-request does not silently drop a
         # context prefetch that was already promised to a caller.
         await container.bus.drain()
+        await container.aclose()
 
     app = FastAPI(
         title="Krungsri ReadyCall",
