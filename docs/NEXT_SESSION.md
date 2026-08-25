@@ -476,6 +476,17 @@ Mismatches in `NEXT_SESSION` / `PROJECT_STATE` / `diagrams/*.md` are real bugs. 
 in `explanations/*.md` and `BUG_HISTORY` verification notes are **expected** — those are
 dated snapshots, and the fix is a "changes since" entry, never an edit to the body.
 
+## Published artifacts (the readable twins, live)
+
+Update by republishing the **same file path**, which keeps the URL. Republishing without the
+URL from another conversation creates a duplicate instead.
+
+| Page | URL |
+|---|---|
+| `reading/the_line.html` — the keypad | https://claude.ai/code/artifact/5953f7a7-d0c4-4829-8cc7-fec2b6f5b856 |
+| `reading/persistence.html` — the restart simulator | https://claude.ai/code/artifact/b2a03f9c-01f2-42bc-ae55-3860d901374d |
+| `reading/workstation_wiring.html` | https://claude.ai/code/artifact/23107f9a-17e5-4011-b206-b2e5809a138f |
+
 ## Handy references
 
 - Pitch deck: `../Krungsri.pdf` (workstation mock p.7). Brief:
