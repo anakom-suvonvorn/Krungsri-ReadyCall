@@ -94,6 +94,15 @@ class IvrResult:
     queue_id: str
     #: Every line played, in order — the spoken half of `D18`'s "show, do not claim".
     played: tuple[str, ...]
+    #: The best intent available, which is **not** always the one the caller chose: a
+    #: caller who says nothing on the motor-claims number still probably had an accident
+    #: (`D19`). Kept separate from `outcome.intent_code`, which only ever holds what was
+    #: actually pressed, so the record never claims a keypress that never happened.
+    intent_code: str | None = None
+    #: Where `intent_code` came from: `dtmf`, `app`, `did`, or `none`. The brief reads
+    #: this rather than guessing, because "they told us" and "we assumed" are different
+    #: claims and the agent needs to know which one they are looking at.
+    intent_source: str = "none"
     #: True when this caller heard the options in a different order (`D37`).
     personalised: bool = False
     promoted_because: tuple[str, ...] = ()
@@ -167,10 +176,13 @@ class IvrService:
         assert outcome is not None
         self._apply(session, outcome)
 
+        intent_code, intent_source = self._best_intent(outcome, did)
         result = IvrResult(
             outcome=outcome,
             queue_id=self.queue_for(outcome, did),
             played=tuple(played),
+            intent_code=intent_code,
+            intent_source=intent_source,
             personalised=bool(run.personalisations),
             promoted_because=tuple(
                 reason for promotion in run.personalisations for reason in promotion.reasons
@@ -182,7 +194,7 @@ class IvrService:
             outcome=outcome.kind.value,
             reason=outcome.reason,
             path="/".join(outcome.path) or "-",
-            intent=outcome.intent_code or "-",
+            intent=f"{intent_code or '-'}({intent_source})",
             queue=result.queue_id,
             lines=len(played),
         )
@@ -214,6 +226,19 @@ class IvrService:
 
     # --- routing ----------------------------------------------------------------------
 
+    def _best_intent(self, outcome: IvrOutcome, did: DidSpec | None) -> tuple[str | None, str]:
+        """What we think they want, and on whose word.
+
+        The DID's assumption is real evidence — somebody dialling the number printed in
+        their glovebox is very likely standing next to a damaged car (`D19`) — but it is
+        weaker evidence than a keypress, and the brief must be able to tell them apart.
+        """
+        if outcome.intent_code is not None:
+            return outcome.intent_code, "app" if outcome.kind is IvrOutcomeKind.SKIPPED else "dtmf"
+        if did is not None and did.assumed_intent:
+            return did.assumed_intent, "did"
+        return None, "none"
+
     def queue_for(self, outcome: IvrOutcome, did: DidSpec | None = None) -> str:
         """Best evidence first. Each rung beats falling through to the general queue.
 
@@ -227,6 +252,8 @@ class IvrService:
             return did.default_queue if did else "q_general"
         if outcome.intent_code:
             return self._pack.queue_for_intent(outcome.intent_code)
+        if did is not None and did.assumed_intent:
+            return self._pack.queue_for_intent(did.assumed_intent)
         if outcome.product_line is not ProductLine.UNKNOWN:
             return self._pack.queue_for_intent(self._pack.catch_all_for(outcome.product_line).code)
         if did is not None:

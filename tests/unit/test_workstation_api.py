@@ -941,3 +941,25 @@ def test_every_served_challenge_is_actually_accepted(client: Any) -> None:
             body["challenge_note"] = "ยืนยันจากการโทรครั้งก่อน"
         response = client.post(f"/v1/agent/calls/{call_id}/identity", json=body)
         assert response.status_code == 200, f"{spec['code']} is offered but refused"
+
+
+# --- the IVR on the demo path (P3) -------------------------------------------------------
+
+
+def test_the_demo_endpoint_walks_the_real_menu(client: Any) -> None:
+    """`# P2b:` retired. Only the keypresses are faked now — the greeting, the notice,
+    the menu order, the retries and the queue decision are all the production walk."""
+    body = place_call(client, did="+6621234000", keys=["2", "4"], ignore_hours=True)
+    assert body["queue_id"] == "q_health_policy"
+
+
+def test_a_demo_caller_who_presses_nothing_is_not_stranded(client: Any) -> None:
+    """The floor, through HTTP: silence twice still reaches a queue (`D37`)."""
+    body = place_call(client, did="+6621234222", keys=[], ignore_hours=True)
+    assert body["queue_id"] not in (None, "")
+    assert body["state"] in {"matched", "offered", "queued"}
+
+
+def test_pressing_zero_reaches_a_human_through_the_api(client: Any) -> None:
+    body = place_call(client, did="+6621234000", keys=["0"], ignore_hours=True)
+    assert body["queue_id"] == "q_general"

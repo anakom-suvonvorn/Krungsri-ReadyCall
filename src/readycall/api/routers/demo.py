@@ -40,6 +40,8 @@ from readycall.domain.enums import CallState, ProductLine, Urgency
 from readycall.errors import ConfigError
 from readycall.logging import get_logger
 from readycall.services.identity.resolver import hash_token
+from readycall.services.ivr.personalise import PersonalisationInputs
+from readycall.services.ivr.service import ScriptedChoices
 from readycall.services.matching.scoring import WaitingCall
 
 log = get_logger(__name__)
@@ -241,18 +243,25 @@ async def place_call(
     if snapshot_id:
         container.snapshot_for_call[session.call_session_id] = snapshot_id
 
-    # P2b: the IVR walk is a real menu walk at P3; here the caller's choices arrive in
-    # the request body because there is no audio yet.
-    intent_code = body.intent_code
-    if body.keys:
-        walk = container.pack.walk_menu(list(body.keys))
-        intent_code = walk.intent_code or intent_code
-    queue_id = container.pack.queue_for_intent(intent_code) if intent_code else "q_general"
+    # The real IVR since P3. Only the *keys* are faked - there is no audio until P5, so
+    # the request body carries what a keypad would have sent. Everything else (greeting,
+    # recording notice, menu order, reserved keys, retries, the queue decision) is the
+    # production walk, and `ScriptedChoices` presses canonical keys so a demo script keeps
+    # meaning what it says when a menu is reordered (`D81`).
+    prefetched = await container.snapshots.get(snapshot_id) if snapshot_id else None
+    ivr = await container.ivr.run(
+        session,
+        caller=ScriptedChoices(list(body.keys)),
+        did=container.pack.did(body.did) if body.did else None,
+        known_intent=body.intent_code,
+        inputs=PersonalisationInputs.from_snapshot(
+            prefetched.payload if prefetched else None, today=container.clock.now().date()
+        ),
+    )
+    intent_code = ivr.intent_code
+    queue_id = ivr.queue_id
     spec = container.pack.queues[queue_id]
 
-    await container.orchestrator.enter_ivr(session)
-    session.menu_path = tuple(body.keys)
-    session.menu_intent_code = intent_code
     session.snapshot_id = snapshot_id
     await container.orchestrator.enqueue(session, queue_id=queue_id)
 

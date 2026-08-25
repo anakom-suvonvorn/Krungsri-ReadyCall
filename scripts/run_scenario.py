@@ -5,10 +5,11 @@
 This is the harness that keeps the project unblocked: telephony is the hardest thing to
 stand up, so the whole system is designed to be driven without it (`ARCHITECTURE.md` §17).
 
-As of **P1** the identity ladder, the menu walk, the context assembler and the brief
+As of **P3** the identity ladder, **the IVR itself**, the context assembler and the brief
 builder are all real services doing real work here — only the *edges* (the phone, the
-speech model, the AI, the bank's database) are fakes. Remaining stand-ins are marked
-`# P1:`; `grep -rn "# P1:" scripts/` is the handover list for P2 and P3.
+speech model, the AI, the bank's database) are fakes. The scenario now supplies only what
+a caller supplies: which number they dialled and which keys they pressed. Remaining
+stand-ins are marked `# P1:`; `grep -rn "# P1:" scripts/` is the handover list.
 
 Deterministic by construction: `ManualClock` + `DeterministicIds` mean two runs produce
 byte-identical output, which is what makes golden-output comparison possible.
@@ -53,6 +54,9 @@ from readycall.services.brief import BriefBuilder
 from readycall.services.call_orchestrator import CallOrchestrator, InMemoryCallSessionRepository
 from readycall.services.context import ContextAssembler
 from readycall.services.identity import IdentityResolver, InMemoryCallIntentStore, hash_token
+from readycall.services.ivr.personalise import PersonalisationInputs
+from readycall.services.ivr.service import IvrService, ScriptedChoices
+from readycall.voiceprompts import PromptPack
 
 CONSENT_BY_NAME = {s.value: s for s in ConsentScope}
 
@@ -127,6 +131,8 @@ class ScenarioRun:
         self.repo = InMemoryCallSessionRepository()
         self.intents = InMemoryCallIntentStore()
         self.pack = DomainPack.load(root / "config")
+        self.prompts = PromptPack.load(root / "config" / "voice_prompts.yaml")
+        self.prompts.validate_against(self.pack)
         self.telephony = SimulatedTelephonyProvider(clock=self.clock)
         self.llm = RuleBasedLlm(clock=self.clock)
 
@@ -154,29 +160,19 @@ class ScenarioRun:
         )
         self.assembler = ContextAssembler(core=self.core, clock=self.clock)
         self.brief_builder = BriefBuilder(pack=self.pack, clock=self.clock)
+        self.ivr = IvrService(
+            pack=self.pack,
+            prompts=self.prompts,
+            telephony=self.telephony,
+            orchestrator=self.orchestrator,
+            clock=self.clock,
+        )
 
         self.snapshot: ContextSnapshot | None = None
         self.brief: CaseBrief | None = None
         self.rating: ev.RatingReceived | None = None
         self.transcript: list[str] = []
         self.notes: list[str] = []
-
-    def _queue_for(self, intent_code: str | None, line: ProductLine, did: Any) -> str:
-        """Pick a queue from the best evidence available.
-
-        Order matters, and each rung is better than falling through to `q_general`:
-        an explicit intent (menu or app) beats the line's catch-all, which beats the DID's
-        default. Knowing only the product line should still land the caller with someone
-        who works on that line — dropping them into the general queue would throw away
-        information we already have.
-        """
-        if intent_code:
-            return self.pack.queue_for_intent(intent_code)
-        if line is not ProductLine.UNKNOWN:
-            return self.pack.queue_for_intent(self.pack.catch_all_for(line).code)
-        if did is not None:
-            return did.default_queue
-        return "q_general"
 
     async def execute(self) -> Any:
         sc = self.scenario
@@ -271,41 +267,32 @@ class ScenarioRun:
         self.clock.advance(sc.seconds("connect", 1.0))
 
         # --- IVR: the menu routes the call, before any AI (D37) -----------------------
-        # P1: the IVR service itself lands in P3; here the scenario supplies the keys and
-        # the domain pack resolves them exactly as the real menu will.
-        session = await orch.enter_ivr(session)
-        intent_code: str | None = None
-
-        if sc.entry_channel is EntryChannel.IN_APP and sc.product_code:
-            # The app knows the plan AND the screen they tapped from, so both menu steps
-            # are answered before the call is even placed (`D6`, `D37`).
-            intent_code = sc.app_intent
-            session.menu_intent_code = intent_code
+        # The real service since P3. The scenario supplies the keypresses; everything
+        # else - greeting, notice, menu order, reserved keys, retries, the queue - is
+        # the production walk. `ScriptedChoices` presses CANONICAL keys, so a scenario
+        # keeps meaning what it says even when the menu is reordered (`D81`).
+        ivr_result = await self.ivr.run(
+            session,
+            caller=ScriptedChoices(sc.menu_path),
+            did=did,
+            known_intent=sc.app_intent if sc.entry_channel is EntryChannel.IN_APP else None,
+            inputs=PersonalisationInputs.from_snapshot(
+                self.snapshot.payload if self.snapshot else None, today=self.clock.now().date()
+            ),
+        )
+        outcome = ivr_result.outcome
+        intent_code = ivr_result.intent_code
+        if outcome.product_line is not ProductLine.UNKNOWN:
+            line = outcome.product_line
+        self.notes.append(
+            f"ivr {outcome.kind.value}: {len(ivr_result.played)} lines played, "
+            f"keys {'/'.join(outcome.pressed) or '-'} -> path {'/'.join(outcome.path) or '-'}"
+            f", line={line}, intent={intent_code or 'none'} ({ivr_result.intent_source})"
+        )
+        if ivr_result.personalised:
             self.notes.append(
-                "menu skipped: the app already said which plan"
-                + (f" and which section -> {intent_code}" if intent_code else "")
+                "menu reordered for this caller: " + "; ".join(ivr_result.promoted_because)
             )
-        elif sc.menu_path:
-            start = "product_line"
-            if did is not None and did.skip_product_menu:
-                reason_menu = self.pack.reason_menu_for(did.product_line)
-                if reason_menu is not None:
-                    start = reason_menu.menu_id
-            walk = self.pack.walk_menu(sc.menu_path, start=start)
-            session.menu_path = walk.path
-            session.menu_intent_code = walk.intent_code
-            intent_code = walk.intent_code
-            if walk.product_line is not ProductLine.UNKNOWN:
-                line = walk.product_line
-                session.product_line = line
-            self.notes.append(
-                f"menu {'/'.join(walk.path) or '-'} -> line={walk.product_line}"
-                f", intent={walk.intent_code or 'incomplete'}"
-            )
-        elif did is not None and did.assumed_intent:
-            intent_code = did.assumed_intent
-            session.menu_intent_code = intent_code
-            self.notes.append(f"no keys pressed; DID implies {intent_code}")
 
         for name in sc.consents:
             scope = CONSENT_BY_NAME.get(name)
@@ -317,7 +304,7 @@ class ScenarioRun:
         self.clock.advance(sc.seconds("ivr", 8.0))
 
         # --- queue: known from the menu, not from AI ----------------------------------
-        queue_id = self._queue_for(intent_code, line, did)
+        queue_id = ivr_result.queue_id
         session = await orch.enqueue(session, queue_id=queue_id, position=3, estimated_wait_s=90.0)
 
         # --- brief v1: context only, no speech, no AI ---------------------------------

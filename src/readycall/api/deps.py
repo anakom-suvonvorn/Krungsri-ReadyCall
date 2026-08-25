@@ -24,6 +24,7 @@ from readycall.adapters.core_data.caching import CachingCoreDataProvider
 from readycall.adapters.core_data.fixtures import FixtureFileProvider
 from readycall.adapters.core_data.null import NullCoreDataProvider
 from readycall.adapters.event_bus.memory import InMemoryEventBus
+from readycall.adapters.telephony.simulated import SimulatedTelephonyProvider
 from readycall.api.realtime import AgentHub
 from readycall.api.schemas import (
     BriefCoverageOut,
@@ -66,6 +67,7 @@ from readycall.services.identity.attestation import AttestationService
 from readycall.services.identity.intents import IntentService
 from readycall.services.identity.resolver import IdentityResolver
 from readycall.services.identity.store import InMemoryCallIntentStore
+from readycall.services.ivr.service import IvrService
 from readycall.services.matching.engine import MatchingEngine
 from readycall.services.matching.scoring import WaitingCall
 from readycall.services.matching.weights import MatchingWeights
@@ -175,6 +177,18 @@ class Container:
         self.hours = QueueHours.load(settings.config_dir / "queue_hours.yaml")
         self.calls = self.storage.calls
         self.orchestrator = CallOrchestrator(repository=self.calls, bus=self.bus, clock=self.clock)
+
+        #: Telephony until P5. Demo calls carry no channel, so nothing is played through
+        #: it yet — but the IVR talks to the port rather than to a special case, which is
+        #: what makes Asterisk a config change rather than a rewrite (`D3`).
+        self.telephony = SimulatedTelephonyProvider(clock=self.clock)
+        self.ivr = IvrService(
+            pack=self.pack,
+            prompts=self.prompts,
+            telephony=self.telephony,
+            orchestrator=self.orchestrator,
+            clock=self.clock,
+        )
         self.hub = AgentHub(clock=self.clock)
         self.presence = PresenceService(
             clock=self.clock,

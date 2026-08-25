@@ -368,13 +368,29 @@ class TestTheServiceEndToEnd:
         self, service: IvrService, pack: DomainPack, orchestrator: CallOrchestrator
     ) -> None:
         """`D40`: knowing only the product line must still beat the general queue."""
+        session = await orchestrator.start_cold_call(dialled_did="+6621234222")
+        result = await service.run(session, caller=ScriptedChoices([]), did=pack.did("+6621234222"))
+
+        assert result.outcome.kind is IvrOutcomeKind.EXHAUSTED
+        assert result.outcome.product_line is ProductLine.HEALTH
+        assert result.queue_id == pack.queue_for_intent("health.other")
+        assert result.queue_id != "q_general"
+
+    async def test_a_did_may_assume_an_intent_but_never_claims_it_was_pressed(
+        self, service: IvrService, pack: DomainPack, orchestrator: CallOrchestrator
+    ) -> None:
+        """Someone dialling the number in their glovebox is probably beside a damaged
+        car (`D19`) — real evidence, weaker than a keypress. So the queue uses it and the
+        record still says nobody pressed anything."""
         session = await orchestrator.start_cold_call(dialled_did="+6621234111")
         result = await service.run(session, caller=ScriptedChoices([]), did=pack.did("+6621234111"))
 
-        assert result.outcome.kind is IvrOutcomeKind.EXHAUSTED
-        assert result.outcome.product_line is ProductLine.MOTOR
-        assert result.queue_id == pack.queue_for_intent("motor.other")
-        assert result.queue_id != "q_general"
+        assert result.queue_id == "q_motor_claim"
+        assert result.intent_code == "motor.claim.accident"
+        assert result.intent_source == "did"
+        assert result.outcome.intent_code is None, "nothing was pressed, so nothing is claimed"
+        assert result.outcome.path == ()
+        assert session.menu_intent_code is None
 
     async def test_every_line_played_is_a_clip_that_the_build_produced(
         self, service: IvrService, pack: DomainPack, orchestrator: CallOrchestrator, prompts
