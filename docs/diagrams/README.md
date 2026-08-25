@@ -62,8 +62,8 @@ naming the doc or module they were checked against.
 teaching decisions that had since been *reversed*: `brief_gating` still gated what the agent
 could SEE, which `D74` overturned, and `identity_promotion` still said a verified third party
 stayed locked, which `D65` overturned. Others had simply been overtaken — `real_vs_fake`
-listed five things as unbuilt that had shipped, `decision_map` said "43 decisions" against 81,
-`test_layers` claimed 161 tests against 496. All are corrected.
+listed five things as unbuilt that had shipped, `decision_map` counted 43 decisions when there
+were 81, and `test_layers` was three phases behind on the suite size. All are corrected.
 
 The lesson for anyone editing these: **the banner is a claim.** If you change a decision,
 `grep` the banner lines for its number — `grep -n "D74" src/*.mmd` — and fix every diagram
