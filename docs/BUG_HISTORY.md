@@ -296,6 +296,63 @@ Format per entry:
   the dispatcher on the way through — so the suite proved the ticking worked without ever
   proving anything caused it.
 
+## B8. The clock-skew fix froze every timer it was meant to correct
+
+- **Symptoms:** reported by the user immediately after `D68` shipped. Both the in-call timer
+  and the after-call-work timer updated *"only after every 10s or so again"* rather than
+  every second — the same symptom the server-anchored rewrite had already fixed once, back
+  when the cause was something else entirely.
+- **Root cause: the correction cancelled out the thing it was correcting.** `D68` added a
+  clock-skew term so a laptop with a drifted clock would not show wrong durations. The
+  arithmetic was right and the *placement* was wrong:
+
+  ```ts
+  const now  = useSecondTicker(signedIn);          // returns Date.now(), fresh each render
+  const skew = clockSkewMs(snapshot.server_time);  // = server_time - Date.now(), EACH RENDER
+  elapsed    = now + skew - started;
+  ```
+
+  Both `now` and the `Date.now()` inside `clockSkewMs` are read during the *same* render, so
+  they are the same instant and cancel:
+
+  ```
+  now + skew  =  Date.now() + (server_time - Date.now())  =  server_time
+  ```
+
+  The elapsed time therefore became `server_time - started` — a value that changes only when
+  a **new snapshot arrives**. Snapshots arrive on socket pushes and background refreshes,
+  which is roughly every ten seconds. The 4 Hz ticker kept re-rendering faithfully and kept
+  computing the identical number.
+- **Why it is worth a full entry:** the timers were re-rendering, the ticker was firing, the
+  server timestamps were correct, and the skew maths was correct. Every component behaved
+  exactly as designed. **The bug lived in the composition** — the same shape as `B5`, where
+  the ladder, the builder, the flag and the UI were each right and the leak was between
+  them. A correction term must be sampled from a *different moment* than the value it
+  corrects, or it is not a correction, it is an identity.
+- **Fix:** sample the skew **once per snapshot** and hold it in state
+  (`useEffect` keyed on `snapshot.server_time`), so `now` moves while `skew` stays put.
+  The code carries the explanation, because the broken version looks more correct than the
+  fixed one — recomputing "current" skew every render reads like the careful choice.
+- **Verification.** Measuring through the rendered DOM was misleading: the automated browser
+  pane runs the tab hidden, and Chrome throttles `setInterval` in background tabs, so the
+  displayed timer *legitimately* freezes there regardless of this bug. Both versions of the
+  computation were therefore replayed directly, simulating two renders five seconds apart
+  against one snapshot:
+
+  ```
+  OLD:  at T+0s = 60.0   at T+5s = 60.0   advanced 0.0s     <- frozen between snapshots
+  NEW:  at T+0s = 60.0   at T+5s = 65.0   advanced 5.0s     <- moves with the clock
+  ```
+
+- **Lesson, and it generalises past this bug:** *a value derived from `Date.now()` cannot be
+  combined with another value derived from `Date.now()` in the same tick and still describe
+  elapsed time.* One of the two has to be anchored earlier. Sample offsets at the moment the
+  reference arrives, never at the moment you use them.
+- **Second lesson, about testing:** the automated browser cannot verify per-second UI
+  timing, because the pane is hidden and hidden tabs are throttled by the browser itself. A
+  timing claim about the DOM measured that way is worthless; test the arithmetic directly
+  instead, or watch it with human eyes.
+
 ---
 
 ## Areas where bugs are expected (write them up when they happen)

@@ -42,6 +42,8 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [muted, setMuted] = useState(false);
   const [held, setHeld] = useState(false);
+  /** `server - browser`, in ms, sampled once per snapshot. See `B8`. */
+  const [skew, setSkew] = useState(0);
 
   const signedIn = snapshot !== null;
   const now = useSecondTicker(signedIn);
@@ -123,6 +125,11 @@ export default function App() {
 
   const socketStatus = useSocket(signedIn, onSocketMessage, setSnapshot);
 
+  // Measured when a snapshot ARRIVES, never per render — see the note where it is used.
+  useEffect(() => {
+    setSkew(clockSkewMs(snapshot?.server_time));
+  }, [snapshot?.server_time]);
+
   useEffect(() => {
     // The softphone is stubbed, so these are local until P5 brings a real media session
     // with its own authoritative mute state. Clearing them off-call keeps the buttons
@@ -142,9 +149,12 @@ export default function App() {
   const onCall = presence.system_state === "on_call";
   const wrapping = presence.system_state === "after_call_work";
 
-  // Drawn from server timestamps AND corrected for a browser clock that disagrees, so a
-  // laptop whose clock has drifted does not quietly show the wrong duration.
-  const skew = clockSkewMs(snapshot.server_time);
+  // Drawn from server timestamps AND corrected for a browser clock that disagrees.
+  // `skew` is measured ONCE per snapshot (see the effect above) and held. Recomputing it
+  // per render freezes every timer: `skew` would be `server - Date.now()` and `now` would
+  // be `Date.now()` from the same render, so `now + skew` collapses to `server_time` --
+  // a constant that only moves when the next snapshot lands. That is exactly what made
+  // the clocks tick once every ten seconds instead of every second (`B8`).
   const callSeconds = elapsedSince(snapshot.call_answered_at, now, skew);
   const acwSeconds = elapsedSince(presence.acw_since, now, skew);
   // The server computes this from `acw_long_after_s`. The client used to OR it with its
@@ -245,6 +255,7 @@ export default function App() {
         <div className="col">
           <IdentityPanel
             identity={identity}
+            challenges={snapshot.challenges}
             callId={callId}
             busy={busy}
             onAttest={(payload) =>
