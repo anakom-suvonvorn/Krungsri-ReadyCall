@@ -43,11 +43,28 @@ def _database_url() -> str:
 def include_object(
     obj: Any, name: str | None, type_: str, reflected: bool, compare_to: Any
 ) -> bool:
-    """Never emit DDL against the bank's schema (`D5`)."""
+    """Never emit DDL against the bank's schema (`D5`), and never churn a foreign key."""
     # Alembic's own bookkeeping table is not part of the model, and autogenerate will
     # cheerfully propose dropping it if it happens to exist when the comparison runs.
     if type_ == "table" and name == "alembic_version":
         return False
+
+    # Foreign keys are compared unqualified in the model and schema-qualified when
+    # reflected, so **every** autogenerate run proposes dropping and recreating every
+    # existing FK — differing only in whether the schema is spelled out. That is churn on
+    # a good day, and on a bad one it is broken DDL: the generated `drop_constraint` omits
+    # `schema=`, so it looks for the table in `public` and fails.
+    #
+    # Qualifying the models instead was tried and rejected: SQLite cannot reference a
+    # table in an ATTACHed database, so `readycall.call_sessions` would break the
+    # container-free test path — and losing that is exactly the trade `D75` refuses.
+    #
+    # Excluding the type suppresses only *alterations*. A foreign key on a new table is
+    # still emitted inline by `create_table`, which is where they actually get made —
+    # verified: the migration that added these six tables carries all five of its FKs.
+    if type_ == "foreign_key_constraint":
+        return False
+
     schema = getattr(obj, "schema", None)
     return not (type_ == "table" and schema not in (None, SCHEMA))
 

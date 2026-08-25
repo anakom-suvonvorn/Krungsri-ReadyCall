@@ -34,6 +34,7 @@ from readycall.domain.models import (
     StateTransition,
 )
 from readycall.logging import get_logger
+from readycall.services.agents.presence import InMemoryAgentStateLog
 
 log = get_logger(__name__)
 
@@ -244,26 +245,9 @@ def _row_to_change(row: AgentStateLogRow) -> AgentStateChange:
     )
 
 
-class InMemoryAgentStateLog:
-    """The fake, kept in step with the real one by the same contract suite (`D3`)."""
-
-    name = "memory"
-
-    def __init__(self) -> None:
-        self._rows: list[AgentStateChange] = []
-
-    async def append(self, change: AgentStateChange) -> None:
-        self._rows.append(change)
-
-    async def for_agent(self, agent_id: str, *, limit: int = 500) -> list[AgentStateChange]:
-        rows = [r for r in self._rows if r.agent_id == agent_id]
-        return sorted(rows, key=lambda r: r.at, reverse=True)[:limit]
-
-    async def latest_per_agent(self) -> dict[str, AgentStateChange]:
-        latest: dict[str, AgentStateChange] = {}
-        for row in sorted(self._rows, key=lambda r: r.at):
-            latest[row.agent_id] = row
-        return latest
+# `InMemoryAgentStateLog` lives beside the Protocol in `services/agents/presence.py`, with
+# every other in-memory store. It is re-exported here because the contract suite and the
+# storage factory both reach for it by this name.
 
 
 __all__ = [

@@ -1,0 +1,14 @@
+-- A SEPARATE database for the test suite, and it is not a nicety.
+--
+-- The Postgres contract tests build their tables with `Base.metadata.create_all` and drop
+-- them again on teardown. Pointed at the dev database that does two bad things at once:
+-- it deletes whatever was there, and — because `drop_all` leaves `alembic_version` behind,
+-- still stamped at head — it leaves Alembic *claiming* the schema is up to date while every
+-- table is gone. `alembic upgrade head` is then a silent no-op and the app dies at startup
+-- with "relation readycall.call_sessions does not exist".
+--
+-- That is a confident, plausible, wrong state (`B3`, `B4`, `B7`, `B9`), and the cheapest
+-- permanent fix is that the suite simply never touches the database anyone else uses.
+--
+-- Recovery, if it ever happens again:  uv run alembic stamp base && uv run alembic upgrade head
+CREATE DATABASE readycall_test OWNER readycall;

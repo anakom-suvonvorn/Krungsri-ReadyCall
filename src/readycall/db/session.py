@@ -27,13 +27,19 @@ from readycall.logging import get_logger
 log = get_logger(__name__)
 
 
-def create_engine(url: str, *, echo: bool = False) -> AsyncEngine:
+def create_engine(url: str, *, echo: bool = False, pooled: bool = True) -> AsyncEngine:
     """An async engine for Postgres or SQLite.
 
     SQLite is not a deployment target — it is what lets the whole suite run with no
     container, which is the difference between the database path being tested on every
     commit and being tested when somebody remembers. `B7` is what happens to code that is
     only exercised when somebody remembers.
+
+    **`pooled=False` exists for tests that cross event loops.** An asyncpg connection is
+    bound to the loop that created it, and `TestClient` runs the app on its own loop — so a
+    pooled engine built in a fixture hands the app a connection from the wrong loop and
+    fails deep inside the driver with *"attached to a different loop"*. Alembic's `env.py`
+    uses `NullPool` for the same reason. Production is always pooled.
     """
     if url.startswith("sqlite"):
         # A shared in-memory SQLite database needs one connection for every session, or
@@ -65,6 +71,10 @@ def create_engine(url: str, *, echo: bool = False) -> AsyncEngine:
             cursor.close()
 
         return engine
+    if not pooled:
+        from sqlalchemy.pool import NullPool
+
+        return create_async_engine(url, echo=echo, poolclass=NullPool)
     return create_async_engine(url, echo=echo, pool_pre_ping=True)
 
 
