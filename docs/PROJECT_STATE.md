@@ -43,8 +43,10 @@ services doing real work - only the *edges* (phone, speech, AI, the bank's data,
 are still fakes. An agent signs in at `/workstation`, a caller arrives, the desk rings, the brief is
 already there, and the disclosure gate moves when the agent attests.
 
-Verified on 2026-08-24: **369 tests pass**, `ruff check` and `ruff format --check` clean,
-`mypy --strict` clean over 81 source files, and all three scenarios replay byte-identically.
+Verified on 2026-08-25: **369 tests pass** (355 + 14 skipped — Postgres unreachable without
+the container, plus the FK case the in-memory backend cannot have), `ruff check` and
+`ruff format --check` clean over 120 files, `mypy --strict` clean over **93** source files,
+and all three scenarios replay byte-identically.
 
 ```
 $ uv run python scripts/run_scenario.py tests/scenarios/pattheera_ipd.yaml --quiet
@@ -320,7 +322,7 @@ performing by hand, i.e. what the next services take over (`D36`).
 
 ---
 
-## 8. Real numbers (as of 2026-08-24)
+## 8. Real numbers (as of 2026-08-25)
 
 | | |
 |---|---|
