@@ -13,8 +13,8 @@ assembled before the phone is answered, which agent should take it and why, the 
 and a human accepts with the screen already right — and now **the caller keys their own way
 to the right queue through a real menu, hearing real (pre-rendered) Thai**.
 
-Verified **2026-08-25**: **494 tests** — 452 pass + 42 skipped without the Postgres
-container, all 494 with it. `ruff check` + `ruff format --check` clean over 140 files,
+Verified **2026-08-25**: **496 tests** — 454 pass + 42 skipped without the Postgres
+container, all 496 with it. `ruff check` + `ruff format --check` clean over 141 files,
 `mypy --strict` clean over 106, all scenarios replay, 60/60 diagrams current.
 
 ### The four sessions of review since P2b, in one place
@@ -421,8 +421,11 @@ Facts about *this laptop* rather than the repo, so a fresh session does not redi
 `docs/diagrams/README.md`. Two pages cover the parts with no screen: **`11_persistence.md`**
 (what survives a restart) and **`12_the_menu.md`** (what the caller actually hears — the
 prompt pipeline, why a menu is not one clip, and every path that does not end in a route).
-`11`'s readable twin `docs/reading/persistence.html` has a **restart simulator** you can
-click through; the two must be updated together. **14 of the 60 are generated from source**,
+Both have readable twins in `docs/reading/` you can click through: `persistence.html` has a
+**restart simulator**, `the_line.html` has a **working keypad** that walks the real menu and
+shows every press resolving back to canonical. Each must be updated with its diagram page —
+and `the_line.html`'s data is generated (`scripts/build_reading_data.py`), with a test that
+fails when it is stale. **14 of the 60 are generated from source**,
 so they cannot drift; `tests/unit/test_diagrams.py` fails if a committed one falls behind.
 
 ```bash
@@ -430,6 +433,7 @@ uv run python scripts/gen_diagrams.py      # rebuild derived .mmd sources
 uv run python scripts/render_diagrams.py   # render all .mmd -> .svg  (needs mermaid-cli)
 uv run python scripts/render_diagrams.py --check   # content-hash staleness check
 uv run python scripts/build_prompts.py --check     # same idea, for the spoken lines
+uv run python scripts/build_reading_data.py       # refresh the keypad page's menu data
 ```
 
 `mermaid-cli` is not installed globally: `npm i -g @mermaid-js/mermaid-cli`, or set `MMDC`.

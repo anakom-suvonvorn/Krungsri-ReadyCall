@@ -189,6 +189,13 @@ notice, and not a single question.
 
 ## Where to go from here
 
+- **`../reading/the_line.html`** — a **readable, interactive twin** of this page. Open it in
+  a browser, no build step. It carries a **working keypad**: pick a number, pick a caller,
+  and press your way through the real menu while it shows you every Thai line that plays and
+  every press being resolved back to canonical. Switch the caller to *recognised* and the
+  numbers move under you — which is `D81` as something you can do rather than read. That is
+  the closest this layer gets to something you can poke at, which is most of why it exists.
+  This page and that one must be updated together.
 - **[Routing](04_routing.md)** — why the menu leads at all, and the tree it walks.
 - **[Voice & AI](07_voice_and_ai.md)** — what runs *after* this, while the caller waits.
 - `explanations/P3_voice.md` — the same material at length, with what was rejected.

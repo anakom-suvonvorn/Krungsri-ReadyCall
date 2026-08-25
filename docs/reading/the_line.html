@@ -1,0 +1,899 @@
+<title>The Line</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&family=Noto+Sans+Thai:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap">
+
+<style>
+  :root {
+    --paper:      #fbfaf7;
+    --paper-2:    #f3f1ea;
+    --ink:        #16181d;
+    --ink-soft:   #4a4d55;
+    --ink-faint:  #7d8089;
+    --rule:       #ddd8cd;
+    --rule-soft:  #eae6dc;
+
+    /* this page's semantics: what is spoken, what is pressed, what is resolved */
+    --spoken:     #9a6114;
+    --spoken-bg:  #f8f0e3;
+    --press:      #1d4f8f;
+    --press-bg:   #e6eef8;
+    --canon:      #1d6b4f;
+    --canon-bg:   #e6f0ea;
+    --soft:       #6b4c9a;
+    --soft-bg:    #efe9f7;
+    --signal:     #b8420f;
+    --signal-bg:  #fbeee7;
+    --shadow:     rgba(22,24,29,.07);
+
+    --f-display: "Fraunces", Georgia, serif;
+    --f-body:    "Newsreader", Georgia, serif;
+    --f-thai:    "Noto Sans Thai", "Leelawadee UI", "Tahoma", sans-serif;
+    --f-mono:    "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper:      #14161a;
+      --paper-2:    #1b1e23;
+      --ink:        #eceae4;
+      --ink-soft:   #b3b0a8;
+      --ink-faint:  #85837c;
+      --rule:       #32363d;
+      --rule-soft:  #262a30;
+      --spoken:     #e0a760;
+      --spoken-bg:  #2e2416;
+      --press:      #7cb2f0;
+      --press-bg:   #162332;
+      --canon:      #5cc39a;
+      --canon-bg:   #16302a;
+      --soft:       #b295e0;
+      --soft-bg:    #241c33;
+      --signal:     #f0885a;
+      --signal-bg:  #2e1d15;
+      --shadow:     rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper:      #14161a;
+    --paper-2:    #1b1e23;
+    --ink:        #eceae4;
+    --ink-soft:   #b3b0a8;
+    --ink-faint:  #85837c;
+    --rule:       #32363d;
+    --rule-soft:  #262a30;
+    --spoken:     #e0a760;
+    --spoken-bg:  #2e2416;
+    --press:      #7cb2f0;
+    --press-bg:   #162332;
+    --canon:      #5cc39a;
+    --canon-bg:   #16302a;
+    --soft:       #b295e0;
+    --soft-bg:    #241c33;
+    --signal:     #f0885a;
+    --signal-bg:  #2e1d15;
+    --shadow:     rgba(0,0,0,.35);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--f-body);
+    font-size: 18px;
+    line-height: 1.65;
+    margin: 0;
+    padding: 0 1.25rem 6rem;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap  { max-width: 43rem; margin: 0 auto; }
+  .bleed { max-width: 64rem; margin-inline: auto; }
+
+  /* ---- masthead ---- */
+  header.mast { padding: 4.5rem 0 2rem; border-bottom: 1px solid var(--rule); margin-bottom: 2.5rem; }
+  .kicker {
+    font-family: var(--f-mono); font-size: .72rem; letter-spacing: .16em;
+    text-transform: uppercase; color: var(--ink-faint); margin: 0 0 1rem;
+  }
+  h1 {
+    font-family: var(--f-display); font-weight: 600; font-size: clamp(2.4rem, 7vw, 4rem);
+    line-height: 1.02; letter-spacing: -.02em; margin: 0 0 1rem; text-wrap: balance;
+  }
+  .standfirst { font-size: 1.28rem; line-height: 1.5; color: var(--ink-soft); margin: 0; text-wrap: pretty; }
+
+  h2 {
+    font-family: var(--f-display); font-weight: 600; font-size: 1.75rem; line-height: 1.15;
+    letter-spacing: -.01em; margin: 3.5rem 0 .5rem; text-wrap: balance;
+  }
+  h2 .num { font-family: var(--f-mono); font-size: .78rem; font-weight: 500; color: var(--ink-faint); display: block; margin-bottom: .5rem; letter-spacing: .1em; }
+  h3 { font-family: var(--f-display); font-weight: 600; font-size: 1.15rem; margin: 2rem 0 .4rem; }
+  p { margin: 0 0 1.1rem; text-wrap: pretty; }
+  a { color: var(--press); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+
+  code, .mono { font-family: var(--f-mono); font-size: .84em; }
+  code { background: var(--paper-2); padding: .1em .35em; border-radius: 3px; }
+  .th { font-family: var(--f-thai); font-size: .95em; }
+
+  .lede::first-letter {
+    font-family: var(--f-display); font-size: 3.4rem; float: left; line-height: .82;
+    padding: .12em .1em 0 0; font-weight: 600;
+  }
+
+  blockquote {
+    margin: 1.8rem 0; padding: 0 0 0 1.2rem; border-left: 3px solid var(--signal);
+    font-size: 1.08rem; color: var(--ink-soft); font-style: italic;
+  }
+  blockquote strong { color: var(--ink); font-style: normal; }
+
+  /* ---- the simulator ---- */
+  .sim {
+    background: var(--paper-2); border: 1px solid var(--rule); border-radius: 10px;
+    padding: 1.5rem; margin: 2rem 0 2.5rem; box-shadow: 0 1px 3px var(--shadow);
+  }
+  .sim-head { display: flex; flex-wrap: wrap; gap: .75rem 1.5rem; align-items: flex-end; margin-bottom: 1.25rem; }
+  .field { display: flex; flex-direction: column; gap: .3rem; }
+  .field label {
+    font-family: var(--f-mono); font-size: .68rem; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--ink-faint);
+  }
+  select {
+    font-family: var(--f-body); font-size: .95rem; padding: .4rem .6rem;
+    background: var(--paper); color: var(--ink); border: 1px solid var(--rule); border-radius: 6px;
+  }
+
+  .sim-body { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1.1fr); gap: 1.25rem; }
+  @media (max-width: 720px) { .sim-body { grid-template-columns: 1fr; } }
+
+  .panel { background: var(--paper); border: 1px solid var(--rule-soft); border-radius: 8px; padding: 1rem; min-width: 0; }
+  .panel h4 {
+    font-family: var(--f-mono); font-size: .68rem; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--ink-faint); margin: 0 0 .75rem; font-weight: 500;
+  }
+
+  .keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: .5rem; }
+  .keypad button {
+    font-family: var(--f-mono); font-size: 1.25rem; font-weight: 500;
+    padding: .65rem 0; background: var(--paper); color: var(--ink);
+    border: 1px solid var(--rule); border-radius: 8px; cursor: pointer;
+  }
+  .keypad button:hover:not(:disabled) { background: var(--press-bg); border-color: var(--press); color: var(--press); }
+  .keypad button:focus-visible { outline: 2px solid var(--press); outline-offset: 2px; }
+  .keypad button:disabled { opacity: .35; cursor: not-allowed; }
+  .keypad button.reserved { color: var(--soft); border-color: var(--rule); }
+  .keypad button small { display: block; font-family: var(--f-body); font-size: .6rem; color: var(--ink-faint); letter-spacing: .02em; }
+
+  .aux { display: flex; gap: .5rem; margin-top: .5rem; flex-wrap: wrap; }
+  .aux button {
+    flex: 1 1 auto; font-family: var(--f-body); font-size: .82rem; padding: .5rem .6rem;
+    background: var(--paper); color: var(--ink-soft);
+    border: 1px dashed var(--rule); border-radius: 8px; cursor: pointer;
+  }
+  .aux button:hover:not(:disabled) { color: var(--signal); border-color: var(--signal); }
+  .aux button:disabled { opacity: .35; cursor: not-allowed; }
+  .aux button.restart { border-style: solid; }
+
+  .heard { max-height: 21rem; overflow-y: auto; display: flex; flex-direction: column; gap: .45rem; }
+  .line-row {
+    display: grid; grid-template-columns: auto 1fr; gap: .55rem; align-items: baseline;
+    padding: .35rem .5rem; border-radius: 5px; background: var(--spoken-bg);
+  }
+  .line-row .pid { font-family: var(--f-mono); font-size: .6rem; color: var(--spoken); white-space: nowrap; }
+  .line-row .txt { font-family: var(--f-thai); font-size: .84rem; line-height: 1.5; color: var(--ink); }
+  .line-row.press { background: var(--press-bg); }
+  .line-row.press .pid { color: var(--press); }
+  .line-row.press .txt { font-family: var(--f-mono); font-size: .78rem; color: var(--press); }
+  .line-row.event { background: transparent; border: 1px dashed var(--rule); }
+  .line-row.event .pid, .line-row.event .txt { color: var(--ink-faint); font-family: var(--f-mono); font-size: .7rem; }
+
+  .state { display: grid; grid-template-columns: auto 1fr; gap: .3rem .8rem; font-size: .82rem; }
+  .state dt { font-family: var(--f-mono); font-size: .68rem; color: var(--ink-faint); text-transform: uppercase; letter-spacing: .08em; align-self: center; }
+  .state dd { margin: 0; font-family: var(--f-mono); font-size: .8rem; }
+  .chip {
+    display: inline-block; padding: .1rem .45rem; border-radius: 4px;
+    font-family: var(--f-mono); font-size: .74rem;
+  }
+  .chip.canon { background: var(--canon-bg); color: var(--canon); }
+  .chip.press { background: var(--press-bg); color: var(--press); }
+  .chip.soft  { background: var(--soft-bg);  color: var(--soft); }
+  .chip.sig   { background: var(--signal-bg); color: var(--signal); }
+  .chip.none  { color: var(--ink-faint); }
+
+  .verdict { margin-top: 1rem; padding: .8rem; border-radius: 6px; border: 1px solid var(--rule); background: var(--paper-2); }
+  .verdict .head { font-family: var(--f-display); font-weight: 600; font-size: 1.05rem; margin-bottom: .2rem; }
+  .verdict .why { font-size: .85rem; color: var(--ink-soft); }
+  .verdict.routed { border-color: var(--canon); background: var(--canon-bg); }
+  .verdict.routed .head { color: var(--canon); }
+  .verdict.softout { border-color: var(--soft); background: var(--soft-bg); }
+  .verdict.softout .head { color: var(--soft); }
+  .verdict.gone { border-color: var(--signal); background: var(--signal-bg); }
+  .verdict.gone .head { color: var(--signal); }
+
+  .promo-note {
+    margin-top: .75rem; padding: .6rem .7rem; border-radius: 6px;
+    background: var(--canon-bg); border: 1px solid var(--canon);
+    font-size: .8rem; color: var(--ink);
+  }
+  .promo-note b { color: var(--canon); }
+
+  /* ---- comparison + tables ---- */
+  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin: 1.75rem 0; }
+  @media (max-width: 640px) { .compare { grid-template-columns: 1fr; } }
+  .card { border: 1px solid var(--rule); border-radius: 8px; padding: 1rem; background: var(--paper-2); }
+  .card h4 { font-family: var(--f-mono); font-size: .68rem; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-faint); margin: 0 0 .7rem; }
+  .card ol { margin: 0; padding-left: 1.3rem; }
+  .card li { font-family: var(--f-thai); font-size: .86rem; margin-bottom: .3rem; }
+  .card li em { font-family: var(--f-mono); font-size: .68rem; font-style: normal; color: var(--ink-faint); display: block; }
+  .card li.moved { color: var(--canon); }
+  .card li.moved em { color: var(--canon); }
+
+  .tablewrap { overflow-x: auto; margin: 1.5rem 0; }
+  table { border-collapse: collapse; width: 100%; font-size: .88rem; }
+  th, td { text-align: left; padding: .55rem .7rem; border-bottom: 1px solid var(--rule-soft); vertical-align: top; }
+  th { font-family: var(--f-mono); font-size: .68rem; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-faint); font-weight: 500; border-bottom: 1px solid var(--rule); }
+  td.k { font-family: var(--f-mono); white-space: nowrap; }
+
+  pre {
+    background: var(--paper-2); border: 1px solid var(--rule-soft); border-radius: 6px;
+    padding: .9rem 1rem; overflow-x: auto; font-family: var(--f-mono); font-size: .8rem; line-height: 1.55;
+  }
+
+  .foot { margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid var(--rule); font-size: .9rem; color: var(--ink-faint); }
+  .foot a { color: var(--ink-soft); }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .line-row { animation: slide .18s ease-out; }
+    @keyframes slide { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
+  }
+</style>
+
+<script id="ivr-data" type="application/json">{"settings":{"repeat_key":"9","operator_key":"0","max_attempts":3,"invalid_prompt":"menu.invalid","timeout_s":7.0},"menus":{"product_line":{"prompt":"menu.product_line","options":[{"key":"1","label":"ประกันรถยนต์","line":"motor","intent":null,"next":"motor_reason"},{"key":"2","label":"ประกันสุขภาพ","line":"health","intent":null,"next":"health_reason"},{"key":"3","label":"ประกันเดินทาง","line":"travel","intent":null,"next":"travel_reason"},{"key":"4","label":"ประกันชีวิต","line":"life","intent":null,"next":"life_reason"},{"key":"5","label":"เรื่องอื่นๆ","line":"unknown","intent":null,"next":"general_reason"}]},"motor_reason":{"prompt":"menu.motor_reason","options":[{"key":"1","label":"แจ้งอุบัติเหตุ","line":null,"intent":"motor.claim.accident","next":null},{"key":"2","label":"ขอความช่วยเหลือฉุกเฉิน","line":null,"intent":"motor.roadside_assist","next":null},{"key":"3","label":"ติดตามสถานะเคลม","line":null,"intent":"motor.claim.status","next":null},{"key":"4","label":"สอบถามความคุ้มครอง","line":null,"intent":"motor.policy.coverage","next":null},{"key":"5","label":"ต่ออายุกรมธรรม์","line":null,"intent":"motor.policy.renew","next":null},{"key":"6","label":"เรื่องอื่นๆ","line":null,"intent":"motor.other","next":null}]},"health_reason":{"prompt":"menu.health_reason","options":[{"key":"1","label":"แจ้งเข้ารักษาผู้ป่วยใน","line":null,"intent":"health.ipd.preauth","next":null},{"key":"2","label":"ยื่นเคลมค่ารักษา","line":null,"intent":"health.claim.submit","next":null},{"key":"3","label":"ติดตามสถานะเคลม","line":null,"intent":"health.claim.status","next":null},{"key":"4","label":"สอบถามความคุ้มครอง","line":null,"intent":"health.coverage.query","next":null},{"key":"5","label":"โรงพยาบาลในเครือ","line":null,"intent":"health.network.hospital","next":null},{"key":"6","label":"เรื่องอื่นๆ","line":null,"intent":"health.other","next":null}]},"travel_reason":{"prompt":"menu.travel_reason","options":[{"key":"1","label":"เหตุฉุกเฉินระหว่างเดินทาง","line":null,"intent":"travel.emergency.overseas","next":null},{"key":"2","label":"ยื่นเคลม","line":null,"intent":"travel.claim.submit","next":null},{"key":"3","label":"สอบถามความคุ้มครอง","line":null,"intent":"travel.coverage.query","next":null},{"key":"4","label":"เรื่องอื่นๆ","line":null,"intent":"travel.other","next":null}]},"life_reason":{"prompt":"menu.life_reason","options":[{"key":"1","label":"สอบถามมูลค่ากรมธรรม์","line":null,"intent":"life.policy.value","next":null},{"key":"2","label":"เปลี่ยนผู้รับผลประโยชน์","line":null,"intent":"life.beneficiary.change","next":null},{"key":"3","label":"แจ้งเคลมกรณีเสียชีวิต","line":null,"intent":"life.claim.death","next":null},{"key":"4","label":"เรื่องอื่นๆ","line":null,"intent":"life.other","next":null}]},"general_reason":{"prompt":"menu.general_reason","options":[{"key":"1","label":"การชำระเบี้ยประกัน","line":null,"intent":"general.billing","next":null},{"key":"2","label":"ต่ออายุกรมธรรม์","line":null,"intent":"general.renewal","next":null},{"key":"3","label":"แก้ไขข้อมูลส่วนตัว","line":null,"intent":"general.update_details","next":null},{"key":"4","label":"ขอเอกสาร","line":null,"intent":"general.document.request","next":null},{"key":"5","label":"สนใจผลิตภัณฑ์ใหม่","line":null,"intent":"general.new_product","next":null},{"key":"6","label":"ร้องเรียน","line":null,"intent":"general.complaint","next":null},{"key":"7","label":"เรื่องอื่นๆ","line":null,"intent":"general.other","next":null}]}},"dids":{"+6621234000":{"label":"General hotline","line":"unknown","greeting":"greeting.general","skip":false,"queue":"q_general","assumed":null},"+6621234111":{"label":"Motor claims","line":"motor","greeting":"greeting.motor_claim","skip":true,"queue":"q_motor_claim","assumed":"motor.claim.accident"},"+6621234222":{"label":"Health","line":"health","greeting":"greeting.health","skip":true,"queue":"q_health_policy","assumed":null},"+6621234333":{"label":"Travel","line":"travel","greeting":"greeting.travel","skip":true,"queue":"q_travel","assumed":null},"+6621234444":{"label":"Life and savings","line":"life","greeting":"greeting.life","skip":true,"queue":"q_life","assumed":null}},"prompts":{"greeting.general":"สวัสดีค่ะ ยินดีต้อนรับสู่ศูนย์บริการลูกค้าประกันภัยกรุงศรี","greeting.motor_claim":"สวัสดีค่ะ ศูนย์รับแจ้งเหตุประกันรถยนต์ กรุงศรี","greeting.health":"สวัสดีค่ะ ศูนย์บริการประกันสุขภาพ กรุงศรี","greeting.travel":"สวัสดีค่ะ ศูนย์บริการประกันเดินทาง กรุงศรี","greeting.life":"สวัสดีค่ะ ศูนย์บริการประกันชีวิตและการออม กรุงศรี","notice.recording":"สายนี้อาจมีการบันทึกเสียงเพื่อพัฒนาคุณภาพการให้บริการค่ะ","menu.product_line":"กรุณาเลือกประเภทประกันที่ท่านต้องการติดต่อ","menu.motor_reason":"กรุณาเลือกเรื่องที่ท่านต้องการติดต่อ เกี่ยวกับประกันรถยนต์","menu.health_reason":"กรุณาเลือกเรื่องที่ท่านต้องการติดต่อ เกี่ยวกับประกันสุขภาพ","menu.travel_reason":"กรุณาเลือกเรื่องที่ท่านต้องการติดต่อ เกี่ยวกับประกันเดินทาง","menu.life_reason":"กรุณาเลือกเรื่องที่ท่านต้องการติดต่อ เกี่ยวกับประกันชีวิต","menu.general_reason":"กรุณาเลือกเรื่องที่ท่านต้องการติดต่อ","menu.option":"กด {key} {label}","menu.reserved_hint":"กด {repeat_key} เพื่อฟังอีกครั้ง กด {operator_key} เพื่อติดต่อเจ้าหน้าที่","menu.invalid":"ขออภัยค่ะ ไม่พบหมายเลขที่ท่านเลือก กรุณาลองอีกครั้ง","menu.language":"สำหรับภาษาไทย กด 1 · For English, press 2","input.none":"ไม่ได้รับการกดหมายเลขค่ะ กรุณาลองอีกครั้ง","input.operator":"กำลังโอนสายไปยังเจ้าหน้าที่ค่ะ กรุณารอสักครู่","identify.request":"เพื่อความปลอดภัย กรุณากดเลขบัตรประชาชน 4 หลักสุดท้าย แล้วกดเครื่องหมายสี่เหลี่ยม","identify.ok":"ขอบคุณค่ะ ยืนยันตัวตนเรียบร้อยแล้ว","identify.failed":"ขออภัยค่ะ ข้อมูลไม่ตรงกับที่ระบบมีอยู่ เจ้าหน้าที่จะตรวจสอบกับท่านอีกครั้ง","queue.position":"ขณะนี้ท่านอยู่ในลำดับที่ {position} รอสายประมาณ {wait_minutes} นาที","queue.hold":"กรุณาถือสายรอสักครู่ค่ะ","intake.offer":"ระหว่างรอสาย ท่านสามารถเล่าเรื่องที่ต้องการติดต่อไว้ล่วงหน้าได้ เจ้าหน้าที่จะเห็นข้อมูลทันทีที่รับสาย กด 1 เพื่อบันทึกข้อความ กด 2 เพื่อรอสายตามปกติ","intake.reoffer":"ท่านยังสามารถเล่าเรื่องที่ต้องการติดต่อไว้ล่วงหน้าได้ กด 1 เพื่อบันทึกข้อความ กด 2 เพื่อรอสายตามปกติ","intake.start":"กรุณาเล่าเรื่องที่ต้องการติดต่อหลังเสียงสัญญาณ เมื่อเล่าเสร็จแล้วกด 1 อีกครั้งค่ะ","intake.declined":"ได้ค่ะ กรุณาถือสายรอเจ้าหน้าที่","intake.done":"ขอบคุณค่ะ เจ้าหน้าที่จะเห็นข้อมูลของท่านทันทีที่รับสาย","voicemail.offer":"ขณะนี้อยู่นอกเวลาทำการ ท่านสามารถฝากข้อความไว้ได้ เจ้าหน้าที่จะติดต่อกลับพร้อมข้อมูลของท่าน กด 1 เพื่อฝากข้อความ กด 2 เพื่อวางสาย","voicemail.start":"กรุณาฝากข้อความหลังเสียงสัญญาณค่ะ","rating.request":"กรุณาให้คะแนนความพึงพอใจ จาก 1 ถึง 5 โดย 5 คือพอใจมากที่สุด","call.goodbye":"ขอบคุณที่ใช้บริการค่ะ"},"roles":{"greeting_fallback":"greeting.general","recording_notice":"notice.recording","menu_option":"menu.option","menu_reserved_hint":"menu.reserved_hint","no_input":"input.none","operator":"input.operator","identify_request":"identify.request","identify_ok":"identify.ok","identify_failed":"identify.failed","queue_position":"queue.position","queue_hold":"queue.hold","intake_offer":"intake.offer","intake_reoffer":"intake.reoffer","intake_start":"intake.start","intake_declined":"intake.declined","intake_done":"intake.done","voicemail_offer":"voicemail.offer","voicemail_start":"voicemail.start","rating_request":"rating.request","goodbye":"call.goodbye"},"queues":{"motor.claim.accident":"q_motor_claim","motor.claim.status":"q_motor_claim","motor.roadside_assist":"q_motor_claim","motor.policy.coverage":"q_motor_policy","motor.policy.renew":"q_motor_policy","motor.other":"q_motor_policy","health.ipd.preauth":"q_health_ipd","health.claim.submit":"q_health_claim","health.claim.status":"q_health_claim","health.coverage.query":"q_health_policy","health.network.hospital":"q_health_policy","health.other":"q_health_policy","travel.claim.submit":"q_travel","travel.emergency.overseas":"q_travel","travel.coverage.query":"q_travel","travel.other":"q_travel","life.policy.value":"q_life","life.beneficiary.change":"q_life","life.claim.death":"q_life","life.other":"q_life","general.billing":"q_general","general.renewal":"q_general","general.update_details":"q_general","general.document.request":"q_general","general.complaint":"q_escalation","general.new_product":"q_general","general.other":"q_general","unknown":"q_general"},"catch_all":{"motor":"motor.other","health":"health.other","travel":"travel.other","life":"life.other"}}</script>
+
+<div class="wrap">
+  <header class="mast">
+    <p class="kicker">Krungsri ReadyCall · P3 · the part with no screen</p>
+    <h1>The Line</h1>
+    <p class="standfirst">
+      Every other page in this project describes something you can look at. This one describes
+      what the <em>caller</em> hears — so here it is as a phone you can actually press.
+    </p>
+  </header>
+
+  <p class="lede">
+    The keypad menu is not a preamble to the interesting part. It <strong>is</strong> the part that
+    decides where the call goes, and it does that before a single word is transcribed. The AI runs
+    afterwards, while the caller waits, and adds the detail a keypad cannot capture — which hospital,
+    which plate, how urgent. If the AI fails, the routing is unaffected, because routing was never
+    its job.
+  </p>
+
+  <p>
+    That is <code>D37</code>, and it sets the bar for this page: not <em>"the AI works"</em> but
+    <strong>parity with an ordinary call centre</strong>. Everything below is about the awkward cases,
+    because that is where parity is won or lost.
+  </p>
+</div>
+
+<div class="bleed">
+  <div class="sim">
+    <div class="sim-head">
+      <div class="field">
+        <label for="did">the number they dialled</label>
+        <select id="did"></select>
+      </div>
+      <div class="field">
+        <label for="who">who is calling</label>
+        <select id="who">
+          <option value="anon">unrecognised — nothing known</option>
+          <option value="known">recognised — open travel claim, life policy</option>
+          <option value="app">tapped Contact in the app (health · IPD)</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="sim-body">
+      <div class="panel">
+        <h4>press a key</h4>
+        <div class="keypad" id="pad"></div>
+        <div class="aux">
+          <button id="silence" type="button">say nothing</button>
+          <button id="hangup" type="button">hang up</button>
+          <button id="restart" class="restart" type="button">start over</button>
+        </div>
+        <div id="promo" class="promo-note" hidden></div>
+        <dl class="state" id="state"></dl>
+        <div id="verdict"></div>
+      </div>
+
+      <div class="panel">
+        <h4>what the caller hears</h4>
+        <div class="heard" id="heard"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+  <p>
+    Three things are worth trying before reading on. Press <strong>8</strong> three times and watch
+    where you end up — it is a queue, not a dial tone. Press <strong>9</strong> five times and watch
+    the attempt counter refuse to move. And switch the caller to <em>recognised</em>, then press
+    <strong>4</strong> for health: the key you press and the key that gets recorded are different, and
+    the panel shows both.
+  </p>
+
+  <h2><span class="num">01</span>Every sentence is text in one file</h2>
+
+  <p>
+    Nothing you just heard was recorded by a person, and nothing was synthesised while the call was
+    running. <code>config/voice_prompts.yaml</code> holds 32 prompts as Thai text;
+    <code>scripts/build_prompts.py</code> renders each one to a clip at build time; the call plays a
+    file. That is <code>D24</code>, and the two things it rules out are the point:
+  </p>
+
+  <div class="tablewrap">
+    <table>
+      <tr><th>Rejected</th><th>Because</th></tr>
+      <tr>
+        <td>hand-recorded audio</td>
+        <td>changing one word costs a studio booking — and wording is exactly what gets tuned the night before</td>
+      </tr>
+      <tr>
+        <td>synthesis during the call</td>
+        <td>latency, cost, and a network dependency standing between a caller and a menu, on a venue's wifi</td>
+      </tr>
+    </table>
+  </div>
+
+  <p>
+    The cache key is <code>hash(text, voice, engine)</code> — <strong>the rendered text, not the
+    prompt id</strong>. That one choice does two jobs. Editing a single Thai line re-renders exactly
+    that line and reuses the other 62, which was measured rather than assumed. And two prompts that
+    say the same words become <strong>one clip</strong>.
+  </p>
+
+  <blockquote>
+    <strong>The honest limit.</strong> <code>TTS_ENGINE</code> defaults to <code>null</code>, which
+    records what it was asked to say and synthesises nothing. So today the pack is a manifest, not
+    audio — which is also why this page shows you the words rather than playing them. A real voice is
+    a config change and a re-run, and it should be chosen on a listening test of these actual 63
+    lines rather than a vendor's spec sheet.
+  </blockquote>
+
+  <h2><span class="num">02</span>A menu cannot be one clip</h2>
+
+  <p>
+    Here is the collision that only appears once you build it. <code>D24</code> says every line is a
+    pre-rendered file. <code>D37</code> says a recognised caller hears their likely options
+    <em>first</em>. Both cannot be true of one baked recording of
+    <span class="th">"กด 1 ประกันรถยนต์ กด 2 ประกันสุขภาพ …"</span> — the order changes per caller.
+  </p>
+
+  <p>
+    So a menu is <strong>composed</strong> from clips that were all pre-rendered: a lead-in, one line
+    per option, then the reserved-key hint. Composition is playback, not synthesis, so
+    <code>D24</code> holds exactly as written. That is <code>D80</code>.
+  </p>
+
+  <div class="compare bleed">
+    <div class="card">
+      <h4>unrecognised caller</h4>
+      <ol id="cmp-anon"></ol>
+    </div>
+    <div class="card">
+      <h4>recognised — open travel claim, life policy</h4>
+      <ol id="cmp-known"></ol>
+    </div>
+  </div>
+
+  <p>
+    The rejected alternative sounds cheaper than it is: <em>one clip per menu per ordering</em>. The
+    product-line menu has five options, so 120 orderings, and every wording edit multiplies through
+    all of them.
+  </p>
+
+  <p>What composition bought, beyond making the feature possible at all:</p>
+
+  <ul>
+    <li>
+      <strong>the label exists in exactly one file.</strong> <code>voice_prompts.yaml</code> contains
+      no menu options; the build reads them from <code>menus.yaml</code> — the same file that does the
+      routing. There is no second copy of <span class="th">ประกันสุขภาพ</span> to drift.
+    </li>
+    <li>
+      <strong>the same words are one clip.</strong>
+      <span class="th">ติดตามสถานะเคลม</span> is key <code>3</code> in both the motor and the health
+      menu, so it renders once. 32 prompts and 32 menu options come to <strong>63 clips</strong>.
+    </li>
+  </ul>
+
+  <p>
+    That dedupe is not a footnote about disk space. It is the same mechanism that makes a dynamic
+    line cacheable at all: everyone who is third in the queue hears the same file, so the pack warms
+    up in minutes rather than never.
+  </p>
+
+  <h2><span class="num">03</span>What they pressed is not what gets stored</h2>
+
+  <p>
+    Follow the promotion through. Travel is promoted, so it takes key <code>1</code>. The caller
+    presses <code>1</code>. <code>CallSession.menu_path</code> records keypresses. The stored path now
+    says <code>1</code>, which in <code>menus.yaml</code> means <strong>motor</strong>.
+  </p>
+
+  <p>
+    Nothing fails. The call is routed correctly, because routing used the live presentation. But the
+    <em>record</em> is wrong, and everything reading it later — the brief, the intent source shown to
+    the agent, a replayed scenario, an auditor asking what the caller chose — is quietly wrong with
+    it. This is the family of bug this project keeps meeting: a confident, plausible, wrong result
+    that nothing is in a position to notice.
+  </p>
+
+  <p>
+    <code>D81</code> fixes it at the only moment the answer is unambiguous. <strong>The press is
+    resolved to its canonical option the instant it arrives.</strong> <code>menu_path</code> always
+    holds keys as <code>menus.yaml</code> spells them; the raw presses are kept separately, where they
+    are a UX signal — a confused menu path is worth seeing — rather than routing evidence.
+  </p>
+
+  <pre>presentation.resolve("4")   # spoken 4 -> canonical 2 -> health
+menu_path      = ("2", "4")   # canonical, on every call
+outcome.pressed = ("4", "4")  # what actually happened under their thumb</pre>
+
+  <p>
+    The rule reaches into the test suite too. <code>ScriptedChoices</code> — used by every scenario
+    file — takes <strong>canonical</strong> keys and looks up whichever key is actually under that
+    option. A scenario keeps meaning what it says when a menu is reordered, instead of silently
+    pressing the wrong thing. Without that, every scenario involving a recognised caller becomes a
+    trap that springs the day somebody tunes the personalisation weights.
+  </p>
+
+  <p>
+    And the reason for renumbering rather than merely shuffling:
+    <span class="th">"กด 3 … กด 1 … กด 2"</span> makes the caller do the sorting. If the order changes,
+    the numbers change with it.
+  </p>
+
+  <h2><span class="num">04</span>Every path ends in a queue</h2>
+
+  <p>
+    The happy path is the one everybody draws. The rest of these are the product, because parity with
+    an ordinary call centre is measured entirely in the awkward cases.
+  </p>
+
+  <div class="tablewrap">
+    <table>
+      <tr><th>The caller</th><th>What happens</th><th>Why that rule</th></tr>
+      <tr>
+        <td class="k">presses 0</td>
+        <td>reaches a human from any menu at any depth, keeping whatever the menu already established</td>
+        <td>somebody who learns <code>0</code> in one menu must not be surprised in another</td>
+      </tr>
+      <tr>
+        <td class="k">presses 9</td>
+        <td>hears the menu again, and <strong>does not spend an attempt</strong></td>
+        <td>re-listening is being careful, not failing</td>
+      </tr>
+      <tr>
+        <td class="k">presses a wrong key</td>
+        <td>apology, then the menu again; three times and they are routed</td>
+        <td>never a hang-up</td>
+      </tr>
+      <tr>
+        <td class="k">says nothing</td>
+        <td>one re-prompt, then routed</td>
+        <td>the same</td>
+      </tr>
+      <tr>
+        <td class="k">says nothing on a product-line number</td>
+        <td>that <strong>line's</strong> queue, not the general one</td>
+        <td>they told us something by dialling it; throwing that away is worse service than using it</td>
+      </tr>
+      <tr>
+        <td class="k">hangs up</td>
+        <td>recorded as abandoned, never as routed</td>
+        <td>the record must not claim a choice nobody made</td>
+      </tr>
+    </table>
+  </div>
+
+  <h3>One thing the machine refuses to claim</h3>
+
+  <p>
+    A published number may assume an intent — someone dialling the number printed in their glovebox
+    is very likely standing beside a damaged car. That is real evidence and it picks the queue. But it
+    is weaker than a keypress, so the two are kept apart: the outcome's intent holds
+    <strong>only what was pressed</strong>, while the result carries the best available answer with a
+    source saying whether it came from <code>dtmf</code>, the <code>app</code>, the <code>did</code>,
+    or nothing at all. The agent's brief has to be able to tell <em>"they told us"</em> from
+    <em>"we assumed"</em>. Try it: dial the motor-claims number and say nothing.
+  </p>
+
+  <h2><span class="num">05</span>Why the rules live in a machine with no I/O</h2>
+
+  <p>
+    <code>begin</code> / <code>on_digit</code> / <code>on_timeout</code> / <code>on_hangup</code>,
+    each returning <em>what to play next</em>. A thin async driver plays it and holds no rules at all
+    — which is why this page could be built from the same shape.
+  </p>
+
+  <p>
+    That is a direct consequence of <code>B7</code>. An IVR written as a coroutine awaiting DTMF can
+    only be tested by feeding it a fake phone line, and the rungs that fire <strong>because time
+    passed</strong> are then exactly the ones that end up driven by nothing. Which is what
+    <code>B7</code> was: three services, all written, all correct, all called by nothing. Here silence
+    is a method call.
+  </p>
+
+  <pre>first  = machine.on_timeout(run)   # re-prompt once
+second = machine.on_timeout(run)   # -> EXHAUSTED, reason="silence_x2"</pre>
+
+  <h2><span class="num">06</span>What is not built</h2>
+
+  <p>
+    Everything above the queue line. Below it — the press-1/press-2 intake offer, the recording, the
+    media gateway, VAD endpointing, the STT worker and the bake-off on the RTX 3050 — is step four of
+    this phase and has not started. The prompts for all of it are already written, rendered and mapped
+    to roles; they are text waiting for the machinery that plays them.
+  </p>
+
+  <p>
+    The identify step that reaches assurance L3 by keypad, and the post-call rating keypress, are in
+    the same position: the sentences exist, nothing calls them yet.
+  </p>
+
+  <div class="foot">
+    <p>
+      A readable twin of <a href="../diagrams/12_the_menu.md">diagrams/12_the_menu.md</a> — the two
+      are updated together. The long form is
+      <a href="../explanations/P3_voice.md">explanations/P3_voice.md</a>; the decisions are
+      <code>D24</code>, <code>D37</code>, <code>D80</code> and <code>D81</code> in
+      <a href="../DECISIONS.md">DECISIONS.md</a>.
+    </p>
+    <p>
+      The menu, the labels and every Thai line on this page are extracted from the real
+      <code>config/</code> by <code>scripts/build_reading_data.py</code>, and a test fails if they
+      fall out of step. The walk itself is a hand-built twin of
+      <code>services/ivr/machine.py</code> — faithful to it, but not the same code.
+    </p>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var DATA = JSON.parse(document.getElementById("ivr-data").textContent);
+  var S = DATA.settings;
+
+  // Which lines a recognised caller has promoted, and why. Mirrors personalise.py against
+  // a fixed persona rather than re-implementing the scoring: the point of the page is the
+  // *consequence* of promotion, not the arithmetic that chose it.
+  var PERSONAS = {
+    anon:  { promoted: [], reasons: [], intent: null },
+    known: {
+      promoted: ["travel", "life"],
+      reasons: ["open claim in travel", "active policy in travel", "active policy in life"],
+      intent: null
+    },
+    app:   { promoted: [], reasons: [], intent: "health.ipd.preauth" }
+  };
+
+  var run = null;
+
+  function el(id) { return document.getElementById(id); }
+
+  function lineFor(promptId) {
+    return { id: promptId, text: DATA.prompts[promptId] || "(undefined prompt)" };
+  }
+  function role(name) { return lineFor(DATA.roles[name]); }
+
+  // --- presentation.py -----------------------------------------------------------------
+  function present(menuId, promotedLines) {
+    var menu = DATA.menus[menuId];
+    var promotedKeys = [];
+    (promotedLines || []).forEach(function (lineName) {
+      menu.options.forEach(function (o) {
+        if (o.line === lineName && promotedKeys.indexOf(o.key) === -1) promotedKeys.push(o.key);
+      });
+    });
+    var ordered = [];
+    promotedKeys.forEach(function (k) {
+      menu.options.forEach(function (o) { if (o.key === k) ordered.push(o); });
+    });
+    menu.options.forEach(function (o) {
+      if (promotedKeys.indexOf(o.key) === -1) ordered.push(o);
+    });
+
+    var options = ordered.map(function (o, i) {
+      return {
+        spoken: promotedKeys.length ? String(i + 1) : o.key,
+        option: o,
+        promoted: promotedKeys.indexOf(o.key) !== -1
+      };
+    });
+
+    var lines = [lineFor(menu.prompt)];
+    options.forEach(function (p) {
+      lines.push({
+        id: DATA.roles.menu_option,
+        text: DATA.prompts[DATA.roles.menu_option]
+          .replace("{key}", p.spoken).replace("{label}", p.option.label)
+      });
+    });
+    lines.push({
+      id: DATA.roles.menu_reserved_hint,
+      text: DATA.prompts[DATA.roles.menu_reserved_hint]
+        .replace("{repeat_key}", S.repeat_key).replace("{operator_key}", S.operator_key)
+    });
+
+    return {
+      menuId: menuId,
+      options: options,
+      lines: lines,
+      reordered: options.some(function (p) { return p.spoken !== p.option.key; })
+    };
+  }
+
+  function resolve(pres, pressed) {
+    for (var i = 0; i < pres.options.length; i++) {
+      if (pres.options[i].spoken === pressed) return pres.options[i].option;
+    }
+    return null;
+  }
+
+  function reasonMenuFor(line) {
+    var root = DATA.menus.product_line;
+    for (var i = 0; i < root.options.length; i++) {
+      if (root.options[i].line === line && root.options[i].next) return root.options[i].next;
+    }
+    return null;
+  }
+
+  // --- machine.py ----------------------------------------------------------------------
+  function begin() {
+    var didNumber = el("did").value;
+    var did = DATA.dids[didNumber] || null;
+    var persona = PERSONAS[el("who").value];
+
+    run = {
+      did: did, didNumber: didNumber, persona: persona,
+      line: did ? did.line : "unknown",
+      intent: null, path: [], pressed: [], attempts: 0, timeouts: 0,
+      pres: null, heard: [], outcome: null, personalised: false
+    };
+
+    say(did ? did.greeting : DATA.roles.greeting_fallback);
+    say(DATA.roles.recording_notice, true);
+
+    if (persona.intent) {
+      run.intent = persona.intent;
+      run.line = "health";
+      return finish("SKIPPED", "app_supplied_line_and_reason");
+    }
+    var startMenu = (did && did.skip) ? reasonMenuFor(did.line) : "product_line";
+    if (!startMenu) return finish("EXHAUSTED", "no_menu_configured");
+    enter(startMenu, true);
+  }
+
+  function enter(menuId, allowPromotion) {
+    var promoted = allowPromotion ? run.persona.promoted : [];
+    run.pres = present(menuId, promoted);
+    run.attempts = 0;
+    run.timeouts = 0;
+    if (promoted.length && run.pres.reordered) run.personalised = true;
+    playLines(run.pres.lines);
+  }
+
+  function onDigit(digit) {
+    if (!run || run.outcome || !run.pres) return;
+    run.pressed.push(digit);
+    note("caller presses " + digit);
+
+    if (digit === S.operator_key) {
+      say(DATA.roles.operator);
+      return finish("OPERATOR", "caller_pressed_operator");
+    }
+    if (digit === S.repeat_key) {
+      run.timeouts = 0;
+      note("repeat — costs no attempt");
+      return playLines(run.pres.lines);
+    }
+
+    var option = resolve(run.pres, digit);
+    if (!option) {
+      run.attempts += 1;
+      if (run.attempts >= S.max_attempts) {
+        say(S.invalid_prompt);
+        return finish("EXHAUSTED", "unrecognised_x" + run.attempts);
+      }
+      say(S.invalid_prompt);
+      note("attempt " + run.attempts + " of " + S.max_attempts);
+      return playLines(run.pres.lines);
+    }
+
+    if (option.key !== digit) note("spoken " + digit + " -> canonical " + option.key);
+    run.path.push(option.key);
+    run.timeouts = 0;
+    if (option.line) run.line = option.line;
+
+    if (option.intent) {
+      run.intent = option.intent;
+      return finish("ROUTED", "menu_completed");
+    }
+    if (option.next) return enter(option.next, false);
+    return finish("EXHAUSTED", "option_leads_nowhere");
+  }
+
+  function onTimeout() {
+    if (!run || run.outcome || !run.pres) return;
+    note("silence");
+    run.timeouts += 1;
+    if (run.timeouts > 1) return finish("EXHAUSTED", "silence_x2");
+    say(DATA.roles.no_input);
+    playLines(run.pres.lines);
+  }
+
+  function onHangup() {
+    if (!run || run.outcome) return;
+    note("the caller hangs up");
+    finish("ABANDONED", "caller_hung_up");
+  }
+
+  // --- service.py: the queue ladder -----------------------------------------------------
+  function bestIntent() {
+    if (run.intent) return { code: run.intent, source: run.persona.intent ? "app" : "dtmf" };
+    if (run.did && run.did.assumed) return { code: run.did.assumed, source: "did" };
+    return { code: null, source: "none" };
+  }
+
+  function queueFor() {
+    if (run.outcome === "OPERATOR") return run.did ? run.did.queue : "q_general";
+    if (run.intent) return DATA.queues[run.intent];
+    if (run.did && run.did.assumed) return DATA.queues[run.did.assumed];
+    if (run.line !== "unknown" && DATA.catch_all[run.line]) {
+      return DATA.queues[DATA.catch_all[run.line]];
+    }
+    if (run.did) return run.did.queue;
+    return "q_general";
+  }
+
+  function finish(kind, reason) {
+    run.outcome = kind;
+    run.reason = reason;
+    render();
+  }
+
+  // --- output ---------------------------------------------------------------------------
+  function say(promptId, isRole) { run.heard.push({ kind: "line", line: lineFor(promptId) }); }
+  function playLines(lines) {
+    lines.forEach(function (l) { run.heard.push({ kind: "line", line: l }); });
+    render();
+  }
+  function note(text) { run.heard.push({ kind: "event", text: text }); }
+
+  function chip(cls, text) { return '<span class="chip ' + cls + '">' + text + "</span>"; }
+
+  function render() {
+    // heard
+    var heard = el("heard");
+    heard.innerHTML = run.heard.map(function (h) {
+      if (h.kind === "event") {
+        return '<div class="line-row event"><span class="pid">·</span><span class="txt">' +
+          h.text + "</span></div>";
+      }
+      var cls = h.line.id === "__press" ? "line-row press" : "line-row";
+      return '<div class="' + cls + '"><span class="pid">' + h.line.id +
+        '</span><span class="txt">' + h.line.text + "</span></div>";
+    }).join("");
+    heard.scrollTop = heard.scrollHeight;
+
+    // promotion note
+    var promo = el("promo");
+    if (run.personalised) {
+      promo.hidden = false;
+      promo.innerHTML = "<b>menu reordered for this caller</b> — " +
+        run.persona.reasons.join("; ") +
+        ". The numbers moved with the order, so what they press is not what gets stored.";
+    } else {
+      promo.hidden = true;
+    }
+
+    // state
+    var best = bestIntent();
+    var rows = [
+      ["menu", run.pres ? run.pres.menuId : "—"],
+      ["pressed", run.pressed.length ? run.pressed.map(function (k) { return chip("press", k); }).join(" ") : chip("none", "—")],
+      ["menu_path", run.path.length ? run.path.map(function (k) { return chip("canon", k); }).join(" ") : chip("none", "—")],
+      ["line", run.line === "unknown" ? chip("none", "unknown") : chip("canon", run.line)],
+      ["intent", best.code ? chip(best.source === "dtmf" ? "canon" : "soft", best.code + " (" + best.source + ")") : chip("none", "none")],
+      ["attempts", run.attempts + " / " + S.max_attempts],
+      ["silences", String(run.timeouts)],
+      ["lines played", String(run.heard.filter(function (h) { return h.kind === "line"; }).length)]
+    ];
+    el("state").innerHTML = rows.map(function (r) {
+      return "<dt>" + r[0] + "</dt><dd>" + r[1] + "</dd>";
+    }).join("");
+
+    // verdict
+    var v = el("verdict");
+    if (!run.outcome) {
+      v.innerHTML = "";
+    } else {
+      var cls = run.outcome === "ROUTED" || run.outcome === "SKIPPED" ? "routed"
+        : run.outcome === "ABANDONED" ? "gone" : "softout";
+      var q = run.outcome === "ABANDONED" ? "—" : queueFor();
+      var why = {
+        ROUTED: "They chose. The queue was known before a word was transcribed.",
+        SKIPPED: "The app answered both questions before the phone rang, so neither was asked.",
+        OPERATOR: "They asked for a person. Whatever the menu established travels with them.",
+        EXHAUSTED: "They never completed the menu — and they still reach a queue, not a dial tone.",
+        ABANDONED: "Recorded as abandoned. The record does not claim a choice nobody made."
+      }[run.outcome];
+      v.className = "verdict " + cls;
+      v.innerHTML = '<div class="head">' + run.outcome + " → " + q + "</div>" +
+        '<div class="why"><span class="mono">' + run.reason + "</span> · " + why + "</div>";
+    }
+
+    // buttons
+    var done = !!run.outcome;
+    Array.prototype.forEach.call(document.querySelectorAll("#pad button"), function (b) {
+      b.disabled = done;
+    });
+    el("silence").disabled = done;
+    el("hangup").disabled = done;
+  }
+
+  // --- static comparison ------------------------------------------------------------------
+  function renderCompare() {
+    function fill(target, promoted) {
+      var pres = present("product_line", promoted);
+      el(target).innerHTML = pres.options.map(function (p) {
+        var moved = p.spoken !== p.option.key;
+        return '<li value="' + p.spoken + '" class="' + (moved ? "moved" : "") + '">' +
+          p.option.label +
+          "<em>canonical key " + p.option.key + (moved ? " · moved" : "") + "</em></li>";
+      }).join("");
+    }
+    fill("cmp-anon", []);
+    fill("cmp-known", ["travel", "life"]);
+  }
+
+  // --- wiring ------------------------------------------------------------------------------
+  function buildPad() {
+    var pad = el("pad");
+    var keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"];
+    pad.innerHTML = keys.map(function (k) {
+      if (k === "*" || k === "#") return '<button type="button" disabled>' + k + "</button>";
+      var reserved = k === S.repeat_key || k === S.operator_key;
+      var hint = k === S.repeat_key ? "repeat" : k === S.operator_key ? "operator" : "";
+      return '<button type="button" class="' + (reserved ? "reserved" : "") +
+        '" data-key="' + k + '">' + k + (hint ? "<small>" + hint + "</small>" : "") + "</button>";
+    }).join("");
+    pad.addEventListener("click", function (e) {
+      var b = e.target.closest("button[data-key]");
+      if (b && !b.disabled) onDigit(b.dataset.key);
+    });
+  }
+
+  function buildDidSelect() {
+    var sel = el("did");
+    sel.innerHTML = Object.keys(DATA.dids).map(function (n) {
+      var d = DATA.dids[n];
+      return '<option value="' + n + '">' + n + " — " + d.label + "</option>";
+    }).join("");
+  }
+
+  buildDidSelect();
+  buildPad();
+  renderCompare();
+  el("restart").addEventListener("click", begin);
+  el("did").addEventListener("change", begin);
+  el("who").addEventListener("change", begin);
+  el("silence").addEventListener("click", onTimeout);
+  el("hangup").addEventListener("click", onHangup);
+  begin();
+})();
+</script>

@@ -30,6 +30,20 @@ ROOT = REPO_ROOT
 CONFIG = REPO_ROOT / "config"
 
 
+def _load_script(name: str) -> ModuleType:
+    """Import a file in `scripts/`, which is not a package."""
+    spec = importlib.util.spec_from_file_location(name, ROOT / "scripts" / f"{name}.py")
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _load_reading_builder() -> ModuleType:
+    return _load_script("build_reading_data")
+
+
 def _load_builder() -> ModuleType:
     """Import `scripts/build_prompts.py`, which is a script rather than a package module."""
     spec = importlib.util.spec_from_file_location(
@@ -278,3 +292,30 @@ class TestTheClipCache:
 
         different = prompts.say(PromptRole.QUEUE_POSITION, position=4, wait_minutes=2)
         assert different.clip_key("null") != first.clip_key("null")
+
+
+class TestTheReadablePage:
+    """`docs/reading/the_line.html` walks the REAL menu, or it is worse than nothing.
+
+    A page that lets you press keys and hear Thai is convincing. A convincing page showing a
+    label nobody would ever hear is a liability, so the data in it is extracted from config
+    by a script and this test fails when the committed page falls behind — the same
+    mechanism, and the same argument, as the generated diagrams.
+    """
+
+    def test_the_embedded_menu_data_is_up_to_date(self) -> None:
+        builder = _load_reading_builder()
+        html = builder.PAGE.read_text(encoding="utf-8")
+        assert builder.current(html) == builder.payload(
+            DomainPack.load(CONFIG), PromptPack.load(CONFIG / "voice_prompts.yaml")
+        ), "run: uv run python scripts/build_reading_data.py"
+
+    def test_the_page_carries_the_thai_a_caller_would_actually_hear(
+        self, pack: DomainPack, prompts: PromptPack
+    ) -> None:
+        """A spot check that survives a refactor of the extractor itself: the exact lead-in
+        and one exact option label have to be findable in the shipped bytes."""
+        builder = _load_reading_builder()
+        html = builder.PAGE.read_text(encoding="utf-8")
+        assert prompts.spec(pack.menus["product_line"].prompt).text_th in html
+        assert pack.menus["product_line"].options[0].label_th in html
