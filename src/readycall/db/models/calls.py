@@ -105,8 +105,6 @@ class CallStateTransitionRow(Base):
     __table_args__ = (Index("ix_call_state_transitions_call", "call_session_id", "id"),)
 
 
-
-
 class ContextSnapshotRow(Base):
     """The frozen `Customer360` a brief is rendered from (`D6`, `D7`).
 

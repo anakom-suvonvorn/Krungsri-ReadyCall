@@ -3,7 +3,7 @@
 _The question this page answers: if the client never sends a customer id, how does anything
 know who anyone is?_
 
-← [The project](09_the_project.md) · [index](README.md)
+← [The project](09_the_project.md) · [index](README.md) · next → [Persistence](11_persistence.md)
 
 ---
 
@@ -167,4 +167,4 @@ from a real one.
 
 ---
 
-← [The project](09_the_project.md) · [index](README.md)
+← [The project](09_the_project.md) · [index](README.md) · next → [Persistence](11_persistence.md)

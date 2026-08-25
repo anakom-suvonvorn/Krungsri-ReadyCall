@@ -1,0 +1,38 @@
+%% HANDWRITTEN. Checked against D44, D58, D78 + services/capture/keypad.py
+flowchart TB
+    C["caller keys <b>2024000811</b><br/>on their phone"]:::act
+    Q{{"has anything said<br/><b>WHAT these digits are?</b>"}}:::pivot
+    C --> Q
+
+    subgraph no["<b>NO</b> — still untyped"]
+        direction TB
+        N1["could be a policy number.<br/>could be a <b>citizen id</b>.<br/>could be a <b>card number</b>."]:::warn
+        N2["row stores:<br/>masked = <b>••••••0811</b><br/>digit_count = <b>10</b><br/>digits = <b>NULL</b>"]:::db
+        N1 --> N2
+    end
+
+    subgraph yes["<b>YES</b> — a lookup matched, or the agent labelled it"]
+        direction TB
+        Y1["it is policy <b>HL-2024-000811</b>.<br/>not a secret, and useful<br/>in the record."]:::ok
+        Y2["row stores:<br/>masked = <b>••••••0811</b><br/>digit_count = <b>10</b><br/>digits = <b>2024000811</b>"]:::db
+        Y1 --> Y2
+    end
+
+    Q -- "is_named == False" --> no
+    Q -- "is_named == True" --> yes
+
+    A["<b>the agent's own screen</b> always shows the real digits"]:::ok
+    C -.-> A
+
+    N3["<b>the inverted default (D44).</b> Everywhere else in this codebase<br/>the safe move is to store what happened. Here it is the opposite:<br/>capture is UNTYPED, so an unidentified number is treated as<br/>sensitive until something identifies it."]:::note
+
+    N4["<b>what survives a restart is the FACT, not the value.</b><br/>A capture of this length happened, these lookups ran, this was<br/>their outcome. D44 asks for short retention and one-click<br/>discard — a durable copy of an unknown number is the opposite<br/>of both."]:::note
+
+    N5["<b>not the same question as the disclosure gate (D58).</b><br/>mask() protects the LOG, never the agent. These are the caller's<br/>own keystrokes, typed seconds ago, to the person they are<br/>speaking to — hiding them deletes the feature and protects<br/>nobody."]:::note
+
+    classDef act fill:#eef4ff,stroke:#5b8def,color:#0b2545
+    classDef pivot fill:#1f6feb,stroke:#0b3d91,color:#fff
+    classDef db fill:#e9f7ef,stroke:#2f9e5f,color:#08361d
+    classDef ok fill:#e9f7ef,stroke:#2f9e5f,color:#08361d
+    classDef warn fill:#fdecec,stroke:#d64545,color:#5c1111
+    classDef note fill:#fffbe6,stroke:#d4a72c,color:#4a3800

@@ -1,0 +1,36 @@
+%% HANDWRITTEN. Checked against D78 + api/deps.py::Container.restore + api/app.py lifespan
+sequenceDiagram
+    autonumber
+    participant P1 as process #1 (dying)
+    participant DB as readycall schema
+    participant P2 as process #2 (starting)
+    participant A as agent's browser
+
+    Note over P1,A: before — an ordinary shift
+    A->>P1: declare "lunch"
+    P1->>DB: append agent_state_log row
+    A->>P1: accept a call, attest identity
+    P1->>DB: assignments + identity_attestations + call_sessions.identity
+
+    Note over P1: process ends (deploy, crash, laptop asleep)
+    P1--xA: socket drops
+
+    Note over P2,DB: restore() — the ORDER is the design
+    P2->>DB: 1. list_in_states(everything NOT finished)
+    DB-->>P2: the live calls
+    Note right of P2: every later read is bounded<br/>to THESE call ids — which is why<br/>no store needs "load everything"
+    P2->>DB: 2. assignments for those calls
+    Note right of P2: rebuilds D52's exclusion set —<br/>without it the matcher re-offers<br/>the same caller to the same<br/>silent desk, forever
+    P2->>DB: 3. attestations for those calls
+    Note right of P2: attestation_count is what<br/>re-locks the identity control (D61)
+    P2->>DB: 4. captures, wrap-ups, last decision
+    P2->>P2: 5. waiting pool ← the calls themselves<br/>(not a table — D78)
+    P2->>DB: 6. latest_per_agent()
+    DB-->>P2: every agent's standing instruction
+    Note right of P2: presence LAST: it is a projection<br/>of a log, not a reload of rows (D76)
+
+    Note over P2,A: after — the agent comes back
+    A->>P2: sign in
+    P2-->>A: agent_intent = <b>lunch</b> (they said it)
+    P2-->>A: system_state = <b>available</b>, never on_call
+    Note over P2,A: READY and LAST_CALL are NOT carried across:<br/>they are the two that invite a call to a desk<br/>the platform cannot see (D78)

@@ -43,7 +43,7 @@ services doing real work - only the *edges* (phone, speech, AI, the bank's data,
 are still fakes. An agent signs in at `/workstation`, a caller arrives, the desk rings, the brief is
 already there, and the disclosure gate moves when the agent attests.
 
-Verified on 2026-08-25: **440 tests pass** (437 + 3 skipped — the FK cases the in-memory
+Verified on 2026-08-25: **441 tests pass** (438 + 3 skipped — the FK cases the in-memory
 backend cannot have), `ruff check` and `ruff format --check` clean over 128 files,
 `mypy --strict` clean over **100** source files, and all three scenarios replay
 byte-identically. The database suites ran against a **live Postgres**, and a restart was
@@ -108,7 +108,7 @@ FullProject/
 ├─ uv.lock  .python-version  .env.example  .gitignore
 ├─ README.md
 ├─ docs/                     # ← this documentation system
-│  └─ diagrams/            # 50 diagrams + 10 explanation pages; a quarter generated from source
+│  └─ diagrams/            # 56 diagrams + 11 explanation pages; a quarter generated from source
 ├─ config/                   # ← the entire insurance-specific "domain pack" (D28)
 │  ├─ core_mapping.yaml      # bank-data field mapping (swap target, DATA_MODEL §4)
 │  ├─ matching_weights.yaml  # fit + urgency weights, tunable at runtime
@@ -334,7 +334,7 @@ performing by hand, i.e. what the next services take over (`D36`).
 | | |
 |---|---|
 | Source files | 131 (`src/` 98 + `tests/` + `scripts/` + `mock/`) |
-| Tests | 440, all passing, ~85 s (137 of them store contract + restart suites across 3 backends) |
+| Tests | 441, all passing, ~85 s (137 of them store contract + restart suites across 3 backends) |
 | Ports defined | 8 (telephony, stt, llm, tts, core_data, event_bus, blob_storage, agent_directory) |
 | Persisted tables | **9** + Alembic, verified on a live Postgres. Presence, the waiting pool and the live identity are deliberately **not** among them (`D78`) |
 | Adapters | 9 fakes/nulls + a caching/circuit-breaking decorator; no real vendor adapter yet |
@@ -344,7 +344,7 @@ performing by hand, i.e. what the next services take over (`D36`).
 | Mock core | 3 customers, 4 policies across 4 product lines, 5 products, 5 interactions, 2 claims |
 | Intent taxonomy | 28 intents across 5 lines, each with a catch-all (revisit during the hackathon) |
 | Generated mock data | 2,000 customers / 2,292 policies / 5,880 interactions (seeded, gitignored) |
-| Diagrams | 50 (12 generated from source, 38 hand-drawn), across 10 explanation pages |
+| Diagrams | 56 (13 generated from source, 43 hand-drawn), across 11 explanation pages |
 
 ---
 

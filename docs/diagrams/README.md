@@ -1,8 +1,8 @@
 # Diagrams — the whole system, visually
 
-_Last updated: 2026-08-23._
+_Last updated: 2026-08-25._
 
-**50 diagrams** covering every part of Krungsri ReadyCall. Written to be read in order the
+**56 diagrams** covering every part of Krungsri ReadyCall. Written to be read in order the
 first time, and dipped into afterwards.
 
 ---
@@ -21,9 +21,13 @@ first time, and dipped into afterwards.
 | 8 | **[Data & events](08_data_and_events.md)** | Every domain object, the two stores, and the event backbone |
 | 9 | **[The project](09_the_project.md)** | Phases, what is built vs faked, how it is tested, and a map of every decision |
 | 10 | **[Sessions & tokens](10_sessions_and_tokens.md)** | How the system knows who is calling when the client never sends a customer id — and why that is hard to attack |
+| 11 | **[Persistence](11_persistence.md)** | The half with no screen: what survives a restart, what deliberately does not, and why half the state is derived rather than stored |
 
 Short on time? **[Start here](01_start_here.md)** then **[The call](02_the_call.md)** is about
 fifteen minutes and covers most of it.
+
+**[Persistence](11_persistence.md)** is the one to read if you want to know what the system
+does when nobody is watching — it is the only part with no screen to look at.
 
 ---
 
@@ -40,6 +44,7 @@ than drawn by hand:
 | `events` | the event registry |
 | `ports_adapters` | the packages present on disk |
 | `assurance_ladder`, `agent_state`, `degradation_ladder` | the enums |
+| `db_schema` | `Base.metadata` — every table, key, index and column count |
 
 A hand-drawn architecture diagram is a comment, and comments rot — six weeks from now it
 quietly describes a system that no longer exists. These cannot: if someone adds a menu
@@ -93,8 +98,8 @@ uv run python scripts/render_diagrams.py brief_gating
 ```
 docs/diagrams/
 ├─ README.md              ← you are here
-├─ 01_start_here.md …     ← the nine explanation pages
-├─ *.svg                  ← 50 rendered diagrams (committed, so no tooling is needed to read them)
+├─ 01_start_here.md …     ← the eleven explanation pages
+├─ *.svg                  ← 56 rendered diagrams (committed, so no tooling is needed to read them)
 ├─ .render-manifest.json  ← source hash per diagram, so --check compares content not mtimes
 └─ src/*.mmd              ← mermaid sources; GENERATED ones say so in the header
 ```

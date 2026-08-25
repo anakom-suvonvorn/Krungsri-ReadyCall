@@ -1,0 +1,35 @@
+%% HANDWRITTEN. Checked against D78 + services/agents/presence.py
+flowchart TB
+    subgraph chosen["<b>WHAT WE DO</b> — write-through, read from memory"]
+        direction TB
+        W1["agent presses <b>Ready</b>"]:::act
+        W2["service updates its<br/><b>working set</b> (a dict)"]:::mem
+        W3["service <b>awaits</b> the store"]:::db
+        W4["only then publish the event"]:::act
+        R1["matcher tick asks<br/>'who is available?'"]:::act
+        R2["reads the <b>dict</b><br/>~0 ms, no await"]:::mem
+        W1 --> W2 --> W3 --> W4
+        R1 --> R2
+    end
+
+    subgraph other["<b>WHAT WE DID NOT DO</b> — read-through"]
+        direction TB
+        X1["matcher tick asks<br/>'who is available?'"]:::act
+        X2["<b>SELECT</b> ... every tick"]:::db
+        X3["a round trip inside a<br/><b>50 ms</b> budget"]:::bad
+        X4["and <b>async</b> ripples into<br/>every router that reads"]:::bad
+        X1 --> X2 --> X3 --> X4
+    end
+
+    N1["<b>why this is honest here, not just convenient.</b><br/>ONE writer per store, ONE process (D2). The usual reason to<br/>read through is that somebody else may have written — and<br/>nobody else can. D76 already made this call for presence;<br/>doing it differently for the rest would leave two durability<br/>models in one codebase."]:::note
+
+    N2["<b>the trigger to revisit is D39's own:</b><br/>the moment TWO PROCESSES need to see the same call.<br/>Then the working set stops being a projection and becomes<br/>a cache with an invalidation problem — which wants Redis<br/>or read-through, and its own decision entry. Not a patch."]:::note
+
+    N3["<b>the tradeoff, stated plainly.</b><br/>If the write throws after the dict was updated, the two<br/>disagree for one process lifetime. The next restore<br/>corrects it, because the DURABLE record is what gets<br/>rebuilt from — never the other way round."]:::warn
+
+    classDef act fill:#eef4ff,stroke:#5b8def,color:#0b2545
+    classDef mem fill:#e9f7ef,stroke:#2f9e5f,color:#08361d
+    classDef db fill:#1f6feb,stroke:#0b3d91,color:#fff
+    classDef bad fill:#fdecec,stroke:#d64545,color:#5c1111
+    classDef note fill:#fffbe6,stroke:#d4a72c,color:#4a3800
+    classDef warn fill:#fff4e6,stroke:#e08a3c,color:#5a2d00

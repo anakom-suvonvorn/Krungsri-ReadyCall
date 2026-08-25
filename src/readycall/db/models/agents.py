@@ -53,8 +53,6 @@ class AgentStateLogRow(Base):
     )
 
 
-
-
 class AssignmentRow(Base):
     """The offer handshake, measured end to end (`D33`).
 

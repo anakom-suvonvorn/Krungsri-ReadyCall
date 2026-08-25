@@ -12,9 +12,9 @@ believe it, why they are calling, everything we hold about them assembled before
 is answered, which agent should take it and why — and now **the desk actually rings, a
 human accepts, and the screen is already right**.
 
-Verified **2026-08-25**: **440 tests pass** (137 of them store-contract and restart suites
+Verified **2026-08-25**: **441 tests pass** (137 of them store-contract and restart suites
 across three backends), `ruff check` + `ruff format --check` clean, `mypy --strict` clean
-over 100 files, all scenarios replay byte-identically, 50/50 diagrams current. The database
+over 100 files, all scenarios replay byte-identically, 56/56 diagrams current. The database
 suites ran against a **live Postgres**, and the restart claim was re-checked outside pytest
 by running two real uvicorn processes and killing the first.
 

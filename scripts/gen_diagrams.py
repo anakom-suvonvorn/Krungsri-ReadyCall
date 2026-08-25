@@ -528,6 +528,88 @@ def product_lines(pack: DomainPack) -> None:
     write("product_lines", "\n".join(lines), src="ProductLine enum + config/intents.yaml")
 
 
+#: Tables grouped by what they are *for*, so the picture reads as a system rather than an
+#: alphabetical list. A table missing from here still appears, under "other" — the grouping
+#: is presentation, and the generator must never silently drop a real table.
+_TABLE_GROUPS: dict[str, tuple[str, ...]] = {
+    "the call": ("call_sessions", "call_state_transitions", "context_snapshots"),
+    "the agent side": ("agent_state_log", "assignments", "call_wrapups"),
+    "the record (PDPA)": ("identity_attestations", "keypad_captures"),
+    "explainability": ("matching_decisions",),
+}
+
+#: What is deliberately NOT a table (`D78`), and what each is computed from. Hand-kept,
+#: because an absence cannot be read off `Base.metadata` — but every source named here is
+#: checked against the real metadata below, so a rename cannot leave it lying.
+_DERIVED: tuple[tuple[str, str, str], ...] = (
+    ("current presence", "agent_state_log", "newest row per agent (D76)"),
+    ("the waiting pool", "call_sessions", "state in queued/matched (D78)"),
+    ("live identity", "call_sessions", "the identity column (D78)"),
+    ("accrued wait", "call_sessions", "recomputed from queued_at (D22)"),
+)
+
+
+def db_schema() -> None:
+    """Every table we write, read straight off the SQLAlchemy metadata.
+
+    Generated rather than drawn because the whole claim of `D78` is *this* set and no more:
+    a table that appears here without a reason, or a derived thing that quietly becomes a
+    table, is exactly the drift the picture exists to prevent.
+    """
+    import readycall.db.models  # noqa: F401  (registers every table on the metadata)
+    from readycall.db.base import Base
+
+    tables = {name.split(".")[-1]: table for name, table in Base.metadata.tables.items()}
+    grouped = {t for names in _TABLE_GROUPS.values() for t in names}
+    ungrouped = tuple(sorted(set(tables) - grouped))
+    groups = dict(_TABLE_GROUPS)
+    if ungrouped:
+        groups["other"] = ungrouped
+
+    lines = ["flowchart TB"]
+    # Enumerated, not hashed: `hash()` on a string is randomised per process, so a hashed
+    # id would make this file differ between runs and `test_diagrams.py` would fail at
+    # random. A generated diagram has to be byte-stable or the freshness check is noise.
+    for n, (group, names) in enumerate(groups.items()):
+        lines.append(f"    subgraph g_{n}[{q(group)}]")
+        lines.append("        direction TB")
+        for name in names:
+            table = tables.get(name)
+            if table is None:
+                continue
+            keys = [c.name for c in table.columns if c.primary_key]
+            indexed = sorted({c.name for ix in table.indexes for c in ix.columns})
+            jsonish = [
+                c.name for c in table.columns if type(c.type).__name__ in {"Json", "JSON", "JSONB"}
+            ]
+            body = [f"<b>{name}</b>", "pk: " + ", ".join(keys)]
+            if indexed:
+                body.append("indexed: " + ", ".join(indexed))
+            if jsonish:
+                body.append("json: " + ", ".join(jsonish))
+            body.append(f"{len(table.columns)} columns")
+            lines.append(f"        t_{name}[{lbl(*body)}]:::tbl")
+        lines.append("    end")
+
+    for name, table in sorted(tables.items()):
+        for fk in table.foreign_keys:
+            target = fk.column.table.name
+            if target != name:
+                lines.append(f"    t_{name} -. {q('FK')} .-> t_{target}")
+
+    lines.append(f"    D[{lbl('NOT tables, on purpose (D78)', '')}]:::hdr")
+    for label, source, how in _DERIVED:
+        assert source in tables, f"{source} is not a real table; _DERIVED is stale"
+        node = "d_" + label.replace(" ", "_")
+        lines.append(f"    D --- {node}[{lbl(label, how)}]:::derived")
+        lines.append(f"    t_{source} == {q('derived from')} ==> {node}")
+
+    lines.append("    classDef tbl fill:#e9f7ef,stroke:#2f9e5f,color:#08361d")
+    lines.append("    classDef derived fill:#fffbe6,stroke:#d4a72c,color:#4a3800")
+    lines.append("    classDef hdr fill:#fff,stroke:#d4a72c,color:#4a3800,stroke-dasharray:4 3")
+    write("db_schema", chr(10).join(lines), src="readycall.db.models via Base.metadata")
+
+
 def main() -> int:
     enable_utf8()
     pack = DomainPack.load(ROOT / "config")
@@ -544,6 +626,7 @@ def main() -> int:
     degradation()
     domain_models()
     product_lines(pack)
+    db_schema()
     where = OUT.relative_to(ROOT) if OUT.is_relative_to(ROOT) else OUT
     print()
     print(f"{len(list(OUT.glob('*.mmd')))} .mmd files in {where}")

@@ -1,0 +1,33 @@
+%% HANDWRITTEN. Checked against D75, D78, D79 + db/storage.py + tests/contracts
+flowchart TB
+    ENV["<b>STORAGE_BACKEND</b><br/>one env var"]:::pivot
+    F["<b>build_storage(settings)</b><br/><i>db/storage.py</i>"]:::app
+    ENV --> F
+
+    F -- "memory <b>(default)</b>" --> M["8 in-memory stores<br/><i>dicts and lists</i>"]:::mem
+    F -- "postgres" --> P["8 Postgres stores<br/><i>+ an engine to dispose</i>"]:::db
+
+    M --> SVC["the services<br/><i>each writes through to its own store</i>"]:::app
+    P --> SVC
+
+    subgraph suite["<b>one contract suite, three backends</b> (D75)"]
+        direction LR
+        T1["<b>memory</b><br/>what nearly every<br/>other test uses"]:::mem
+        T2["<b>SQLite</b><br/>the fast path —<br/>no container,<br/>runs every commit"]:::mid
+        T3["<b>Postgres</b><br/>the deployment target;<br/>skips when unreachable"]:::db
+    end
+    SVC -.-> suite
+
+    N1["<b>memory is NOT 'no persistence'.</b> It builds real stores, so the<br/>write-through path runs on the DEFAULT configuration and in every<br/>test — rather than only when somebody remembers to start a<br/>container. That is exactly the shape that produced B7: code that<br/>was correct and never ran."]:::note
+
+    N2["<b>the divergence this caught within an hour.</b> SQLite ignores<br/>foreign keys unless asked, so an orphan row was refused by Postgres<br/>and accepted by SQLite — the same test passing on one backend and<br/>failing on the other. A fast path that enforces LESS than production<br/>is worse than no fast path. PRAGMA foreign_keys=ON, now with a test."]:::warn
+
+    N3["<b>the suite has its own DATABASE</b> (D79). It builds tables with<br/>create_all and drops them on teardown — which against the dev<br/>database deletes everything AND leaves alembic_version stamped at<br/>head with nothing behind it. Then 'upgrade head' is a silent no-op<br/>and the app dies at startup. Separation makes it impossible."]:::warn
+
+    classDef pivot fill:#1f6feb,stroke:#0b3d91,color:#fff
+    classDef app fill:#eef4ff,stroke:#5b8def,color:#0b2545
+    classDef mem fill:#e9f7ef,stroke:#2f9e5f,color:#08361d
+    classDef mid fill:#f0f7ff,stroke:#5b8def,color:#0b2545
+    classDef db fill:#1f6feb,stroke:#0b3d91,color:#fff
+    classDef note fill:#fffbe6,stroke:#d4a72c,color:#4a3800
+    classDef warn fill:#fff4e6,stroke:#e08a3c,color:#5a2d00

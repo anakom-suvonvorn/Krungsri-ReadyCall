@@ -1,0 +1,35 @@
+%% HANDWRITTEN. Checked against D78 + tests/integration/test_restart.py
+flowchart LR
+    R{{"a process<br/>restarts"}}:::pivot
+
+    subgraph back["<b>COMES BACK</b>"]
+        direction TB
+        S1["the call itself<br/><i>state, timeline, queue</i>"]:::keep
+        S2["the agent's <b>standing instruction</b><br/><i>lunch is still lunch (D59)</i>"]:::keep
+        S3["the waiting caller<br/><i>with wait recomputed from queued_at</i>"]:::keep
+        S4["the attested identity<br/><i>AND its attestation_count (D61)</i>"]:::keep
+        S5["who already declined this call<br/><i>D52's exclusion set</i>"]:::keep
+        S6["the frozen snapshot<br/><i>so the brief still renders (D42)</i>"]:::keep
+        S7["the saved wrap-up"]:::keep
+    end
+
+    subgraph gone["<b>DOES NOT — and that is correct</b>"]
+        direction TB
+        G1["<b>system_state</b> → offline<br/><i>the platform has given them<br/>nothing to do: no socket,<br/>no offer, no call</i>"]:::drop
+        G2["<b>ready</b> / <b>last_call</b><br/><i>the two that INVITE a call<br/>to a desk nobody can see</i>"]:::drop
+        G3["the <b>heartbeat</b><br/><i>liveness is a property of a<br/>live socket, not a fact (B7)</i>"]:::drop
+        G4["<b>unnamed</b> keypad digits<br/><i>never stored at all (D44)</i>"]:::drop
+        G5["a <b>closed</b> call's working state<br/><i>history is answered with SQL</i>"]:::drop
+    end
+
+    R --> back
+    R --> gone
+
+    N1["<b>the rule underneath both columns.</b><br/>The PERSON's axis survives, because they said it.<br/>The PLATFORM's axis does not, because after a restart<br/>the platform genuinely knows nothing. That is what the<br/>two axes were for all along (D33) — this is the first<br/>time the distinction had to do real work."]:::note
+
+    N2["<b>and an absence can be data.</b><br/>No wrap-up row means the call was never wrapped up,<br/>which is TRUE and useful. D45 refuses to auto-save<br/>precisely so that stays true — a restore that invented<br/>one would replace a fact with a fabrication."]:::note
+
+    classDef pivot fill:#1f6feb,stroke:#0b3d91,color:#fff
+    classDef keep fill:#e9f7ef,stroke:#2f9e5f,color:#08361d
+    classDef drop fill:#f5f5f5,stroke:#999,color:#333
+    classDef note fill:#fffbe6,stroke:#d4a72c,color:#4a3800
