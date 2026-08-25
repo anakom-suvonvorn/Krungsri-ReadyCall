@@ -1,4 +1,5 @@
-%% HANDWRITTEN. Checked against D43 as amended by D44
+%% HANDWRITTEN. Checked against D43 as amended by D44, D58, D66, D67, D78
+%% + services/capture/keypad.py and services/capture/matching.py
 flowchart TB
     PROB["<b>the problem</b><br/>the agent needs a number - policy, claim, citizen id, plate.<br/>Spoken digits over a mobile are the WORST case: short,<br/>phonetically confusable, no linguistic context for a<br/>human or a model to lean on."]:::prob
     PROB --> OLD["today: 'ขอโทษค่ะ ทวนอีกครั้งได้ไหมคะ'<br/><b>= dead air</b>, the exact thing this product exists to remove"]:::bad
@@ -10,14 +11,15 @@ flowchart TB
 
     C3 --> USE{"<b>now the agent chooses</b><br/>interpretation is a SEPARATE step"}:::gate
     USE -- "<b>default, and all we build first</b>" --> U0["<b>the agent just uses the digits</b><br/>reads them, pastes them, types them<br/>into whatever they were going to"]:::ok
-    USE -- "added later, one at a time" --> U1["match against THIS customer's policies"]:::opt
-    USE -- "added later" --> U2["match last N of a citizen id"]:::opt
-    USE -- "added later" --> U3["look up a claim number"]:::opt
+    USE -- "<b>built</b>" --> U1["match against THIS customer's policies<br/><i>whole number, last N, first N, or contained</i>"]:::ok
+    USE -- "<b>built</b>" --> U2["match a date of birth<br/><i>full, day+month, or year alone</i>"]:::ok
+    USE -- "<b>built</b>" --> U3["look up a claim number"]:::ok
 
     U1 --> EV
     U2 --> EV
     U3 --> EV
-    EV["<b>a lookup returns EVIDENCE, never an action</b><br/>renders matched / not matched + what it matched.<br/>Changes no assurance. Unlocks no field.<br/>Writes nothing to the identity record."]:::ev
+    EV["<b>a lookup returns EVIDENCE, never an action</b><br/>Changes no assurance. Unlocks no field.<br/>Writes nothing to the identity record."]:::ev
+    EV --> RUNG["<b>and it says WHICH RUNG matched (D66).</b><br/>'the whole number' and 'four trailing digits' are very<br/>different evidence for an agent about to attest an identity,<br/>so a bare true/false throws away the part that matters.<br/>Years are compared in <b>both eras</b> — a schedule may show<br/>2569 where the app shows 2026 (D67)."]:::note
 
     EV --> AGENT
     U0 --> AGENT
@@ -27,6 +29,10 @@ flowchart TB
     WHY["<b>why a match cannot promote on its own.</b> A daughter<br/>calling for her father may legitimately be holding his<br/>documents and type his policy number correctly. Auto-<br/>promoting would record her as the verified policyholder -<br/>the exact failure D42 exists to prevent."]:::note
 
     ASSUME["<b>why capture is untyped.</b> We cannot assume the caller<br/>has any particular document. They may have a citizen id<br/>in their wallet, a claim SMS, a renewal letter, or nothing.<br/>Asking for one specific thing and building around it fails<br/>the moment they do not have it - which is often."]:::note
+
+    REST["<b>what reaches the database (D78).</b> Always: the mask<br/>••••••0811, the digit count, and every lookup with its outcome.<br/>Only once a lookup NAMES the value are the digits themselves<br/>stored — at which point they are a policy or claim number,<br/>not a secret. <b>A restart mid-capture gives the agent back<br/>the fact that a capture happened, never the digits.</b>"]:::warn
+
+    MASK["<b>mask() protects the LOG, not the agent (D58).</b> These are<br/>the caller's own keystrokes, typed seconds ago, to the person<br/>they are speaking to. Masking the agent's own screen deletes<br/>the feature and protects nobody."]:::note
 
     SEC["<b>the safe default inverts.</b> Because capture is untyped,<br/><b>we do not know what the digits are</b> - so raw captures are<br/>treated as potentially sensitive: masked in transcripts and<br/>logs, short retention, one-click discard. Only once a lookup<br/>NAMES the value may it be stored in the clear."]:::warn
 

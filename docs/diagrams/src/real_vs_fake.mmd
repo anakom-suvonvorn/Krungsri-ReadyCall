@@ -1,42 +1,55 @@
-%% HANDWRITTEN. Checked against PROJECT_STATE.md S5 + adapters on disk
+%% HANDWRITTEN. Checked against PROJECT_STATE.md S5 + adapters on disk + the P3 handover
 flowchart TB
     subgraph real["<b>REAL SERVICES</b> - doing actual work today"]
         direction TB
         R1["config + startup coherence checks"]:::real
         R2["injected Clock + ids (deterministic replay)"]:::real
-        R3["16-state machine + orchestrator"]:::real
+        R3["15-state machine + orchestrator (single writer)"]:::real
         R4["in-memory event bus (replayable)"]:::real
         R5["<b>DomainPack</b> - typed, cross-validated YAML"]:::real
-        R6["<b>IdentityResolver</b> - the L0-L3 ladder"]:::real
-        R7["<b>ContextAssembler</b> - parallel + provenance"]:::real
-        R8["<b>BriefBuilder</b> - assurance-gated disclosure"]:::real
-        R9["caching + stale-serving + circuit breaker"]:::real
+        R6["<b>PromptPack</b> - every spoken line, cross-checked"]:::real
+        R7["<b>IdentityResolver</b> - the L0-L3 ladder"]:::real
+        R8["<b>IvrMachine</b> - the keypad walk that ROUTES the call"]:::real
+        R9["<b>ContextAssembler</b> - parallel + provenance"]:::real
+        R10["<b>BriefBuilder</b> - assurance-gated SAY/DO (D74)"]:::real
+        R11["<b>MatchingEngine</b> - our own Hungarian solver"]:::real
+        R12["presence, the offer handshake, dispatch, ACW"]:::real
+        R13["keypad capture + the lookup ladder (D66)"]:::real
+        R14["attestation - three outcomes, re-locking (D61)"]:::real
+        R15["HTTP API + websocket + React workstation"]:::real
+        R16["Postgres stores, 9 tables, Alembic (D77)"]:::real
+        R17["caching + stale-serving + circuit breaker"]:::real
     end
 
     subgraph fake["<b>STILL FAKES</b> - only the EDGES"]
         direction TB
-        F1["telephony -> simulated"]:::fake
-        F2["speech -> scripted turns"]:::fake
-        F3["LLM -> rule-based"]:::fake
-        F4["TTS -> null"]:::fake
-        F5["bank data -> YAML fixtures"]:::fake
-        F6["storage -> in-memory dict"]:::fake
+        F1["telephony -> simulated (Asterisk at P5)"]:::fake
+        F2["speech -> scripted turns (real STT: P3 step 4)"]:::fake
+        F3["LLM -> rule-based (Claude/Typhoon at P4)"]:::fake
+        F4["TTS -> null: records lines, renders no audio"]:::fake
+        F5["bank data -> JSON fixtures (3 customers)"]:::fake
+        F6["agent roster -> mock/agents/agents.json"]:::fake
+        F7["login -> a persona picker, not authentication (D47)"]:::fake
     end
 
     subgraph none["<b>NOT BUILT YET</b>"]
         direction TB
-        N1["HTTP API (P1b)"]:::none
-        N2["customer simulator (P1b)"]:::none
-        N3["matching engine (P2)"]:::none
-        N4["agent workstation (P2)"]:::none
-        N5["Postgres / Alembic (P2, deferred by D39)"]:::none
-        N6["media gateway + real STT (P3)"]:::none
+        N1["media gateway + per-leg forking (P3 step 4)"]:::none
+        N2["VAD endpointing + the STT worker (P3 step 4)"]:::none
+        N3["the intake offer, recording, transcript (P3 step 4)"]:::none
+        N4["analysis + brief v2 (P4)"]:::none
+        N5["real telephony + the softphone (P5)"]:::none
+        N6["call transfer (D63) - designed, unbuilt"]:::none
+        N7["the live matching board (D64) - designed, unbuilt"]:::none
     end
 
-    real --> KEY["<b>the point of the shape:</b> everything in the left<br/>column is real logic, and every fake is at a PORT.<br/>Swapping one in is a config change, so no phase is<br/>ever blocked on telephony or a GPU."]:::key
+    CHOICE["<b>storage is a CHOICE, not a fake.</b> STORAGE_BACKEND=memory<br/>builds real in-memory stores that run the same write-through<br/>path as Postgres, and all three backends pass one contract<br/>suite (D75). 'memory' does not mean 'no persistence layer' -<br/>it means the durable record lives in this process."]:::choice
+
+    real --> KEY["<b>the point of the shape:</b> everything in the left column<br/>is real logic, and every fake is at a PORT. Swapping one in is<br/>a config change, so no phase is ever blocked on telephony,<br/>a GPU or an API key."]:::key
     fake --> KEY
 
     classDef real fill:#e9f7ef,stroke:#2f9e5f,color:#08361d
     classDef fake fill:#fff4e6,stroke:#e8a33d,color:#4a2f00
     classDef none fill:#f5f5f5,stroke:#999,color:#666,stroke-dasharray:4 3
     classDef key fill:#1f6feb,stroke:#0b3d91,color:#fff
+    classDef choice fill:#eef4ff,stroke:#5b8def,color:#0b2545

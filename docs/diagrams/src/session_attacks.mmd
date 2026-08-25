@@ -1,4 +1,5 @@
-%% HANDWRITTEN. Checked against api/security.py + tests/unit/test_api.py
+%% HANDWRITTEN. Checked against api/security.py + tests/unit/test_api.py + D78
+%% (P2c landed; sessions were deliberately NOT among the things made durable)
 flowchart TB
     A1["<b>send customer_id in the request body</b><br/>POST /v1/calls/intents {customer_id: 'C000002'}"]:::atk
     A1 --> D1["<b>422.</b> The schema has no such field and<br/>extra='forbid' rejects unknown keys.<br/>There is nothing to override. (D4)"]:::def1
@@ -24,7 +25,7 @@ flowchart TB
     A8["<b>log in as any customer id</b><br/>POST /v1/demo/session {customer_id: 'C000999'}"]:::atk
     A8 --> D8["<b>404.</b> Only the three configured personas,<br/>and the whole demo router disappears when<br/>demo_login_enabled is false. (D47)"]:::def1
 
-    GAP["<b>what is NOT solved yet, honestly:</b><br/>sessions live in a dict (P2 moves them to Postgres/Redis);<br/>no CSRF token yet - SameSite=Lax only, fine for a<br/>same-origin demo, not for production; no TLS locally;<br/>and the demo login is a persona picker, not authentication.<br/>The SHAPE is right so the real adapter drops in - but this<br/>is not a hardened auth system and does not claim to be."]:::gap
+    GAP["<b>what is NOT solved yet, honestly:</b><br/><b>sessions still live in a dict</b> — P2c made calls, agents and<br/>attestations durable and deliberately left sessions out, so a<br/>restart signs everybody out. That is survivable (they sign back<br/>in) but it IS a gap, not a plan;<br/>no CSRF token yet - SameSite=Lax only, fine for a<br/>same-origin demo, not for production; no TLS locally;<br/>and the demo login is a persona picker, not authentication.<br/>The SHAPE is right so the real adapter drops in - but this<br/>is not a hardened auth system and does not claim to be."]:::gap
 
     classDef atk fill:#fdecea,stroke:#d93025,color:#5c1a13
     classDef def1 fill:#e9f7ef,stroke:#2f9e5f,color:#08361d

@@ -1,47 +1,94 @@
-%% HANDWRITTEN. Checked against DECISIONS.md D1-D43
+%% HANDWRITTEN. Checked against DECISIONS.md D1-D81 (every one is here, exactly once)
 mindmap
-  root((43 decisions))
+  root((81 decisions))
     Shape
       D2 modular monolith
       D3 ports and adapters
+      D11 no LLM framework
+      D17 docs as memory
       D28 generic core + domain pack
-      D31 no LLM framework
+      D31 framework trigger written down
       D34 one project not two
       D35 injected time and ids
-      D39 defer the ORM to P2
-    Data
+      D39 defer the ORM until needed
+      D1 superseded by D34
+    Data and truth
       D5 bank data READ-ONLY
-      D16 figures are data never model output
       D7 briefs versioned never mutated
+      D15 Redis Streams backbone
+      D16 figures are data never model output
       D18 timings and provenance persisted
+      D53 no domain model at a permission boundary
     Identity
       D4 identity bound server-side
-      D20 the L0-L3 assurance ladder
-      D42 assurance rises mid-call
-    Routing
+      D20 the L0-L3 ladder
+      D42 assurance rises AND falls mid-call
+      D55 never speak an unverified name
+      D57 other is a first-class method
+      D58 masking protects the LOG not the agent
+      D60 an attestation locks the control
+      D61 locked after EVERY attestation
+      D65 a verified third party IS verified
+      D66 a lookup says WHICH rung matched
+      D67 both eras accepted
+      D71 the control depends on identification
+      D74 gates SAY and DO never SEE
+      D62 reversed by D65
+    Routing and the line
+      D8 routing deterministic LLM only labels
       D19 the cold call is the base case
+      D24 pre-rendered TTS prompts
       D37 the keypad menu runs FIRST
+      D38 language is a graded hard filter
       D40 queue falls back to the line
       D41 app screen context gives intent
-      D38 language is a hard filter
+      D48 the app asks WHY before dialling
+      D80 a menu is composed not one clip
+      D81 menu_path is always canonical
     The call
       D6 context starts at TAP
       D12 never blocked on AI
       D21 offer window is the grace period
+      D25 after-hours voicemail is briefed
       D43 keypad live for the whole call
+      D44 capture is UNTYPED
+      D46 a rating is an event not a state
+      D54 the demo may bypass queue hours
     Matching
       D22 one pool + Hungarian + guarded deferral
       D23 fit weighted by confidence
-      D33 offer accept and real ACW
-    Agent
-      D32 the workstation IS the phone
+      D49 our own solver gap MEASURED
+      D50 unplaced is two opposite outcomes
+      D52 a missed offer excludes that agent
+      D64 a live matching board
+    The agent
       D27 both sides rate
-    Voice
+      D32 the workstation IS the phone
+      D33 offer accept and real ACW
+      D45 ACW ends when the PERSON says
+      D51 signing in is not being ready
+      D56 where recommended actions come from
+      D59 agent_intent is a standing instruction
+      D63 transfer is one filtered menu
+      D68 if the server knows it it SAYS it
+      D69 the offer card previews the brief
+      D70 queue strip splits mine and all
+      D72 the challenge list lives in config
+      D73 progress prediction is about ACW
+    Voice and AI
       D9 STT streaming-first
-      D24 pre-rendered TTS prompts
+      D10 IntakeStrategy seam
       D26 fork both legs separately
+      D29 two LLM adapters from day one
       D30 Thonburian default Typhoon compared
-    Trust
+    Persistence
+      D75 one contract suite three backends
+      D76 presence is a projection of the log
+      D77 repositories return domain models
+      D78 write-through half derived
+      D79 alembic never compares FKs
+    Trust and demo
       D13 calibrated confidence or none
       D14 PDPA consent per scope
-      D10 IntakeStrategy seam
+      D36 the runner hands lifecycle steps over
+      D47 the simulator is one static page

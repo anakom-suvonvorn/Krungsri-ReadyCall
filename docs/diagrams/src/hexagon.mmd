@@ -3,7 +3,7 @@ flowchart TB
     subgraph inside["<b>THE INSIDE</b> - pure, testable. No vendor SDK may be imported here."]
         direction TB
         DOM["<b>domain/</b><br/>models - enums - events<br/>no I/O at all"]:::dom
-        SVC["<b>services/</b><br/>orchestrator - identity - context<br/>brief - matching - intake"]:::svc
+        SVC["<b>services/</b><br/>orchestrator - identity - context - brief<br/><b>ivr</b> - matching - agents - capture - queues - wrapup"]:::svc
         SVC --> DOM
     end
 
@@ -16,6 +16,7 @@ flowchart TB
         P5["CoreDataProvider"]:::port
         P6["EventBus"]:::port
         P7["BlobStorage"]:::port
+        P8["AgentDirectory"]:::port
     end
 
     subgraph out["<b>adapters/</b> - the only place a vendor name may appear"]
@@ -27,6 +28,7 @@ flowchart TB
         A5["postgres / http / <b>fixtures</b><br/>+ caching decorator"]:::ad
         A6["redis streams / kafka<br/><b>memory</b>"]:::ad
         A7["minio / s3<br/><b>memory</b>"]:::ad
+        A8["LDAP / the bank HR feed<br/><b>fixtures</b>"]:::ad
     end
 
     SVC --> ports
@@ -37,6 +39,7 @@ flowchart TB
     P5 --> A5
     P6 --> A6
     P7 --> A7
+    P8 --> A8
 
     NOTE["<b>Why this shape?</b> The hackathon hands us unknown data on the day.<br/>Swapping an adapter is a config change, not a rewrite.<br/><b>Bold</b> = what actually runs today, with no keys and no GPU."]:::note
 

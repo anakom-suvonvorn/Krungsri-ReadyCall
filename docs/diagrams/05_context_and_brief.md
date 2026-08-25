@@ -38,33 +38,53 @@ since moved.
 
 ---
 
-## 5.2 What the agent is allowed to see
+## 5.2 What the agent may SAY and DO — not what they may see
 
 ![brief gating](brief_gating.svg)
 
-Look at the top-left box: the frozen snapshot **holds everything** — full policy numbers,
-every coverage figure — regardless of assurance. The gate is on *rendering*, not fetching.
+> **`D74` reversed the original rule here, and this section was rewritten with it.** The first
+> design hid the record below L2. That is the intuitive answer and it is wrong, because **the
+> agent needs the record precisely so that they can verify the caller** — hiding it makes
+> verification impossible, and showing a bank employee the record they were routed is internal
+> processing, not disclosure. The risk lives in what leaves the agent's mouth and what gets
+> changed in the system, never on their screen.
 
-This was verified rather than assumed. At L1 in the motor scenario, the snapshot contains
-`MT-2025-004512` and all four coverage figures, while the brief prints *"มีกรมธรรม์ที่
-เกี่ยวข้อง (ยังไม่ยืนยันตัวตน)"*.
+So there are **two gates, not one**:
 
-The consequence is the good kind: **confirming identity is a re-render, not a re-fetch.** No
-round trip to the bank core, no spinner. The data was already in memory.
+| Gate | Question | Threshold |
+|---|---|---|
+| `may_see_record` | is there anybody to show? | L1 and up |
+| `may_act_on_policy` | may they say it aloud, confirm it, change it? | L2 and up |
+
+**L0 renders nothing** — not as a restriction, but because at L0 there is nobody to render.
+
+Verified rather than assumed: at L1 in the motor scenario the brief prints the policy number
+`MT-2025-004512` **and** the standing note *"(ยังไม่ยืนยันตัวตน — ยังใช้/อ้างอิงกับผู้ติดต่อไม่ได้)"*.
+A test asserts both halves of that sentence.
 
 Below L2, three things happen automatically:
 
-1. the policy number is replaced with a neutral phrase,
+1. the policy number carries that note — **shown, but not yet usable**,
 2. a verify-identity step is **prepended as action 0**,
-3. every playbook step tagged L2-required is **dropped**.
+3. every playbook step tagged above L1 is **dropped** (`requires_assurance`).
 
-The agent is never blocked — they are told what to do first.
+The agent is never blocked — they are told what to do first. And the opening line asks an
+**open** question with no name in it (`D55`): the name is on screen, it just does not leave
+their mouth yet.
 
-**Two rules this diagram encodes:**
+The consequence is the good kind: **attesting identity is a re-render, not a re-fetch.** No
+round trip to the bank core, no spinner. The data was already in memory — and assurance moves
+*down* the same way.
 
-- **Gate at the wire, server-side.** The workstation receives only what the current level
-  permits. Sending the full brief and hiding fields in React would put someone's coverage one
-  devtools panel away.
+**Three rules this diagram encodes:**
+
+- **Gate at the wire, server-side, with a DTO.** The workstation receives `BriefOut`, never
+  `CaseBrief.model_dump()`. Sending the domain model and hiding fields in React is defeated by
+  one devtools panel — and it shipped a real leak (`B5`, `D53`). Test the **raw bytes**: an
+  assertion on rendered text cannot see a field the renderer never mentions.
+- **Gate the sentence on the IDENTITY, not the payload.** After a rejection the frozen snapshot
+  still holds the old policy, so a summary built from the payload will happily print a number
+  the structured fields correctly withheld. Both flags come from the `IdentityResolution`.
 - **The LLM is not even imported in this module** (`D16`). Every figure is read from a typed
   `Coverage` field. There is no code path that could put an invented number on an insurance
   screen — and a hallucinated room-and-board limit is not a bad answer, it is a mis-selling

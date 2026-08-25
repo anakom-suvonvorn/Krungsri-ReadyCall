@@ -1,6 +1,6 @@
 # Diagrams — the whole system, visually
 
-_Last updated: 2026-08-25._
+_Last updated: 2026-08-26._
 
 **60 diagrams** covering every part of Krungsri ReadyCall. Written to be read in order the
 first time, and dipped into afterwards.
@@ -57,6 +57,18 @@ file carries a `%% GENERATED` banner naming its source of truth.
 The rest are hand-drawn because they describe *intent* rather than structure — sequence
 flows, the reasoning behind a decision, the roadmap. Those carry a `%% HANDWRITTEN` banner
 naming the doc or module they were checked against.
+
+**Hand-drawn is where rot collects, and it did.** A sweep on 2026-08-26 found several
+teaching decisions that had since been *reversed*: `brief_gating` still gated what the agent
+could SEE, which `D74` overturned, and `identity_promotion` still said a verified third party
+stayed locked, which `D65` overturned. Others had simply been overtaken — `real_vs_fake`
+listed five things as unbuilt that had shipped, `decision_map` said "43 decisions" against 81,
+`test_layers` claimed 161 tests against 496. All are corrected.
+
+The lesson for anyone editing these: **the banner is a claim.** If you change a decision,
+`grep` the banner lines for its number — `grep -n "D74" src/*.mmd` — and fix every diagram
+that cites it in the same commit. A generated diagram cannot lie about the system, but a
+hand-drawn one can, and it is more convincing than prose while doing it.
 
 ---
 

@@ -23,7 +23,10 @@ The ordering is also risk-driven. Telephony is the hardest, most fragile depende
 lands at **P5** — late — and everything before it is built against a simulated adapter. No
 phase is ever blocked waiting for a SIP trunk or a working microphone.
 
-Current position: **P0 and P1 are done, P1b is next.**
+Current position: **P0 · P1 · P1b · P2a · P2b · P2c are done, and P3 is part-way.** P3's first
+three steps — the voice-prompt pipeline and the keypad IVR that actually routes the call — are
+built; step 4 is the media gateway, VAD and the STT worker, which is where the only hardware
+risk in the project lives.
 
 ---
 
@@ -43,13 +46,24 @@ generator are *injected*, never read from the wall. Nothing anywhere calls `date
 or generates a random id on its own. Without that discipline, golden-output comparison would
 be impossible and every scenario test would be flaky.
 
+**Three freshness checks share one argument.** The generated diagrams, the voice-prompt
+manifest and the keypad page's embedded menu data are each regenerated into a temp copy and
+compared against what is committed. A committed artefact that has silently fallen behind is
+worse than a missing one, because it is convincing.
+
 **`grep -rn "# P1:" scripts/`** lists every lifecycle step the scenario runner still performs
-by hand — which is exactly the handover list for P2 and P3. The list of what is not yet built
-is executable rather than prose, so it cannot quietly go stale (`D36`).
+by hand. P2 took over matching and P3 took over the IVR; what remains is the media gateway,
+the named agent and the agent-side rating. The list of what is not yet built is executable
+rather than prose, so it cannot quietly go stale (`D36`).
+
+**And one gap no layer closes by itself** (`B7`). Every test drove the system through
+endpoints, and endpoints tick the dispatcher on the way through — so the suite proved the
+ticking *worked* without proving anything *caused* it. Anything that must happen because time
+passed needs a test in which only time passes.
 
 ---
 
-## 9.3 All 43 decisions
+## 9.3 All 81 decisions
 
 ![decision map](decision_map.svg)
 
@@ -65,6 +79,7 @@ If you read only five, read these:
 | **D12** | the call is never blocked on AI | the entire degradation story follows from this one line |
 | **D16** | figures are data, never model output | the single biggest product risk in an insurance context |
 | **D20** | identity is an assurance ladder | why a phone number is not a login |
+| **D74** | assurance gates SAY and DO, never SEE | reversed `D20`'s display gating — the agent needs the record *in order to* verify |
 
 The discipline around this file matters as much as its contents: **a decision is never
 silently reversed.** Reversing one means a new entry explaining why. That is what makes it
@@ -75,9 +90,9 @@ already considered and rejected.
 
 ## 9.4 Where to go next
 
-- **The written walkthroughs** — [`../explanations/P0_foundations.md`](../explanations/P0_foundations.md)
-  and [`P1_context.md`](../explanations/P1_context.md) explain the code layer by layer, in
-  prose, with the actual output.
+- **The written walkthroughs** — one per phase in [`../explanations/`](../explanations/),
+  explaining the code layer by layer, in prose, with the actual output. `P0_foundations.md`
+  starts it; `P2c_persistence.md` and `P3_voice.md` are the two most recent.
 - **The live state** — [`../NEXT_SESSION.md`](../NEXT_SESSION.md) is current priorities,
   open questions and landmines.
 - **Run it yourself** — the fastest way to see the whole thing move:

@@ -24,7 +24,7 @@ flowchart TB
 
     NOTE["<b>why two different strings?</b> The cookie proves who is<br/>using the APP. The token proves this PHONE CALL belongs<br/>to that app session. Cookies do not travel down a<br/>telephone line, so the call needs its own single-purpose,<br/>short-lived credential."]:::note
 
-    HASH["<b>why the token is stored HASHED but the session is not.</b><br/>Different threat: the token is the one credential that also<br/>rides an external channel (the call), so a database leak<br/>must not yield working tokens. Sessions expire in an hour<br/>and are revoked on logout. At P2 both become DB rows and<br/>the session gets the same treatment."]:::note
+    HASH["<b>why the token is stored HASHED but the session is not.</b><br/>Different threat: the token is the one credential that also<br/>rides an external channel (the call), so a database leak<br/>must not yield working tokens. Sessions expire in an hour<br/>and are revoked on logout. <b>P2c made the call side durable and<br/>left sessions in memory on purpose</b> — a signed-out agent costs<br/>one sign-in, where a lost call costs a caller. If sessions ever<br/>become rows they get the same hashing."]:::note
 
     classDef secret fill:#fff4e6,stroke:#e8a33d,color:#4a2f00
     classDef store fill:#e9f7ef,stroke:#2f9e5f,color:#08361d

@@ -1,23 +1,30 @@
-%% HANDWRITTEN. Checked against src/ tree on disk
+%% HANDWRITTEN. Checked against the src/ tree on disk, 2026-08-26
 flowchart LR
     ROOT["FullProject/"]:::root
-    ROOT --> DOCS["docs/<br/><i>the permanent memory</i>"]:::docs
-    ROOT --> CFG["config/<br/><b>the entire insurance domain pack</b><br/>intents - skills - dids - menus"]:::cfg
+    ROOT --> DOCS["docs/<br/><i>the permanent memory</i><br/>diagrams - explanations - reading"]:::docs
+    ROOT --> CFG["config/<br/><b>the entire insurance domain pack</b><br/>intents - skills - dids - menus -<br/>challenges - queue_hours - <b>voice_prompts</b>"]:::cfg
     ROOT --> SRC["src/readycall/"]:::src
-    ROOT --> MOCK["mock/bank_core/<br/>fixtures + 2000-customer generator"]:::misc
-    ROOT --> SCR["scripts/<br/>run_scenario - gen_diagrams"]:::misc
-    ROOT --> TST["tests/<br/>unit - contracts - scenarios"]:::misc
+    ROOT --> APPS["apps/<br/>workstation (React, built once)<br/>customer_sim (one HTML file, D47)"]:::misc
+    ROOT --> PR["prompts/voice/<br/>the rendered clip manifest (D24)"]:::misc
+    ROOT --> MOCK["mock/<br/>bank_core fixtures + generator<br/>agents roster"]:::misc
+    ROOT --> SCR["scripts/<br/>run_scenario - run_matching - build_prompts -<br/>gen_diagrams - render_diagrams - audit_docs"]:::misc
+    ROOT --> TST["tests/<br/>unit - contracts - integration - scenarios"]:::misc
     ROOT --> INF["infra/<br/>docker-compose + schema SQL"]:::misc
 
-    SRC --> D1["domain/<br/><b>no I/O at all</b>"]:::layer
-    SRC --> D2["ports/<br/><b>Protocols only</b>"]:::layer
-    SRC --> D3["adapters/<br/><b>no business rules</b>"]:::layer
-    SRC --> D4["services/<br/><b>imports only domain + ports</b>"]:::layer
-    SRC --> D5["entrypoints/<br/>the runnable processes"]:::layer
+    SRC --> D1["domain/<br/><b>no I/O at all</b><br/>models - enums - events"]:::layer
+    SRC --> D2["ports/<br/><b>Protocols only</b> - 8 of them"]:::layer
+    SRC --> D3["adapters/<br/><b>no business rules</b><br/>telephony - stt - tts - llm -<br/>core_data - event_bus - storage - agent_directory"]:::layer
+    SRC --> D4["services/<br/><b>imports only domain + ports</b><br/>call_orchestrator - identity - context - brief -<br/><b>ivr</b> - matching - agents - capture - queues - wrapup"]:::layer
+    SRC --> D5["db/<br/>models - stores - storage factory - migrations<br/><b>returns DOMAIN models, never ORM rows (D77)</b>"]:::layer
+    SRC --> D6["api/<br/>app - deps - security - realtime - routers"]:::layer
+    SRC --> D7["entrypoints/<br/>the runnable processes"]:::layer
+    SRC --> D8["domainpack.py + voiceprompts.py<br/><i>the two config loaders</i>"]:::layer
 
     RULE["<b>the dependency rule, in one line:</b><br/>domain knows nothing - ports know domain -<br/>services know domain and ports - adapters know<br/>ports and a vendor. <b>Any file that breaks that is a bug.</b>"]:::key
 
-    CFGN["<b>why config/ is separate and large.</b> Every insurance<br/>literal lives there, so retargeting this to a hospital<br/>line or a telco desk means swapping YAML, not touching<br/>services/. That reuse claim is D28, and it is enforced:<br/>no insurance literal may be hardcoded in services/."]:::note
+    CFGN["<b>why config/ is separate and large.</b> Every insurance<br/>literal lives there, so retargeting this to a hospital<br/>line or a telco desk means swapping YAML, not touching<br/>services/. That reuse claim is D28, and it is enforced:<br/>no insurance literal may be hardcoded in services/ —<br/>and since P3, no prompt id either."]:::note
+
+    GI["<b>a gitignore lesson worth keeping (B9).</b> A bare<br/>directory name matches at ANY depth, so `models/` for ML<br/>weights silently swallowed src/readycall/db/models/ and a<br/>whole phase shipped with no ORM package. It is anchored<br/>`/models/` now. After adding a package: git ls-files it."]:::warn
 
     classDef root fill:#1f6feb,stroke:#0b3d91,color:#fff
     classDef docs fill:#fff4e6,stroke:#e8a33d,color:#4a2f00
@@ -27,3 +34,4 @@ flowchart LR
     classDef misc fill:#f5f5f5,stroke:#999,color:#333
     classDef key fill:#1f6feb,stroke:#0b3d91,color:#fff
     classDef note fill:#fffbe6,stroke:#d4a72c,color:#4a3800
+    classDef warn fill:#fdecea,stroke:#d93025,color:#5c1a13

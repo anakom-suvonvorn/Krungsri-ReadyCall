@@ -1,33 +1,45 @@
-%% HANDWRITTEN. Checked against services/brief/builder.py + D20 + D16
+%% HANDWRITTEN. Checked against services/brief/builder.py + D74 (which REVERSED D20's
+%% display gating) + D16 + D53 + B5
 flowchart TB
     SNAP[("frozen ContextSnapshot<br/><b>holds EVERYTHING</b> - policy numbers,<br/>every Coverage figure")]:::snap
     ID["IdentityResolution<br/>assurance level"]:::id
 
-    SNAP --> GATE
-    ID --> GATE
-    GATE{"may_disclose_policy_details<br/>= assurance is L2 or better"}:::gate
+    SNAP --> G1
+    ID --> G1
 
-    GATE -- "NO (L0 / L1)" --> LOW["<b>WITHHELD RENDER</b><br/>- policy number replaced by<br/>&nbsp;&nbsp;'มีกรมธรรม์ที่เกี่ยวข้อง (ยังไม่ยืนยันตัวตน)'<br/>- verify-identity PREPENDED as action 0<br/>- every L2-gated playbook step DROPPED<br/>- degraded = LOW_ASSURANCE"]:::low
-    GATE -- "YES (L2 / L3)" --> HIGH["<b>FULL RENDER</b><br/>- policy number shown<br/>- coverage figures shown<br/>- full playbook"]:::high
+    G1{"<b>may_see_record</b><br/>is there anybody to show?<br/>= assurance is L1 or better"}:::gate
+    G1 -- "NO — L0 only" --> L0["<b>NOTHING RENDERS</b><br/>no name, no policy, no history.<br/>Not a restriction: at L0 there is<br/>simply nobody to render."]:::low
+    G1 -- "YES — L1, L2, L3" --> G2
 
-    LOW --> PROMO["agent confirms identity,<br/>or a typed policy number matches (D42/D43)"]:::promo
-    PROMO --> HIGH
-    PROMO -.-> NOTE["<b>this is a RE-RENDER, not a re-fetch.</b><br/>The data was already in memory.<br/>No round trip to the bank core."]:::note
+    G2{"<b>may_act_on_policy</b><br/>may they SAY it and DO it?<br/>= assurance is L2 or better"}:::gate
 
-    HIGH --> WIRE
-    LOW --> WIRE
-    WIRE["<b>GATE AT THE WIRE, SERVER-SIDE</b><br/>send only what this level permits.<br/>Never ship the full brief and hide<br/>fields in React - devtools defeats that."]:::wire
+    G2 -- "NO — L1" --> L1["<b>SHOWN, BUT NOT YET USABLE</b><br/>- policy number IS on screen<br/>- coverage figures ARE on screen<br/>- number carries a standing note:<br/>&nbsp;&nbsp;'(ยังไม่ยืนยันตัวตน — ยังใช้/อ้างอิงกับผู้ติดต่อไม่ได้)'<br/>- verify-identity PREPENDED as action 0<br/>- every playbook step above L1 DROPPED<br/>- opening line asks an OPEN question, no name (D55)<br/>- degraded = LOW_ASSURANCE"]:::mid
+    G2 -- "YES — L2 / L3" --> L2["<b>FULL USE</b><br/>- read the number aloud<br/>- confirm a figure<br/>- change a detail, process a claim<br/>- full playbook"]:::high
+
+    L1 --> PROMO["agent attests on the call (D42):<br/>Confirmed, or a verified third party (D65)"]:::promo
+    PROMO --> L2
+    PROMO -.-> NOTE["<b>this is a RE-RENDER, not a re-fetch.</b><br/>The data was already in memory.<br/>No round trip to the bank core.<br/>Assurance moves DOWN this way too."]:::note
+
+    D74["<b>D74 reversed D20 here, and it matters.</b> The old rule hid<br/>the record below L2. But the agent needs the record precisely<br/>SO THAT they can verify the caller — hiding it makes<br/>verification impossible, and showing a bank employee the<br/>record they were routed is internal processing, not<br/>disclosure. So assurance gates what the agent may SAY and DO,<br/>never what they may SEE."]:::big
+
+    L1 --> WIRE
+    L2 --> WIRE
+    L0 --> WIRE
+    WIRE["<b>GATE AT THE WIRE, SERVER-SIDE</b><br/>BriefOut is a wire DTO, never CaseBrief.model_dump().<br/>Shipping the domain model and hiding fields in React<br/>is defeated by devtools — and it shipped a real leak (B5, D53)."]:::wire
     WIRE --> V2["CaseBrief v2 (versioned, never mutated - D7)"]:::v2
 
-    NO_AI["<b>the LLM is not even imported here (D16)</b><br/>every figure is read from a typed Coverage field,<br/>so there is no code path that could put an<br/>invented number on an insurance screen"]:::noai
+    B5["<b>gate the SENTENCE on the identity, not the payload.</b><br/>After a rejection the frozen snapshot still holds the old<br/>policy, so a summary built from the payload will happily print<br/>a number the structured fields correctly withheld. Both<br/>`may_see` and `may_act_on_policy` come from the IdentityResolution."]:::note
+
+    NO_AI["<b>the LLM is not even imported here (D16)</b><br/>every figure is read from a typed Coverage field,<br/>so there is no code path that could put an<br/>invented number on an insurance screen"]:::note
 
     classDef snap fill:#e9f7ef,stroke:#2f9e5f,color:#08361d
     classDef id fill:#eef4ff,stroke:#5b8def,color:#0b2545
     classDef gate fill:#1f6feb,stroke:#0b3d91,color:#fff
-    classDef low fill:#fdecea,stroke:#d93025,color:#5c1a13
+    classDef low fill:#f5f5f5,stroke:#999,color:#333,stroke-dasharray:4 3
+    classDef mid fill:#fff4e6,stroke:#e8a33d,color:#4a2f00
     classDef high fill:#e9f7ef,stroke:#2f9e5f,color:#08361d
     classDef promo fill:#fff4e6,stroke:#e8a33d,color:#4a2f00
     classDef wire fill:#1f6feb,stroke:#0b3d91,color:#fff
     classDef v2 fill:#eef4ff,stroke:#5b8def,color:#0b2545
     classDef note fill:#fffbe6,stroke:#d4a72c,color:#4a3800
-    classDef noai fill:#fffbe6,stroke:#d4a72c,color:#4a3800
+    classDef big fill:#fdecea,stroke:#d93025,color:#5c1a13

@@ -1,4 +1,4 @@
-%% HANDWRITTEN. Checked against PLAN.md P0-P8
+%% HANDWRITTEN. Checked against PLAN.md P0-P8 + NEXT_SESSION.md status
 gantt
     title Build phases - each one ends in something demonstrable (D34)
     dateFormat X
@@ -6,17 +6,20 @@ gantt
     todayMarker off
 
     section DONE
-    P0 foundations - the spine runs on fakes    :done, p0, 0, 1
-    P1 context - identity, assembly, brief v1   :done, p1, 1, 1
+    P0 foundations - the spine runs on fakes      :done, p0, 0, 1
+    P1 context - identity, assembly, brief v1     :done, p1, 1, 1
+    P1b HTTP layer + customer simulator           :done, p1b, 2, 1
+    P2a matching engine + our Hungarian solver    :done, p2a, 3, 1
+    P2b the agent workstation + offer handshake   :done, p2b, 4, 1
+    P2c persistence - 9 tables, restart survived  :done, p2c, 5, 1
 
-    section NEXT
-    P1b HTTP layer + customer simulator         :active, p1b, 2, 1
+    section IN PROGRESS
+    P3 steps 1-3 - prompts + the IVR that routes  :done, p3a, 6, 1
+    P3 step 4 - media, VAD, STT worker, bake-off  :active, p3b, 7, 1
 
     section PLANNED
-    P2 matching engine + agent workstation      :p2, 3, 1
-    P3 voice - IVR, media gateway, STT, intake  :p3, 4, 1
-    P4 analysis - brief v2+, Claude vs Typhoon  :p4, 5, 1
-    P5 real telephony - Asterisk + softphone    :p5, 6, 1
-    P6 live transcription, wrap-up, metrics     :p6, 7, 1
-    P7 PDPA hardening                           :p7, 8, 1
-    P8 future - conversational intake, outbound :p8, 9, 1
+    P4 analysis - brief v2+, Claude vs Typhoon    :p4, 8, 1
+    P5 real telephony - Asterisk + softphone      :p5, 9, 1
+    P6 live transcription, wrap-up, metrics       :p6, 10, 1
+    P7 PDPA hardening                             :p7, 11, 1
+    P8 future - conversational intake, outbound   :p8, 12, 1

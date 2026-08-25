@@ -1,9 +1,9 @@
-%% HANDWRITTEN. Checked against D10 + IntakeStrategyKind
+%% HANDWRITTEN. Checked against D10 + IntakeStrategyKind + the P3 step-4 boundary
 flowchart TB
     ORCH["CallOrchestrator<br/><b>does not know or care which one ran</b>"]:::orch
     ORCH --> SEAM{{"IntakeStrategy - the seam (D10)"}}:::seam
 
-    SEAM --> S1["<b>PASSIVE</b> - P3, the one we build first<br/>'เล่าปัญหาได้เลยค่ะ'<br/>customer talks, we listen and transcribe.<br/>No AI in the loop with the customer."]:::now
+    SEAM --> S1["<b>PASSIVE</b> - P3 <b>step 4</b>, not built yet<br/>'เล่าปัญหาได้เลยค่ะ'<br/>customer talks, we listen and transcribe.<br/>No AI in the loop with the customer."]:::now
     SEAM --> S2["<b>GUIDED</b> - P8<br/>TTS asks for the missing slots:<br/>'โรงพยาบาลไหนคะ' 'วันที่เท่าไหร่คะ'<br/>still one-way, but it fills gaps"]:::later
     SEAM --> S3["<b>CONVERSATIONAL</b> - P8<br/>a real AI caller that talks WITH them<br/>while they wait"]:::later
 
@@ -14,6 +14,8 @@ flowchart TB
 
     OUT --> DOWN["everything downstream is unchanged.<br/>Brief, matching, workstation, storage:<br/>none of them can tell which strategy ran."]:::down
 
+    STATE["<b>where this actually stands.</b> The seam, the enum and the<br/>output contract exist; <b>no strategy is implemented</b>. The IVR<br/>already routes the call and the prompts that offer intake<br/>(กด 1 เพื่อบันทึกข้อความ) are written and rendered — they are<br/>text waiting for the machinery that plays them."]:::warn
+
     NOTE["<b>why the seam exists.</b> The user asked for pre-call<br/>intake to be modular so it can BECOME a full AI caller<br/>later without a rewrite. Getting the output contract<br/>right now is what makes that a swap instead of a rebuild."]:::note
 
     classDef orch fill:#1f6feb,stroke:#0b3d91,color:#fff
@@ -23,3 +25,4 @@ flowchart TB
     classDef out fill:#eef4ff,stroke:#5b8def,color:#0b2545
     classDef down fill:#eef4ff,stroke:#5b8def,color:#0b2545
     classDef note fill:#fffbe6,stroke:#d4a72c,color:#4a3800
+    classDef warn fill:#fdecea,stroke:#d93025,color:#5c1a13

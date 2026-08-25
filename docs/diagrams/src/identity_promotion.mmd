@@ -1,31 +1,44 @@
-%% HANDWRITTEN. Checked against D42
+%% HANDWRITTEN. Checked against D42 as amended by D57, D61, D65 (which REVERSED D62),
+%% D71, D74 + services/identity/attestation.py
 flowchart TB
     ARR["call arrives<br/>IdentityResolver runs once"]:::in
-    ARR --> LVL["<b>L1_PROBABLE</b> - caller ID matched<br/>name on screen, policy details LOCKED"]:::l1
+    ARR --> LVL["<b>L1_PROBABLE</b> - caller ID matched<br/>the whole record is ON SCREEN (D74),<br/>but nothing may be said or acted on yet"]:::l1
 
     LVL --> ACT0["brief shows action 0:<br/>ยืนยันตัวตนผู้ติดต่อก่อนให้ข้อมูลกรมธรรม์"]:::act
     ACT0 --> ASK["agent asks an <b>OPEN</b> question<br/>ขอทราบชื่อผู้ติดต่อด้วยค่ะ"]:::ask
-    ASK -.-> WHY["<b>never ask a leading question.</b><br/>'ใช่คุณ X ไหมคะ' both leaks that the number<br/>belongs to them AND is weaker verification -<br/>anyone can answer yes."]:::note
+    ASK -.-> WHY["<b>never ask a leading question (D55).</b><br/>'ใช่คุณ X ไหมคะ' both leaks that the number<br/>belongs to them AND is weaker verification -<br/>anyone can answer yes. The name is on the<br/>agent's screen; it does not leave their mouth."]:::note
 
-    ASK --> CTRL{"agent presses one of THREE"}:::gate
+    ASK --> CTRL{"agent presses one of THREE<br/><i>which three are OFFERED depends on how<br/>the caller was identified (D71)</i>"}:::gate
 
-    CTRL -- "Confirmed<br/>(records WHICH challenge)" --> C1["<b>L3_VERIFIED</b><br/>full disclosure<br/>brief re-renders as v2"]:::l3
-    CTRL -- "Not this person" --> C2["<b>L0</b> + rejected id recorded<br/>nothing re-proposes them<br/>feeds a data-quality signal:<br/>usually a recycled mobile number"]:::l0
-    CTRL -- "Third party acting for them" --> C3["context VISIBLE (which policy)<br/>disclosure STILL LOCKED<br/>+ playbook step: check authority to act"]:::l2
+    CTRL -- "<b>Confirmed</b><br/>+ WHICH challenge was used<br/>(4 named + 'other' free text, D57)" --> C1["<b>L3_VERIFIED</b><br/>outcome = confirmed<br/>brief re-renders as v2"]:::l3
+    CTRL -- "<b>Not this person</b>" --> C2["<b>L0</b> + rejected id recorded<br/>nothing re-proposes them<br/>data-quality signal: usually<br/>a recycled mobile number"]:::l0
+    CTRL -- "<b>Third party acting for them</b><br/>MUST be named + relationship" --> C3["<b>L3_VERIFIED</b> — it promotes (D65)<br/>outcome stays <b>third_party</b>, forever"]:::l3
 
-    C3 -.-> WHY3["<b>why a third button exists.</b> A daughter calling<br/>about her father is neither confirmed nor wrong.<br/>Forced into a binary the agent presses Confirmed,<br/>and the audit log now says the policyholder was<br/>verified. The binary manufactures a false record."]:::note
+    C3 -.-> WHY3["<b>D65 REVERSED D42/D62 here.</b> The button asserts the<br/>agent checked this person may act for the policyholder,<br/>so the LEVEL follows the attestation — same rule as<br/>Confirmed. What keeps the log honest is the OUTCOME,<br/>not a lower number: the record says 'an authorised<br/>representative was verified', never 'the policyholder<br/>was verified'. The earlier reading confused 'keep the log<br/>truthful' with 'keep the level low', and only the first<br/>was ever the requirement."]:::fixed
 
-    C1 --> AUDIT[("disclosure audit log<br/>what was asked, what was shown, when")]:::store
-    C2 --> AUDIT
-    C3 --> AUDIT
+    C2 -.-> WHY2["<b>a rejection is REVERSIBLE (D71).</b> The original<br/>resolution is kept, so an agent who pressed it by<br/>mistake can put the caller back. Q18: with no customer<br/>search yet, a rejected call otherwise stays anonymous<br/>for its whole duration — the two forward outcomes are<br/>DISABLED with the reason in the tooltip, not hidden."]:::note
+
+    C1 --> LOCK
+    C2 --> LOCK
+    C3 --> LOCK
+    LOCK["<b>the control LOCKS after every attestation (D61)</b><br/>and is always reopenable with an explicit Amend."]:::lock
+
+    LOCK --> AMEND{"agent amends?"}:::gate
+    AMEND -- "yes" --> CTRL
+    AMEND -.-> CNT["<b>the client knows a new one landed from<br/>attestation_count, which only ever grows.</b><br/>Watching attested_outcome misses a<br/>confirmed → confirmed correction, and a lock<br/>that opens once is worse than no lock —<br/>the screen says the question is settled."]:::note
+
+    LOCK --> AUDIT[("attestation log — append-only<br/>what was asked, which challenge, who,<br/>when, and the outcome. A THIRD-PARTY row<br/>keeps the name and the relationship.")]:::store
+
+    AUDIT -.-> RESTART["<b>a restart rebuilds attestation_count from this</b> (D78).<br/>A restore that came back empty would silently UNLOCK<br/>an identity already attested — and a lock that opens<br/>by itself is the worst of the three states."]:::note
 
     classDef in fill:#1f6feb,stroke:#0b3d91,color:#fff
     classDef l1 fill:#fff4e6,stroke:#e8a33d,color:#4a2f00
     classDef l0 fill:#fdecea,stroke:#d93025,color:#5c1a13
-    classDef l2 fill:#eef4ff,stroke:#5b8def,color:#0b2545
     classDef l3 fill:#e9f7ef,stroke:#2f9e5f,color:#08361d
     classDef act fill:#f5f5f5,stroke:#999,color:#333
     classDef ask fill:#eef4ff,stroke:#5b8def,color:#0b2545
     classDef gate fill:#1f6feb,stroke:#0b3d91,color:#fff
+    classDef lock fill:#eef4ff,stroke:#5b8def,color:#0b2545
     classDef store fill:#e9f7ef,stroke:#2f9e5f,color:#08361d
     classDef note fill:#fffbe6,stroke:#d4a72c,color:#4a3800
+    classDef fixed fill:#fdecea,stroke:#d93025,color:#5c1a13

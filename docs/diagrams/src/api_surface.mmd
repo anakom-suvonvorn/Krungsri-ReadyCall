@@ -1,39 +1,73 @@
-%% HANDWRITTEN. Checked against src/readycall/api/ + D4 + D47
+%% HANDWRITTEN. Checked against src/readycall/api/routers/ on disk + D4 + D47 + D53 + D68
 flowchart TB
-    subgraph clients["clients - both speak the SAME public API"]
+    subgraph clients["<b>TWO SIDES, TWO COOKIES, TWO STORES</b>"]
         direction LR
         SIM["<b>customer simulator</b><br/>apps/customer_sim/index.html<br/>one file, no build step (D47)"]:::sim
+        WS["<b>agent workstation</b><br/>apps/workstation, React, built once<br/>the call happens IN the tab (D32)"]:::sim
         APP["<b>the real Krungsri app</b><br/>does not exist yet, and needs<br/>no server change when it does"]:::future
     end
 
-    clients --> AUTH{{"<b>SessionResolver</b> - the seam<br/>cookie -> customer_id, SERVER-SIDE"}}:::gate
+    SIM --> AUTH
+    APP --> AUTH
+    WS --> AAUTH
+
+    AUTH{{"<b>SessionResolver</b><br/>customer cookie -> customer_id, SERVER-SIDE"}}:::gate
+    AAUTH{{"<b>agent session store</b><br/>agent cookie -> agent_id, SERVER-SIDE"}}:::gate
+
     AUTH -.-> A1["DemoSessionStore<br/>persona picker (D47)"]:::demo
     AUTH -.-> A2["the bank's OIDC<br/>one adapter, later"]:::future
+    AAUTH -.-> A3["demo-login by agent id;<br/>the bank's staff directory, later"]:::demo
 
-    AUTH --> R1["<b>POST /v1/calls/intents</b><br/>mint a correlation token"]:::route
-    AUTH --> R2["<b>GET /v1/calls/intents/{id}</b><br/>what the prefetch found"]:::route
-    AUTH --> R3["<b>POST /v1/app/context-events</b><br/>a screen they looked at"]:::route
+    SEP["<b>separate stores on purpose.</b> One shared lookup and a<br/>customer session would resolve to an agent principal.<br/>The client sends NEITHER customer_id NOR agent_id."]:::note
 
-    R1 --> SVC["IntentService<br/>routes stay thin: validate, delegate"]:::svc
-    SVC --> STORE[("intent stored -<br/>only the token's SHA-256 hash")]:::store
-    SVC --> BUS(["publish <b>intent.created</b>"]):::bus
+    subgraph cust["<b>/v1</b> — the customer side (P1b)"]
+        direction TB
+        R1["POST /calls/intents<br/><i>mint a correlation token</i>"]:::route
+        R2["GET /calls/intents/{id}<br/><i>what the prefetch found</i>"]:::route
+        R3["POST /app/context-events<br/><i>a screen they looked at</i>"]:::route
+    end
 
-    BUS --> BG["drained AFTER the response is sent"]:::bg
-    BG --> ASM["ContextAssembler - 6 parallel reads"]:::svc
-    ASM --> SNAP[("frozen ContextSnapshot")]:::store
-    SNAP --> R2
+    subgraph agent["<b>/v1/agent</b> — the staff side (P2b)"]
+        direction TB
+        G1["GET /me · POST /state<br/><i>the two axes; the platform writes<br/>its own, never the person's (D51/D59)</i>"]:::route
+        G2["POST /offers/{id}/accept · /decline<br/><i>the handshake (D33); a miss excludes<br/>that agent from the re-match (D52)</i>"]:::route
+        G3["POST /calls/{id}/end · /wrapup<br/><i>saving is NOT done — ACW runs to the<br/>agent's declaration (D45)</i>"]:::route
+        G4["POST /calls/{id}/identity<br/><i>three outcomes, re-locks each time (D61)</i>"]:::route
+        G5["POST /calls/{id}/capture + 6 capture ops<br/><i>keys · backspace · stop · discard ·<br/>label · lookup (D44, D66)</i>"]:::route
+        G6["GET /queues<br/><i>split mine / all (D70)</i>"]:::route
+        G7["<b>WS /ws</b><br/><i>per-agent sequencing, replay on reconnect</i>"]:::ws
+    end
 
-    D4["<b>D4, enforced by the schema not by a check.</b><br/>CreateIntentRequest has NO customer_id field, and<br/>extra='forbid' makes smuggling one in a 422. If a<br/>client could assert identity, anyone with curl could<br/>mint a token for a stranger and walk it to L3 on the<br/>next call - the whole ladder would rest on their input."]:::note
+    subgraph demo["<b>/v1/demo</b> — gated by DEMO_LOGIN_ENABLED"]
+        direction TB
+        M1["POST /login · /logout · GET /personas · /plans"]:::demo
+        M2["<b>POST /calls</b> — a caller arrives<br/><i>stands in for telephony until P5. Since P3<br/>it drives the REAL IVR; only the keys are faked</i>"]:::demo
+        M3["GET /agents — who you can sign in as"]:::demo
+    end
 
-    D6["<b>D6: why the bus, not a direct call.</b> The endpoint<br/>publishes and returns a dial target immediately; the<br/>six reads to the bank core happen afterwards, while<br/>the customer is still lifting the phone to their ear.<br/>Measured: dial target in ~50ms, context in ~1.8ms<br/>after it."]:::note
+    AUTH --> cust
+    AAUTH --> agent
+    AUTH --> demo
+
+    cust --> SVC["services — routes stay thin: validate, delegate"]:::svc
+    agent --> SVC
+    demo --> SVC
+
+    SVC --> DTO["<b>every response is a wire DTO</b> (D53)<br/>never CaseBrief.model_dump(). Serialising the domain<br/>model at a permission boundary shipped a real leak:<br/>policy numbers and coverage figures to an L1 call (B5).<br/>Test the RAW BYTES — an assertion on rendered text<br/>cannot see a field the renderer never mentions."]:::wire
+
+    OPS["GET /health — liveness<br/>GET /docs — OpenAPI"]:::ops
+
+    D4N["<b>D4, enforced by the schema not by a check.</b><br/>CreateIntentRequest has NO customer_id field, and<br/>extra='forbid' makes smuggling one in a 422. If a<br/>client could assert identity, anyone with curl could<br/>mint a token for a stranger and walk it to L3 on the<br/>next call — the whole ladder would rest on their input."]:::note
+
+    D68N["<b>D68: if the server knows it, the server says it.</b><br/>declarable, offerable, intent_reason, attestation_count,<br/>server_time and what the brief may show are all decided<br/>server-side. The workstation RENDERS permissions; it never<br/>computes them, because a client that decides will<br/>eventually disagree and the client's copy is the wrong one."]:::note
 
     classDef sim fill:#e9f7ef,stroke:#2f9e5f,color:#08361d
     classDef future fill:#f5f5f5,stroke:#999,color:#666,stroke-dasharray:4 3
     classDef gate fill:#1f6feb,stroke:#0b3d91,color:#fff
     classDef demo fill:#fff4e6,stroke:#e8a33d,color:#4a2f00
     classDef route fill:#eef4ff,stroke:#5b8def,color:#0b2545
+    classDef ws fill:#f3e8ff,stroke:#8b5cf6,color:#2e1065
     classDef svc fill:#eef4ff,stroke:#5b8def,color:#0b2545
-    classDef store fill:#e9f7ef,stroke:#2f9e5f,color:#08361d
-    classDef bus fill:#fff4e6,stroke:#e8a33d,color:#4a2f00
-    classDef bg fill:#fff4e6,stroke:#e8a33d,color:#4a2f00
+    classDef wire fill:#1f6feb,stroke:#0b3d91,color:#fff
+    classDef ops fill:#f5f5f5,stroke:#999,color:#333
     classDef note fill:#fffbe6,stroke:#d4a72c,color:#4a3800

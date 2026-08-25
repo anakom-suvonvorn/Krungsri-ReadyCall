@@ -53,13 +53,27 @@ failure is specific: a daughter calls about her father's claim. Under a binary, 
 presses **Confirmed** — it *is* the right customer's case, after all — and the audit log now
 records that the policyholder was verified. That is false, and it is precisely the record
 PDPA requires. The binary quietly manufactures a compliance lie. So there is a third option:
-*third party acting for them* — the case context is visible, disclosure stays locked, and a
-playbook step appears to check authority to act.
+*third party acting for them*, which must carry a **name and a relationship** (`D57`).
+
+**And it promotes — `D65` reversed this.** The first version kept a third party locked below
+L2, on the theory that a lower level kept the log honest. That confused two different things.
+The button asserts the agent has checked this person may act for the policyholder, so the
+*level* follows the attestation exactly as it does for **Confirmed**; what keeps the record
+truthful is the **outcome**, which stays `third_party` with the name and relationship forever.
+The log has never said the policyholder was verified, and still does not. Keeping the level low
+as well just meant a verified representative could not be helped.
 
 **Rejection is not plain L0.** "This is *not* C000002" is information. It stops the system
 re-proposing them, and it feeds a data-quality signal — a rejected ANI match usually means a
 stale number in the core data. A contact centre that logs these hands the bank a free
 data-hygiene feed.
+
+**The control locks after every attestation, and always reopens** (`D61`). Amending is a
+separate, recorded act — and the client learns a new one landed from `attestation_count`, which
+only ever grows. Watching the outcome instead would miss a confirmed→confirmed correction, and
+a lock that opens once is worse than no lock, because the screen says the question is settled.
+Which of the three outcomes is even *offered* depends on how the caller was identified (`D71`),
+and a rejection is **reversible** — the original resolution is kept.
 
 **Never ask a leading question.** The agent asks *"ขอทราบชื่อผู้ติดต่อด้วยค่ะ"* — may I have
 your name — not *"is this Khun Pattheera?"*. Two reasons, and the second is the better one:

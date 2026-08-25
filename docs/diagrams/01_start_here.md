@@ -125,14 +125,19 @@ Worth being precise about, because "we built an AI call system" and "we built th
 of one" are different claims.
 
 **Real, doing real work:** the call state machine and orchestrator, the event bus, the domain
-pack loader with its cross-validation, the identity ladder, the context assembler, the brief
-builder, and the caching/circuit-breaking layer. These are services with logic, not stubs.
+pack and prompt pack loaders with their cross-validation, the identity ladder, **the keypad
+IVR that routes the call**, the context assembler, the brief builder, the matching engine and
+its solver, presence and the offer handshake, keypad capture and its lookups, the HTTP API and
+websocket, the React workstation, the Postgres stores, and the caching/circuit-breaking layer.
+These are services with logic, not stubs.
 
 **Fake, but only at the edges:** the phone, the speech model, the LLM, the TTS, the bank's
-database, the blob store. Every one of those fakes sits behind a port.
+database, the agent roster, the login. Every one of those fakes sits behind a port.
 
-**Not built yet:** the HTTP API, the customer simulator, the matching engine, the
-workstation, the database layer, the media gateway.
+**Not built yet:** the media gateway and per-leg forking, VAD endpointing and the STT worker,
+the intake offer and everything downstream of it (P3 step 4), analysis and brief v2 (P4), real
+telephony (P5), and two designed-but-unbuilt features — call transfer (`D63`) and the live
+matching board (`D64`).
 
 The distinction that matters: *everything fake is at a boundary.* There is no fake business
 logic. When the real Asterisk adapter lands, nothing in `services/` changes.
