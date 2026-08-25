@@ -277,7 +277,7 @@ the code about something that was never checked against reality.
 | Prompts defined | 32 |
 | Distinct clips after dedupe | 63 |
 | Flow roles | 19 |
-| Tests in the suite | 496 (454 pass + 42 skip without the Postgres container) |
+| Tests in the suite | 496 — 454 pass + 42 skip without the Postgres container; 493 pass + 3 skip with it |
 | New tests this phase | 55 — 27 on the prompt pack, 24 on the IVR, 3 on the demo path, and one more generated diagram to keep fresh |
 | Diagrams | 60, one of them generated from the prompt pack |
 

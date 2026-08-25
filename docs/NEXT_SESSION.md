@@ -14,7 +14,8 @@ and a human accepts with the screen already right — and now **the caller keys 
 to the right queue through a real menu, hearing real (pre-rendered) Thai**.
 
 Verified **2026-08-25**: **496 tests** — 454 pass + 42 skipped without the Postgres
-container, all 496 with it. `ruff check` + `ruff format --check` clean over 141 files,
+container, 493 pass + 3 skipped with it (the three are FK cases the in-memory backend
+cannot have). `ruff check` + `ruff format --check` clean over 141 files,
 `mypy --strict` clean over 106, all scenarios replay, 60/60 diagrams current.
 
 ### The four sessions of review since P2b, in one place
@@ -237,11 +238,11 @@ menu-first flow (`D37`).
 
 Facts about *this laptop* rather than the repo, so a fresh session does not rediscover them.
 
-- **Docker works** (v29.2.0) and the Postgres container is **stopped**, not removed. Bring it
-  back with `docker compose -f infra/docker-compose.yml up -d postgres`. Everything runs
-  without it; with the container down the database cases skip (**399 pass, 42 skipped**)
-  and with it up they all run (**438 pass, 3 skipped** — the three are FK cases the
-  in-memory backend cannot have).
+- **Docker works** (v29.2.0) and the Postgres container was **left running** on 2026-08-25
+  after the P3 verification. Stop it with `docker compose -f infra/docker-compose.yml stop
+  postgres`, start it the same way with `up -d`. Everything runs without it; with the
+  container down the database cases skip (**454 pass, 42 skipped**) and with it up they all
+  run (**493 pass, 3 skipped** — the three are FK cases the in-memory backend cannot have).
 - **`readycall_test` exists inside that container's volume.** It was created by hand *and*
   added to `infra/postgres/init/02-test-database.sql` for fresh setups — init scripts only
   run on an empty data directory, so a `docker compose down -v` re-creates it and a plain

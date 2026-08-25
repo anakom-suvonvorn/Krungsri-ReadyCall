@@ -45,7 +45,8 @@ real menu to the right queue, the desk rings, the brief is already there, and th
 moves when the agent attests.
 
 Verified on 2026-08-25: **496 tests** — 454 pass + 42 skipped without the Postgres container,
-all 496 with it. `ruff check` and `ruff format --check` clean over 141 files, `mypy --strict`
+493 pass + 3 skipped with it (the three are FK cases the in-memory backend cannot have).
+`ruff check` and `ruff format --check` clean over 141 files, `mypy --strict`
 clean over **106** source files, and all three scenarios replay byte-identically. The database
 suites ran against a **live Postgres**, and a restart was verified outside pytest with two real
 uvicorn processes.
