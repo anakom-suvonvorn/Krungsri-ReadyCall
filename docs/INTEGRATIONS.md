@@ -1,7 +1,12 @@
 # INTEGRATIONS
 
 _Every external thing the system touches: the port that hides it, the adapters behind it, and the config that selects one._
-_Status: **design only**. Last updated: 2026-08-23._
+_Status: **mostly design; the persistence stack is real.** Last updated: 2026-08-25._
+
+> **Real as of P2c:** SQLAlchemy 2.0 (async) + Alembic + `asyncpg`, against Postgres 16 in
+> `infra/docker-compose.yml`, verified on a live container. `aiosqlite` is a **test-only**
+> dependency — the fast path that lets the store contract suite run with no container
+> (`D75`), never a deployment target. Everything else on this page is still design.
 
 ---
 

@@ -1,7 +1,7 @@
 # PLAN
 
 _The master build plan for the full system: what gets built, in what order, and what "done" means for each phase._
-_Last updated: 2026-08-24._
+_Last updated: 2026-08-25._
 
 ---
 
