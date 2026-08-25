@@ -157,39 +157,52 @@ already Protocol-shaped or dict-backed behind one class each.
 
 ---
 
-## P3 — Voice, IVR, and AI Pre-Call Intake v1 (passive)
+## P3 — Voice, IVR, and AI Pre-Call Intake v1 (passive) — 🔶 **steps 1–3 done (2026-08-25)**
 **Goal:** the pitch's Step 2 — the line talks, audio goes in, transcript comes out, live.
 
-> **Starting notes, checked against disk 2026-08-25.** `NEXT_SESSION.md` carries the full
-> briefing; two things belong here because they change the plan rather than the working state:
->
-> * **The `ml` extra is commented out in `pyproject.toml`**, so `uv sync --extra ml` fails
->   today. Declaring `torch` / `transformers` / `faster-whisper` / `onnxruntime` /
->   `silero-vad` is step zero, and it is the slow install — worth starting before anything
->   that needs thinking.
-> * **`menus.yaml` and `dids.yaml` already fix the prompt-id vocabulary**: 8 menu prompts and
->   5 greetings. So `voice_prompts.yaml` has a known minimum, and the first thing to build is
->   a **test that every referenced id exists** — the same guard `D72` put on `challenges.yaml`,
->   for the same reason (a list enforced on one side and read from another drifts silently).
->
-> Suggested order, lowest risk first: prompts config + its guard → `build_prompts.py` → the
-> IVR service against the simulated adapter → *then* media, VAD and the STT worker, which is
-> where the RTX 3050 risk actually lives.
+The phase was ordered lowest-risk-first, and that order held. Steps 1–3 needed no model, no
+audio hardware and no network; step 4 is where the RTX 3050 risk actually lives and is not
+started. `explanations/P3_voice.md` covers the built half; `diagrams/12_the_menu.md` draws it.
 
-- **Voice prompts pipeline** (`D24`): `config/voice_prompts.yaml`, `scripts/build_prompts.py`
-  (hash-cached rendering), the checked-in fallback prompt pack, and the admin **prompt studio** page.
-- **IVR service**, and note the ordering — **the menu routes the call, before any AI** (`D37`):
-  greeting + recording notice → product-line menu (skipped when the app or DID already said) →
-  reason menu → optional identification → **queue** → only then the press-1/press-2 intake offer.
-  Plus: personalised option ordering from the prefetched context, reserved keys (`9` repeat,
-  `0` operator), catch-all options, re-offer once, barge-in, and the post-call rating keypress.
-  `config/menus.yaml` already holds the tree and is validated by tests.
-- Media Gateway: AudioSocket + WebSocket media servers, **per-leg forking**, resampling to 16 kHz mono
-  float32, framing, encrypted recording to MinIO, per-recording key refs.
+### ✅ Done
+
+- **Voice prompts** (`D24`): `config/voice_prompts.yaml` with **32 prompts**, declared slots,
+  and a `flow:` table mapping **19 roles** to ids so `services/` carries no prompt literals
+  (`D28`). Cross-validated against `menus.yaml` / `dids.yaml` **in both directions**, as a
+  startup gate *and* a test — a dangling id is a silent gap in a call.
+- **`scripts/build_prompts.py`**: renders through the `TtsEngine` port, cached by
+  `hash(text, voice, engine)`, deduped by rendered text to **63 clips**. Committed manifest,
+  asserted fresh by a test. Verified: one edited line re-renders one clip.
+- **Two decisions that only appeared once it was built.** `D80` — a menu is a lead-in plus
+  one line per option, because personalised ordering makes a single baked clip impossible.
+  `D81` — the key pressed is not the key stored; every press resolves to canonical, so
+  `menu_path` means the same thing on every call.
+- **`services/ivr/`**: greeting + recording notice → product-line menu (skipped when the DID
+  or the app already said) → reason menu → queue. `0` reaches a human from any depth, `9`
+  repeats without spending an attempt, three wrong keys or two silences route rather than
+  hang up, and a product-line number with no keypress still reaches that line's queue.
+  Personalised ordering with the evidence attached. No I/O in the machine, so a timeout is a
+  method call (`B7`).
+- **Handover complete.** `run_scenario.py`'s `# P1:` IVR marker and `demo.py`'s `# P2b:` are
+  both retired; the only thing still faked is the number dialled and the keys pressed.
+
+### ☐ Remaining — step 4, the GPU half
+
+- A **real TTS voice**: `TTS_ENGINE=null` synthesises nothing today, so the pack is a manifest.
+  Choose on a listening test of the actual 63 lines, not a spec sheet. Plus the checked-in
+  audio pack and the admin **prompt studio** page.
+- The **identify step** (keypad → L3), the **press-1/press-2 intake offer** with its re-offer,
+  and the **post-call rating keypress**. All three have prompts and roles already; nothing
+  calls them yet.
+- Media Gateway: AudioSocket + WebSocket media servers, **per-leg forking**, resampling to
+  16 kHz mono float32, framing, encrypted recording to MinIO, per-recording key refs.
 - Consent gate (IVR keypress + in-app toggle) writing `consents` before a single frame is analysed.
 - `transcription/`: rolling buffer, Silero VAD endpointing (threshold 0.65 / 500 ms / 100 ms +
   120 ms·60 ms padding, per `D9`), utterance dispatch, repetition guard.
 - `stt_worker`: long-lived, model loaded once, GPU-pinned, batched, health-checked.
+  **The `ml` extra is still commented out in `pyproject.toml`** — declaring `torch` /
+  `transformers` / `faster-whisper` / `onnxruntime` / `silero-vad` is step zero and it is the
+  slow install.
 - **STT bake-off on the real hardware**: Thonburian-HF vs Thonburian-CT2 vs distilled vs Typhoon ASR —
   WER, p95 utterance latency, VRAM — recorded in `PROJECT_STATE.md` (`D30`, `INTEGRATIONS.md` §2.1).
 - `TranscriptTurn` events + incremental DB writes; live transcript in the agent desktop.
@@ -198,13 +211,16 @@ already Protocol-shaped or dict-backed behind one class each.
 **Exit criteria**
 - Utterance end → turn visible **p95 < 1.5 s** on the RTX 3050, with the chosen engine named and the
   bake-off table recorded.
-- A caller who presses 2, and a caller who consents to nothing, both still reach **the correct
+- ✅ A caller who presses 2, and a caller who consents to nothing, both still reach **the correct
   queue** with a menu-derived brief — because routing never depended on the AI (`D37`).
-- A caller on the general hotline with an unrecognised number reaches the right specialist purely by
+  *(The queue half is proved; the press-2 offer itself is step 4.)*
+- ✅ A caller on the general hotline with an unrecognised number reaches the right specialist purely by
   keypad. That is the floor, and it must be at least as good as an ordinary call centre.
+  *(`anonymous_declined` replays it: keys 2/4 → `q_health_policy`, no identity, no consent.)*
 - Killing the STT worker mid-call degrades to recording-only; the call is unaffected.
 - No audio ever written to local disk unencrypted.
-- Changing a line of Thai in `voice_prompts.yaml` changes what the caller hears after one re-render.
+- 🔶 Changing a line of Thai in `voice_prompts.yaml` changes what the caller hears after one re-render.
+  *(The re-render is proved; "what the caller hears" waits on a real voice.)*
 
 ---
 

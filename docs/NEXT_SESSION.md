@@ -7,16 +7,15 @@ _Last updated: 2026-08-25._
 
 ## Where things stand right now
 
-**P0 · P1 · P1b · P2a · P2b · P2c complete.** The system knows who is calling and how much to
-believe it, why they are calling, everything we hold about them assembled before the phone
-is answered, which agent should take it and why — and now **the desk actually rings, a
-human accepts, and the screen is already right**.
+**P0 · P1 · P1b · P2a · P2b · P2c complete. P3 steps 1–3 done.** The system knows who is
+calling and how much to believe it, why they are calling, everything we hold about them
+assembled before the phone is answered, which agent should take it and why, the desk rings
+and a human accepts with the screen already right — and now **the caller keys their own way
+to the right queue through a real menu, hearing real (pre-rendered) Thai**.
 
-Verified **2026-08-25**: **441 tests pass** (137 of them store-contract and restart suites
-across three backends), `ruff check` + `ruff format --check` clean, `mypy --strict` clean
-over 100 files, all scenarios replay byte-identically, 56/56 diagrams current. The database
-suites ran against a **live Postgres**, and the restart claim was re-checked outside pytest
-by running two real uvicorn processes and killing the first.
+Verified **2026-08-25**: **494 tests** — 452 pass + 42 skipped without the Postgres
+container, all 494 with it. `ruff check` + `ruff format --check` clean over 140 files,
+`mypy --strict` clean over 106, all scenarios replay, 60/60 diagrams current.
 
 ### The four sessions of review since P2b, in one place
 
@@ -45,6 +44,7 @@ docker compose -f infra/docker-compose.yml up -d postgres && uv run alembic upgr
 uv run pytest -q
 uv run python scripts/run_scenario.py tests/scenarios/anonymous_declined.yaml --quiet
 uv run python scripts/run_matching.py --calls 25 --compare
+uv run python scripts/build_prompts.py --list      # every line the caller can hear
 cd apps/workstation && npm install && npm run build && cd ../..   # once; node not needed to RUN
 uv run python -m readycall.entrypoints.api
 #   http://127.0.0.1:8000/sim          the customer
@@ -89,6 +89,17 @@ write durably, restore at startup · presence, the waiting pool and the live ide
 **derived, never stored twice** (`D76`, `D78`) · `Container` reads `STORAGE_BACKEND` ·
 a restart is proved by **ending a process**, in pytest and again with real uvicorn.
 
+**P3 (steps 1–3) — the line.** `config/voice_prompts.yaml`: **32 prompts**, declared slots,
+and a `flow:` table mapping **19 roles** to ids so `services/` holds no prompt literals
+(`D28`) · the guard that every referenced id resolves, **both directions**, as a startup
+gate *and* a test · `scripts/build_prompts.py` hash-cached by (text, voice, engine), deduped
+by rendered text to **63 clips**, committed manifest asserted fresh · **`services/ivr/`** —
+greeting + notice → product menu (skipped when the DID or app said) → reason menu → queue,
+with `0` always reaching a human, `9` free, and every failure path ending in a queue rather
+than a hang-up · personalised ordering with its evidence · **a menu is composed, not one
+clip** (`D80`) · **`menu_path` is canonical whatever was pressed** (`D81`) · both fake IVR
+walks retired — `run_scenario.py`'s `# P1:` and `demo.py`'s `# P2b:`.
+
 **P2b review pass.** The opening line asks an **open question** below L2 (`D55`) · the
 recommended-action chain written down (`D56`) · `other` challenge + a **named** third party
 (`D57`) · the agent sees the digits, `mask()` is for logs (`D58`) · `agent_intent` is a
@@ -119,8 +130,8 @@ reversing `D20`'s display gating).
 
 ## Next steps (in order)
 
-1. **P3** — voice/IVR/intake. Biggest remaining block, only one with hardware risk. Full
-   briefing below.
+1. **P3 step 4** — media, VAD and the STT worker. The only part with hardware risk, and the
+   only part of P3 not started. Full briefing below.
 2. **P4** — analysis and brief v2+ with Claude and Typhoon compared on the golden set.
 3. **Small and worth doing when convenient:**
    - `call_intents` and `app_context_events` are still in memory. Neither loses anything a
@@ -131,65 +142,64 @@ reversing `D20`'s display gating).
 
 `grep -rn "# P2b:" src/` lists the steps a real IVR will drive that the demo endpoint fakes.
 
-## Starting P3 — read this before opening anything else
+## Starting P3 step 4 — read this before opening anything else
 
-P3 is voice, IVR and pre-call intake. It is the largest remaining block and the only one with
-**hardware risk**, so it is worth knowing what is already decided and what is genuinely open
-before writing a line.
+Steps 1–3 are done and needed no GPU. **Step 4 is the GPU half**, and it is the only part
+of the whole project with hardware risk. `explanations/P3_voice.md` covers what was built
+and why; `diagrams/12_the_menu.md` draws it.
 
-### What already exists, and it is more than it looks
+### What now exists that step 4 plugs into
 
-| Already there | Why it matters on day one |
+| Already there | Why it matters |
 |---|---|
-| **`config/menus.yaml`** with real prompt ids | the tree, the reserved keys and the catch-alls are built and tested. It already names **8 prompt ids** (`menu.product_line`, `menu.{motor,health,travel,life,general}_reason`, `menu.invalid`, `menu.language`) and `config/dids.yaml` names **5 greetings** (`greeting.{general,health,life,motor_claim,travel}`). That is the minimum key set `voice_prompts.yaml` must define. |
-| **`ports/stt.py`** | the contract is written and streaming-first (`D9`): `AudioFrame` is **16 kHz mono float32, always**, and the media gateway normalises before anyone sees it. Per-utterance and in-memory, so no PII lands on disk. |
-| **`ports/tts.py`** | deliberately asymmetric (`D24`): `synthesize()` is a **build-time** call, `stream()` exists only for the future conversational intake. During a v1 call nothing in this port runs — telephony plays a file. |
+| **`services/ivr/`** | the walk is real and drives the simulated telephony adapter. Step 4 adds what happens *after* the queue, not another menu. |
+| **`voice_prompts.yaml`** | `intake.offer`, `intake.start`, `intake.done`, `intake.declined`, `intake.reoffer`, `voicemail.*` and `rating.request` are **written, rendered and mapped to roles**. They are text waiting for the machinery that plays them; nothing calls those roles yet. |
+| **`ports/stt.py`** | streaming-first (`D9`): `AudioFrame` is **16 kHz mono float32, always**, and the media gateway normalises before anyone sees it. Per-utterance and in-memory, so no PII lands on disk. |
 | **`adapters/stt/scripted.py`** | the fake that keeps every test and the stage-safe demo path off the GPU. It honours `warmup()`, so swapping to Thonburian is one env var. |
-| the whole call lifecycle | `IVR` and `INTAKE_ACTIVE`/`INTAKE_COMPLETE` are already real `CallState`s that scenarios drive through. P3 replaces the stand-ins, it does not add states. |
+| **`IvrResult`** | already carries `queue_id`, the intent and its `intent_source`. Whatever runs intake reads a finished routing decision rather than making one. |
 
-`grep -rn "# P1:" scripts/` still lists the lifecycle steps `run_scenario.py` performs by hand
-— that is the handover list, and P3 takes over the IVR and media ones.
+### What does NOT exist (checked against disk 2026-08-25)
 
-### What does NOT exist (checked against disk 2026-08-25, do not assume)
-
-`config/voice_prompts.yaml` · `prompts/` (the whole tree) · `scripts/build_prompts.py` ·
-`services/ivr/` · `services/intake/` · `services/transcription/` · `services/analysis/` ·
+`prompts/th/` (the LLM prompt tree — `prompts/voice/manifest.json` is the *audio* one and
+does exist) · `services/intake/` · `services/transcription/` · `services/analysis/` ·
 `media/` · `workers/` · `observability/` · `config/core_mapping.yaml` · `tests/golden/`
 
-**And the `ml` extra is commented out in `pyproject.toml`**, so `uv sync --extra ml` fails
-today. The intended set is on that commented line: `torch`, `transformers`, `faster-whisper`,
-`onnxruntime`, `silero-vad`. Declaring it is step zero and it is not free — this is the
-install that takes a while on a metered connection, and it lands on the STT box only (`D2`).
+**And the `ml` extra is still commented out in `pyproject.toml`**, so `uv sync --extra ml`
+fails today. The intended set is on that commented line: `torch`, `transformers`,
+`faster-whisper`, `onnxruntime`, `silero-vad`. Declaring it is step zero and it is not free
+— this is the install that takes a while on a metered connection, and it lands on the STT
+box only (`D2`). It was deliberately **not** done this session, because nothing in steps 1–3
+needed it and an unused multi-gigabyte dependency in the lockfile is a cost with no payer.
 
-### The decisions that already constrain P3 — do not re-litigate
+### The decisions that already constrain step 4 — do not re-litigate
 
-- **`D37`: the keypad menu runs FIRST and it — not the AI — routes the call.** The floor is
-  parity with an ordinary call centre. Every AI failure degrades to that, never below it.
-- **`D24`: prompts are pre-rendered at build time**, hash-cached by (text, voice, engine).
-  Not live synthesis, not hand-recorded. Editing a Thai line in YAML and hearing it a second
-  later is the whole point, and it works with no internet.
+- **`D12`: the call is never blocked on AI**, and **`D37`**: routing is already settled by
+  the time any of this runs. Every failure here degrades to a call that is routed correctly
+  with a menu-derived brief — which is exactly what `anonymous_declined` already replays.
 - **`D9`: STT is re-implemented streaming-first.** The reference project
-  (`…/scamprojectthing/ProjectCode/STT_Thonburian_Whisper/`) is **read-only** and is reference
-  for *how the model behaves*, never code to copy. Keep from it: VAD threshold 0.65, min
+  (`…/scamprojectthing/ProjectCode/STT_Thonburian_Whisper/`) is **read-only** and is
+  reference for *how the model behaves*, never code to copy. Keep: VAD threshold 0.65, min
   speech 500 ms, min silence 100 ms, ~120/60 ms padding, and the repetition guard for
-  Whisper's silence-loop. Change from it: `silero-vad` as a dependency, never a runtime
+  Whisper's silence-loop. Change: `silero-vad` as a dependency, never a runtime
   `torch.hub.load` — a network fetch during a live call is unacceptable.
 - **`D21`: the offer window IS the intake grace period.** Intake keeps recording until the
   agent presses Accept; nobody waits longer and no sentence is lost.
-- **`D12`: the call is never blocked on AI**, and **`D30`**: Thonburian stays default,
-  Typhoon ASR is benchmarked against it on the same audio rather than argued about.
+- **`D26`: both legs are forked separately** — speaker labels come from the topology, not
+  from a diarisation model.
+- **`D30`**: Thonburian stays default; Typhoon ASR is benchmarked against it on the same
+  audio rather than argued about.
+- **`D10`: intake is a STRATEGY.** `PassiveRecordIntake` for v1, same `IntakeResult` as the
+  future conversational one. Do not inline it into the orchestrator.
 
-### Suggested order, lowest risk first
+### Suggested order
 
-1. **`voice_prompts.yaml` + a test that every prompt id referenced by `menus.yaml` and
-   `dids.yaml` exists.** Pure config, no GPU, and it is the same guard `D72` put on
-   `challenges.yaml` — a list enforced on one side and displayed on the other has to be
-   checked, or it drifts silently.
-2. **`scripts/build_prompts.py`** with the hash cache, plus the checked-in fallback pack.
-3. **`services/ivr/`** driving the existing `menus.yaml` walk against the simulated telephony
-   adapter — still no audio hardware, still fully testable.
-4. **Then** the media gateway, VAD, and the STT worker, which is where the RTX 3050 risk
-   actually lives.
+1. **`uv add --optional ml …`** first — it is the slow one, and everything else can be
+   written while it downloads.
+2. **The intake offer in the IVR** (press 1 / press 2, re-offer once). Pure keypad, no
+   audio, and it finishes the flow the prompts already describe.
+3. **Media gateway + VAD**, against a WAV file rather than a phone, so endpointing can be
+   tuned without telephony.
+4. **The STT worker and the bake-off**, which is where the 3050 risk actually is.
 
 ### The hardware reality, stated plainly
 
@@ -215,6 +225,9 @@ Whoever has the strongest GPU should own the demo machine.
 | **Q19** | **`config/playbooks/` does not exist** but is in the folder map. Actions live in `_PLAYBOOKS` in `builder.py` (`D56`). Moving them out is a P4 task. | Deferred to P4 |
 | **Q20** | **Should a reveal-on-click with a per-field audit entry come back at P7**, for the most sensitive fields only? `D74` opened display to the agent; the honest answer depends on Krungsri's own agent-desktop policy, which we do not have. | Not for now; every read is logged |
 | **Q21** | **Which storage backend does the DEMO run on?** `memory` is the default and needs nothing; `postgres` is what survives a restart, and it is what makes the persistence work visible on stage at all. Running it on the day adds a container to the list of things that can fail, against `PLAN.md`'s risk register — *never depend on the venue*. Leaning: **rehearse on `postgres`, keep `memory` as the one-keystroke fallback**, since both pass the same suite. | Not decided |
+
+| **Q22** | **Does the committed prompt pack carry actual audio once a real voice is chosen?** `D24` calls the checked-in pack the offline fallback, which is the whole reason the IVR works with no internet — but `CLAUDE.md` says never commit audio. That rule means *call recordings*, not TTS output of our own sentences, so the two are probably compatible; 63 short Thai clips is a few MB. Undecided because there is no audio yet. | Manifest only, for now |
+| **Q23** | **Personalised menus renumber, and a human on a real keypad has no `ScriptedChoices`.** Every automated caller presses canonical keys and is translated (`D81`), so nothing in the suite or the demo endpoint can get this wrong. But at P5 a person reading a rehearsal script off paper will press what the script says, and for a recognised persona the numbers may have moved. Either rehearse with the persona that will actually be used, or set `personalisation.enabled: false` for the demo. | Enabled; decide before the day |
 
 Resolved: rating is an event (`D46`) · single project (`D34`) · Asterisk · RTX 3050 · Claude
 + Typhoon compared · React workstation with the softphone in it · web customer simulator ·
@@ -377,6 +390,25 @@ Facts about *this laptop* rather than the repo, so a fresh session does not redi
   restarts the call clock at zero.
 - **The server must be restarted to pick up Python changes** — the launch config runs
   uvicorn without `--reload`. Twenty minutes went into "why is `intent_reason` empty".
+- **A menu is NOT one clip** (`D80`). Personalised ordering makes a single baked recording
+  impossible, so a menu is a lead-in plus one rendered line per option plus the reserved-key
+  hint. The labels live only in `menus.yaml`; `voice_prompts.yaml` contains no menu options
+  at all, and adding some would create the second copy the whole design avoids.
+- **What the caller pressed is NOT what gets stored** (`D81`). With an option promoted, `1`
+  means something different on that call. Every press is resolved to canonical the instant it
+  arrives, so `menu_path` always means the same thing. If you add a new caller-input path,
+  route it through `MenuPresentation.resolve()` — and if you write a scenario, give
+  `ScriptedChoices` **canonical** keys, never the ones a caller would hear.
+- **A prompt id is a string in one file and a definition in another.** The join is checked in
+  both directions, as a startup gate *and* a test, because the failure is silent in the worst
+  place: everything passes and the caller hears a gap. Add a `PromptRole` and you must map it
+  in `voice_prompts.yaml`, or the app will not boot.
+- **`services/` asks for a prompt ROLE, never a prompt id** (`D28`). Same reason as every
+  other literal: the id belongs in `config/`.
+- **A personalisation fixture that promotes options already in position proves nothing.** One
+  test asserted a reordering that never happened, because motor and health are canonically
+  keys `1` and `2` and promoting them changed nothing. Use travel/life (`3`/`4`) when you
+  want the numbering to actually move.
 - **Never hardcode an insurance literal in `services/`** — it goes in `config/` (`D28`).
 - **Never `datetime.now()` or a raw random id** outside `clock.py`/`ids.py` (`D35`).
 - **`docs/` is excluded from `ruff format`** — the explanations are verbatim records.
@@ -386,16 +418,18 @@ Facts about *this laptop* rather than the repo, so a fresh session does not redi
 ## Diagrams (visual walkthroughs)
 
 `docs/diagrams/` — diagrams with explanations, in themed pages. Start at
-`docs/diagrams/README.md`. **`11_persistence.md` is the page for the invisible half** —
-what is stored, what is derived, and what a restart does, drawn rather than described. Its
-readable twin `docs/reading/persistence.html` has a **restart simulator** you can click
-through; the two must be updated together. Twelve are **generated from source**, so they cannot drift;
-`tests/unit/test_diagrams.py` fails if a committed one falls behind.
+`docs/diagrams/README.md`. Two pages cover the parts with no screen: **`11_persistence.md`**
+(what survives a restart) and **`12_the_menu.md`** (what the caller actually hears — the
+prompt pipeline, why a menu is not one clip, and every path that does not end in a route).
+`11`'s readable twin `docs/reading/persistence.html` has a **restart simulator** you can
+click through; the two must be updated together. **14 of the 60 are generated from source**,
+so they cannot drift; `tests/unit/test_diagrams.py` fails if a committed one falls behind.
 
 ```bash
 uv run python scripts/gen_diagrams.py      # rebuild derived .mmd sources
 uv run python scripts/render_diagrams.py   # render all .mmd -> .svg  (needs mermaid-cli)
 uv run python scripts/render_diagrams.py --check   # content-hash staleness check
+uv run python scripts/build_prompts.py --check     # same idea, for the spoken lines
 ```
 
 `mermaid-cli` is not installed globally: `npm i -g @mermaid-js/mermaid-cli`, or set `MMDC`.
@@ -413,6 +447,9 @@ each has a "changes since" section. Write one per phase as it lands.
   one contract suite, **what is stored versus what is derived** (`D78`), the redaction rule
   at rest, the migration papercuts, and how a restart is actually proved. Read §8 before
   assuming something is or is not durable.
+- `P3_voice.md` — the prompt pipeline and the IVR: why the guard was written before the
+  prompts, the two decisions that only appeared once it was built (`D80`, `D81`), and the two
+  test bugs that would have passed review. **§9 says exactly what step 4 has left to do.**
 - `P2b_workstation_client.md` — **the browser tab itself**: its two channels, the full
   server-owned vs client-owned ledger, every endpoint, the socket contract, and the
   audit that produced `B7`, `B8`, `D68` and `D71`. Read this before changing

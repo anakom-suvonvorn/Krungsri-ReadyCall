@@ -216,6 +216,18 @@ customer (if any), product, snapshot and queue.
 
 ## 6. Data flow B — the line, the IVR, and pre-call intake
 
+> **Built as of P3 down to the queue.** `services/ivr/` walks the real menu, plays real
+> (pre-rendered) lines, and hands back a queue — the scenario runner and the demo endpoint
+> both use it. What is **not** built is everything below the queue line in the diagram: the
+> intake offer, the recording, and the transcription. `diagrams/12_the_menu.md` draws the
+> built half; `explanations/P3_voice.md` covers it at length.
+>
+> Two things the build changed about this section as written. A menu is **not one clip** —
+> personalised ordering makes that impossible, so it is a lead-in plus one line per option
+> (`D80`). And the key the caller presses is **not** the key stored: with an option promoted
+> they differ, so every press is resolved back to canonical before anything records it
+> (`D81`).
+
 > **An app caller skips all of this (`D48`).** Tapping Contact opens a reason sheet in the app,
 > populated from the *same `menus.yaml` this IVR reads*, so both menu questions are answered
 > before the phone rings. One menu, two surfaces.
