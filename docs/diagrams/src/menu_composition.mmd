@@ -1,0 +1,41 @@
+%% HANDWRITTEN. Checked against D37 + D80 + D81
+flowchart TB
+    subgraph anon["<b>ANONYMOUS CALLER</b> - nothing known"]
+        a1["<i>lead-in</i><br/>กรุณาเลือกประเภทประกัน..."]:::lead
+        a2["กด 1 ประกันรถยนต์"]:::opt
+        a3["กด 2 ประกันสุขภาพ"]:::opt
+        a4["กด 3 ประกันเดินทาง"]:::opt
+        a5["กด 4 ประกันชีวิต"]:::opt
+        a6["กด 5 เรื่องอื่นๆ"]:::opt
+        a7["<i>hint</i><br/>กด 9 ฟังอีกครั้ง กด 0 เจ้าหน้าที่"]:::lead
+        a1 --> a2 --> a3 --> a4 --> a5 --> a6 --> a7
+    end
+
+    subgraph known["<b>RECOGNISED CALLER</b> - open travel claim, life policy"]
+        b1["<i>same lead-in clip</i>"]:::lead
+        b2["กด 1 ประกันเดินทาง<br/><i>canonical key 3</i>"]:::promo
+        b3["กด 2 ประกันชีวิต<br/><i>canonical key 4</i>"]:::promo
+        b4["กด 3 ประกันรถยนต์<br/><i>canonical key 1</i>"]:::opt
+        b5["กด 4 ประกันสุขภาพ<br/><i>canonical key 2</i>"]:::opt
+        b6["กด 5 เรื่องอื่นๆ<br/><i>canonical key 5</i>"]:::opt
+        b7["<i>same hint clip</i>"]:::lead
+        b1 --> b2 --> b3 --> b4 --> b5 --> b6 --> b7
+    end
+
+    press(["the caller presses <b>4</b>"]):::press
+    known -.-> press
+    press --> resolve["<b>presentation.resolve('4')</b><br/>spoken 4 -> canonical <b>2</b> -> health"]:::resolve
+    resolve --> stored["<b>menu_path = ('2', ...)</b><br/>canonical, always.<br/><i>the same two calls mean the same thing</i>"]:::stored
+    resolve --> raw["outcome.pressed = ('4', ...)<br/><i>kept, but as a UX signal - never routing</i>"]:::raw
+
+    why["<b>why not just reorder?</b><br/>'กด 3 ... กด 1 ... กด 2' makes the caller<br/>do the sorting. If the order changes,<br/>the numbers change with it (D81)."]:::note
+    known -.- why
+
+    classDef lead fill:#eef4ff,stroke:#5b8def,color:#0b2545
+    classDef opt fill:#f6f8fa,stroke:#8b949e,color:#24292f
+    classDef promo fill:#e9f7ef,stroke:#2f9e5f,color:#08361d
+    classDef press fill:#1f6feb,stroke:#0b3d91,color:#fff
+    classDef resolve fill:#f3e8ff,stroke:#8b5cf6,color:#2e1065
+    classDef stored fill:#e9f7ef,stroke:#2f9e5f,color:#08361d
+    classDef raw fill:#fff4e6,stroke:#e8a33d,color:#4a2f00
+    classDef note fill:#ffe4e6,stroke:#e11d48,color:#4c0519

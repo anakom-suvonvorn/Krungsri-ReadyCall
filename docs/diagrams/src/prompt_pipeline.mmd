@@ -1,0 +1,34 @@
+%% HANDWRITTEN. Checked against D24 + D80 and scripts/build_prompts.py
+flowchart LR
+    subgraph build["<b>BUILD TIME</b> - runs on a laptop, never during a call"]
+        yaml["<b>config/voice_prompts.yaml</b><br/>32 prompts, Thai text<br/>+ declared slots"]:::cfg
+        menus["<b>config/menus.yaml</b><br/>32 option labels<br/><i>the only copy</i>"]:::cfg
+        work["<b>work list</b><br/>static + warmed + one line<br/>per menu option (D80)"]:::step
+        dedupe["<b>dedupe by rendered text</b><br/>64 lines -> <b>63 clips</b><br/>'ติดตามสถานะเคลม' is key 3<br/>in TWO menus = one clip"]:::step
+        key["<b>clip_key = sha256</b><br/>(text, voice, engine)<br/><i>not the prompt id</i>"]:::step
+        tts["TtsEngine.synthesize()<br/><i>the only call to a voice vendor,<br/>anywhere in the system</i>"]:::port
+        man["<b>prompts/voice/manifest.json</b><br/>committed, checked fresh<br/>by a test"]:::out
+    end
+
+    subgraph call["<b>CALL TIME</b> - no synthesis, no network, no vendor"]
+        ivr["services/ivr<br/>asks for a ROLE"]:::run
+        play["telephony.play(prompt://engine/key)"]:::run
+        ear(["the caller hears it"]):::ear
+    end
+
+    yaml --> work
+    menus --> work
+    work --> dedupe --> key --> tts --> man
+    man -.-> play
+    ivr --> play --> ear
+
+    edit["edit one Thai line"]:::edit -.->|"re-render"| one["<b>1 rendered, 62 reused</b><br/>measured, not claimed"]:::edit
+    edit -.-> yaml
+
+    classDef cfg fill:#fff4e6,stroke:#e8a33d,color:#4a2f00
+    classDef step fill:#eef4ff,stroke:#5b8def,color:#0b2545
+    classDef port fill:#f3e8ff,stroke:#8b5cf6,color:#2e1065
+    classDef out fill:#e9f7ef,stroke:#2f9e5f,color:#08361d
+    classDef run fill:#e9f7ef,stroke:#2f9e5f,color:#08361d
+    classDef ear fill:#1f6feb,stroke:#0b3d91,color:#fff
+    classDef edit fill:#ffe4e6,stroke:#e11d48,color:#4c0519

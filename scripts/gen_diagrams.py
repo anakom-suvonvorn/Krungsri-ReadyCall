@@ -35,6 +35,7 @@ from readycall.domain.enums import (  # noqa: E402
 )
 from readycall.domainpack import DomainPack  # noqa: E402
 from readycall.services.call_orchestrator import machine  # noqa: E402
+from readycall.voiceprompts import PromptPack, PromptRole  # noqa: E402
 
 OUT = ROOT / "docs" / "diagrams" / "src"
 
@@ -610,9 +611,64 @@ def db_schema() -> None:
     write("db_schema", chr(10).join(lines), src="readycall.db.models via Base.metadata")
 
 
+def voice_prompts(pack: DomainPack, prompts: PromptPack) -> None:
+    """Who asks for which line — read off the pack and the flow table.
+
+    The point of drawing this is the arrows, not the boxes: a prompt id is a string in
+    one file and a definition in another, and this is the only place the join is visible.
+    An orphan shows up as a box nothing points at.
+    """
+    lines = ["flowchart LR"]
+    referenced = prompts.referenced_ids(pack)
+
+    lines.append('    subgraph flow["services/ivr asks by ROLE"]')
+    for role in PromptRole:
+        lines.append(f"        role_{role.value}[{q(role.value)}]:::role")
+    lines.append("    end")
+
+    lines.append('    subgraph cfg["menus.yaml + dids.yaml name an ID"]')
+    for menu_id in sorted(pack.menus):
+        lines.append(f"        menu_{menu_id}[{q(menu_id)}]:::cfg")
+    for number in sorted(pack.dids):
+        lines.append(f"        did_{number.replace('+', 'p')}[{q(number)}]:::cfg")
+    lines.append("    end")
+
+    def node(prompt_id: str) -> str:
+        return "p_" + prompt_id.replace(".", "_")
+
+    for prompt_id in sorted(prompts.prompts):
+        spec = prompts.prompts[prompt_id]
+        style = "dyn" if spec.is_dynamic else "static"
+        suffix = f"{chr(10)}{{{', '.join(spec.slots)}}}" if spec.slots else ""
+        lines.append(f"    {node(prompt_id)}[{q(prompt_id + suffix)}]:::{style}")
+
+    for role, prompt_id in sorted(prompts.flow.items()):
+        lines.append(f"    role_{role.value} --> {node(prompt_id)}")
+    for menu_id, menu in sorted(pack.menus.items()):
+        lines.append(f"    menu_{menu_id} --> {node(menu.prompt)}")
+    for number, did in sorted(pack.dids.items()):
+        lines.append(f"    did_{number.replace('+', 'p')} --> {node(did.greeting_prompt)}")
+
+    orphans = sorted(set(prompts.prompts) - referenced)
+    for prompt_id in orphans:
+        lines.append(f"    class {node(prompt_id)} orphan")
+
+    lines.append("    classDef role fill:#eef4ff,stroke:#5b8def,color:#0b2545")
+    lines.append("    classDef cfg fill:#fff4e6,stroke:#e8a33d,color:#4a2f00")
+    lines.append("    classDef static fill:#e9f7ef,stroke:#2f9e5f,color:#08361d")
+    lines.append("    classDef dyn fill:#f3e8ff,stroke:#8b5cf6,color:#2e1065")
+    lines.append("    classDef orphan fill:#ffe4e6,stroke:#e11d48,color:#4c0519")
+    write(
+        "voice_prompts",
+        "\n".join(lines),
+        src="config/voice_prompts.yaml + config/menus.yaml + config/dids.yaml",
+    )
+
+
 def main() -> int:
     enable_utf8()
     pack = DomainPack.load(ROOT / "config")
+    prompts = PromptPack.load(ROOT / "config" / "voice_prompts.yaml")
     print("generating derived diagrams:")
     state_machine()
     state_machine_readable()
@@ -627,6 +683,7 @@ def main() -> int:
     domain_models()
     product_lines(pack)
     db_schema()
+    voice_prompts(pack, prompts)
     where = OUT.relative_to(ROOT) if OUT.is_relative_to(ROOT) else OUT
     print()
     print(f"{len(list(OUT.glob('*.mmd')))} .mmd files in {where}")

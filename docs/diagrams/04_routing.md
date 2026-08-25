@@ -34,6 +34,10 @@ upside" is a much harder position to attack.
 
 ---
 
+> **Built as of P3.** What the caller actually *hears* walking this tree — the composed
+> menu, the personalised ordering, and every path that does not end in a route — is
+> **[The line](12_the_menu.md)**.
+
 ## 4.2 The menu tree
 
 ![menu tree](menu_tree.svg)

@@ -1929,3 +1929,70 @@ _Two migration papercuts, fixed permanently rather than worked around each time.
   like a code bug, and it is discovered at startup rather than at the moment of damage. A
   rule ("do not point the tests at the dev database") is exactly the kind of thing that
   holds until somebody sets an env var. Separation makes it structurally impossible.
+
+---
+
+_`D80`–`D81` added 2026-08-25, during P3. Both came out of building `D37`'s personalised
+menu ordering, which turned out to have consequences the design had not spelled out._
+
+## D80. A menu is a lead-in plus one line per option, never a single clip
+- **Problem:** `D24` says every spoken line is pre-rendered at build time, cached by
+  `hash(text, voice, engine)`, and played as a file. The obvious reading is one clip per
+  prompt id — `menu.product_line` is a single recording that says *"กด 1 ประกันรถยนต์ กด 2
+  ประกันสุขภาพ …"*. But `D37` reads a recognised caller's likely options **first**, so the
+  order differs per caller. Those two cannot both be true of one baked clip.
+- **Decision:** a menu is **composed** at call time from clips that were all pre-rendered:
+  a static lead-in (`menu.product_line` = *"กรุณาเลือกประเภทประกัน…"*), one `menu.option`
+  line per option rendered from the `label_th` that already lives in `menus.yaml`, then the
+  reserved-key hint. Composition is playback, not synthesis — nothing is generated during
+  the call, so `D24` holds exactly as written.
+- **Reasoning:** it is the only shape that supports reordering at all, and it comes with
+  two properties worth having on their own:
+  - **the label exists in one file.** `voice_prompts.yaml` contains no menu options; the
+    build reads them from the domain pack. There is no second copy of "ประกันสุขภาพ" to
+    drift out of step with the one that does the routing.
+  - **the same words are one clip.** "ติดตามสถานะเคลม" is key `3` in both the motor and the
+    health menu, so it renders once. 32 prompts and 32 menu options come to **63 distinct
+    clips**, and that dedupe is the same mechanism that makes a dynamic line like the queue
+    position cacheable at all.
+- **Alternatives:** *one clip per menu per ordering* — rejected: the product-line menu alone
+  has 5 options and therefore 120 orderings, and every wording edit multiplies. *Speak the
+  options in a changed order but keep their configured numbers* ("กด 3 … กด 1 … กด 2") —
+  rejected under `D81`. *Give up personalisation* — it is `D37`'s cheapest win and costs
+  one template.
+- **Tradeoffs:** a menu is several playbacks rather than one, so a real telephony provider
+  must chain them with barge-in still live between clips. Renumbered option lines are not in
+  the built pack, and render on first use — which is exactly the mechanism `D24` §5 already
+  describes, and it warms up after one call.
+
+## D81. What the caller pressed is not what gets stored: `menu_path` is always canonical
+- **Problem:** `D37` says promoted options "take the low numbers". So when health is
+  promoted, `1` means health — **for that call only**. `CallSession.menu_path` records
+  keypresses, and a stored `("1", "3")` would then mean different things on different calls.
+  Every downstream reading of it — the brief, the intent source, a replayed scenario, an
+  auditor asking what the caller chose — would be quietly wrong, and nothing would fail.
+- **Decision:** the presentation carries the mapping back, and **every press is resolved to
+  its canonical option the instant it arrives**. `menu_path` therefore always holds the keys
+  as `menus.yaml` spells them, personalised or not. The raw presses are kept separately, on
+  the outcome, where they are a UX signal rather than routing evidence.
+  - `ScriptedChoices` — used by every scenario file and test — takes **canonical** keys and
+    looks up the key that is actually under that option. A scenario keeps meaning what it
+    says when a menu is reordered, instead of silently pressing the wrong thing.
+  - Renumbering happens only when something was actually promoted. With nothing promoted the
+    spoken key **is** the canonical key, which keeps the common case identical to the config
+    and keeps the built prompt pack complete for it.
+- **Reasoning for renumbering rather than reordering:** reading numbers out of sequence
+  ("กด 3 … กด 1 … กด 2") makes the caller do the sorting, and is worse than not personalising
+  at all. If the order changes, the numbers change with it.
+- **Alternatives:** *store the presented order alongside the path* — a `CallSession` column
+  and a migration, to preserve a fact nothing downstream wants. *Store raw presses and
+  re-derive* — the derivation depends on the snapshot, the weights and the config all being
+  identical months later, which is exactly the assumption that rots. *Never renumber* —
+  see above.
+- **Tradeoffs:** `menu_path` no longer literally means "what they pressed", so the model's
+  field carries a comment saying which of the two it is. The distinction is invisible until
+  personalisation fires, which is precisely why it is written down here.
+- **Found by building it.** Two tests were wrong before they were right: one promoted
+  options that were *already* in position one and two, so it asserted a reordering that
+  never happened; and entering the second menu reset the record of the first having been
+  personalised, so the call reported itself as ordinary. Both would have passed review.

@@ -1,0 +1,47 @@
+%% HANDWRITTEN. Checked against D37 + src/readycall/services/ivr/machine.py
+flowchart TB
+    start(["call answered"]):::entry
+    greet["<b>greeting</b> (per DID)<br/>+ <b>recording notice</b><br/><i>always first, every call</i>"]:::play
+
+    known{"do we already<br/>know why?"}:::ask
+    skipped["<b>SKIPPED</b><br/>the app said both (D48)<br/><i>asking twice is bad service</i>"]:::done
+
+    didq{"did the NUMBER<br/>say the line?"}:::ask
+    m1["<b>STEP 1</b> product line"]:::play
+    m2["<b>STEP 2</b> reason"]:::play
+
+    routed["<b>ROUTED</b><br/>line + reason -> the queue<br/><i>before a word is transcribed</i>"]:::done
+    operator["<b>OPERATOR</b><br/>keeps whatever we learned"]:::done
+    exhausted["<b>EXHAUSTED</b><br/>line's queue if we have one,<br/>general if we do not (D40)"]:::soft
+    abandoned["<b>ABANDONED</b>"]:::soft
+
+    start --> greet --> known
+    known -->|yes| skipped
+    known -->|no| didq
+    didq -->|yes, skip step 1| m2
+    didq -->|no| m1
+    m1 -->|"1-5"| m2
+    m2 -->|"a reason"| routed
+
+    m1 -.->|"<b>0</b> from anywhere"| operator
+    m2 -.->|"<b>0</b> from anywhere"| operator
+    m1 -.->|"<b>9</b> repeat - costs no attempt"| m1
+    m2 -.->|"<b>9</b> repeat - costs no attempt"| m2
+    m1 -.->|"wrong key x3"| exhausted
+    m2 -.->|"wrong key x3"| exhausted
+    m1 -.->|"silence x2 (re-prompted once)"| exhausted
+    m2 -.->|"silence x2 (re-prompted once)"| exhausted
+    m2 -.->|"hangs up"| abandoned
+
+    floor["<b>EVERY dotted path still ends in a queue.</b><br/>Not one of them hangs up on the caller.<br/>That is the floor the AI layer sits on (D37)."]:::note
+    exhausted -.- floor
+
+    ai["AI intake runs AFTER this, while they wait.<br/>It adds detail a keypad cannot capture.<br/>If it fails, routing is unaffected -<br/>it was never the AI's job."]:::note
+    routed -.- ai
+
+    classDef entry fill:#1f6feb,stroke:#0b3d91,color:#fff
+    classDef play fill:#eef4ff,stroke:#5b8def,color:#0b2545
+    classDef ask fill:#fff4e6,stroke:#e8a33d,color:#4a2f00
+    classDef done fill:#e9f7ef,stroke:#2f9e5f,color:#08361d
+    classDef soft fill:#f3e8ff,stroke:#8b5cf6,color:#2e1065
+    classDef note fill:#f6f8fa,stroke:#8b949e,color:#24292f
