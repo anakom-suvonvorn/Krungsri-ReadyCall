@@ -28,7 +28,10 @@ transcripts/
 mock/bank_core/generated/
 
 # Models / caches
-models/
+# NOTE: anchored to the repo root ON PURPOSE. A bare `models/` matches at ANY depth, and
+# it silently swallowed `src/readycall/db/models/` — the entire ORM package — so a phase
+# that looked committed had no tables in a fresh clone (`B9`). ML weights live at the root.
+/models/
 *.bin
 *.safetensors
 *.ct2/
