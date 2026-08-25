@@ -7,12 +7,12 @@ _Last updated: 2026-08-25._
 
 ## Where things stand right now
 
-**P0 · P1 · P1b · P2a · P2b complete.** The system knows who is calling and how much to
+**P0 · P1 · P1b · P2a · P2b · P2c(part) complete.** The system knows who is calling and how much to
 believe it, why they are calling, everything we hold about them assembled before the phone
 is answered, which agent should take it and why — and now **the desk actually rings, a
 human accepts, and the screen is already right**.
 
-Verified 2026-08-24: **329 tests pass**, `ruff check` + `ruff format --check` clean,
+Verified 2026-08-24: **369 tests pass**, `ruff check` + `ruff format --check` clean,
 `mypy --strict` clean over 81 files, all scenarios replay byte-identically, 50/50 diagrams
 current. The whole workstation flow was also driven by hand in a browser.
 
@@ -22,6 +22,8 @@ them were decisions the docs already contained.** Read `B6` before touching the 
 
 ```bash
 uv sync --extra web
+# Optional: the database path. Everything below works without it.
+docker compose -f infra/docker-compose.yml up -d postgres && uv run alembic upgrade head
 uv run pytest -q
 uv run python scripts/run_scenario.py tests/scenarios/anonymous_declined.yaml --quiet
 uv run python scripts/run_matching.py --calls 25 --compare
@@ -31,7 +33,8 @@ uv run python -m readycall.entrypoints.api
 #   http://127.0.0.1:8000/workstation  the agent
 ```
 
-Everything runs **in memory, no services, no keys, no GPU**. Nothing needs Docker yet.
+Everything still runs **in memory by default** — no services, no keys, no GPU. Postgres is
+now real and optional: `STORAGE_BACKEND=postgres` switches one factory line (`D75`).
 
 ## What exists (cumulative)
 
@@ -79,14 +82,19 @@ anchored to server timestamps · the ACW bar lives outside the wrap-up form.
 
 ## Next steps (in order)
 
-1. **P2c — the database layer** (`D39`). It did **not** land with P2b and that is the
-   biggest outstanding debt: presence, assignments and `agent_state_log` are in memory, so
-   a restart loses a shift. Postgres + SQLAlchemy 2.0 + Alembic; `infra/docker-compose.yml`
-   and the schema/role SQL already exist. **Docker was not running on this machine**, so
-   anything written against it must actually be started and verified, not assumed.
-2. **P3** — voice/IVR/intake: menu prompts become real audio, VAD, streaming STT, the
+1. **Finish P2c.** `call_sessions`, `call_state_transitions` and `agent_state_log` are
+   persisted, migrated and verified against a real container. Still in memory:
+   **assignments, attestations, captures, the waiting pool, and `matching_decisions`.**
+   Each is the same pattern repeated — a table, a hand-written mapper, a row in the
+   contract suite — and none needs a new decision. See `explanations/P2c_persistence.md`
+   §8 for the exact list and what a restart costs for each.
+2. **Wire the container to `STORAGE_BACKEND`.** The repositories exist and pass their
+   contract suite, but `Container` still constructs the in-memory ones unconditionally.
+   That is the one line between "the code is written" and "the demo survives a restart" —
+   and writing code with no driver is precisely `B7`.
+3. **P3** — voice/IVR/intake: menu prompts become real audio, VAD, streaming STT, the
    bake-off on the 3050.
-3. **P4** — analysis and brief v2+ with Claude and Typhoon compared.
+4. **P4** — analysis and brief v2+ with Claude and Typhoon compared.
 
 `grep -rn "# P2b:" src/` lists the steps a real IVR will drive that the demo endpoint fakes.
 
@@ -163,6 +171,18 @@ menu-first flow (`D37`).
   deselected around a call. Mid-call only `ready`/`last_call`/`draining` are declarable.
   `LAST_CALL` is **spent** when that call ends. Use `intent_reason` to tell the three routes
   into `not_ready` apart — they need different screens.
+- **A fast test path that enforces LESS than production is a fast path that lies** (`D75`).
+  SQLite ignores foreign keys unless asked, so the same contract test passed on SQLite and
+  failed on Postgres. `PRAGMA foreign_keys=ON` is set on every SQLite connection now.
+- **Presence is a projection of `agent_state_log`, not a stored table** (`D76`). Two places
+  recording the same fact will disagree, and the log is the one that answers *"what was
+  true at 14:03"*. A restart rebuilds standing state from `latest_per_agent()`.
+- **Repositories return domain models, never ORM rows** (`D77`). A row carries a session
+  lifetime, and the first thing that breaks is a background sweep whose session has closed.
+- **Alembic takes its URL from `Settings`, never `alembic.ini`.** A migration against a
+  different database than the app opens fails as "table does not exist" and costs an hour.
+  Generated migrations also need `import readycall.db.base` — the template does it now,
+  because autogenerate emits custom types by full path without importing them.
 - **Anything that must happen because TIME PASSED needs a driver, and needs a test in
   which only time passes** (`B7`). `expire_offers`, `dispatch.tick` and `presence.sweep`
   were all written, all correct, and all called by nothing — an ignored offer stranded the
@@ -231,6 +251,9 @@ each has a "changes since" section. Write one per phase as it lands.
 - `P2b_workstation.md` — the two axes, the handshake, after-call work, the socket, queue
   hours, the disclosure leak and the invented digit — plus a **"changes since"** section
   covering the `D55`–`D60` review pass and where recommended actions come from.
+- `P2c_persistence.md` — the database layer: the seam, three backends against one contract
+  suite, presence as a projection, the migration papercuts, and **exactly what is still in
+  memory**. Read §8 before assuming something is durable.
 - `P2b_workstation_client.md` — **the browser tab itself**: its two channels, the full
   server-owned vs client-owned ledger, every endpoint, the socket contract, and the
   audit that produced `B7`, `B8`, `D68` and `D71`. Read this before changing

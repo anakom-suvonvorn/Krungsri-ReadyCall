@@ -1712,3 +1712,93 @@ argument is written out fully._
 - **`Q20` (new):** should a reveal-on-click with a per-field audit entry come back at `P7`,
   for the most sensitive fields only? The answer depends on Krungsri's own agent-desktop
   policy, which we do not have. Recorded rather than guessed.
+
+## D75. The store is a seam with a contract suite, and the fast path is SQLite
+- **Problem:** `D39` deferred the database until something genuinely needed to outlive a
+  process, and P2b made that true — presence, assignments and `agent_state_log` were in
+  memory, so a restart lost a shift. The open question was not *whether* to add Postgres
+  but **how to keep it honest**: a database path exercised only when somebody runs a
+  container is a database path nobody runs, which is exactly the shape that produced `B7`.
+- **Decision, three parts:**
+  1. **The store keeps the interface P0 already had.** `CallSessionRepository` was written
+     as a Protocol with a dict implementation precisely so this day would be a factory
+     line. It was, and nothing above `db/` changed.
+  2. **One contract suite, run against every backend** — in-memory, SQLite and Postgres —
+     the same rule `D3` applies to ports. The in-memory store is what every other test in
+     the project runs against, so if the two ever disagree the suite is green while
+     production is broken.
+  3. **SQLite is the fast path, not a deployment target.** It needs no container, so the
+     database tests run on every commit rather than when somebody remembers. Postgres runs
+     too and *skips* if unreachable, so `docker compose up` is the difference between
+     "tested" and "tested harder" rather than between "tested" and "not".
+- **The divergence this immediately caught, and the reason part 3 needs care.** SQLite
+  **ignores foreign keys unless asked**. An `agent_state_log` row pointing at a call that
+  did not exist was refused by Postgres and accepted by SQLite — the same test passing on
+  one backend and failing on the other. A fast path that enforces *less* than production is
+  worse than no fast path, because it converts a real constraint into one that only appears
+  in production. `PRAGMA foreign_keys=ON` is now set on every SQLite connection, and there
+  is a test asserting the FK bites.
+- **Alembic takes its URL from `Settings`**, not from `alembic.ini`, because a migration
+  run against a different database from the one the app opens fails as *"the table does not
+  exist"* and costs an hour every time. The ini value is left empty with a comment saying
+  so.
+- **`include_object` refuses to emit DDL against the `core` schema.** The bank's data is
+  read-only to us (`D5`) and grants already enforce that — but a migration is exactly the
+  kind of thing that runs as a superuser and defeats a grant, so this is the second lock.
+  It also excludes `alembic_version`, which autogenerate will otherwise propose dropping.
+- **The version table lives in the `readycall` schema.** Left in `public` it would be the
+  one piece of our state sitting outside the boundary `D5` draws.
+- **Verified against a real container**, not asserted: schemas and both roles created by the
+  init SQL, `alembic upgrade head` → four tables, `downgrade base` → clean, `upgrade` again,
+  a call written through the repository and read back with `psql`, then read again through a
+  **fresh engine** to prove it survives a restart rather than a cache.
+
+## D76. Presence is a projection of the state log, not a table of its own
+- **Problem:** the obvious schema has an `agent_presence` table holding current state and an
+  `agent_state_log` holding history. Two places recording the same fact.
+- **Decision:** only the log is stored. Current presence is `latest_per_agent()` — the newest
+  row per agent — computed at startup and held in memory thereafter.
+- **Reasoning:**
+  - **Two facts that can disagree will.** A crash between the two writes, or one path that
+    updates presence without logging, and the shift report and the screen tell different
+    stories. There is no reconciliation to write because there is nothing to reconcile.
+  - **The log is the one that answers the real question.** A supervisor asks *"what was true
+    at 14:03"*, and a current-state row cannot answer it. If only one survives, it is this.
+  - **It costs nothing.** The rebuild is one ordered SELECT over a shift's worth of rows,
+    run once per process start.
+- **What this fixes, concretely:** a restart used to leave every agent silently `NOT_READY`
+  — the sign-in default (`D51`) — regardless of what they had actually declared. Now a
+  restart costs a socket reconnect, and the agent who said *"lunch"* is still at lunch.
+- **Deliberately a plain SELECT ordered by time, not a window function.** It is the same on
+  every backend including the SQLite the tests use, and clever SQL that only works on one
+  of them would undo `D75`'s point.
+- **Not stored, and correctly so:** the heartbeat. Liveness is a property of a live socket,
+  not a durable fact — an agent whose laptop is shut is not present no matter what the last
+  row says, which is what the sweep already handles (`B7`).
+
+## D77. Repositories return domain models, never ORM rows
+- **Problem:** the cheapest thing to do is hand a `CallSessionRow` back to the caller.
+- **Decision:** every method in `db/repositories.py` maps to and from the domain model. No
+  SQLAlchemy type crosses the package boundary, and the mapping is written by hand.
+- **Reasoning:**
+  - **An ORM row carries a session lifetime with it.** The first place that breaks is a
+    background sweep (`B7`) whose session has closed, producing a lazy-load error far from
+    the code that caused it.
+  - **It is the same rule as the port boundary** (`D3`): adapters return `Customer` and
+    `Policy`, never vendor rows. The store is an internal seam rather than a port, but the
+    argument does not change — swapping the backend must not ripple.
+  - **Hand-written, because this is the one place the two shapes are allowed to differ**, and
+    a mapping worth having is a mapping worth reading. Generated mapping hides exactly the
+    decisions that matter: what is a column and what is JSON.
+- **The rule for column vs JSON, since it will be asked again:** anything the matcher, a
+  report, or a query **filters on** is a real column; anything only ever read back whole is
+  JSON. `state`, `queue_id` and the timestamps are columns with indexes. Consents, stage
+  timings and the identity resolution are JSON.
+- **`expire_on_commit=False` follows from this.** Nothing outside the package holds an
+  attached instance, so the default would only buy re-SELECTs on objects we have finished
+  with.
+- **Tradeoff:** the mapping has to be kept in step with the domain model by hand, and a new
+  field added to `CallSession` and not to the mapper is silently dropped. The contract suite
+  covers it the only way that works — it round-trips a **whole object and compares
+  equality**, so a field the mapper forgets fails the test rather than passing field-by-field
+  assertions that were themselves written from the mapper.

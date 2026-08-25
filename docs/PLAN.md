@@ -127,6 +127,14 @@ render is **0.2 ms** (a re-render of a frozen snapshot, not a fetch — `D42`), 
 20-caller × 3-session run has not been done. The matching engine's own determinism is covered
 by `scripts/run_matching.py --seed`.
 
+**P2c update, 2026-08-25.** The first half landed and is verified against a real
+container: SQLAlchemy 2.0 + Alembic, `call_sessions`, `call_state_transitions` and
+`agent_state_log`, Postgres repositories behind the interfaces P0 already had, and one
+contract suite run against in-memory, SQLite and Postgres (`D75`). Presence is rebuilt
+from the log rather than stored beside it (`D76`). Still in memory: assignments,
+attestations, captures, the waiting pool and `matching_decisions` — and `Container` does
+not yet read `STORAGE_BACKEND`, so the default process is unchanged.
+
 **The database (`D39`) did NOT land with P2b.** Presence, assignments and the state log are
 still in memory. The reason is not oversight: `D39`'s trigger was "two processes need to see
 the same call", and P2b is a single process. Landing Postgres would have doubled the size of an

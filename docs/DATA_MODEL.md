@@ -1,7 +1,18 @@
 # DATA_MODEL
 
 _The two databases, every table, and — most importantly — how the bank's half gets swapped out for the real thing on hackathon day._
-_Status: **design only**. Last updated: 2026-08-23._
+_Status: **partly built as of P2c**. Last updated: 2026-08-25._
+
+> **What is real today (`P2c`):** `call_sessions`, `call_state_transitions` and
+> `agent_state_log` exist as SQLAlchemy models with an Alembic migration, verified against a
+> live Postgres. Everything else on this page is still design. Two corrections to what is
+> below, both from building it:
+> * **There is no `agent_presence` table and there will not be one** — current presence is a
+>   projection of `agent_state_log` (`D76`). Two places recording one fact will disagree.
+> * The **column vs JSON rule** settled while mapping: anything the matcher, a report or a
+>   query *filters on* is a column; anything only read back whole is JSON (`D77`).
+>
+> See `explanations/P2c_persistence.md` §8 for exactly what is still in memory.
 
 ---
 

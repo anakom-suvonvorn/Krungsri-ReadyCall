@@ -68,6 +68,13 @@ class EventBusName(StrEnum):
     KAFKA = "kafka"
 
 
+class StorageBackend(StrEnum):
+    """Where our writable state lives (`D75`)."""
+
+    MEMORY = "memory"
+    POSTGRES = "postgres"
+
+
 class BlobStorageName(StrEnum):
     MEMORY = "memory"
     LOCALFS = "localfs"
@@ -201,9 +208,26 @@ class Settings(BaseSettings):
     transcript_retention_days: int = 365
 
     # --- infrastructure ---
+    #: Which store backs the call sessions and the agent state log (`D75`). `memory` keeps
+    #: the whole system runnable with no container, which is what every scenario replay and
+    #: most of the suite uses; `postgres` is what survives a restart. The seam is the
+    #: repository interface P0 already had, so this is one factory line either way.
+    storage_backend: StorageBackend = StorageBackend.MEMORY
     readycall_database_url: str | None = None
     core_database_url: str | None = None
     redis_url: str | None = None
+
+    @property
+    def database_url(self) -> str:
+        """Where our own tables live. Used by the engine AND by Alembic (`D75`).
+
+        One source, because a migration run against a different database from the one the
+        app opens is a failure mode that looks like "the table does not exist" and wastes
+        an hour every time.
+        """
+        return self.readycall_database_url or (
+            "postgresql+asyncpg://readycall:readycall@127.0.0.1:5432/readycall"
+        )
 
     # --- secrets (never logged, never committed) ---
     anthropic_api_key: str | None = None

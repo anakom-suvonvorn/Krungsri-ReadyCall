@@ -31,7 +31,7 @@ demonstrable slice, so "the demo" is the current state plus a chosen scenario (`
 
 ---
 
-## 2. Status: **P0 · P1 · P1b · P2a · P2b complete**
+## 2. Status: **P0 · P1 · P1b · P2a · P2b complete · P2c in progress**
 
 The spine runs. A full call lifecycle - arrival, IVR, consent, queue, intake, matching, the offer
 handshake, the live call, wrap-up, rating, closed - executes end to end on fake adapters with no
@@ -43,7 +43,7 @@ services doing real work - only the *edges* (phone, speech, AI, the bank's data,
 are still fakes. An agent signs in at `/workstation`, a caller arrives, the desk rings, the brief is
 already there, and the disclosure gate moves when the agent attests.
 
-Verified on 2026-08-24: **329 tests pass**, `ruff check` and `ruff format --check` clean,
+Verified on 2026-08-24: **369 tests pass**, `ruff check` and `ruff format --check` clean,
 `mypy --strict` clean over 81 source files, and all three scenarios replay byte-identically.
 
 ```
@@ -162,10 +162,12 @@ FullProject/
 │  │  ├─ routers/  mobile.py*  agent.py*  demo.py*  health.py*  telephony_webhooks.py  admin.py
 │  │  └─ schemas.py*   # request/response DTOs. NEVER serialise a domain model where a
 │  │                   #   permission boundary exists - that shipped a leak (B5, D53)
-│  ├─ db/
-│  │  ├─ session.py  base.py
-│  │  ├─ models/    readycall/*.py        # our writable tables
-│  │  └─ migrations/                      # alembic
+│  ├─ db/*                   # P2c. Repositories return DOMAIN models, never ORM rows (D77)
+│  │  ├─ base.py*            #   declarative base, naming convention, Json/Utc types
+│  │  ├─ session.py*         #   engine + session factory. SQLite gets foreign keys ON (D75)
+│  │  ├─ repositories.py*    #   Postgres impls of the seams P0 already had
+│  │  ├─ models/*            #   calls.py, agents.py. Presence is NOT a table (D76)
+│  │  └─ migrations/*        #   alembic; URL from Settings, never alembic.ini
 │  ├─ workers/     orchestrator_worker.py  analysis_worker.py  stt_worker.py  jobs.py
 │  ├─ observability/  tracing.py  metrics.py  timing.py
 │  └─ entrypoints/  api.py  worker.py  media.py  stt.py    # the runnable processes
@@ -233,6 +235,16 @@ expiry finally have a driver (`B7`) · ☑ tiered keypad lookups reporting which
 both eras (`D66`, `D67`) · ☑ gated brief preview on the offer card (`D69`) · ☑ queue strip
 split into mine/all (`D70`) · ☐ **Postgres/SQLAlchemy/Alembic** (`D39`) — deferred again;
 see `NEXT_SESSION`
+
+**P2c — persistence** (in progress)
+☑ SQLAlchemy 2.0 async + Alembic, URL from `Settings` (`D75`) · ☑ `call_sessions` +
+`call_state_transitions` + `agent_state_log` with indexes and a real FK · ☑ Postgres
+repositories returning **domain models** (`D77`) · ☑ **one contract suite across three
+backends**, SQLite with foreign keys enforced · ☑ presence rebuilt from the log rather
+than stored twice (`D76`) · ☑ verified against a live container: upgrade, downgrade,
+upgrade, write, read back through a fresh engine · ☐ assignments, attestations,
+captures, the waiting pool, `matching_decisions` · ☐ `Container` wired to
+`STORAGE_BACKEND`
 
 **P3 — voice, IVR & intake v1** ☐ voice-prompt build pipeline + prompt studio · ☐ IVR flow (menu,
 identify, consent, press-1/2, rating) · ☐ media gateway (per-leg fork) · ☐ recording + encryption ·
@@ -312,9 +324,10 @@ performing by hand, i.e. what the next services take over (`D36`).
 
 | | |
 |---|---|
-| Source files | 111 (`src/` 82 + `tests/` + `scripts/` + `mock/`) |
-| Tests | 329, all passing, ~13 s |
+| Source files | 121 (`src/` 91 + `tests/` + `scripts/` + `mock/`) |
+| Tests | 369, all passing, ~26 s (82 of them the store contract suite across 3 backends) |
 | Ports defined | 8 (telephony, stt, llm, tts, core_data, event_bus, blob_storage, agent_directory) |
+| Persisted tables | 3 (`call_sessions`, `call_state_transitions`, `agent_state_log`) + Alembic, verified on a live Postgres |
 | Adapters | 9 fakes/nulls + a caching/circuit-breaking decorator; no real vendor adapter yet |
 | Call states | 15, transition table self-validated (the rating is an event, not a state — `D46`) |
 | Event types | 19 |
