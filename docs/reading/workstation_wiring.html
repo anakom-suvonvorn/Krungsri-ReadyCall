@@ -1003,6 +1003,30 @@ config.py:181 acw_long_after_s: float = <b>45.0</b></div>
   </div>
 </section>
 
+<section>
+  <h2>Changes since this was written</h2>
+  <div class="card">
+    <p><b>2026-08-25 &mdash; P2c landed, and this page still describes the wire correctly.</b>
+      Persistence changed nothing a browser can see: no endpoint, no payload, no behaviour.
+      That is the return on the wire-DTO discipline &mdash; the workstation talks to the same
+      <code>WorkstationSnapshot</code> whether the process is backed by dictionaries or by
+      Postgres.</p>
+    <ul>
+      <li><b>Internals only:</b> the attestation and keypad services became <code>async</code>
+        because they now write through to a store; the routes await them and the shapes are
+        identical.</li>
+      <li><b>One real fix behind the glass.</b> Identity had only ever lived in a map on the
+        API container, never on the call itself &mdash; so after a restart a live call had no
+        identity and the brief rendered nothing. It is written to both now.</li>
+      <li><b>Testing by hand:</b> a restart signs every agent out. The platform&rsquo;s axis is
+        deliberately not restored, so the tab reconnects and signs in again; a declared
+        <i>lunch</i> comes back, <code>ready</code> deliberately does not.</li>
+    </ul>
+    <p>The persistence layer has its own illustrated page:
+      <code>docs/reading/persistence.html</code>, with a restart simulator.</p>
+  </div>
+</section>
+
 </div>
 
 </body>

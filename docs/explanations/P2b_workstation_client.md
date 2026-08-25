@@ -282,3 +282,26 @@ Two other corrections to the ledger above:
   heading gives up the space instead. The time beside each count is now labelled
   **รอนานสุด** — it is the longest wait in that queue, not an average and not necessarily
   the next caller out, since matching is global and urgency-weighted (`D22`).
+
+### 2026-08-25 — P2c, and what it did NOT change
+
+Persistence landed (`D78`) and **no endpoint, payload or client behaviour changed**, which is
+worth recording because it is the return on the wire-DTO discipline: the workstation talks to
+the same `WorkstationSnapshot` whether the process is backed by dicts or by Postgres.
+
+Three internal changes a future reader may notice while tracing a route:
+
+- **`AttestationService.attest` and the keypad milestones are now `async`** (they write
+  through to a store). The routes await them; the request/response shapes are identical.
+- **`container.wrapups` holds `CallWrapup` models, not dicts.** `wrapup_saved` on the
+  snapshot is computed the same way.
+- **Identity now goes through `Container.set_identity`**, which writes it onto the
+  `CallSession` as well as the live map. It had only ever been in the map, so a restored call
+  had no identity and `render_brief` returned `None` — the panel would have rendered empty on
+  a live call after a restart.
+
+One behaviour worth knowing when testing by hand: **a restart signs every agent out.**
+`system_state` is not restored (`D78`), so the browser reconnects and signs in again; the
+agent's *declared* instruction (lunch, break, draining) comes back, `ready` deliberately does
+not.
+

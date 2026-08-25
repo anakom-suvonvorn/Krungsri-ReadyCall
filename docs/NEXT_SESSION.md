@@ -119,9 +119,8 @@ reversing `D20`'s display gating).
 
 ## Next steps (in order)
 
-1. **P3** — voice/IVR/intake: menu prompts become real audio, VAD endpointing, streaming
-   Thai STT, and the bake-off on the 3050. This is the biggest remaining block and the one
-   with real hardware risk, so it wants a whole session.
+1. **P3** — voice/IVR/intake. Biggest remaining block, only one with hardware risk. Full
+   briefing below.
 2. **P4** — analysis and brief v2+ with Claude and Typhoon compared on the golden set.
 3. **Small and worth doing when convenient:**
    - `call_intents` and `app_context_events` are still in memory. Neither loses anything a
@@ -131,6 +130,73 @@ reversing `D20`'s display gating).
      is most of the work; it would have caught `B4` on sight.
 
 `grep -rn "# P2b:" src/` lists the steps a real IVR will drive that the demo endpoint fakes.
+
+## Starting P3 — read this before opening anything else
+
+P3 is voice, IVR and pre-call intake. It is the largest remaining block and the only one with
+**hardware risk**, so it is worth knowing what is already decided and what is genuinely open
+before writing a line.
+
+### What already exists, and it is more than it looks
+
+| Already there | Why it matters on day one |
+|---|---|
+| **`config/menus.yaml`** with real prompt ids | the tree, the reserved keys and the catch-alls are built and tested. It already names **8 prompt ids** (`menu.product_line`, `menu.{motor,health,travel,life,general}_reason`, `menu.invalid`, `menu.language`) and `config/dids.yaml` names **5 greetings** (`greeting.{general,health,life,motor_claim,travel}`). That is the minimum key set `voice_prompts.yaml` must define. |
+| **`ports/stt.py`** | the contract is written and streaming-first (`D9`): `AudioFrame` is **16 kHz mono float32, always**, and the media gateway normalises before anyone sees it. Per-utterance and in-memory, so no PII lands on disk. |
+| **`ports/tts.py`** | deliberately asymmetric (`D24`): `synthesize()` is a **build-time** call, `stream()` exists only for the future conversational intake. During a v1 call nothing in this port runs — telephony plays a file. |
+| **`adapters/stt/scripted.py`** | the fake that keeps every test and the stage-safe demo path off the GPU. It honours `warmup()`, so swapping to Thonburian is one env var. |
+| the whole call lifecycle | `IVR` and `INTAKE_ACTIVE`/`INTAKE_COMPLETE` are already real `CallState`s that scenarios drive through. P3 replaces the stand-ins, it does not add states. |
+
+`grep -rn "# P1:" scripts/` still lists the lifecycle steps `run_scenario.py` performs by hand
+— that is the handover list, and P3 takes over the IVR and media ones.
+
+### What does NOT exist (checked against disk 2026-08-25, do not assume)
+
+`config/voice_prompts.yaml` · `prompts/` (the whole tree) · `scripts/build_prompts.py` ·
+`services/ivr/` · `services/intake/` · `services/transcription/` · `services/analysis/` ·
+`media/` · `workers/` · `observability/` · `config/core_mapping.yaml` · `tests/golden/`
+
+**And the `ml` extra is commented out in `pyproject.toml`**, so `uv sync --extra ml` fails
+today. The intended set is on that commented line: `torch`, `transformers`, `faster-whisper`,
+`onnxruntime`, `silero-vad`. Declaring it is step zero and it is not free — this is the
+install that takes a while on a metered connection, and it lands on the STT box only (`D2`).
+
+### The decisions that already constrain P3 — do not re-litigate
+
+- **`D37`: the keypad menu runs FIRST and it — not the AI — routes the call.** The floor is
+  parity with an ordinary call centre. Every AI failure degrades to that, never below it.
+- **`D24`: prompts are pre-rendered at build time**, hash-cached by (text, voice, engine).
+  Not live synthesis, not hand-recorded. Editing a Thai line in YAML and hearing it a second
+  later is the whole point, and it works with no internet.
+- **`D9`: STT is re-implemented streaming-first.** The reference project
+  (`…/scamprojectthing/ProjectCode/STT_Thonburian_Whisper/`) is **read-only** and is reference
+  for *how the model behaves*, never code to copy. Keep from it: VAD threshold 0.65, min
+  speech 500 ms, min silence 100 ms, ~120/60 ms padding, and the repetition guard for
+  Whisper's silence-loop. Change from it: `silero-vad` as a dependency, never a runtime
+  `torch.hub.load` — a network fetch during a live call is unacceptable.
+- **`D21`: the offer window IS the intake grace period.** Intake keeps recording until the
+  agent presses Accept; nobody waits longer and no sentence is lost.
+- **`D12`: the call is never blocked on AI**, and **`D30`**: Thonburian stays default,
+  Typhoon ASR is benchmarked against it on the same audio rather than argued about.
+
+### Suggested order, lowest risk first
+
+1. **`voice_prompts.yaml` + a test that every prompt id referenced by `menus.yaml` and
+   `dids.yaml` exists.** Pure config, no GPU, and it is the same guard `D72` put on
+   `challenges.yaml` — a list enforced on one side and displayed on the other has to be
+   checked, or it drifts silently.
+2. **`scripts/build_prompts.py`** with the hash cache, plus the checked-in fallback pack.
+3. **`services/ivr/`** driving the existing `menus.yaml` walk against the simulated telephony
+   adapter — still no audio hardware, still fully testable.
+4. **Then** the media gateway, VAD, and the STT worker, which is where the RTX 3050 risk
+   actually lives.
+
+### The hardware reality, stated plainly
+
+RTX 3050 laptop, 4–6 GB. Whisper pads every chunk to 30 s, so `faster-whisper`/CTranslate2 at
+`int8_float16` is probably required to hit the p95 < 1.5 s budget. **Do not plan to run a
+local LLM and Whisper on the same card** — the default split is STT local, LLM via API.
+Whoever has the strongest GPU should own the demo machine.
 
 ## Still open
 
@@ -147,11 +213,34 @@ reversing `D20`'s display gating).
 | **Q17** | **Commit `apps/workstation/dist/`?** It is gitignored, so a fresh clone has no workstation until `npm run build` runs — and on a venue with no internet, `npm install` is what fails. | Not committed |
 | **Q18** | **"Not this person" is a one-way door.** It clears the customer exactly as `D42` asks, but leaves the agent with nobody to attach the call to, and customer search does not exist (`D32` defers lookup). A rejected call stays anonymous for its duration. A test asserts this so it fails the day search lands. **Now visible rather than silent (`D61`)**: the two forward outcomes are disabled with the reason in the tooltip instead of answering 400. | Accepted for now |
 | **Q20** | **Should a reveal-on-click with a per-field audit entry come back at P7**, for the most sensitive fields only? `D74` opened display to the agent; the honest answer depends on Krungsri's own agent-desktop policy, which we do not have. | Not for now; every read is logged |
+| **Q21** | **Which storage backend does the DEMO run on?** `memory` is the default and needs nothing; `postgres` is what survives a restart and is what makes the persistence work visible on stage. Running Postgres on the day adds a container to the list of things that can fail, and `D-risk` says never depend on the venue. Leaning: **rehearse on `postgres`, keep `memory` as the one-keystroke fallback**, since both now pass the same suite. | Not decided |
 | **Q19** | **`config/playbooks/` does not exist** but is in the folder map. Actions live in `_PLAYBOOKS` in `builder.py` (`D56`). Moving them out is a P4 task. | Deferred to P4 |
 
 Resolved: rating is an event (`D46`) · single project (`D34`) · Asterisk · RTX 3050 · Claude
 + Typhoon compared · React workstation with the softphone in it · web customer simulator ·
 menu-first flow (`D37`).
+
+## The machine, as left on 2026-08-25
+
+Facts about *this laptop* rather than the repo, so a fresh session does not rediscover them.
+
+- **Docker works** (v29.2.0) and the Postgres container is **stopped**, not removed. Bring it
+  back with `docker compose -f infra/docker-compose.yml up -d postgres`. Everything runs
+  without it; with the container down the database cases skip (**399 pass, 42 skipped**)
+  and with it up they all run (**438 pass, 3 skipped** — the three are FK cases the
+  in-memory backend cannot have).
+- **`readycall_test` exists inside that container's volume.** It was created by hand *and*
+  added to `infra/postgres/init/02-test-database.sql` for fresh setups — init scripts only
+  run on an empty data directory, so a `docker compose down -v` re-creates it and a plain
+  restart keeps it. If the suite ever reports it missing:
+  `docker compose -f infra/docker-compose.yml exec postgres psql -U readycall -d postgres -c "CREATE DATABASE readycall_test OWNER readycall"`.
+- **`mermaid-cli` is now installed globally** (`npm i -g @mermaid-js/mermaid-cli`, ~190
+  packages, a few minutes). `scripts/render_diagrams.py` finds it on `PATH`; nothing else
+  needs it, and `--check` works without rendering.
+- **Node is on `PATH`**, so `apps/workstation` can be rebuilt. `dist/` is gitignored and
+  still uncommitted (`Q17`).
+- The **dev database currently holds one call** from the live restart check. Harmless; the
+  suite no longer touches that database at all.
 
 ## Things to be careful about (live landmines)
 
@@ -173,6 +262,14 @@ menu-first flow (`D37`).
   a call at L1. Use a wire DTO, and **test the raw bytes** — an assertion on rendered text
   cannot see a field the renderer never mentions.
 - **`enable_utf8()` before printing domain text** — Thai + cp1252 kills the process (`B1`).
+  **This bit twice more on 2026-08-25**, both times from a throwaway `python - <<PY` that
+  printed a box-drawing character or Thai. The rule is not only about the app: any ad-hoc
+  script that prints non-ASCII dies on this laptop. Write to a UTF-8 file and `cat` it, or
+  print nothing and check the result separately.
+- **The browser preview pane does not composite, so CSS transitions never advance** and
+  `getComputedStyle` reads the *start* value forever. Two colours looked identical when they
+  were not. This is `B8`'s second lesson in a new place — anything animated cannot be measured
+  through that pane. Inject `transition: none !important` first, or test the logic directly.
 - **`event` is not usable as a structlog kwarg** (`B2`).
 - **`time.monotonic()` is useless for stage timings on Windows** (`B3`) — use `perf_counter`.
 - **`ManualClock()` defaults to New Year's Day**, so every `business` queue is CLOSED under

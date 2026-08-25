@@ -100,22 +100,31 @@ Full adapter catalogue and library list: `INTEGRATIONS.md`.
 
 ---
 
-## 4. Folder structure  (`*` = exists today)
+## 4. Folder structure
+
+**`*` = exists on disk today. Everything without one is planned and NOT THERE.** The markers
+were inconsistent for several phases, which is the general form of `Q19` — a folder map that
+lists a path reads as though the path is real, and somebody eventually writes an import
+against it. They were audited against disk on 2026-08-25; re-audit rather than trust if this
+date is old.
 
 ```
 FullProject/
-├─ pyproject.toml            # package renamed fullproject → readycall in P0
+├─ pyproject.toml*           # package renamed fullproject → readycall in P0
 ├─ uv.lock  .python-version  .env.example  .gitignore
-├─ README.md
-├─ docs/                     # ← this documentation system
-│  └─ diagrams/            # 56 diagrams + 11 explanation pages; a quarter generated from source
-├─ config/                   # ← the entire insurance-specific "domain pack" (D28)
+├─ README.md*
+├─ docs/*                    # ← this documentation system
+│  └─ diagrams/*           # 56 diagrams + 11 explanation pages; a quarter generated from source
+├─ config/*                  # ← the entire insurance-specific "domain pack" (D28)
 │  ├─ core_mapping.yaml      # bank-data field mapping (swap target, DATA_MODEL §4)
-│  ├─ matching_weights.yaml  # fit + urgency weights, tunable at runtime
-│  ├─ intents.yaml           # closed intent taxonomy + required slots per intent
-│  ├─ skills.yaml            # skill codes, queues, intent→skill mapping
-│  ├─ queue_hours.yaml       # opening hours + holidays per queue
-│  ├─ dids.yaml              # printed phone numbers → product line + queue (D19)
+│  ├─ matching_weights.yaml* # fit + urgency weights, tunable at runtime
+│  ├─ intents.yaml*          # closed intent taxonomy + required slots per intent
+│  ├─ skills.yaml*           # skill codes, queues, intent→skill mapping
+│  ├─ queue_hours.yaml*      # opening hours + holidays per queue
+│  ├─ dids.yaml*             # printed phone numbers → product line + queue (D19)
+│  ├─ menus.yaml*            # the IVR tree. ALSO served to the app (D48) - one menu, two surfaces
+│  ├─ challenges.yaml*       # how an agent may verify a caller. Served, never hardcoded twice (D72)
+│  ├─ demo_personas.yaml*    # DEMO: ids only, everything displayed is read live (D47)
 │  ├─ voice_prompts.yaml     # every spoken line, as Thai text (D24)
 │  └─ playbooks/             # per-intent recommended-action playbooks. NOT YET REAL (Q19):
 │                            #   the steps live in _PLAYBOOKS in services/brief/builder.py
@@ -125,15 +134,15 @@ FullProject/
 ├─ prompts/                  # versioned prompt files (never inline in code)
 │  └─ th/ intent_classify.v1.md  summarize_intake.v1.md  suggested_opening.v1.md  ...
 ├─ src/readycall/
-│  ├─ config.py  logging.py  errors.py
-│  ├─ domain/                # pure models, no I/O
+│  ├─ config.py* logging.py* errors.py*
+│  ├─ domain/*               # pure models, no I/O
 │  │  ├─ models.py           # Customer, Policy, CallSession, TranscriptTurn, CaseBrief, MatchingDecision…
 │  │  ├─ enums.py            # CallState, IntentCode, ConsentScope, FinalizeReason…
 │  │  └─ events.py           # event schemas (versioned)
-│  ├─ ports/                 # Protocols only — THE seams
+│  ├─ ports/*                # Protocols only — THE seams
 │  │  ├─ telephony.py  stt.py  llm.py  tts.py  core_data.py
 │  │  └─ event_bus.py  blob_storage.py  agent_directory.py  notifier.py
-│  ├─ adapters/
+│  ├─ adapters/*
 │  │  ├─ telephony/  asterisk_ari.py  twilio.py  livekit.py  simulated.py
 │  │  ├─ stt/        thonburian_hf.py  faster_whisper.py  cloud.py  scripted.py
 │  │  ├─ llm/        anthropic.py  openai_compatible.py  gemini.py  rulebased.py
@@ -142,7 +151,7 @@ FullProject/
 │  │  │               caching.py  null.py  mapping.py   # YAML-driven field mapper
 │  │  ├─ event_bus/  redis_streams.py  kafka.py  memory.py
 │  │  └─ storage/    minio.py  s3.py  localfs.py
-│  ├─ services/              # NO insurance-specific literals may live here (D28)
+│  ├─ services/*             # NO insurance-specific literals may live here (D28)
 │  │  ├─ call_orchestrator/  machine.py  handlers.py     # single writer of call state
 │  │  ├─ identity/           resolver.py  assurance.py   # L0–L3 ladder (D20)
 │  │  ├─ context/            assembler.py  snapshot.py   # Customer360 + provenance
@@ -160,7 +169,7 @@ FullProject/
 │  │  └─ metrics/            rollups.py
 │  ├─ media/                 # the media gateway (audio I/O, resampling, framing, recording)
 │  │  ├─ gateway.py  audiosocket.py  ws_media.py  resample.py  recorder.py
-│  ├─ api/
+│  ├─ api/*
 │  │  ├─ app.py*  deps.py*  security.py*  realtime.py*   # realtime = the agent hub
 │  │  ├─ routers/  mobile.py*  agent.py*  demo.py*  health.py*  telephony_webhooks.py  admin.py
 │  │  └─ schemas.py*   # request/response DTOs. NEVER serialise a domain model where a
@@ -176,19 +185,21 @@ FullProject/
 │  ├─ workers/     orchestrator_worker.py  analysis_worker.py  stt_worker.py  jobs.py
 │  ├─ observability/  tracing.py  metrics.py  timing.py
 │  └─ entrypoints/  api.py  worker.py  media.py  stt.py    # the runnable processes
-├─ mock/bank_core/           # the simulated read-only bank data
-│  ├─ schema.sql  generate.py  personas.yaml  scenarios/*.yaml
-├─ apps/
+├─ mock/*                    # the simulated read-only bank data + the agent roster
+│  ├─ bank_core/generate.py*  bank_core/fixtures/*  agents/agents.json*
+│  │                        # the `core` schema DDL lives in infra/postgres/init/*, not here.
+│  │                        # personas.yaml is NOT written; demo personas are config/demo_personas.yaml*
+├─ apps/*
 │  ├─ workstation/*          # React 18 + TS + Vite — the agent desktop (D32). dist/ is
 │  │                         #   gitignored and mounted at /workstation when it exists,
 │  │                         #   so the API runs with no node installed.
 │  └─ customer_sim/*         # one static HTML page, no build step (D47)
-├─ infra/
+├─ infra/*
 │  ├─ docker-compose.yml  asterisk/  grafana/  k8s/
-├─ scripts/                  # seed_db, run_scenario, convert_ct2_model, eval_golden_set…
-└─ tests/
-   ├─ unit/  integration/  contracts/   # contracts/ = the port suites every adapter must pass
-   ├─ scenarios/                        # end-to-end scripted calls, no telephony
+├─ scripts/*                 # audit_docs, gen_diagrams, render_diagrams, run_matching, run_scenario
+└─ tests/*
+   ├─ unit/*  integration/*  contracts/*  # contracts/ = the suites every impl must pass
+   ├─ scenarios/*                       # end-to-end scripted calls, no telephony
    └─ golden/                           # labelled AI evaluation set
 ```
 

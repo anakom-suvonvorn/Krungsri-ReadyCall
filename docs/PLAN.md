@@ -160,6 +160,22 @@ already Protocol-shaped or dict-backed behind one class each.
 ## P3 — Voice, IVR, and AI Pre-Call Intake v1 (passive)
 **Goal:** the pitch's Step 2 — the line talks, audio goes in, transcript comes out, live.
 
+> **Starting notes, checked against disk 2026-08-25.** `NEXT_SESSION.md` carries the full
+> briefing; two things belong here because they change the plan rather than the working state:
+>
+> * **The `ml` extra is commented out in `pyproject.toml`**, so `uv sync --extra ml` fails
+>   today. Declaring `torch` / `transformers` / `faster-whisper` / `onnxruntime` /
+>   `silero-vad` is step zero, and it is the slow install — worth starting before anything
+>   that needs thinking.
+> * **`menus.yaml` and `dids.yaml` already fix the prompt-id vocabulary**: 8 menu prompts and
+>   5 greetings. So `voice_prompts.yaml` has a known minimum, and the first thing to build is
+>   a **test that every referenced id exists** — the same guard `D72` put on `challenges.yaml`,
+>   for the same reason (a list enforced on one side and read from another drifts silently).
+>
+> Suggested order, lowest risk first: prompts config + its guard → `build_prompts.py` → the
+> IVR service against the simulated adapter → *then* media, VAD and the STT worker, which is
+> where the RTX 3050 risk actually lives.
+
 - **Voice prompts pipeline** (`D24`): `config/voice_prompts.yaml`, `scripts/build_prompts.py`
   (hash-cached rendering), the checked-in fallback prompt pack, and the admin **prompt studio** page.
 - **IVR service**, and note the ordering — **the menu routes the call, before any AI** (`D37`):
