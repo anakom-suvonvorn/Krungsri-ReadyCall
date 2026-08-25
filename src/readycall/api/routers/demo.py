@@ -191,7 +191,8 @@ async def demo_logout(request: Request, response: Response, container: Container
 # through the real lifecycle: identity resolution, IVR, queue, match, offer. Every step
 # below is the production service - only the trigger is fake.
 #
-# `# P2b:` marks the steps a real IVR will drive. `grep -rn "# P2b:" src/` lists them.
+# As of **P3** the IVR here is the real one; the only thing this endpoint fakes is the
+# arrival itself and the keypresses, because there is no audio until P5.
 
 
 @router.post("/calls", response_model=PlaceCallResponse, summary="DEMO: place a call")
