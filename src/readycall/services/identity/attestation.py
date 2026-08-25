@@ -30,9 +30,11 @@ agent attests, and the record keeps the two facts separately.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
+from typing import Protocol
 
 from readycall.clock import Clock
 from readycall.domain.enums import AssuranceLevel, IdentityMethod
@@ -88,6 +90,35 @@ class Attestation:
     note: str | None = None
 
 
+class AttestationStore(Protocol):
+    """The durable disclosure log (`D78`).
+
+    **Append-only, and that is the entire design.** `D60` made an attestation a signed
+    statement rather than a toggle; `D61` made correcting one an *append*. A call whose
+    agent confirmed and then realised they were speaking to the policyholder's daughter
+    keeps both rows, and the record shows the correction happening — which is more truthful
+    than either version alone. There is deliberately no `update` and no `delete`.
+    """
+
+    async def append(self, attestation: Attestation) -> None: ...
+
+    async def for_calls(self, call_session_ids: Sequence[str]) -> list[Attestation]: ...
+
+
+class InMemoryAttestationStore:
+    """The fake, held to the same contract suite as the real one (`D3`)."""
+
+    def __init__(self) -> None:
+        self._rows: list[Attestation] = []
+
+    async def append(self, attestation: Attestation) -> None:
+        self._rows.append(attestation)
+
+    async def for_calls(self, call_session_ids: Sequence[str]) -> list[Attestation]:
+        wanted = set(call_session_ids)
+        return [a for a in self._rows if a.call_session_id in wanted]
+
+
 @dataclass
 class _CallIdentityState:
     attestations: list[Attestation] = field(default_factory=list)
@@ -103,14 +134,68 @@ class _CallIdentityState:
 class AttestationService:
     """Applies an agent's attestation to a call's identity, and records why."""
 
-    def __init__(self, *, clock: Clock, challenges: frozenset[str] | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        clock: Clock,
+        challenges: frozenset[str] | None = None,
+        store: AttestationStore | None = None,
+    ) -> None:
         self._clock = clock
+        self._store = store
         self._by_call: dict[str, _CallIdentityState] = {}
         #: From `config/challenges.yaml` (`D72`). The service refuses anything not in it,
         #: which is precisely why the workstation must render the same list rather than
         #: keep its own — an option the screen offers and the server refuses is a dead end
         #: the agent cannot diagnose.
         self._challenges = challenges if challenges is not None else DEFAULT_CHALLENGES
+
+    async def restore(
+        self,
+        call_session_ids: Sequence[str],
+        *,
+        resolutions: dict[str, IdentityResolution] | None = None,
+    ) -> int:
+        """Reload the disclosure log for live calls. Returns the number of rows.
+
+        Three things have to come back, and only the first is obvious:
+
+        1. **The history**, because `attestation_count` is what re-locks the control after
+           every amendment (`D61`). Restoring an empty history would unlock the identity
+           panel on a call that had already been attested, and a lock that opens by itself
+           is worse than no lock — the screen would say the question was settled while
+           letting anyone re-answer it.
+        2. **The rejected customer ids**, so nothing re-proposes a match the agent has
+           already thrown out (`D42`).
+        3. **The original resolution**, without which a rejection stops being reversible
+           (`D71`). It is taken from the live session's identity when that still names a
+           customer, and otherwise from the rejected id on the log row — the same match the
+           system originally made, offered again. Nothing is invented either way.
+        """
+        if self._store is None:
+            return 0
+        rows = await self._store.for_calls(call_session_ids)
+        for record in sorted(rows, key=lambda r: r.at):
+            state = self._by_call.setdefault(record.call_session_id, _CallIdentityState())
+            state.attestations.append(record)
+            if record.rejected_customer_id:
+                state.rejected_customer_ids.add(record.rejected_customer_id)
+        for call_session_id, state in self._by_call.items():
+            if state.original is not None:
+                continue
+            live = (resolutions or {}).get(call_session_id)
+            if live is not None and live.customer_id is not None:
+                state.original = live
+                continue
+            rejected = next(
+                (a.rejected_customer_id for a in state.attestations if a.rejected_customer_id),
+                None,
+            )
+            if rejected is not None and live is not None:
+                state.original = live.model_copy(update={"customer_id": rejected})
+        if rows:
+            log.info("attestations restored", attestations=len(rows), calls=len(self._by_call))
+        return len(rows)
 
     def history(self, call_session_id: str) -> tuple[Attestation, ...]:
         state = self._by_call.get(call_session_id)
@@ -168,7 +253,7 @@ class AttestationService:
         original = state.original if state and state.original is not None else current
         return original.method is IdentityMethod.APP_TOKEN
 
-    def attest(
+    async def attest(
         self,
         *,
         call_session_id: str,
@@ -315,6 +400,11 @@ class AttestationService:
             note=note,
         )
         state.attestations.append(record)
+        if self._store is not None:
+            # Durable before the caller is told it worked. An attestation the agent saw
+            # accepted, and the log never received, is the one failure this table exists
+            # to make impossible.
+            await self._store.append(record)
         log.info(
             "identity attested",
             call_session_id=call_session_id,
@@ -332,4 +422,6 @@ __all__ = [
     "Attestation",
     "AttestationOutcome",
     "AttestationService",
+    "AttestationStore",
+    "InMemoryAttestationStore",
 ]

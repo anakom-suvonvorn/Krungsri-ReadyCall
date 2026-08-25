@@ -21,8 +21,10 @@ Two rules here are load-bearing and easy to "simplify" back into bugs:
 
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from typing import Protocol
 
 from readycall.clock import Clock
 from readycall.domain import events as ev
@@ -60,6 +62,11 @@ DECLARABLE_ON_CALL: frozenset[AgentIntent] = frozenset(
     {AgentIntent.READY, AgentIntent.LAST_CALL, AgentIntent.DRAINING}
 )
 
+#: How much of the log the service keeps in memory. Large enough that `intent_reason`
+#: always finds the row that set the current intent; small enough that a long shift does
+#: not grow without bound. Not a retention policy — the durable table keeps everything.
+RECENT_LOG_ROWS = 500
+
 #: Display order for the status control. Kept beside the sets that filter it so the screen
 #: and the rules cannot drift apart.
 MENU_ORDER: tuple[AgentIntent, ...] = (
@@ -71,6 +78,47 @@ MENU_ORDER: tuple[AgentIntent, ...] = (
     AgentIntent.LAST_CALL,
     AgentIntent.DRAINING,
 )
+
+
+class AgentStateLog(Protocol):
+    """The durable half of presence (`D76`, `D78`).
+
+    Presence itself is **not** stored — it is the newest row per agent, projected into
+    memory at startup and kept there. Two places recording one fact will disagree, and the
+    log is the one that answers the question a supervisor actually asks: *what was true at
+    14:03*.
+    """
+
+    async def append(self, change: AgentStateChange) -> None: ...
+
+    async def latest_per_agent(self) -> dict[str, AgentStateChange]: ...
+
+
+class InMemoryAgentStateLog:
+    """The fake, kept in step with the real one by the same contract suite (`D3`).
+
+    Worth having even though it dies with the process: it keeps presence's write-through
+    path running on the default configuration, so the code persistence depends on is
+    exercised by every test rather than only when somebody starts a container (`B7`).
+    """
+
+    name = "memory"
+
+    def __init__(self) -> None:
+        self._rows: list[AgentStateChange] = []
+
+    async def append(self, change: AgentStateChange) -> None:
+        self._rows.append(change)
+
+    async def for_agent(self, agent_id: str, *, limit: int = 500) -> list[AgentStateChange]:
+        rows = [r for r in self._rows if r.agent_id == agent_id]
+        return sorted(rows, key=lambda r: r.at, reverse=True)[:limit]
+
+    async def latest_per_agent(self) -> dict[str, AgentStateChange]:
+        latest: dict[str, AgentStateChange] = {}
+        for row in sorted(self._rows, key=lambda r: r.at):
+            latest[row.agent_id] = row
+        return latest
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,17 +159,69 @@ class PresenceService:
         bus: EventBus,
         heartbeat_ttl_s: float = 30.0,
         long_acw_after_s: float = 45.0,
+        state_log: AgentStateLog | None = None,
     ) -> None:
         self._clock = clock
         self._bus = bus
         self._ttl_s = heartbeat_ttl_s
         self._long_acw_after_s = long_acw_after_s
         self._presence: dict[str, AgentPresence] = {}
-        #: Durable in spirit; a list until the DB lands (`D39`). Append-only, on purpose.
-        self._log: list[AgentStateChange] = []
+        #: The durable append-only record. Every commit writes here; nothing reads it on
+        #: the hot path (`D78`). `None` keeps the service usable in isolation.
+        self._state_log = state_log
+        #: The recent tail of the log, kept in memory purely so `_intent_reason` stays a
+        #: synchronous read. Bounded on purpose: it is a **cache of what was written**,
+        #: not a second record, so it may forget the distant past without losing anything.
+        self._recent: deque[AgentStateChange] = deque(maxlen=RECENT_LOG_ROWS)
         #: When the media disconnected, per agent. ACW is measured from here (`D45`),
         #: not from any form action.
         self._acw_since: dict[str, datetime] = {}
+        #: Agents whose standing instruction came back from the log rather than from a
+        #: sign-in this process. Consumed by the next `sign_in` and never re-set.
+        self._restored: set[str] = set()
+
+    # --- restore ----------------------------------------------------------------------
+
+    async def restore(self) -> int:
+        """Rebuild every agent's standing state from the log (`D76`). Returns how many.
+
+        This is the method that turns *"a restart loses a shift"* into *"a restart costs a
+        socket reconnect"*. Without it every agent came back silently `NOT_READY` — the
+        sign-in default (`D51`) — regardless of what they had actually declared, and an
+        agent who said *lunch* was misreported for the rest of the day.
+
+        **Everyone comes back `OFFLINE`, whatever the log said**, and that is not a
+        limitation to fix later. `system_state` describes what the *platform* has given
+        this person to do, and after a restart the platform has given them nothing: there
+        is no socket, no offer, and no call. Restoring `ON_CALL` from a log row would
+        assert a conversation that is not happening and let the matcher count a desk that
+        is not there. The person's own axis is theirs and does survive — which is the
+        whole point of two axes (`D33`).
+
+        Liveness is deliberately not restored either: it is a property of a live socket,
+        not a durable fact (`B7`). The agent reconnects, heartbeats, and signs in.
+        """
+        if self._state_log is None:
+            return 0
+        latest = await self._state_log.latest_per_agent()
+        for agent_id, change in latest.items():
+            self._presence[agent_id] = AgentPresence(
+                agent_id=agent_id,
+                system_state=AgentSystemState.OFFLINE,
+                agent_intent=change.agent_intent,
+                since=change.at,
+                current_load=0,
+                session_id=None,
+                heartbeat_at=None,
+            )
+            # Seed the cache so `intent_reason` can answer immediately — a restored agent
+            # whose intent is `NOT_READY` still needs the screen to say *which* of the
+            # three routes into it applied (`D59`).
+            self._recent.append(change)
+            self._restored.add(agent_id)
+        if latest:
+            log.info("presence restored from the state log", agents=len(latest))
+        return len(latest)
 
     # --- reading ----------------------------------------------------------------------
 
@@ -133,9 +233,14 @@ class PresenceService:
         return dict(self._presence)
 
     def state_log(self, agent_id: str | None = None) -> list[AgentStateChange]:
+        """The recent tail, for the screen and for tests. **Not** the durable record.
+
+        The full history is in `agent_state_log` and is read with SQL, because "show me
+        the shift" is a reporting question and not something the call path ever asks.
+        """
         if agent_id is None:
-            return list(self._log)
-        return [row for row in self._log if row.agent_id == agent_id]
+            return list(self._recent)
+        return [row for row in self._recent if row.agent_id == agent_id]
 
     def view(self, agent_id: str) -> PresenceView | None:
         presence = self._presence.get(agent_id)
@@ -160,7 +265,7 @@ class PresenceService:
         current = self._presence.get(agent_id)
         if current is None:
             return ""
-        for row in reversed(self._log):
+        for row in reversed(self._recent):
             if row.agent_id == agent_id and row.agent_intent is current.agent_intent:
                 return row.reason
         return ""
@@ -191,18 +296,38 @@ class PresenceService:
         Starting an agent as READY would hand a call to someone who just opened the tab
         and is making coffee. The workstation shows a prominent Ready button instead;
         declaring is one click and is the person's own statement.
+
+        **Reconnecting after a server restart is the one exception, and it is narrower
+        than it looks** (`D78`). If this agent's standing instruction was restored from the
+        log (`D76`), it is carried forward rather than overwritten — with `READY` and
+        `LAST_CALL` deliberately excluded, because those are the two that invite a call and
+        the platform has no idea whether the person is still at the desk.
+
+        This does not weaken `D51`. The platform is not *writing* the person's axis here;
+        it is declining to overwrite it. The write is `OFFLINE → AVAILABLE`, which is the
+        platform's own axis, and the intent simply rides along unchanged as it does on
+        every other platform move. What `D51` forbids is inventing a state the person did
+        not choose — and *lunch* is exactly what they did choose.
         """
         now = self._clock.now()
+        intent = AgentIntent.NOT_READY
+        reason = "signed_in"
+        previous = self._presence.get(agent_id)
+        if agent_id in self._restored and previous is not None:
+            self._restored.discard(agent_id)
+            if previous.agent_intent not in {AgentIntent.READY, AgentIntent.LAST_CALL}:
+                intent = previous.agent_intent
+                reason = "reconnected_after_restart"
         presence = AgentPresence(
             agent_id=agent_id,
             system_state=AgentSystemState.AVAILABLE,
-            agent_intent=AgentIntent.NOT_READY,
+            agent_intent=intent,
             since=now,
             current_load=0,
             session_id=session_id,
             heartbeat_at=now,
         )
-        await self._commit(presence, set_by="platform", reason="signed_in")
+        await self._commit(presence, set_by="platform", reason=reason)
         return presence
 
     async def sign_out(self, agent_id: str, *, reason: str = "signed_out") -> AgentPresence:
@@ -219,6 +344,9 @@ class PresenceService:
             }
         )
         self._acw_since.pop(agent_id, None)
+        # An explicit sign-out ends the shift, so the next sign-in gets plain `D51`
+        # behaviour. Only a *restart* carries an instruction across.
+        self._restored.discard(agent_id)
         await self._commit(updated, set_by="agent", reason=reason)
         return updated
 
@@ -401,18 +529,22 @@ class PresenceService:
         acw_seconds: float | None = None,
     ) -> None:
         self._presence[presence.agent_id] = presence
-        self._log.append(
-            AgentStateChange(
-                agent_id=presence.agent_id,
-                at=self._clock.now(),
-                system_state=presence.system_state,
-                agent_intent=presence.agent_intent,
-                set_by=set_by,
-                reason=reason,
-                call_session_id=call_session_id,
-                acw_seconds=acw_seconds,
-            )
+        change = AgentStateChange(
+            agent_id=presence.agent_id,
+            at=self._clock.now(),
+            system_state=presence.system_state,
+            agent_intent=presence.agent_intent,
+            set_by=set_by,
+            reason=reason,
+            call_session_id=call_session_id,
+            acw_seconds=acw_seconds,
         )
+        self._recent.append(change)
+        if self._state_log is not None:
+            # Write-through, before the event is published (`D78`). Publishing first
+            # would let a consumer act on a state change that is not yet durable, which
+            # is the shape of "nothing is done until the external system confirms it".
+            await self._state_log.append(change)
         log.info(
             "agent presence",
             agent_id=presence.agent_id,
@@ -431,4 +563,13 @@ class PresenceService:
         )
 
 
-__all__ = ["DECLARABLE", "DECLARABLE_ON_CALL", "MENU_ORDER", "PresenceService", "PresenceView"]
+__all__ = [
+    "DECLARABLE",
+    "DECLARABLE_ON_CALL",
+    "MENU_ORDER",
+    "RECENT_LOG_ROWS",
+    "AgentStateLog",
+    "InMemoryAgentStateLog",
+    "PresenceService",
+    "PresenceView",
+]

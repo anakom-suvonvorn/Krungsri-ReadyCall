@@ -633,6 +633,30 @@ class Assignment(DomainModel):
         return (self.acw_ended_at - self.acw_started_at).total_seconds()
 
 
+class CallWrapup(DomainModel):
+    """What the agent wrote when the call was over — **never written by anything else**.
+
+    Saving this closes the *call record*; it does not end after-call work, which runs
+    until the person declares a next state (`D45`). The two are different statements and
+    either may happen without the other.
+
+    Was a bare dict on the API container until it needed to survive a restart. A dict was
+    fine while nothing read it but the screen that had just written it; a row in someone's
+    file deserves a shape, and this is the model the disclosure and quality records are
+    both derived from.
+    """
+
+    call_session_id: str
+    agent_id: str
+    saved_at: datetime
+    disposition: str
+    notes: str | None = None
+    follow_up_required: bool = False
+    #: Did the agent change the AI's draft? The honest input to *"did the draft help"* —
+    #: the evaluation signal behind the ACW claim (`D27`).
+    was_edited: bool = True
+
+
 class QueueEntry(DomainModel):
     queue_id: str
     call_session_id: str

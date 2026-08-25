@@ -25,8 +25,10 @@ desk not answer, forever.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Protocol
 
 from readycall import ids
 from readycall.clock import Clock
@@ -55,6 +57,40 @@ class OfferPolicy:
     long_acw_after_s: float = 45.0
 
 
+class AssignmentStore(Protocol):
+    """The durable half of the handshake (`D78`).
+
+    `save` is an upsert: an assignment is **one offer moving through its outcomes**, not a
+    sequence of statements, so it is updated in place. The two logs beside it
+    (`agent_state_log`, `identity_attestations`) append instead, because there the
+    sequence *is* the record.
+    """
+
+    async def save(self, assignment: Assignment) -> None: ...
+
+    async def for_calls(self, call_session_ids: Sequence[str]) -> list[Assignment]: ...
+
+
+class InMemoryAssignmentStore:
+    """Dies with the process, and is still worth having.
+
+    It keeps the write-through path on the default configuration, so every test exercises
+    the code that persistence depends on rather than leaving it to run only when somebody
+    starts a container. That is `D75`'s SQLite argument one level up, and the failure it
+    guards against is `B7`: code that was correct and never ran.
+    """
+
+    def __init__(self) -> None:
+        self._rows: dict[str, Assignment] = {}
+
+    async def save(self, assignment: Assignment) -> None:
+        self._rows[assignment.assignment_id] = assignment
+
+    async def for_calls(self, call_session_ids: Sequence[str]) -> list[Assignment]:
+        wanted = set(call_session_ids)
+        return [a for a in self._rows.values() if a.call_session_id in wanted]
+
+
 @dataclass
 class _CallOffers:
     """Per-call memory the matcher needs on the next tick."""
@@ -72,15 +108,47 @@ class AssignmentService:
         bus: EventBus,
         clock: Clock,
         policy: OfferPolicy | None = None,
+        store: AssignmentStore | None = None,
     ) -> None:
         self._orchestrator = orchestrator
         self._presence = presence
         self._bus = bus
         self._clock = clock
         self._policy = policy or OfferPolicy()
+        self._store_backend = store
         self._assignments: dict[str, Assignment] = {}
         self._open_by_call: dict[str, str] = {}
         self._history: dict[str, _CallOffers] = {}
+
+    # --- restore -----------------------------------------------------------------------
+
+    async def restore(self, call_session_ids: Sequence[str]) -> int:
+        """Reload the handshake state for calls that are still live. Returns how many.
+
+        Bounded to the given calls on purpose: a shift's worth of closed assignments is
+        history, and history belongs in SQL rather than in a process's memory. What has to
+        come back is only what the next tick will ask about.
+
+        **Rebuilding `D52`'s exclusion set is the part that matters.** Without it a restart
+        forgets that agent A001 already let this offer time out, the global matcher
+        re-solves, reaches the same optimum, and offers the same caller to the same silent
+        desk — the exact loop `D52` exists to break, reintroduced by a process restart. A
+        `CANCELLED` offer excludes nobody, because nobody did anything wrong.
+        """
+        if self._store_backend is None:
+            return 0
+        rows = await self._store_backend.for_calls(call_session_ids)
+        for assignment in rows:
+            self._assignments[assignment.assignment_id] = assignment
+            record = self._history.setdefault(assignment.call_session_id, _CallOffers())
+            record.attempts += 1
+            if assignment.outcome is OfferOutcome.PENDING:
+                self._open_by_call[assignment.call_session_id] = assignment.assignment_id
+            elif assignment.outcome in {OfferOutcome.DECLINED, OfferOutcome.TIMEOUT}:
+                record.excluded_agent_ids.add(assignment.agent_id)
+        if rows:
+            log.info("assignments restored", assignments=len(rows), calls=len(call_session_ids))
+        return len(rows)
 
     # --- reading -----------------------------------------------------------------------
 
@@ -131,6 +199,10 @@ class AssignmentService:
         self._assignments[assignment.assignment_id] = assignment
         self._open_by_call[session.call_session_id] = assignment.assignment_id
         self._history.setdefault(session.call_session_id, _CallOffers()).attempts += 1
+        if self._store_backend is not None:
+            # Durable *before* the desk rings. An offer that reached a screen and not the
+            # store would come back from a restart as a call nobody was ever offered.
+            await self._store_backend.save(assignment)
 
         await self._presence.begin_offer(agent_id, call_session_id=session.call_session_id)
         await self._orchestrator.transition(
@@ -162,7 +234,7 @@ class AssignmentService:
                 "bridged_at": now,
             }
         )
-        self._store(assignment, still_open=False)
+        await self._store(assignment, still_open=False)
         await self._presence.begin_call(
             assignment.agent_id, call_session_id=session.call_session_id
         )
@@ -200,7 +272,7 @@ class AssignmentService:
         assignment = assignment.model_copy(
             update={"outcome": OfferOutcome.CANCELLED, "decline_reason": reason}
         )
-        self._store(assignment, still_open=False)
+        await self._store(assignment, still_open=False)
         await self._presence.release_offer(assignment.agent_id, reason="offer_cancelled")
         await self._orchestrator.transition(session, CallState.ABANDONED, reason=reason)
         await self._publish_resolution(session, assignment)
@@ -224,7 +296,7 @@ class AssignmentService:
         assignment = assignment.model_copy(
             update={"ended_at": disconnected_at, "acw_started_at": disconnected_at}
         )
-        self._store(assignment, still_open=False)
+        await self._store(assignment, still_open=False)
         await self._orchestrator.transition(session, CallState.WRAP_UP, reason=reason)
         await self._presence.begin_after_call_work(
             assignment.agent_id,
@@ -286,7 +358,7 @@ class AssignmentService:
                 "acw_ended_by": declared_intent,
             }
         )
-        self._store(assignment, still_open=False)
+        await self._store(assignment, still_open=False)
         return assignment
 
     # --- internals ---------------------------------------------------------------------------
@@ -302,7 +374,7 @@ class AssignmentService:
     ) -> Assignment:
         assignment = self._require_open(assignment_id)
         assignment = assignment.model_copy(update={"outcome": outcome, "decline_reason": reason})
-        self._store(assignment, still_open=False)
+        await self._store(assignment, still_open=False)
 
         # Both paths exclude the agent from this call. Otherwise the very next matching
         # tick hands the same caller to the same desk, indefinitely.
@@ -344,10 +416,13 @@ class AssignmentService:
             )
         )
 
-    def _store(self, assignment: Assignment, *, still_open: bool) -> None:
+    async def _store(self, assignment: Assignment, *, still_open: bool) -> None:
+        """Update the projection, then the durable row (`D78`)."""
         self._assignments[assignment.assignment_id] = assignment
         if not still_open:
             self._open_by_call.pop(assignment.call_session_id, None)
+        if self._store_backend is not None:
+            await self._store_backend.save(assignment)
 
     def _require(self, assignment_id: str) -> Assignment:
         assignment = self._assignments.get(assignment_id)
@@ -365,3 +440,11 @@ class AssignmentService:
 
 
 __all__ = ["AssignmentService", "OfferPolicy"]
+
+
+__all__ = [
+    "AssignmentService",
+    "AssignmentStore",
+    "InMemoryAssignmentStore",
+    "OfferPolicy",
+]
