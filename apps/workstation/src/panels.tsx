@@ -68,9 +68,16 @@ const REASON_HINT: Record<string, string> = {
   last_call_fulfilled: "สายสุดท้ายของคุณจบแล้ว — เลือกสถานะถัดไปเองเมื่อพร้อม",
 };
 
+const LOOKUP_LABEL: Record<string, string> = {
+  policy_number: "เลขกรมธรรม์",
+  claim_number: "เลขเคลม",
+  date_of_birth: "วันเกิด",
+  citizen_id_last4: "เลขบัตรประชาชน",
+};
+
 const OUTCOME_LABEL: Record<string, string> = {
   confirmed: "ยืนยันแล้วว่าเป็นเจ้าของกรมธรรม์",
-  third_party: "ผู้ดำเนินการแทน",
+  third_party: "ผู้ดำเนินการแทน (ตรวจสอบสิทธิ์แล้ว)",
   not_this_person: "ไม่ใช่บุคคลนี้",
 };
 
@@ -96,10 +103,30 @@ export function useSecondTicker(active: boolean): number {
   return Date.now();
 }
 
-export function elapsedSince(iso: string | null | undefined, now: number): number | null {
+/**
+ * Seconds since a **server** timestamp, corrected for a browser clock that disagrees.
+ *
+ * `now - Date.parse(server_iso)` was silently mixing two clocks. On one machine they
+ * agree and it is invisible; on a demo laptop whose clock has drifted, or a second machine
+ * with a bad NTP sync, every duration on screen is wrong by the offset and nothing points
+ * at the clock. `server_time` rides in every snapshot for exactly this and was read by
+ * nothing (`D68`); `skewMs` is `server - browser` measured when the snapshot arrived.
+ */
+export function elapsedSince(
+  iso: string | null | undefined,
+  now: number,
+  skewMs = 0,
+): number | null {
   if (!iso) return null;
   const started = Date.parse(iso);
-  return Number.isNaN(started) ? null : (now - started) / 1000;
+  return Number.isNaN(started) ? null : (now + skewMs - started) / 1000;
+}
+
+/** `server_time - browser_now`, in ms. Zero when the server did not say. */
+export function clockSkewMs(serverTime: string | null | undefined): number {
+  if (!serverTime) return 0;
+  const server = Date.parse(serverTime);
+  return Number.isNaN(server) ? 0 : server - Date.now();
 }
 
 // --- the offer card -------------------------------------------------------
@@ -150,6 +177,21 @@ export function OfferCard({
           </span>
           <span className="badge">รอมาแล้ว {mmss(offer.waited_s)}</span>
         </div>
+
+        {/* What the call is ABOUT, not only why it came here (`D69`). Server-gated: at
+            L1 the name is absent from the payload, so there is nothing to hide here. */}
+        {(offer.customer_name_th || offer.summary_th) && (
+          <div className="rationale" style={{ borderLeftColor: "var(--info)" }}>
+            {offer.customer_name_th && <div><strong>{offer.customer_name_th}</strong></div>}
+            {offer.summary_th && <div>{offer.summary_th}</div>}
+          </div>
+        )}
+
+        {offer.first_action_th && (
+          <div className="faint" style={{ marginTop: 8 }}>
+            เริ่มจาก: {offer.first_action_th}
+          </div>
+        )}
 
         {offer.rationale_th && (
           <div className="rationale">
@@ -313,9 +355,17 @@ export function IdentityPanel({
   // the server refuses both with a 400 (`attestation.py`). Customer search is not built
   // yet (`Q18`), so this is a real dead end for the rest of the call — and it must LOOK
   // like one. A live-looking button that always errors reads as a broken screen.
+  // With no proposed customer there is nothing to confirm, nothing to act *for*, and
+  // nothing to reject either — so all three are greyed, not just the first two. This covers
+  // both routes into that state: a caller who was never identified (L0 from the start), and
+  // one whose match the agent rejected, which clears the customer by design (`D42`).
+  // Customer search does not exist yet (`Q18`), so on this call it is a dead end, and it has
+  // to look like one rather than answering 400 on every click.
   const noCustomer = identity.customer_id === null;
   const noCustomerHint = noCustomer
-    ? "ไม่มีลูกค้าที่ระบบเสนอไว้แล้ว — ต้องค้นหาลูกค้าก่อน (ยังไม่มีในระบบ)"
+    ? identity.attested_outcome === "not_this_person"
+      ? "ปฏิเสธการจับคู่แล้ว — ระบบไม่มีลูกค้าให้ยืนยัน ต้องค้นหาลูกค้าก่อน (ยังไม่มีในระบบ)"
+      : "ยังไม่ทราบว่าเป็นใคร — ไม่มีข้อมูลให้ยืนยันหรือปฏิเสธ ต้องค้นหาลูกค้าก่อน (ยังไม่มีในระบบ)"
     : undefined;
 
   return (
@@ -376,7 +426,8 @@ export function IdentityPanel({
 
       {identity.authority_check_required && (
         <div className="rationale" style={{ borderLeftColor: "var(--warn)" }}>
-          ผู้ติดต่อดำเนินการแทนเจ้าของกรมธรรม์ — ตรวจสอบสิทธิ์ในการดำเนินการก่อน
+          ผู้ติดต่อดำเนินการแทนเจ้าของกรมธรรม์ (เจ้าหน้าที่ตรวจสอบสิทธิ์แล้ว) —
+          บันทึกทุกอย่างในนามผู้ดำเนินการแทน ไม่ใช่เจ้าของกรมธรรม์
         </div>
       )}
 
@@ -425,12 +476,13 @@ export function IdentityPanel({
 
         <div style={{ borderTop: "1px solid var(--line)", paddingTop: 10 }}>
           <div className="field-label">ผู้ดำเนินการแทน (ต้องกรอกทั้งสองช่อง)</div>
-          {/* Says out loud what `D42` decided, because the screen looked like a bug
-              otherwise: third party is NOT a promotion. The case context attaches so the
-              agent can see which policy this is about; disclosure stays locked, because a
-              relative holding the documents is not the policyholder. */}
+          {/* The label carries the agent's obligation, because the button *is* the
+              authority check (`D65`). Pressing it says two things at once: this person may
+              act for the policyholder, and I have satisfied myself of that. There is no
+              second step, and there was never a control for one. */}
           <div className="faint" style={{ marginBottom: 6 }}>
-            บันทึกว่าเป็นผู้ดำเนินการแทน — ยังไม่เปิดเผยรายละเอียดกรมธรรม์ และจะมีขั้นตอนตรวจสอบสิทธิ์
+            กดเมื่อตรวจสอบแล้วว่ามีสิทธิ์ดำเนินการแทน — ระบบจะบันทึกว่าเป็น “ผู้ดำเนินการแทน”
+            ไม่ใช่เจ้าของกรมธรรม์
           </div>
           <div className="stack">
             <input
@@ -457,14 +509,15 @@ export function IdentityPanel({
                 })
               }
             >
-              ยืนยันว่าเป็นผู้ดำเนินการแทน
+              ยืนยันว่ามีสิทธิ์ดำเนินการแทน
             </button>
           </div>
         </div>
 
         <button
           className="danger"
-          disabled={disabled}
+          disabled={disabled || noCustomer}
+          title={noCustomerHint}
           onClick={() => onAttest({ outcome: "not_this_person", amend: reopened })}
         >
           ไม่ใช่บุคคลนี้
@@ -547,23 +600,41 @@ export function CapturePanel({
 
       {capture && capture.state !== "open" && capture.length > 0 && (
         <div className="stack" style={{ marginTop: 10 }}>
+          {/* The titles say what the agent may ASK for, because the matcher now accepts
+              all of it (`D66`): the whole number, the last N, the first N, or — for a
+              date — day+month or the year alone, in either era (`D67`). The old labels
+              implied the caller had to key the entire thing. */}
           <div className="faint">
             เทียบว่าเลขนี้ตรงกับอะไร — เป็นเพียงหลักฐาน ไม่เปลี่ยนระดับการยืนยันตัวตน
+            <br />
+            ขอเป็นเลขเต็ม ตัวท้าย หรือตัวแรกก็ได้ ระบบจะบอกว่าตรงแบบไหน
           </div>
           <div className="row">
-            <button onClick={() => onLookup("policy_number")} disabled={busy}>
+            <button
+              onClick={() => onLookup("policy_number")}
+              disabled={busy}
+              title="รับได้ทั้งเลขเต็ม, N ตัวท้าย หรือ N ตัวแรก (อย่างน้อย 3 หลัก)"
+            >
               เทียบเลขกรมธรรม์
             </button>
-            <button onClick={() => onLookup("claim_number")} disabled={busy}>
+            <button
+              onClick={() => onLookup("claim_number")}
+              disabled={busy}
+              title="รับได้ทั้งเลขเต็ม, N ตัวท้าย หรือ N ตัวแรก (อย่างน้อย 3 หลัก)"
+            >
               เทียบเลขเคลม
             </button>
-            <button onClick={() => onLookup("date_of_birth")} disabled={busy}>
-              เทียบวันเกิด
+            <button
+              onClick={() => onLookup("date_of_birth")}
+              disabled={busy}
+              title="รับได้ทั้ง ววดดปปปป, ปปปปดดวว, ววดด หรือปีเกิดอย่างเดียว — ค.ศ. หรือ พ.ศ. ก็ได้"
+            >
+              เทียบวันเกิด / ปีเกิด
             </button>
           </div>
           {capture.lookups.map((lookup, index) => (
             <div key={index} className={`badge ${lookup.matched ? "ok" : "bad"}`}>
-              {lookup.kind}: {lookup.matched ? "ตรงกัน" : "ไม่ตรง"}
+              {LOOKUP_LABEL[lookup.kind] ?? lookup.kind}: {lookup.matched ? "ตรงกัน" : "ไม่ตรง"}
               {lookup.matched_value ? ` · ${lookup.matched_value}` : ""}
               {lookup.detail ? ` · ${lookup.detail}` : ""}
             </div>
@@ -722,14 +793,51 @@ export function BriefPanel({ brief }: { brief: Brief }) {
 
 // --- queues ---------------------------------------------------------------
 
+/**
+ * Queue depth, split into what this agent can act on and what they cannot (`D70`).
+ *
+ * Each row is a QUEUE and its depth, not a caller — worth saying, because the strip reads
+ * like a list of people until you notice the numbers. All nine queues used to be listed
+ * identically, so a health agent watched motor and life fill up with no way to tell which
+ * of those numbers were theirs. `mine` comes from the server, which already owns the
+ * skill-to-queue mapping the matcher uses.
+ */
 export function QueueStrip({ queues }: { queues: Queue[] }) {
+  const [showAll, setShowAll] = useState(false);
+  const mine = queues.filter((q) => q.mine);
+  const shown = showAll ? queues : mine;
+  const othersWaiting = queues.filter((q) => !q.mine).reduce((n, q) => n + q.waiting, 0);
+
   return (
     <div className="panel">
-      <h2>คิว</h2>
-      {queues.map((queue) => (
+      <div className="row">
+        <h2 style={{ margin: 0 }}>คิว</h2>
+        <div className="spacer" />
+        <button
+          className={showAll ? "ghost" : "ghost on"}
+          onClick={() => setShowAll(false)}
+          title="เฉพาะคิวที่คุณมีทักษะรับได้"
+        >
+          ของฉัน ({mine.length})
+        </button>
+        <button
+          className={showAll ? "ghost on" : "ghost"}
+          onClick={() => setShowAll(true)}
+          title="ทุกคิวในระบบ รวมคิวที่คุณรับไม่ได้"
+        >
+          ทั้งหมด ({queues.length})
+        </button>
+      </div>
+
+      {shown.length === 0 && <p className="faint">ไม่มีคิวที่ตรงกับทักษะของคุณ</p>}
+
+      {shown.map((queue) => (
         <div className="queue" key={queue.queue_id}>
           <span className="dot" style={{ color: queue.is_open ? "var(--ok)" : "var(--bad)" }} />
-          <span>{queue.label_th}</span>
+          <span style={{ opacity: queue.mine ? 1 : 0.55 }}>
+            {queue.label_th}
+            {showAll && !queue.mine && <span className="faint"> · รับไม่ได้</span>}
+          </span>
           <div className="spacer" />
           {queue.is_open ? (
             <span className="mono muted">
@@ -742,6 +850,12 @@ export function QueueStrip({ queues }: { queues: Queue[] }) {
           )}
         </div>
       ))}
+
+      {!showAll && othersWaiting > 0 && (
+        <div className="faint" style={{ marginTop: 6 }}>
+          อีก {othersWaiting} สายรออยู่ในคิวที่คุณรับไม่ได้
+        </div>
+      )}
     </div>
   );
 }

@@ -10,12 +10,18 @@ Three outcomes, not two:
 * **Confirmed** — verified by challenge. The agent records *which* challenge. → `L3`.
 * **Not this person** — the ANI guess was wrong. → `L0`, and the rejected `customer_id`
   is suppressed for the rest of the call so nothing re-proposes them.
-* **Third party acting for them** — a daughter calling about her father's claim. The case
-  context stays; **disclosure stays locked**; a playbook step appears to check authority.
+* **Third party with authority to act** — a daughter calling about her father's claim,
+  whose authority the agent has checked. → `L3`, since `D65`.
 
-The third button is the whole point. Forced into a binary, that daughter gets recorded as
-a verified policyholder, and the disclosure log — the only reason to keep one under PDPA —
-becomes a record of something that did not happen.
+The third button is the whole point, and what makes it work is the **outcome**, not the
+level. Forced into a binary, that daughter gets recorded as a verified *policyholder*, and
+the disclosure log — the only reason to keep one under PDPA — becomes a record of something
+that did not happen. Recording her as `third_party`, named and related, keeps the log true
+while still letting the agent do their job.
+
+`D65` corrected the first implementation, which held third parties at `L1` and so withheld
+the very context the agent needed to help a caller they had just verified. There was also
+no second control to complete an authority check with, so the level was stuck for good.
 
 **Nothing here is automatic.** A keypad lookup may say "these digits match policy
 MT-2025-004512"; that is evidence, and evidence is not an attestation (`D44`). Only the
@@ -185,13 +191,13 @@ class AttestationService:
                 raise PermanentError("a third party must state their relationship to the customer")
             resolution = current.model_copy(
                 update={
-                    # Deliberately NOT promoted. The case context attaches so the agent
-                    # can see which policy this is about, and disclosure stays locked.
-                    "assurance": min(
-                        current.assurance,
-                        AssuranceLevel.L1_PROBABLE,
-                        key=lambda level: level.rank,
-                    ),
+                    # PROMOTED, since `D65`. The button says the agent has checked that
+                    # this person is authorised to act for the policyholder, so the level
+                    # follows the attestation — the same rule as CONFIRMED. What keeps the
+                    # log honest is not a lower number but the OUTCOME, which stays
+                    # `third_party` forever: the record says "an authorised representative
+                    # was verified", never "the policyholder was verified".
+                    "assurance": AssuranceLevel.L3_VERIFIED,
                     "method": IdentityMethod.MANUAL,
                     "resolved_at": now,
                     "evidence": {
@@ -199,7 +205,12 @@ class AttestationService:
                         "third_party_declared_by": agent_id,
                         "third_party_name": caller_name,
                         "relationship": relationship,
+                        # Kept, and it is now a *record* rather than a pending task: the
+                        # agent asserts they made this check by pressing the button. The
+                        # workstation still shows the reminder, because acting for someone
+                        # else is worth flagging for the whole call.
                         "authority_check_required": True,
+                        "authority_attested_by": agent_id,
                     },
                 }
             )
