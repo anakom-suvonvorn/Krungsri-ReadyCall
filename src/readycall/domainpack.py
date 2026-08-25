@@ -147,6 +147,25 @@ class MenuSettings:
 
 
 @dataclass(frozen=True, slots=True)
+class PersonalisationSpec:
+    """How a recognised caller's menu is reordered (`D37`).
+
+    Every parameter is here rather than in code because all of them are domain policy the
+    bank owns: which claim statuses count as open, how soon a renewal is "soon", how long
+    an app view stays relevant (`D28`). The weights are guesses until there is real call
+    data to tune them against.
+    """
+
+    enabled: bool
+    max_promoted: int
+    renumber: bool
+    weights: dict[str, float]
+    open_claim_statuses: frozenset[str]
+    renewal_window_days: int
+    app_view_window_hours: int
+
+
+@dataclass(frozen=True, slots=True)
 class LanguageMenuSpec:
     """The language menu (`D38`) — modelled now, Thai-only in behaviour.
 
@@ -170,8 +189,7 @@ class DomainPack:
     challenges: dict[str, ChallengeSpec]
     menu_settings: MenuSettings
     language_menu: LanguageMenuSpec | None = None
-    personalisation_enabled: bool = True
-    max_promoted_options: int = 2
+    personalisation: PersonalisationSpec | None = None
     source_dir: Path = field(default=Path("config"))
 
     # --- lookups the rest of the system actually uses --------------------------------
@@ -284,8 +302,7 @@ class DomainPack:
             challenges=challenges,
             menu_settings=settings,
             language_menu=language_menu,
-            personalisation_enabled=bool(personalisation.get("enabled", True)),
-            max_promoted_options=int(personalisation.get("max_promoted", 2)),
+            personalisation=personalisation,
             source_dir=directory,
         )
         pack.validate()
@@ -376,7 +393,9 @@ class DomainPack:
     @staticmethod
     def _load_menus(
         raw: dict[str, Any],
-    ) -> tuple[dict[str, MenuSpec], MenuSettings, dict[str, Any], LanguageMenuSpec | None]:
+    ) -> tuple[
+        dict[str, MenuSpec], MenuSettings, PersonalisationSpec | None, LanguageMenuSpec | None
+    ]:
         settings_raw = raw.get("settings") or {}
         settings = MenuSettings(
             barge_in=bool(settings_raw.get("barge_in", True)),
@@ -417,7 +436,26 @@ class DomainPack:
             if language_raw.get("prompt")
             else None
         )
-        return menus, settings, raw.get("personalisation") or {}, language_menu
+        p_raw = raw.get("personalisation") or {}
+        personalisation = (
+            PersonalisationSpec(
+                enabled=bool(p_raw.get("enabled", True)),
+                max_promoted=int(p_raw.get("max_promoted", 2)),
+                renumber=bool(p_raw.get("renumber", True)),
+                weights={
+                    str(rule["signal"]): float(rule.get("weight", 1.0))
+                    for rule in (p_raw.get("rules") or ())
+                },
+                open_claim_statuses=frozenset(
+                    str(s) for s in (p_raw.get("open_claim_statuses") or ())
+                ),
+                renewal_window_days=int(p_raw.get("renewal_window_days", 30)),
+                app_view_window_hours=int(p_raw.get("app_view_window_hours", 24)),
+            )
+            if p_raw
+            else None
+        )
+        return menus, settings, personalisation, language_menu
 
     # --- validation ------------------------------------------------------------------
 

@@ -38,6 +38,17 @@ settings:
 personalisation:
   enabled: true
   max_promoted: 2             # promote at most 2, or the menu stops being predictable
+  # When the order changes, the options are RENUMBERED so the caller still hears
+  # "กด 1 ... กด 2 ... กด 3" in order. Reading numbers out of sequence is worse than not
+  # personalising at all. What the caller pressed is resolved back to the canonical
+  # option immediately, so `menu_path` means the same thing on every call (D81).
+  renumber: true
+  # Which claim statuses count as "open". In config because it is domain vocabulary the
+  # bank owns, not mechanism (D28) - a new status must not silently stop being a signal.
+  open_claim_statuses: [pending_documents, submitted, under_review, awaiting_payment]
+  renewal_window_days: 30
+  # How recently they must have looked at a product in the app for it to count.
+  app_view_window_hours: 24
   rules:
     # An active policy in a line makes that line's option come first.
     - signal: has_active_policy_in_line

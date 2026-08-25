@@ -43,6 +43,9 @@ defaults:
 # directions: every role resolves to a defined prompt, and every prompt is reachable from
 # either this table, `menus.yaml` or `dids.yaml`.
 flow:
+  # The greeting for a number we do not publish an entry for. Every DID in
+  # `dids.yaml` names its own; this is the floor, not a default anyone edits.
+  greeting_fallback: greeting.general
   recording_notice: notice.recording
   menu_option: menu.option
   menu_reserved_hint: menu.reserved_hint

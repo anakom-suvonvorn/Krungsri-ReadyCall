@@ -47,6 +47,7 @@ class PromptRole(StrEnum):
     is a startup error, not a silent gap that only shows up when a caller reaches it.
     """
 
+    GREETING_FALLBACK = "greeting_fallback"
     RECORDING_NOTICE = "recording_notice"
     MENU_OPTION = "menu_option"
     MENU_RESERVED_HINT = "menu_reserved_hint"
