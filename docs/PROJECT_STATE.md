@@ -43,7 +43,7 @@ services doing real work - only the *edges* (phone, speech, AI, the bank's data,
 are still fakes. An agent signs in at `/workstation`, a caller arrives, the desk rings, the brief is
 already there, and the disclosure gate moves when the agent attests.
 
-Verified on 2026-08-24: **326 tests pass**, `ruff check` and `ruff format --check` clean,
+Verified on 2026-08-24: **329 tests pass**, `ruff check` and `ruff format --check` clean,
 `mypy --strict` clean over 81 source files, and all three scenarios replay byte-identically.
 
 ```
@@ -312,8 +312,8 @@ performing by hand, i.e. what the next services take over (`D36`).
 
 | | |
 |---|---|
-| Source files | 110 (`src/` 82 + `tests/` + `scripts/` + `mock/`) |
-| Tests | 326, all passing, ~14 s |
+| Source files | 111 (`src/` 82 + `tests/` + `scripts/` + `mock/`) |
+| Tests | 329, all passing, ~13 s |
 | Ports defined | 8 (telephony, stt, llm, tts, core_data, event_bus, blob_storage, agent_directory) |
 | Adapters | 9 fakes/nulls + a caching/circuit-breaking decorator; no real vendor adapter yet |
 | Call states | 15, transition table self-validated (the rating is an event, not a state — `D46`) |

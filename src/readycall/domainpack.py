@@ -75,6 +75,24 @@ class QueueSpec:
 
 
 @dataclass(frozen=True, slots=True)
+class ChallengeSpec:
+    """One way an agent may verify who is on the phone (`D42`, `D72`).
+
+    In config rather than in code because the list is domain policy, not mechanism, and
+    because it must reach the workstation as data — it existed twice and the copies could
+    drift, with the server refusing an option the screen had offered.
+    """
+
+    code: str
+    label_th: str
+    #: Whether this challenge is strong enough to reach `L3_VERIFIED`.
+    promotes: bool = True
+    #: Whether the agent must type what they actually did. True for `other`, where a blank
+    #: is the unfalsifiable audit row `D42` exists to prevent.
+    requires_note: bool = False
+
+
+@dataclass(frozen=True, slots=True)
 class DidSpec:
     number: str
     label: str
@@ -135,6 +153,7 @@ class DomainPack:
     queues: dict[str, QueueSpec]
     dids: dict[str, DidSpec]
     menus: dict[str, MenuSpec]
+    challenges: dict[str, ChallengeSpec]
     menu_settings: MenuSettings
     personalisation_enabled: bool = True
     max_promoted_options: int = 2
@@ -232,6 +251,7 @@ class DomainPack:
         skills, queues = cls._load_skills(_read(directory / "skills.yaml"))
         dids = cls._load_dids(_read(directory / "dids.yaml"))
         menus, settings, personalisation = cls._load_menus(_read(directory / "menus.yaml"))
+        challenges = cls._load_challenges(_read(directory / "challenges.yaml"))
 
         pack = cls(
             intents=intents,
@@ -239,6 +259,7 @@ class DomainPack:
             queues=queues,
             dids=dids,
             menus=menus,
+            challenges=challenges,
             menu_settings=settings,
             personalisation_enabled=bool(personalisation.get("enabled", True)),
             max_promoted_options=int(personalisation.get("max_promoted", 2)),
@@ -252,8 +273,24 @@ class DomainPack:
             queues=len(queues),
             dids=len(dids),
             menus=len(menus),
+            challenges=len(challenges),
         )
         return pack
+
+    @staticmethod
+    def _load_challenges(raw: dict[str, Any]) -> dict[str, ChallengeSpec]:
+        out: dict[str, ChallengeSpec] = {}
+        for entry in raw.get("challenges", []):
+            spec = ChallengeSpec(
+                code=str(entry["code"]),
+                label_th=str(entry["label_th"]),
+                promotes=bool(entry.get("promotes", True)),
+                requires_note=bool(entry.get("requires_note", False)),
+            )
+            out[spec.code] = spec
+        if not out:
+            raise ConfigError("challenges.yaml defines no challenges")
+        return out
 
     @staticmethod
     def _load_intents(raw: dict[str, Any]) -> dict[str, IntentSpec]:

@@ -1,0 +1,48 @@
+# How an agent may verify who is on the phone (D42, D57, D72).
+#
+# This file is the SINGLE source of truth for the list. It used to exist twice - a
+# frozenset in `services/identity/attestation.py` and a hand-kept array in the React
+# panel - and the server rejects anything not in its copy, so the two drifting apart
+# means an agent picks an option that is refused on submit. `Q12` says this list is
+# unconfirmed and will change once Krungsri weigh in, so the drift was scheduled, not
+# hypothetical.
+#
+# Same shape as `menus.yaml` (D48): one file, several surfaces. The workstation renders
+# what the server sends and cannot invent an option the server would refuse.
+#
+# `promotes: true` means the challenge is strong enough to reach L3_VERIFIED. Keep this
+# honest - it is the difference between "we checked something" and "we established who
+# this is". Anything a person standing in the same room could answer is not verification.
+
+challenges:
+  - code: date_of_birth
+    label_th: "วันเกิด"
+    promotes: true
+
+  - code: citizen_id_last4
+    label_th: "เลขบัตรประชาชน 4 ตัวท้าย"
+    promotes: true
+    # Never the whole number (D43). Last four is a check; the full id is a liability we
+    # have no reason to hold.
+
+  - code: policy_number
+    label_th: "เลขกรมธรรม์"
+    promotes: true
+
+  - code: recent_claim_amount
+    label_th: "ยอดเคลมล่าสุด"
+    promotes: true
+
+  # The escape hatch, and D44 argued it should have been built FIRST rather than last.
+  # Real verification does not fit a closed list: recognised the voice from last week,
+  # read a claim reference off an SMS, transferred in from a branch that already checked
+  # ID, answered a question about a recent transaction. A four-item dropdown forces every
+  # one of those into the nearest lie, and a false category is worse evidence than a true
+  # sentence nobody can chart.
+  #
+  # `requires_note: true` is what keeps it honest - an `other` with nothing written in it
+  # is the unfalsifiable audit row D42 exists to prevent.
+  - code: other
+    label_th: "อื่น ๆ (ระบุเอง)"
+    promotes: true
+    requires_note: true

@@ -1,0 +1,1005 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!--
+  Krungsri ReadyCall - the agent workstation, wired.
+
+  This is the READABLE copy of docs/explanations/P2b_workstation_client.md. Same content,
+  same audit, laid out for a screen. Open it in any browser; it needs no server and no
+  build step. Google Fonts are linked but every face has a real fallback stack, so it
+  reads correctly with no internet - which matters, because the venue may not have any.
+
+  Keep the two in step. The markdown is the greppable, diffable copy and is what a future
+  session should read; this one is what a human should look at.
+-->
+<title>Workstation Wiring</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+
+<style>
+  :root {
+    --ground:   #f2f5f9;
+    --surface:  #ffffff;
+    --sunken:   #e9eef5;
+    --ink:      #131722;
+    --muted:    #59616f;
+    --faint:    #838c9b;
+    --line:     #d6dde7;
+    --line-firm:#b8c3d2;
+
+    /* The page's spine: these two colours mean "who owns this value". */
+    --server:   #2549b8;
+    --server-bg:#e5ebfa;
+    --client:   #9c5406;
+    --client-bg:#fbeddc;
+    --wire:     #6b46a8;
+    --wire-bg:  #efe8fa;
+
+    --ok:       #14795a;
+    --ok-bg:    #dcf1e9;
+    --bad:      #b5342a;
+    --bad-bg:   #fbe6e3;
+    --warn:     #96650a;
+    --warn-bg:  #fbf0d8;
+
+    --shadow: 0 1px 2px rgba(19,23,34,.06), 0 8px 24px -16px rgba(19,23,34,.28);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:   #0d1017;
+      --surface:  #151a24;
+      --sunken:   #1b2130;
+      --ink:      #e7ebf2;
+      --muted:    #9aa4b4;
+      --faint:    #6f7889;
+      --line:     #262e3d;
+      --line-firm:#3a445780;
+
+      --server:   #7c9cf5;
+      --server-bg:#1a2440;
+      --client:   #e0a154;
+      --client-bg:#33240f;
+      --wire:     #b195e8;
+      --wire-bg:  #241a3a;
+
+      --ok:       #55c99d;
+      --ok-bg:    #102c23;
+      --bad:      #f08579;
+      --bad-bg:   #331916;
+      --warn:     #ddb055;
+      --warn-bg:  #2e2410;
+
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px -16px rgba(0,0,0,.8);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground:   #0d1017;
+    --surface:  #151a24;
+    --sunken:   #1b2130;
+    --ink:      #e7ebf2;
+    --muted:    #9aa4b4;
+    --faint:    #6f7889;
+    --line:     #262e3d;
+    --line-firm:#3a4457;
+
+    --server:   #7c9cf5;
+    --server-bg:#1a2440;
+    --client:   #e0a154;
+    --client-bg:#33240f;
+    --wire:     #b195e8;
+    --wire-bg:  #241a3a;
+
+    --ok:       #55c99d;
+    --ok-bg:    #102c23;
+    --bad:      #f08579;
+    --bad-bg:   #331916;
+    --warn:     #ddb055;
+    --warn-bg:  #2e2410;
+
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px -16px rgba(0,0,0,.8);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+    font-size: 16px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px 96px; }
+  .col  { max-width: 70ch; }
+
+  h1, h2, h3, h4 {
+    font-family: Archivo, "IBM Plex Sans", sans-serif;
+    text-wrap: balance;
+    margin: 0;
+    letter-spacing: -0.015em;
+  }
+
+  /* --- masthead --- */
+  header.masthead {
+    border-bottom: 1px solid var(--line);
+    background: var(--surface);
+    padding: 44px 0 30px;
+    margin-bottom: 40px;
+  }
+  header.masthead .wrap { padding-bottom: 0; }
+  .eyebrow {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11.5px;
+    letter-spacing: .13em;
+    text-transform: uppercase;
+    color: var(--faint);
+    margin-bottom: 14px;
+  }
+  h1 { font-size: clamp(32px, 5vw, 46px); font-weight: 700; line-height: 1.08; }
+  .standfirst {
+    font-size: 18.5px;
+    color: var(--muted);
+    margin: 16px 0 0;
+    max-width: 66ch;
+  }
+
+  /* --- ownership legend, the page's key --- */
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 10px;
+    margin-top: 26px;
+  }
+  .key {
+    display: inline-flex; align-items: center; gap: 8px;
+    border: 1px solid var(--line); border-radius: 3px;
+    padding: 7px 12px 7px 10px;
+    background: var(--surface);
+    font-size: 13.5px;
+  }
+  .key b {
+    font-family: "IBM Plex Mono", monospace;
+    font-weight: 600; font-size: 12px;
+    letter-spacing: .02em;
+  }
+  .swatch { width: 11px; height: 11px; border-radius: 2px; flex: none; }
+  .sw-server { background: var(--server); }
+  .sw-client { background: var(--client); }
+  .sw-wire   { background: var(--wire); }
+
+  /* --- sections --- */
+  section { margin: 0 0 68px; }
+  .sec-head {
+    display: flex; align-items: baseline; gap: 14px;
+    border-top: 2px solid var(--ink);
+    padding-top: 12px;
+    margin-bottom: 22px;
+  }
+  .sec-num {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12px; font-weight: 600;
+    color: var(--faint);
+    flex: none;
+  }
+  h2 { font-size: 25px; font-weight: 600; }
+  h3 {
+    font-size: 17px; font-weight: 600;
+    margin: 34px 0 10px;
+  }
+  p { margin: 0 0 15px; }
+  .col p:last-child { margin-bottom: 0; }
+
+  code, .mono {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: .885em;
+  }
+  code {
+    background: var(--sunken);
+    padding: 1px 5px;
+    border-radius: 3px;
+    border: 1px solid var(--line);
+  }
+  .m-server { color: var(--server); font-weight: 500; }
+  .m-client { color: var(--client); font-weight: 500; }
+
+  /* --- figures --- */
+  figure {
+    margin: 30px 0;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 26px 22px 18px;
+    box-shadow: var(--shadow);
+    overflow-x: auto;
+  }
+  figure svg { display: block; max-width: 100%; height: auto; margin: 0 auto; }
+  figcaption {
+    margin-top: 18px;
+    padding-top: 13px;
+    border-top: 1px solid var(--line);
+    font-size: 13.5px;
+    color: var(--muted);
+    max-width: 76ch;
+  }
+  figcaption b { color: var(--ink); font-weight: 600; }
+
+  /* --- tables --- */
+  .tablewrap { overflow-x: auto; margin: 24px 0; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; min-width: 640px; }
+  th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  thead th {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11px; font-weight: 600;
+    letter-spacing: .08em; text-transform: uppercase;
+    color: var(--faint);
+    background: var(--sunken);
+    border-bottom: 1px solid var(--line-firm);
+    white-space: nowrap;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  td.id { font-family: "IBM Plex Mono", monospace; font-size: 12.5px; white-space: nowrap; }
+  td.num { font-variant-numeric: tabular-nums; }
+
+  .owner {
+    display: inline-block;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 10.5px; font-weight: 600;
+    letter-spacing: .06em; text-transform: uppercase;
+    padding: 2px 7px; border-radius: 3px;
+    white-space: nowrap;
+  }
+  .o-server { background: var(--server-bg); color: var(--server); }
+  .o-client { background: var(--client-bg); color: var(--client); }
+  .o-wire   { background: var(--wire-bg);   color: var(--wire); }
+
+  .verb {
+    display: inline-block;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 10.5px; font-weight: 600;
+    padding: 2px 6px; border-radius: 3px;
+    background: var(--sunken); color: var(--muted);
+    border: 1px solid var(--line);
+    margin-right: 6px;
+  }
+  .v-get  { color: var(--ok); border-color: var(--ok); background: var(--ok-bg); }
+  .v-post { color: var(--server); border-color: var(--server); background: var(--server-bg); }
+  .v-ws   { color: var(--wire); border-color: var(--wire); background: var(--wire-bg); }
+
+  /* --- findings --- */
+  .finding {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--faint);
+    border-radius: 4px;
+    padding: 18px 20px;
+    margin: 0 0 16px;
+    box-shadow: var(--shadow);
+  }
+  .finding.high { border-left-color: var(--ok); }
+  .finding.med  { border-left-color: var(--warn); }
+  .finding.low  { border-left-color: var(--faint); }
+  .finding h4 {
+    font-size: 16px; font-weight: 600;
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    margin-bottom: 9px;
+  }
+  .sev {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 10px; font-weight: 600;
+    letter-spacing: .08em; text-transform: uppercase;
+    padding: 2px 7px; border-radius: 3px;
+    flex: none;
+  }
+  .s-high { background: var(--bad-bg); color: var(--bad); }
+  .s-med  { background: var(--warn-bg); color: var(--warn); }
+  .s-low  { background: var(--sunken); color: var(--muted); }
+  .s-fixed{ background: var(--ok-bg); color: var(--ok); }
+  .finding p { font-size: 14.5px; margin-bottom: 10px; }
+  .finding p:last-child { margin-bottom: 0; }
+  .proof {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12.5px;
+    background: var(--sunken);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 10px 12px;
+    margin: 10px 0;
+    overflow-x: auto;
+    white-space: pre;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+  .proof b { color: var(--ink); font-weight: 600; }
+
+  .callout {
+    background: var(--sunken);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 16px 18px;
+    margin: 24px 0;
+    font-size: 14.5px;
+  }
+  .callout strong { font-weight: 600; }
+
+  ul.tight { margin: 0 0 15px; padding-left: 20px; }
+  ul.tight li { margin-bottom: 7px; }
+
+  hr.rule { border: none; border-top: 1px solid var(--line); margin: 46px 0; }
+
+  a { color: var(--server); }
+</style>
+</head>
+<body>
+
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Krungsri ReadyCall · P2b · apps/workstation</div>
+    <h1>Workstation Wiring</h1>
+    <p class="standfirst">
+      Everything the agent's browser tab holds, requests, receives and decides for itself —
+      drawn from the source. The durable copy lives in
+      <code>docs/explanations/P2b_workstation_client.md</code>; this is the same audit, illustrated.
+    </p>
+    <div class="legend">
+      <span class="key"><span class="swatch sw-server"></span><b>SERVER</b> owns it; the client renders it</span>
+      <span class="key"><span class="swatch sw-client"></span><b>CLIENT</b> owns it; nothing else knows</span>
+      <span class="key"><span class="swatch sw-wire"></span><b>WIRE</b> transport &amp; ordering</span>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+<!-- ============================================================ -->
+<section>
+  <div class="sec-head"><span class="sec-num">01</span><h2>The whole surface, in one picture</h2></div>
+
+  <div class="col">
+    <p>
+      The workstation is a single React bundle served as static files by the same FastAPI
+      process that serves the API. There is no separate dev server in play, no second origin,
+      and no direct connection to anything else — <b>no database, no Redis, no telephony</b>.
+      The browser has exactly <b>two</b> live channels to exactly one host.
+    </p>
+  </div>
+
+  <figure>
+    <svg viewBox="0 0 1000 470" role="img" aria-label="The workstation browser tab connects to one FastAPI process over HTTP and one WebSocket; the server alone reaches the services and data behind it.">
+      <defs>
+        <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+        </marker>
+        <marker id="ar-s" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#2549b8"/>
+        </marker>
+        <marker id="ar-w" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#6b46a8"/>
+        </marker>
+      </defs>
+
+      <!-- browser -->
+      <rect x="20" y="60" width="250" height="330" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      <text x="36" y="86" font-family="IBM Plex Mono, monospace" font-size="12" font-weight="600" fill="currentColor">BROWSER TAB</text>
+      <text x="36" y="103" font-family="IBM Plex Mono, monospace" font-size="11" fill="currentColor" opacity=".6">127.0.0.1:8000/workstation</text>
+
+      <rect x="38" y="118" width="214" height="60" rx="4" fill="#a8560622" stroke="#9c5406" stroke-width="1.3"/>
+      <text x="50" y="138" font-size="12.5" font-weight="600" fill="#9c5406">React app · App.tsx</text>
+      <text x="50" y="155" font-size="11.5" fill="currentColor" opacity=".75">holds one cached Snapshot</text>
+      <text x="50" y="170" font-size="11.5" fill="currentColor" opacity=".75">+ 14 pieces of local state</text>
+
+      <rect x="38" y="190" width="214" height="46" rx="4" fill="#6b46a822" stroke="#6b46a8" stroke-width="1.3"/>
+      <text x="50" y="209" font-size="12.5" font-weight="600" fill="#6b46a8">useSocket.ts</text>
+      <text x="50" y="225" font-size="11.5" fill="currentColor" opacity=".75">lastSeq · backoff · heartbeat</text>
+
+      <rect x="38" y="248" width="214" height="40" rx="4" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="4 3"/>
+      <text x="50" y="266" font-size="12" fill="currentColor" opacity=".8">HttpOnly cookie</text>
+      <text x="50" y="281" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="currentColor" opacity=".6">JS cannot read it</text>
+
+      <rect x="38" y="300" width="214" height="40" rx="4" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="4 3"/>
+      <text x="50" y="318" font-size="12" fill="currentColor" opacity=".8">softphone</text>
+      <text x="50" y="333" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="currentColor" opacity=".6">STUBBED until P5</text>
+
+      <!-- channels -->
+      <line x1="272" y1="150" x2="418" y2="150" stroke="#2549b8" stroke-width="2" marker-end="url(#ar-s)"/>
+      <line x1="418" y1="176" x2="272" y2="176" stroke="#2549b8" stroke-width="2" marker-end="url(#ar-s)"/>
+      <text x="284" y="142" font-family="IBM Plex Mono, monospace" font-size="11" font-weight="600" fill="#2549b8">HTTP · 15 endpoints</text>
+      <text x="284" y="194" font-size="11" fill="#2549b8" opacity=".85">every reply = a fresh Snapshot</text>
+
+      <line x1="272" y1="240" x2="418" y2="240" stroke="#6b46a8" stroke-width="2" stroke-dasharray="6 3" marker-end="url(#ar-w)"/>
+      <line x1="418" y1="266" x2="272" y2="266" stroke="#6b46a8" stroke-width="2" marker-end="url(#ar-w)"/>
+      <text x="284" y="232" font-family="IBM Plex Mono, monospace" font-size="11" font-weight="600" fill="#6b46a8">WS /v1/agent/ws</text>
+      <text x="284" y="284" font-size="11" fill="#6b46a8" opacity=".85">4 push types · sequenced</text>
+
+      <!-- server -->
+      <rect x="420" y="40" width="290" height="390" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      <text x="436" y="66" font-family="IBM Plex Mono, monospace" font-size="12" font-weight="600" fill="currentColor">ONE FASTAPI PROCESS</text>
+      <text x="436" y="83" font-family="IBM Plex Mono, monospace" font-size="11" fill="currentColor" opacity=".6">entrypoints/api.py · no --reload</text>
+
+      <rect x="438" y="98" width="254" height="40" rx="4" fill="#2549b822" stroke="#2549b8" stroke-width="1.3"/>
+      <text x="450" y="116" font-size="12.5" font-weight="600" fill="#2549b8">routers/agent.py</text>
+      <text x="450" y="131" font-size="11" fill="currentColor" opacity=".75">thin: validate, delegate, re-snapshot</text>
+
+      <rect x="438" y="148" width="254" height="40" rx="4" fill="#6b46a822" stroke="#6b46a8" stroke-width="1.3"/>
+      <text x="450" y="166" font-size="12.5" font-weight="600" fill="#6b46a8">realtime.py · AgentHub</text>
+      <text x="450" y="181" font-size="11" fill="currentColor" opacity=".75">per-agent seq + 200-msg outbox</text>
+
+      <rect x="438" y="198" width="254" height="56" rx="4" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <text x="450" y="216" font-size="12.5" font-weight="600" fill="currentColor">services/</text>
+      <text x="450" y="231" font-size="11" fill="currentColor" opacity=".75">presence · assignment · dispatch</text>
+      <text x="450" y="246" font-size="11" fill="currentColor" opacity=".75">matching · brief · identity · capture</text>
+
+      <rect x="438" y="264" width="254" height="40" rx="4" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <text x="450" y="282" font-size="12.5" font-weight="600" fill="currentColor">schemas.py · wire DTOs</text>
+      <text x="450" y="297" font-size="11" fill="currentColor" opacity=".75">the disclosure gate lives HERE</text>
+
+      <rect x="438" y="314" width="254" height="44" rx="4" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="4 3"/>
+      <text x="450" y="332" font-size="12" fill="currentColor" opacity=".85">state: all in memory</text>
+      <text x="450" y="347" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="currentColor" opacity=".6">a restart loses the shift (P2c)</text>
+
+      <text x="438" y="382" font-size="11.5" fill="currentColor" opacity=".7">also serves the static bundle at /workstation</text>
+      <text x="438" y="399" font-size="11.5" fill="currentColor" opacity=".7">and the customer simulator at /sim</text>
+
+      <!-- outside -->
+      <rect x="740" y="150" width="240" height="130" rx="6" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="5 4"/>
+      <text x="756" y="176" font-family="IBM Plex Mono, monospace" font-size="12" font-weight="600" fill="currentColor" opacity=".8">FAKES / NOT YET REAL</text>
+      <text x="756" y="199" font-size="11.5" fill="currentColor" opacity=".7">core data → fixtures + cache</text>
+      <text x="756" y="217" font-size="11.5" fill="currentColor" opacity=".7">telephony → POST /v1/demo/calls</text>
+      <text x="756" y="235" font-size="11.5" fill="currentColor" opacity=".7">STT / LLM / TTS → not wired</text>
+      <text x="756" y="253" font-size="11.5" fill="currentColor" opacity=".7">Postgres / Redis → absent</text>
+      <line x1="712" y1="215" x2="738" y2="215" stroke="currentColor" stroke-width="1.4" opacity=".55" marker-end="url(#ar)"/>
+
+      <text x="20" y="452" font-size="11.5" fill="currentColor" opacity=".65">The browser never reaches past the FastAPI process. Swapping any fake changes nothing on the left.</text>
+    </svg>
+    <figcaption>
+      <b>Two channels, one host, one origin.</b> Because the bundle is served by the API itself,
+      the WebSocket URL is derived from <code>window.location.host</code> and no CORS or second
+      origin is involved. The dashed box is the part that is still standing in for reality — and
+      none of it is visible to the client, which is the whole point of the port boundary.
+    </figcaption>
+  </figure>
+</section>
+
+<!-- ============================================================ -->
+<section>
+  <div class="sec-head"><span class="sec-num">02</span><h2>Who owns what</h2></div>
+
+  <div class="col">
+    <p>
+      This is the table to audit against. The client's stated rule is <em>the server owns state,
+      the client owns presentation</em> — so every row in <span class="m-client">amber</span> is
+      a deliberate exception, and every deliberate exception is a place the two can disagree.
+    </p>
+    <p>
+      The <span class="m-server">blue</span> rows all arrive inside one object,
+      <code>Snapshot</code>, returned by <code>GET /v1/agent/me</code> <em>and</em> by every
+      mutating request. There is no partial update path and no client-side derivation of them.
+    </p>
+  </div>
+
+  <h3>Server-owned — arrives as <code>Snapshot</code></h3>
+  <div class="tablewrap">
+    <table>
+      <thead>
+        <tr><th>Field</th><th>Owner</th><th>What it decides on screen</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="id">presence.system_state</td><td><span class="owner o-server">platform</span></td><td>Which panels exist at all: <code>on_call</code> shows the call bar, <code>after_call_work</code> shows the ACW bar</td></tr>
+        <tr><td class="id">presence.agent_intent</td><td><span class="owner o-server">person</span></td><td>Which status button reads as current</td></tr>
+        <tr><td class="id">presence.offerable</td><td><span class="owner o-server">derived</span></td><td>The รับสายได้ badge and whether the test-call button is enabled. <b>Never recomputed client-side</b></td></tr>
+        <tr><td class="id">presence.declarable[]</td><td><span class="owner o-server">derived</span></td><td>Exactly which status buttons are pressable right now (mid-call, only three of seven)</td></tr>
+        <tr><td class="id">presence.awaiting_declaration</td><td><span class="owner o-server">derived</span></td><td>Stops the pre-call instruction rendering as if it were current</td></tr>
+        <tr><td class="id">presence.intent_reason</td><td><span class="owner o-server">log</span></td><td>Which of three sentences explains a <code>not_ready</code>; whether <em>Save &amp; Ready</em> is offered</td></tr>
+        <tr><td class="id">presence.acw_since</td><td><span class="owner o-server">clock</span></td><td>The anchor the ACW timer counts from — not a client counter</td></tr>
+        <tr><td class="id">presence.long_acw</td><td><span class="owner o-server">config</span></td><td>The "running long" warning <span class="m-client">(also recomputed client-side — see §06)</span></td></tr>
+        <tr><td class="id">offer</td><td><span class="owner o-server">matcher</span></td><td>The whole offer card: queue, intent, urgency, accrued wait, assurance, rationale</td></tr>
+        <tr><td class="id">active_call_session_id</td><td><span class="owner o-server">state</span></td><td>Whether there is a call to attest against, capture into, or wrap up</td></tr>
+        <tr><td class="id">identity</td><td><span class="owner o-server">attestation</span></td><td>Assurance badge, lock state, amend count, whether disclosure is open</td></tr>
+        <tr><td class="id">brief</td><td><span class="owner o-server">gated DTO</span></td><td>Everything in the brief panel. A locked field is <b>absent from the payload</b>, not hidden</td></tr>
+        <tr><td class="id">captures[]</td><td><span class="owner o-server">capture svc</span></td><td>The digits, the mask, the lookups. The client appends nothing of its own</td></tr>
+        <tr><td class="id">queues[]</td><td><span class="owner o-server">hours + pool</span></td><td>Queue strip: open/closed, waiting count, longest wait</td></tr>
+        <tr><td class="id">call_answered_at</td><td><span class="owner o-server">clock</span></td><td>The anchor the call timer counts from, so a refresh does not reset it</td></tr>
+        <tr><td class="id">server_time</td><td><span class="owner o-server">clock</span></td><td><b>Nothing. It is declared and never read</b> — see §06</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Client-owned — exists only in this tab</h3>
+  <div class="tablewrap">
+    <table>
+      <thead>
+        <tr><th>State</th><th>Lives in</th><th>What it is for, and what a refresh costs</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="id">snapshot</td><td class="id">App.tsx</td><td>The cached copy of server truth. Refresh re-fetches it — costs nothing</td></tr>
+        <tr><td class="id">busy</td><td class="id">App.tsx</td><td>A user-initiated request is in flight → disable controls. <b>Background refreshes must never set it</b> — that was the flicker</td></tr>
+        <tr><td class="id">error</td><td class="id">App.tsx</td><td>The toast. Cleared by clicking it or by the next action</td></tr>
+        <tr><td class="id">muted, held</td><td class="id">App.tsx</td><td>Softphone stub. Reset whenever the agent is not <code>on_call</code>. Refresh loses them — harmless until P5 makes them real</td></tr>
+        <tr><td class="id">savedCalls</td><td class="id">App.tsx</td><td>Which wrap-ups this tab has saved. <b>The server knows this and does not say so</b> — see §06</td></tr>
+        <tr><td class="id">previousState</td><td class="id">App.tsx</td><td>A ref that is written and never read. Dead — see §06</td></tr>
+        <tr><td class="id">challenge, challengeNote,<br>callerName, relationship</td><td class="id">panels.tsx</td><td>The identity form before submission. Refresh loses the typing; the attestation itself is server-side</td></tr>
+        <tr><td class="id">reopened</td><td class="id">panels.tsx</td><td>"I pressed amend." Re-locks on <code>attestation_count</code> changing — the fix that stopped one amend unlocking the control for the rest of the call</td></tr>
+        <tr><td class="id">disposition, notes, followUp</td><td class="id">panels.tsx</td><td>The wrap-up draft. <b>Refresh loses typed notes</b> — no draft persistence exists</td></tr>
+        <tr><td class="id">lastSeq, attempt, stopped</td><td class="id">useSocket.ts</td><td>Replay position and backoff. <code>lastSeq</code> resets to 0 on reload, so a reconnect after refresh replays the whole outbox — then a fresh snapshot lands on top anyway</td></tr>
+        <tr><td class="id">tick</td><td class="id">panels.tsx</td><td>Forces a re-render 4×/second so timers move. Drives the whole tree — see §06</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout">
+    <strong>The rule that holds so far:</strong> nothing in the amber list decides what the agent
+    is <em>allowed</em> to do or see. Permission — <code>offerable</code>,
+    <code>declarable</code>, what the brief contains — is entirely blue. The two amber entries
+    that come closest to breaking that (<code>long_acw</code> recomputed, and <code>savedCalls</code>)
+    are both in §06.
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section>
+  <div class="sec-head"><span class="sec-num">03</span><h2>Every request the client can make</h2></div>
+
+  <div class="col">
+    <p>
+      Fifteen calls, all with <code>credentials: "include"</code>, none carrying an
+      <code>agent_id</code> — identity comes from the HttpOnly cookie the JavaScript cannot read.
+      Note the response column: nine of them return the <em>whole</em> Snapshot, which is why the
+      UI stays coherent after any action without a follow-up fetch.
+    </p>
+  </div>
+
+  <div class="tablewrap">
+    <table>
+      <thead>
+        <tr><th>What the agent does</th><th>Request</th><th>Returns</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Opens the sign-in screen</td><td class="id"><span class="verb v-get">GET</span>/v1/demo/agents</td><td>roster (DEMO)</td></tr>
+        <tr><td>Signs in</td><td class="id"><span class="verb v-post">POST</span>/v1/agent/demo-login</td><td>Presence + sets cookie</td></tr>
+        <tr><td>Loads / refreshes the page</td><td class="id"><span class="verb v-get">GET</span>/v1/agent/me</td><td><b>Snapshot</b></td></tr>
+        <tr><td>Presses a status button</td><td class="id"><span class="verb v-post">POST</span>/v1/agent/state</td><td>Presence <em>(then re-reads /me)</em></td></tr>
+        <tr><td>Accepts an offer</td><td class="id"><span class="verb v-post">POST</span>/v1/agent/offers/{id}/accept</td><td><b>Snapshot</b></td></tr>
+        <tr><td>Declines an offer</td><td class="id"><span class="verb v-post">POST</span>/v1/agent/offers/{id}/decline</td><td><b>Snapshot</b></td></tr>
+        <tr><td>Hangs up</td><td class="id"><span class="verb v-post">POST</span>/v1/agent/calls/{id}/end</td><td><b>Snapshot</b></td></tr>
+        <tr><td>Saves the wrap-up</td><td class="id"><span class="verb v-post">POST</span>/v1/agent/calls/{id}/wrapup</td><td><b>Snapshot</b></td></tr>
+        <tr><td>Attests identity (×3 outcomes)</td><td class="id"><span class="verb v-post">POST</span>/v1/agent/calls/{id}/identity</td><td><b>Snapshot</b> · 409 if locked</td></tr>
+        <tr><td>Starts digit capture</td><td class="id"><span class="verb v-post">POST</span>/v1/agent/calls/{id}/capture</td><td>Capture</td></tr>
+        <tr><td>Caller presses a key <em>(simulated here)</em></td><td class="id"><span class="verb v-post">POST</span>/v1/agent/captures/{id}/keys</td><td>Capture <em>+ socket push</em></td></tr>
+        <tr><td>Backspace / stop / discard</td><td class="id"><span class="verb v-post">POST</span>/v1/agent/captures/{id}/…</td><td>Capture</td></tr>
+        <tr><td>Runs a lookup on the digits</td><td class="id"><span class="verb v-post">POST</span>/v1/agent/captures/{id}/lookup</td><td>Capture + evidence</td></tr>
+        <tr><td>Signs out</td><td class="id"><span class="verb v-post">POST</span>/v1/agent/logout</td><td>204</td></tr>
+        <tr><td>Presses + สายทดสอบ</td><td class="id"><span class="verb v-post">POST</span>/v1/demo/calls</td><td>call id (DEMO)</td></tr>
+        <tr><td>— always open —</td><td class="id"><span class="verb v-ws">WS</span>/v1/agent/ws</td><td>see §04</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout">
+    <strong>Two server endpoints no client calls.</strong>
+    <code>POST /v1/agent/captures/{id}/label</code> and <code>GET /v1/agent/queues</code> exist
+    and are routed, but <code>api.ts</code> has no method for either — queues ride along in the
+    Snapshot, and labelling a capture was never wired to a control. Reachable, tested, unused.
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section>
+  <div class="sec-head"><span class="sec-num">04</span><h2>The socket, and what it actually does</h2></div>
+
+  <div class="col">
+    <p>
+      The interesting thing about the WebSocket is how <em>little</em> it carries. Four push
+      types exist, and the client acts on the content of exactly one of them. Everything else is
+      a doorbell: <em>something changed, go and re-read</em>.
+    </p>
+  </div>
+
+  <figure>
+    <svg viewBox="0 0 1000 420" role="img" aria-label="Socket message flow: only capture messages patch client state directly; offer, offer_revoked and presence all trigger a full snapshot re-read over HTTP.">
+      <defs>
+        <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+        </marker>
+        <marker id="ar2s" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#2549b8"/>
+        </marker>
+        <marker id="ar2w" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#6b46a8"/>
+        </marker>
+      </defs>
+
+      <text x="20" y="28" font-family="IBM Plex Mono, monospace" font-size="12" font-weight="600" fill="#6b46a8">SERVER PUSHES</text>
+      <text x="470" y="28" font-family="IBM Plex Mono, monospace" font-size="12" font-weight="600" fill="currentColor">CLIENT DOES</text>
+
+      <!-- messages -->
+      <rect x="20" y="46" width="230" height="52" rx="4" fill="#6b46a822" stroke="#6b46a8" stroke-width="1.3"/>
+      <text x="34" y="66" font-family="IBM Plex Mono, monospace" font-size="12.5" font-weight="600" fill="#6b46a8">offer</text>
+      <text x="34" y="85" font-size="11.5" fill="currentColor" opacity=".75">seq n · from DispatchService</text>
+
+      <rect x="20" y="110" width="230" height="52" rx="4" fill="#6b46a822" stroke="#6b46a8" stroke-width="1.3"/>
+      <text x="34" y="130" font-family="IBM Plex Mono, monospace" font-size="12.5" font-weight="600" fill="#6b46a8">offer_revoked</text>
+      <text x="34" y="149" font-size="11.5" fill="currentColor" opacity=".75">seq n · RONA timeout sweep</text>
+
+      <rect x="20" y="174" width="230" height="52" rx="4" fill="#6b46a822" stroke="#6b46a8" stroke-width="1.3"/>
+      <text x="34" y="194" font-family="IBM Plex Mono, monospace" font-size="12.5" font-weight="600" fill="#6b46a8">presence</text>
+      <text x="34" y="213" font-size="11.5" fill="currentColor" opacity=".75">seq n · state changed</text>
+
+      <rect x="20" y="238" width="230" height="52" rx="4" fill="#2549b822" stroke="#2549b8" stroke-width="1.6"/>
+      <text x="34" y="258" font-family="IBM Plex Mono, monospace" font-size="12.5" font-weight="600" fill="#2549b8">capture</text>
+      <text x="34" y="277" font-size="11.5" fill="currentColor" opacity=".75">seq n · a digit landed</text>
+
+      <rect x="20" y="308" width="230" height="66" rx="4" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="4 3"/>
+      <text x="34" y="328" font-family="IBM Plex Mono, monospace" font-size="12.5" font-weight="600" fill="currentColor" opacity=".8">snapshot · heartbeat_ack</text>
+      <text x="34" y="346" font-size="11.5" fill="currentColor" opacity=".7">seq 0 — out of band,</text>
+      <text x="34" y="362" font-size="11.5" fill="currentColor" opacity=".7">never acked, never replayed</text>
+
+      <!-- funnel -->
+      <path d="M252,72 L340,72 L340,175 L420,175" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".7"/>
+      <path d="M252,136 L340,136 L340,175" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".7"/>
+      <path d="M252,200 L340,200 L340,175" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".7"/>
+      <line x1="420" y1="175" x2="466" y2="175" stroke="currentColor" stroke-width="1.5" opacity=".7" marker-end="url(#ar2)"/>
+
+      <line x1="252" y1="264" x2="466" y2="264" stroke="#2549b8" stroke-width="2" marker-end="url(#ar2s)"/>
+
+      <!-- actions -->
+      <rect x="470" y="140" width="270" height="70" rx="4" fill="none" stroke="currentColor" stroke-width="1.4"/>
+      <text x="484" y="162" font-size="12.5" font-weight="600" fill="currentColor">quietRefresh()</text>
+      <text x="484" y="180" font-family="IBM Plex Mono, monospace" font-size="11" fill="currentColor" opacity=".75">GET /v1/agent/me</text>
+      <text x="484" y="197" font-size="11.5" fill="currentColor" opacity=".75">does NOT touch busy</text>
+
+      <rect x="470" y="238" width="270" height="70" rx="4" fill="#2549b822" stroke="#2549b8" stroke-width="1.4"/>
+      <text x="484" y="260" font-size="12.5" font-weight="600" fill="#2549b8">patch that one capture</text>
+      <text x="484" y="278" font-size="11.5" fill="currentColor" opacity=".75">no HTTP round trip</text>
+      <text x="484" y="295" font-size="11.5" fill="currentColor" opacity=".75">server is still the only writer</text>
+
+      <line x1="742" y1="175" x2="790" y2="175" stroke="#2549b8" stroke-width="1.6" marker-end="url(#ar2s)"/>
+      <line x1="742" y1="273" x2="790" y2="273" stroke="#2549b8" stroke-width="1.6" marker-end="url(#ar2s)"/>
+
+      <rect x="792" y="140" width="190" height="168" rx="4" fill="none" stroke="currentColor" stroke-width="1.4"/>
+      <text x="806" y="163" font-size="12.5" font-weight="600" fill="currentColor">setSnapshot(...)</text>
+      <text x="806" y="184" font-size="11.5" fill="currentColor" opacity=".75">one React state update</text>
+      <text x="806" y="201" font-size="11.5" fill="currentColor" opacity=".75">re-renders every panel</text>
+      <text x="806" y="230" font-size="11.5" fill="currentColor" opacity=".75">Panels are pure:</text>
+      <text x="806" y="247" font-size="11.5" fill="currentColor" opacity=".75">they read the snapshot</text>
+      <text x="806" y="264" font-size="11.5" fill="currentColor" opacity=".75">and call back on click.</text>
+      <text x="806" y="288" font-size="11.5" fill="currentColor" opacity=".75">None of them decide.</text>
+
+      <text x="470" y="345" font-size="11.5" fill="currentColor" opacity=".7">Client → server on the same socket: </text>
+      <text x="470" y="363" font-family="IBM Plex Mono, monospace" font-size="11.5" fill="#6b46a8">hello {last_seq} · ack {seq} · heartbeat every 10s</text>
+      <text x="470" y="386" font-size="11.5" fill="currentColor" opacity=".7">Reconnect backs off 0.5 → 8s. Nothing on this socket is</text>
+      <text x="470" y="402" font-size="11.5" fill="currentColor" opacity=".7">state-bearing: if it is down, the offer still exists and still times out.</text>
+    </svg>
+    <figcaption>
+      <b>Three of the four pushes are doorbells.</b> Only <code>capture</code> carries a payload
+      the client applies directly — because keystrokes arrive fast and a full snapshot per digit
+      would be both wasteful and jumpy. Everything else provokes a full re-read, which is simple
+      and correct, and is also the shape that would need revisiting at real volumes (§06).
+    </figcaption>
+  </figure>
+
+  <div class="col">
+    <h3>The ordering contract</h3>
+    <p>
+      Each agent has their own sequence counter and a 200-message outbox on the server, and
+      <b>a message is written to the outbox before delivery is attempted</b> — a message that
+      failed to send is precisely the one a reconnecting client needs replayed. On reconnect the
+      client sends the highest <code>seq</code> it applied; the server replays exactly the gap,
+      then sends a fresh snapshot on top. Anything at or below what the client already applied
+      is dropped, because a duplicate offer is a call ringing at a desk that already declined it.
+    </p>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section>
+  <div class="sec-head"><span class="sec-num">05</span><h2>One call, end to end</h2></div>
+
+  <div class="col">
+    <p>
+      The sequence below is the whole product in twelve steps. Read the middle column as the
+      answer to <em>"where did this appear from?"</em> for anything on screen.
+    </p>
+  </div>
+
+  <figure>
+    <svg viewBox="0 0 1000 640" role="img" aria-label="Twelve-step sequence from sign-in through offer, accept, attestation, capture and wrap-up, showing which side originates each step.">
+      <defs>
+        <marker id="ar3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+        </marker>
+      </defs>
+
+      <line x1="250" y1="46" x2="250" y2="612" stroke="currentColor" stroke-width="1.2" opacity=".35"/>
+      <line x1="700" y1="46" x2="700" y2="612" stroke="currentColor" stroke-width="1.2" opacity=".35"/>
+
+      <text x="250" y="32" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="12" font-weight="600" fill="#9c5406">BROWSER</text>
+      <text x="700" y="32" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="12" font-weight="600" fill="#2549b8">SERVER</text>
+
+      <!-- rows: y, label-left, arrow dir, label-mid, note-right -->
+      <g font-size="12">
+        <!-- 1 -->
+        <text x="16" y="72" fill="currentColor" opacity=".55" font-family="IBM Plex Mono, monospace" font-size="11">01</text>
+        <text x="44" y="72" fill="currentColor">sign in</text>
+        <line x1="252" y1="66" x2="698" y2="66" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar3)"/>
+        <text x="475" y="60" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="currentColor" opacity=".8">POST /agent/demo-login</text>
+        <text x="716" y="72" fill="currentColor" opacity=".75">AVAILABLE + NOT_READY, cookie set</text>
+
+        <!-- 2 -->
+        <text x="16" y="112" fill="currentColor" opacity=".55" font-family="IBM Plex Mono, monospace" font-size="11">02</text>
+        <text x="44" y="112" fill="currentColor">socket opens</text>
+        <line x1="252" y1="106" x2="698" y2="106" stroke="#6b46a8" stroke-width="1.3" stroke-dasharray="5 3" marker-end="url(#ar3)"/>
+        <text x="475" y="100" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="#6b46a8">hello {last_seq: 0}</text>
+        <text x="716" y="112" fill="currentColor" opacity=".75">replay gap, then push a snapshot</text>
+
+        <!-- 3 -->
+        <text x="16" y="152" fill="currentColor" opacity=".55" font-family="IBM Plex Mono, monospace" font-size="11">03</text>
+        <text x="44" y="152" fill="currentColor">press พร้อมรับสาย</text>
+        <line x1="252" y1="146" x2="698" y2="146" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar3)"/>
+        <text x="475" y="140" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="currentColor" opacity=".8">POST /agent/state</text>
+        <text x="716" y="152" fill="currentColor" opacity=".75">intent READY → now offerable</text>
+
+        <!-- 4 -->
+        <text x="16" y="192" fill="currentColor" opacity=".55" font-family="IBM Plex Mono, monospace" font-size="11">04</text>
+        <text x="44" y="192" fill="currentColor" opacity=".6">— nothing —</text>
+        <line x1="698" y1="186" x2="252" y2="186" stroke="#6b46a8" stroke-width="1.6" marker-end="url(#ar3)"/>
+        <text x="475" y="180" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="#6b46a8">push: offer (seq n)</text>
+        <text x="716" y="192" fill="currentColor" opacity=".75">matcher chose this desk</text>
+
+        <!-- 5 -->
+        <text x="16" y="232" fill="currentColor" opacity=".55" font-family="IBM Plex Mono, monospace" font-size="11">05</text>
+        <text x="44" y="232" fill="currentColor">doorbell → re-read</text>
+        <line x1="252" y1="226" x2="698" y2="226" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar3)"/>
+        <text x="475" y="220" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="currentColor" opacity=".8">GET /agent/me</text>
+        <text x="716" y="232" fill="currentColor" opacity=".75">offer card data: queue, urgency, wait</text>
+
+        <!-- 6 -->
+        <text x="16" y="272" fill="currentColor" opacity=".55" font-family="IBM Plex Mono, monospace" font-size="11">06</text>
+        <text x="44" y="272" fill="currentColor">press Accept</text>
+        <line x1="252" y1="266" x2="698" y2="266" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar3)"/>
+        <text x="475" y="260" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="currentColor" opacity=".8">POST /offers/{id}/accept</text>
+        <text x="716" y="272" fill="currentColor" opacity=".75">ON_CALL · answered_at stamped</text>
+
+        <!-- 7 -->
+        <text x="16" y="312" fill="currentColor" opacity=".55" font-family="IBM Plex Mono, monospace" font-size="11">07</text>
+        <text x="44" y="312" fill="currentColor" opacity=".6">renders brief</text>
+        <line x1="698" y1="306" x2="252" y2="306" stroke="#2549b8" stroke-width="1.6" marker-end="url(#ar3)"/>
+        <text x="475" y="300" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="#2549b8">Snapshot incl. gated BriefOut</text>
+        <text x="716" y="312" fill="currentColor" opacity=".75">at L1 the policy block is ABSENT</text>
+
+        <!-- 8 -->
+        <text x="16" y="352" fill="currentColor" opacity=".55" font-family="IBM Plex Mono, monospace" font-size="11">08</text>
+        <text x="44" y="352" fill="currentColor">start capture, keys land</text>
+        <line x1="698" y1="346" x2="252" y2="346" stroke="#2549b8" stroke-width="1.6" marker-end="url(#ar3)"/>
+        <text x="475" y="340" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="#2549b8">push: capture — the only patched type</text>
+        <text x="716" y="352" fill="currentColor" opacity=".75">digits to the panel, mask to the log</text>
+
+        <!-- 9 -->
+        <text x="16" y="392" fill="currentColor" opacity=".55" font-family="IBM Plex Mono, monospace" font-size="11">09</text>
+        <text x="44" y="392" fill="currentColor">attest identity</text>
+        <line x1="252" y1="386" x2="698" y2="386" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar3)"/>
+        <text x="475" y="380" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="currentColor" opacity=".8">POST /calls/{id}/identity</text>
+        <text x="716" y="392" fill="currentColor" opacity=".75">L3 → brief v2 re-rendered, not re-fetched</text>
+
+        <!-- 10 -->
+        <text x="16" y="432" fill="currentColor" opacity=".55" font-family="IBM Plex Mono, monospace" font-size="11">10</text>
+        <text x="44" y="432" fill="currentColor">hang up</text>
+        <line x1="252" y1="426" x2="698" y2="426" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar3)"/>
+        <text x="475" y="420" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="currentColor" opacity=".8">POST /calls/{id}/end</text>
+        <text x="716" y="432" fill="currentColor" opacity=".75">WRAP_UP · ACW clock starts HERE</text>
+
+        <!-- 11 -->
+        <text x="16" y="472" fill="currentColor" opacity=".55" font-family="IBM Plex Mono, monospace" font-size="11">11</text>
+        <text x="44" y="472" fill="currentColor">save the wrap-up</text>
+        <line x1="252" y1="466" x2="698" y2="466" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar3)"/>
+        <text x="475" y="460" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="currentColor" opacity=".8">POST /calls/{id}/wrapup</text>
+        <text x="716" y="472" fill="currentColor" opacity=".75">CLOSED — the record, not the ACW</text>
+
+        <!-- 12 -->
+        <text x="16" y="512" fill="currentColor" opacity=".55" font-family="IBM Plex Mono, monospace" font-size="11">12</text>
+        <text x="44" y="512" fill="currentColor">declare next state</text>
+        <line x1="252" y1="506" x2="698" y2="506" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar3)"/>
+        <text x="475" y="500" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="currentColor" opacity=".8">POST /agent/state</text>
+        <text x="716" y="512" fill="currentColor" opacity=".75">ACW ends — ANY state ends it</text>
+      </g>
+
+      <rect x="16" y="540" width="968" height="66" rx="4" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="4 3" opacity=".7"/>
+      <text x="32" y="562" font-size="12" font-weight="600" fill="currentColor">Steps 11 and 12 are separate on purpose.</text>
+      <text x="32" y="581" font-size="11.5" fill="currentColor" opacity=".78">Saving closes the call record; only the agent declaring a next state ends after-call work. Save &amp; Ready is one button</text>
+      <text x="32" y="597" font-size="11.5" fill="currentColor" opacity=".78">firing both requests, because either can legitimately happen without the other.</text>
+    </svg>
+    <figcaption>
+      <b>Nothing in the left column decides anything.</b> Every step is either a user gesture sent
+      to the server or a server statement rendered. The one exception — step 08 — patches a single
+      capture object the server had just pushed, and even then the server remains the only writer.
+    </figcaption>
+  </figure>
+</section>
+
+<!-- ============================================================ -->
+<section>
+  <div class="sec-head"><span class="sec-num">06</span><h2>Where the logic lapsed — all fixed</h2></div>
+
+  <div class="col">
+    <p>
+      Found by reading the client against the server and confirming each on the running system.
+      <strong>All of them have since been fixed</strong> — kept here because the pattern is the
+      lesson: every one was the client holding, deriving, or guessing something the server
+      already knew (<code>D68</code>). None of them was the disclosure gate; that one holds.
+    </p>
+  </div>
+
+
+  <div class="finding high">
+    <h4><span class="sev s-fixed">fixed · B7</span>An ignored offer stranded the agent for the shift</h4>
+    <p>
+      The worst of them, and it was not in the client at all. <b>Nothing in the running
+      process ever called <code>expire_offers</code>, <code>dispatch.tick</code>, or
+      <code>presence.sweep</code></b> — all three written, all correct, all wired to nothing.
+      <code>expire_offers</code> even documents itself as running "on a timer in the API
+      process"; there was no timer.
+    </p>
+    <p>
+      So an ignored offer never resolved: the agent sat in <code>OFFERING</code> with no card
+      and no way out, and the caller was never re-matched. It survived P2b because the visible
+      half was <em>correct</em> — the card hides itself at zero on purpose, so the client was
+      counting down a deadline nobody enforced.
+    </p>
+    <div class="proof">ignoring the offer for 25s (timeout 20s, sweeper every 1s)
+
+offer         None
+system_state  <b>available</b>          ← was stuck on "offering", forever
+agent_intent  not_ready
+intent_reason rona_missed_offer</div>
+    <p>
+      <em>The lesson, now in <code>NEXT_SESSION</code>: anything that must happen because
+      time passed needs a test in which only time passes.</em> Every existing test drove the
+      system through endpoints, and endpoints tick the dispatcher on the way through — so the
+      suite proved the ticking worked without proving anything caused it.
+    </p>
+  </div>
+  <div class="finding high">
+    <h4><span class="sev s-fixed">fixed · D68</span>Saving the wrap-up showed no confirmation</h4>
+    <p>
+      The "saved" badge is keyed on <code>savedCalls.has(callId)</code> — but saving the record
+      moves the call to <code>CLOSED</code>, and <code>active_call_session_id</code> only reports
+      calls that are <code>IN_CALL</code> or <code>WRAP_UP</code>. So the moment the save
+      succeeds, <code>callId</code> becomes <code>null</code>, the lookup becomes
+      <code>savedCalls.has("")</code>, and the badge never renders. The form unmounts at the same
+      instant, so the agent presses Save and gets <em>nothing back at all</em>.
+    </p>
+    <div class="proof">clicked:              บันทึก
+after_active_call_id: <b>null</b>
+acwBarStillThere:     true          ← correct, D45 holds
+savedBadgeShown:      <b>false</b>         ← should be true
+wrapupPanelStillThere: false</div>
+    <p>
+      The deeper cause is that <b>the server knows whether a wrap-up was saved and does not say
+      so</b>. It is stored in <code>container.wrapups[call_session_id]</code> and never surfaced
+      in the Snapshot, which forced the client to track it locally. A refresh during ACW loses it
+      too. <em>Fix: put it in the Snapshot and delete <code>savedCalls</code>.</em>
+    </p>
+  </div>
+
+  <div class="finding high">
+    <h4><span class="sev s-fixed">fixed · D68</span>Every timer trusted the laptop's clock</h4>
+    <p>
+      Timers are computed as <code>Date.now() − Date.parse(server_timestamp)</code>. That fixed
+      the refresh bug, but it silently introduced a dependency on the browser clock agreeing with
+      the server's. The Snapshot already carries <code>server_time</code> for exactly this —
+      and <b>nothing reads it</b>:
+    </p>
+    <div class="proof">$ grep -rn "server_time" apps/workstation/src/
+api.ts:133:  server_time: string | null;      <b>← declared, never used</b></div>
+    <p>
+      On one machine this is invisible. On a demo laptop whose clock drifted, or a second machine
+      in a different timezone with a bad NTP sync, the call timer is wrong by the offset and
+      nobody would suspect the clock. <em>Fix: compute an offset once per snapshot and add it in
+      <code>elapsedSince</code>.</em>
+    </p>
+  </div>
+
+  <div class="finding med">
+    <h4><span class="sev s-fixed">fixed · D68</span>The client second-guessed a server threshold</h4>
+    <div class="proof">App.tsx:147   const longAcw = presence.long_acw || (acwSeconds !== null &amp;&amp; acwSeconds &gt;= <b>45</b>);
+config.py:181 acw_long_after_s: float = <b>45.0</b></div>
+    <p>
+      The server already computes <code>long_acw</code> from configuration, and the client ORs it
+      with its own hardcoded copy of the same number. Tune <code>acw_long_after_s</code> — which
+      <code>Q9</code> explicitly expects to happen, since these thresholds are guesses — and the
+      screen keeps warning at 45 seconds while the server has moved on. It also contradicts the
+      panel's own stated rule that nothing here decides what may be shown.
+      <em>Fix: delete the client half.</em>
+    </p>
+  </div>
+
+  <div class="finding med">
+    <h4><span class="sev s-med">still open</span>The challenge list exists twice</h4>
+    <p>
+      <code>CHALLENGES</code> in <code>panels.tsx</code> and <code>NAMED_CHALLENGES</code> in
+      <code>attestation.py</code> are two hand-maintained copies of the same list, and the server
+      rejects anything not in its copy. <code>Q12</code> says this list is unconfirmed and will
+      change once Krungsri weighs in — so the drift is scheduled, not hypothetical. The same
+      pattern repeats in the four label maps (<code>INTENT_LABEL</code>,
+      <code>SYSTEM_LABEL</code>, <code>ASSURANCE_LABEL</code>, <code>URGENCY_LABEL</code>): add an
+      enum value server-side and the screen shows a raw code.
+      <em>Fix: serve the list, the same way the app and the IVR share one <code>menus.yaml</code>.</em>
+    </p>
+  </div>
+
+  <div class="finding low">
+    <h4><span class="sev s-low">design note</span>Every push costs a full snapshot</h4>
+    <p>
+      Three of four socket messages call <code>quietRefresh()</code>, so N pushes cost N complete
+      <code>GET /me</code> round trips — each one re-rendering the brief, the queues and the
+      presence block. Correct and simple at one agent with one call. At fifteen agents on a busy
+      floor it is a thundering-herd shape, and the payload already contains everything needed to
+      patch in place. Not a bug today; a thing to measure before it is one.
+    </p>
+  </div>
+
+  <div class="finding low">
+    <h4><span class="sev s-low">design note</span>The whole tree re-renders four times a second</h4>
+    <p>
+      <code>useSecondTicker</code> fires every 250 ms and lives in <code>App</code>, so every
+      panel re-renders 4×/second for as long as an agent is signed in — even with no call, no
+      timer on screen, and nothing changing. It is also why the old <code>busy</code> flicker was
+      so visible. <em>Fix, if it ever matters: move the ticker into the two components that
+      display a timer.</em>
+    </p>
+  </div>
+
+  <div class="finding low">
+    <h4><span class="sev s-low">partly fixed</span>Two unused endpoints (the dead ref is gone)</h4>
+    <p>
+      <code>POST /captures/{id}/label</code> and <code>GET /agent/queues</code> are routed and
+      reachable but no client calls them. <code>previousState</code> in <code>App.tsx</code> is
+      written on every state change and never read. Harmless, but each one is a small false
+      signal about what the system does.
+    </p>
+  </div>
+
+  <div class="finding low">
+    <h4><span class="sev s-low">gap</span>The wrap-up draft is not persisted anywhere</h4>
+    <p>
+      <code>disposition</code>, <code>notes</code> and <code>followUp</code> live only in the
+      component. A refresh mid-ACW — or a crash, or a closed laptop — loses whatever the agent
+      typed. <code>D45</code> anticipates the shape ("drafts are per-call and persist"), so this
+      is an unbuilt piece rather than a wrong one, but today the words are gone.
+    </p>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section>
+  <div class="sec-head"><span class="sec-num">07</span><h2>What holds</h2></div>
+  <div class="col">
+    <p>
+      Worth stating as plainly as the faults, because these are the parts that would be expensive
+      to get wrong and are not wrong:
+    </p>
+    <ul class="tight">
+      <li><b>The disclosure gate is structural.</b> <code>BriefOut</code> has no field for a
+        policy number until assurance permits one, so there is nowhere for a leak to hide. The
+        client could not render what it does not receive even if a component tried.</li>
+      <li><b>No identity is ever asserted by the client.</b> No request carries an
+        <code>agent_id</code>; it comes from a cookie the JavaScript cannot read.</li>
+      <li><b>Permission is never computed on this side.</b> <code>offerable</code> and
+        <code>declarable</code> arrive as answers, so the screen and the matcher cannot
+        disagree about who is available.</li>
+      <li><b>The socket is not authoritative.</b> Drop it and offers still exist, still time out,
+        still re-match. The tab is a view.</li>
+      <li><b>One writer for the digits.</b> The optimistic append that invented an eleventh digit
+        is gone; the panel renders only what the server sent.</li>
+    </ul>
+  </div>
+</section>
+
+</div>
+
+</body>
+</html>

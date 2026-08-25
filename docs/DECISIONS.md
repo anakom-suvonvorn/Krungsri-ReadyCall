@@ -1517,3 +1517,118 @@ reasoning stays visible; this entry explains why the earlier one was wrong._
   a queue list may show *non-identifying* facts (intent, wait, urgency) to anyone, and
   identity only to the agent it is offered to. That needs deciding before it is built, so it
   is not built.
+
+## D71. What the identity control offers depends on how the caller was identified
+_Corrects the over-broad lock added in `D61`._
+
+- **Problem:** `D61` disabled all three outcomes whenever no customer was attached. That is
+  right for one case and wrong for another, and the two had been collapsed:
+  - a caller nobody recognised (`L0` from the first second) — correctly inert;
+  - a caller whose match the agent **rejected** — wrongly permanent. `ไม่ใช่บุคคลนี้`
+    clears the customer, so the control locked itself out and the call sat at `L0` for its
+    whole duration.
+- **Why the second one matters more than it looks.** The cases are ordinary, not exotic: a
+  mis-press; an agent who concluded they were talking to a stranger and then heard "I am
+  his daughter, I am calling about his claim"; a caller who only produced the right
+  document on the second attempt. Punishing those with an unrecoverable `L0` makes the
+  safest button the one nobody dares press, which is the opposite of what a disclosure
+  control should encourage.
+- **Decision — the server publishes `attestable`, and the answer depends on the ORIGINAL
+  identification, not the current state:**
+
+  | How the call was identified | Offered |
+  |---|---|
+  | Nobody proposed (`L0` from the start) | **nothing** — no one to confirm, reject, or act for |
+  | App token (`APP_TOKEN`) | **third party only** |
+  | Anything else — ANI, pending intent, IVR — **including after a rejection** | all three |
+
+- **A rejection is explicitly reversible.** The service keeps the resolution the resolver
+  originally produced, so amending away from `not_this_person` **restores that proposal**
+  and un-suppresses the customer id. Nothing is invented: it is the same match the system
+  made, offered again. The rejection stays in the log, because amending appends (`D60`) —
+  the record shows the agent rejected the match and then withdrew that, which is more
+  truthful than either version alone.
+- **Why an app-token caller is different, and this is the interesting one.** They
+  authenticated against the bank's own login before the call existed. The agent re-asserting
+  that adds nothing — they have *less* evidence than the auth system did. But one question
+  is still open, and it is a real one: **is the person holding the phone the account holder,
+  or somebody helping them?** A daughter can perfectly well be handed her father's unlocked
+  app. So *third party* stays live and becomes the only control, relabelled: not
+  *"ยืนยันว่ามีสิทธิ์ดำเนินการแทน"* (which claims the agent checked something) but
+  *"บันทึกว่ามีผู้ดำเนินการแทน"* — recording a fact, not vouching for one.
+- **`IVR_VERIFY` deliberately does NOT count as system-verified.** Keying the last four of a
+  citizen id is a *knowledge* check, and a family member in the same room knows those
+  digits. App auth is possession of an authenticated session. Collapsing the two would let
+  the weaker one silently disable the agent's control, so the distinction is enforced in
+  code and commented there.
+- **Amending an outcome now clears the evidence the previous one set.** Confirming after a
+  third-party attestation used to leave the banner saying *"ผู้ติดต่อดำเนินการแทนเจ้าของ
+  กรมธรรม์"* on a call the agent had just confirmed **was** the policyholder — because
+  evidence is carried forward wholesale on each amendment. Anything an outcome asserts, the
+  next outcome has to be able to retire.
+- **`Q18` is narrowed, not closed.** Customer *search* still does not exist, so a caller who
+  was never identified stays unidentifiable for the call. What is fixed is the far more
+  common case: undoing an attestation about a caller the system had already matched.
+
+## D72. The challenge list lives in config and is served, never hardcoded twice
+- **Problem:** the list of ways an agent may verify a caller existed in two hand-kept
+  places — a `frozenset` in `services/identity/attestation.py` and an array in the React
+  panel. The service **refuses** any code not in its copy, so a drift does not degrade
+  gracefully: the screen offers an option, the agent picks it, the submit fails, and there
+  is nothing on screen explaining why. `Q12` records that this list is unconfirmed and will
+  change once Krungsri weigh in, so the drift was scheduled rather than hypothetical.
+- **Decision:** `config/challenges.yaml` is the single source of truth. The domain pack
+  loads it, `AttestationService` is constructed with it, and the workstation **renders the
+  list the server sends** in its snapshot. The panel can no longer offer anything the server
+  would refuse, because it does not know any codes of its own.
+- **Same shape as `menus.yaml` serving both the IVR and the app** (`D48`), and for the same
+  reason: one menu, several surfaces. Where a list is *enforced* on one side and *displayed*
+  on another, the displaying side has to be told, not told twice.
+- **`requires_note` travels with the option** rather than the client special-casing
+  `other`. The rule "this choice needs an explanation" is policy about evidence quality
+  (`D57`), so it belongs beside the option it governs — and adding a second free-text
+  challenge later is then a config line, not a code change on both sides.
+- **`promotes` is carried but not yet enforced.** Every current challenge reaches `L3`. The
+  field exists because the honest answer to `Q12` may well be that some checks are weaker
+  than others, and the schema should not have to change on the day that is decided.
+- **Guarded by a test that is the whole point:** every challenge the server *offers* must be
+  one the server *accepts*. It fails the day somebody edits the YAML without checking, which
+  is exactly when nobody is looking.
+- **Not moved to config:** the `other` code itself, which is special-cased in one place (the
+  note requirement). A constant naming the one branch that exists is clearer than a lookup.
+
+## D73. Call-progress prediction is really about after-call work, not the end of the call
+_Raised by the user. Design correction to `D22`; deferral is still stubbed off until P6._
+
+- **Problem:** `D22` allows the matcher to **defer** a caller for a few seconds when a much
+  better-fitting agent is about to free up, and defines `expected_free_in(agent)` from a
+  *call-progress* estimate: closing phrases in the live transcript, elapsed time against
+  expected handling time, and an agent's own "wrapping up" button. All of that was designed
+  **before `D45` existed**, when the model implicitly assumed an agent becomes available as
+  the call ends.
+- **They do not.** `D45` put a whole phase between hanging up and being offerable:
+  after-call work runs from media disconnect until the agent *declares* a next state, and
+  nothing ends it automatically. So "this call is nearly over" answers the wrong question.
+  The agent finishing their sentence is not about to take a caller; the agent finishing
+  their **wrap-up** is.
+- **Decision:** `expected_free_in(agent)` = remaining call time **+ expected ACW**, and the
+  second term is the larger and far less predictable one. Concretely:
+  - an agent in `AFTER_CALL_WORK` **who has saved their wrap-up** is the strongest
+    "about to be free" signal the system has — a discrete, already-observed event, not a
+    prediction;
+  - an agent in ACW who has not saved is weaker, and gets whatever ACW distribution the
+    metrics show;
+  - an agent mid-call is weakest of all, because their entire ACW is still ahead of them.
+- **This makes the feature both simpler and more honest.** The original design leaned on
+  transcript cues, which need P6's live transcription and a model that can be wrong.
+  Wrap-up-saved is a fact we already have, needs no AI, and cannot hallucinate — the same
+  instinct as `D37` preferring the keypad to speech for the thing the keypad does reliably.
+- **The agent's "wrapping up" affordance moves too.** It made sense as a mid-call button
+  under the old model. Under this one it is redundant: saving the wrap-up already says it,
+  and asking an agent to *also* press "nearly done" is asking them to maintain a second,
+  weaker copy of a fact they have already given us.
+- **Consequence for the metric:** the same reasoning strengthens the product claim. ACW is
+  the shrinkable part (`D45`, `D33`), so predicting availability from ACW rather than from
+  call progress means the deferral logic improves as the AI-drafted wrap-up improves.
+- **Not implemented.** Deferral stays off until P6 brings the data. Recorded now because
+  `D22`'s wording would otherwise be built from as written.

@@ -12,7 +12,7 @@ believe it, why they are calling, everything we hold about them assembled before
 is answered, which agent should take it and why — and now **the desk actually rings, a
 human accepts, and the screen is already right**.
 
-Verified 2026-08-24: **326 tests pass**, `ruff check` + `ruff format --check` clean,
+Verified 2026-08-24: **329 tests pass**, `ruff check` + `ruff format --check` clean,
 `mypy --strict` clean over 81 files, all scenarios replay byte-identically, 50/50 diagrams
 current. The whole workstation flow was also driven by hand in a browser.
 
@@ -219,8 +219,11 @@ each has a "changes since" section. Write one per phase as it lands.
   hours, the disclosure leak and the invented digit — plus a **"changes since"** section
   covering the `D55`–`D60` review pass and where recommended actions come from.
 - `P2b_workstation_client.md` — **the browser tab itself**: its two channels, the full
-  server-owned vs client-owned ledger, all 15 endpoints, the socket contract, and the
-  audit that produced `B7` and `D68`. Read this before changing `apps/workstation/`.
+  server-owned vs client-owned ledger, every endpoint, the socket contract, and the
+  audit that produced `B7`, `B8`, `D68` and `D71`. Read this before changing
+  `apps/workstation/`. A **readable, illustrated twin** lives at
+  `docs/reading/workstation_wiring.html` — open it in a browser, no build step. Both
+  must be updated together.
 
 **Before changing identity, capture or presence, open the `.mmd` sources**, not just the
 prose. `diagrams/src/identity_promotion.mmd` carries the open-question rule and the

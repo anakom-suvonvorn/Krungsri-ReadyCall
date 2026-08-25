@@ -202,7 +202,11 @@ class Container:
             pending_intent_window_s=settings.intent_ttl_s,
         )
         self.captures = KeypadCaptureService(clock=self.clock)
-        self.attestations = AttestationService(clock=self.clock)
+        self.attestations = AttestationService(
+            clock=self.clock,
+            # One source of truth, shared with the workstation (`D72`).
+            challenges=frozenset(self.pack.challenges),
+        )
         self.brief_builder = BriefBuilder(pack=self.pack, clock=self.clock)
 
         #: Live identity per call. Mutable on purpose — assurance moves *during* a call

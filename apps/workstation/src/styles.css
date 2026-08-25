@@ -161,6 +161,29 @@ textarea {
   flex-wrap: wrap;
 }
 
+/* The queue header must never wrap. `.row` wraps by design, which is right almost
+   everywhere and wrong here: switching to "all" lengthens the list, a scrollbar appears,
+   the panel loses that width, and the second pill drops onto its own line under the title.
+   The pills are fixed-size and the heading gives up space instead. */
+.queue-head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: nowrap;
+}
+
+.queue-head h2 {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.queue-head button {
+  flex: none;
+  white-space: nowrap;
+}
+
 .stack {
   display: flex;
   flex-direction: column;

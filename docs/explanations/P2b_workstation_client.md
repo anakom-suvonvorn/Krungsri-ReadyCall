@@ -2,6 +2,12 @@
 
 _Written 2026-08-25. A snapshot, not a specification — see "changes since" at the bottom._
 
+> **There is a readable version of this page**: [`docs/reading/workstation_wiring.html`](../reading/workstation_wiring.html)
+> — same content, same audit, laid out with the diagrams drawn. Open it in any browser;
+> no server, no build step, works offline. **Keep the two in step**: this file is the
+> greppable, diffable copy and is what a future session should read; the HTML is what a
+> human should look at.
+
 `P2b_workstation.md` explains the *system* behind the agent desk: the two axes, the offer
 handshake, after-call work, queue hours. This one explains the **browser tab** — what it
 holds, what it asks for, what it is told, and which of those it decides for itself.
@@ -68,12 +74,13 @@ update path, which is why the UI stays coherent after any click without a follow
 | `active_call_session_id` | Which call can still be acted on (`IN_CALL` or `WRAP_UP` only) |
 | `wrapup_call_session_id` | Which call is being wrapped — **outlives the record closing** (`D68`) |
 | `wrapup_saved` | Whether the record was saved (`D68`) |
-| `identity` | Assurance badge, lock state, `attestation_count`, disclosure flag |
+| `identity` | Assurance badge, lock state, `attestation_count`, disclosure flag, and **`attestable`** — which of the three outcomes may be pressed (`D71`) |
 | `brief` | The whole brief panel. A locked field is **absent from the payload** |
 | `captures[]` | Digits, mask, and the tiered lookup results |
 | `queues[]` | Queue depth, each flagged `mine` for this agent's skills (`D70`) |
 | `call_answered_at` | The anchor the call timer counts from |
-| `server_time` | The skew correction every timer applies (`D68`) |
+| `server_time` | The skew correction every timer applies — **sampled once per snapshot**, never per render (`B8`) |
+| `challenges[]` | The verification methods the dropdown renders, from `config/challenges.yaml` (`D72`) |
 
 ### Client-owned — exists only in this tab
 
@@ -84,6 +91,7 @@ update path, which is why the UI stays coherent after any click without a follow
 | `error` | The toast | nothing |
 | `muted`, `held` | Softphone stub; cleared whenever not `on_call` | nothing today; P5 makes them real |
 | `challenge`, `challengeNote`, `callerName`, `relationship` | The identity form before submission | the typing |
+| `skew` | `server − browser`, sampled when a snapshot arrives | nothing |
 | `reopened` | "I pressed amend" — re-locks on `attestation_count` (`D61`) | nothing |
 | `disposition`, `notes`, `followUp` | The wrap-up draft | **the typed notes** — no draft persistence exists |
 | `lastSeq`, `attempt`, `stopped` | Replay position and backoff | replays the outbox, then a snapshot lands on top |
@@ -231,3 +239,28 @@ Worth stating as plainly as the faults:
 ## Changes since this was written
 
 _Append here rather than editing above._
+
+### 2026-08-25 — the audit's own fixes, and one it caused
+
+- **`B8` — the skew correction froze every timer.** `D68`'s fix computed
+  `server_time − Date.now()` on **every render** and added it to a `now` read from the same
+  render, so the two cancelled and elapsed time collapsed to `server_time` — a value that
+  only moves when a snapshot arrives, i.e. about every ten seconds. The skew is now sampled
+  once per snapshot and held. Every component was correct; the bug was in the composition,
+  the same shape as `B5`.
+- **`D71` — `attestable` replaces the client's guess.** `D61` locked all three outcomes
+  whenever no customer was attached, which conflated two cases. A caller nobody ever
+  identified is correctly inert; a caller whose match the agent **rejected** must be able to
+  come back, because mis-clicks happen and so does "actually, I am his daughter". A
+  rejection now restores the resolver's original proposal on amendment. An app-token caller
+  gets *third party only*, relabelled, since authentication already happened and the one
+  open question is who is holding the phone.
+- **`D72` — the challenge list moved to `config/challenges.yaml`** and is served in the
+  snapshot. It existed twice, the server refused anything not in its copy, and `Q12` says
+  the list is going to change.
+- **`D70` follow-up** — the queue header no longer wraps. `.row` wraps by design; switching
+  to *ทั้งหมด* lengthens the list, a scrollbar appears, the panel loses that width, and the
+  second pill dropped onto its own line. `.queue-head` sets `flex-wrap: nowrap` and the
+  heading gives up the space instead. The time beside each count is now labelled
+  **รอนานสุด** — it is the longest wait in that queue, not an average and not necessarily
+  the next caller out, since matching is global and urgency-weighted (`D22`).
