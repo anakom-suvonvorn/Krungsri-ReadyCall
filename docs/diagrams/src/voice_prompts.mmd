@@ -8,9 +8,6 @@ flowchart LR
         role_menu_reserved_hint["menu_reserved_hint"]:::role
         role_no_input["no_input"]:::role
         role_operator["operator"]:::role
-        role_identify_request["identify_request"]:::role
-        role_identify_ok["identify_ok"]:::role
-        role_identify_failed["identify_failed"]:::role
         role_queue_position["queue_position"]:::role
         role_queue_hold["queue_hold"]:::role
         role_intake_offer["intake_offer"]:::role
@@ -42,9 +39,6 @@ flowchart LR
     p_greeting_life["greeting.life"]:::static
     p_greeting_motor_claim["greeting.motor_claim"]:::static
     p_greeting_travel["greeting.travel"]:::static
-    p_identify_failed["identify.failed"]:::static
-    p_identify_ok["identify.ok"]:::static
-    p_identify_request["identify.request"]:::static
     p_input_none["input.none"]:::static
     p_input_operator["input.operator"]:::static
     p_intake_declined["intake.declined"]:::static
@@ -73,9 +67,6 @@ flowchart LR
     p_voicemail_start["voicemail.start"]:::static
     role_goodbye --> p_call_goodbye
     role_greeting_fallback --> p_greeting_general
-    role_identify_failed --> p_identify_failed
-    role_identify_ok --> p_identify_ok
-    role_identify_request --> p_identify_request
     role_intake_declined --> p_intake_declined
     role_intake_done --> p_intake_done
     role_intake_offer --> p_intake_offer

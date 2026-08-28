@@ -137,7 +137,7 @@ class IvrService:
         did: DidSpec | None = None,
         known_intent: str | None = None,
         inputs: PersonalisationInputs | None = None,
-        max_steps: int = 24,
+        max_steps: int = 200,
     ) -> IvrResult:
         """Greet, ask what we do not know, and leave the call ready to be queued."""
         await self._orchestrator.enter_ivr(session)
@@ -156,7 +156,9 @@ class IvrService:
         while not step.finished:
             steps += 1
             if steps > max_steps:
-                # A caller cannot loop for ever, even by pressing 9 all day.
+                # The driver's own backstop, well above the machine's runaway guard. A
+                # caller pressing 9 all day is legitimate and costs nothing; this exists
+                # so a broken input source cannot spin this loop for ever.
                 step = self._machine.on_timeout(run)
                 await self._play(session, step.lines, played)
                 continue
@@ -245,11 +247,11 @@ class IvrService:
         An explicit intent beats the line's catch-all, which beats the DID's default.
         Knowing only the product line must still land the caller with someone who works
         on that line: dropping them into `q_general` throws away what they told us.
+
+        **Pressing `0` takes this same ladder** (`D83`). It used to jump straight to the
+        DID's default queue, which threw away a product line the caller had already
+        chosen — the one real objection to having an operator key at all.
         """
-        if outcome.kind is IvrOutcomeKind.OPERATOR:
-            # They asked for a person, not a specialist. Send them where people are, and
-            # keep whatever the menu already established for the brief.
-            return did.default_queue if did else "q_general"
         if outcome.intent_code:
             return self._pack.queue_for_intent(outcome.intent_code)
         if did is not None and did.assumed_intent:

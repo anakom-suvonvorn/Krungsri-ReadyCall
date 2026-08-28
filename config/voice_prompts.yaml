@@ -51,9 +51,6 @@ flow:
   menu_reserved_hint: menu.reserved_hint
   no_input: input.none
   operator: input.operator
-  identify_request: identify.request
-  identify_ok: identify.ok
-  identify_failed: identify.failed
   queue_position: queue.position
   queue_hold: queue.hold
   intake_offer: intake.offer
@@ -134,7 +131,13 @@ prompts:
       the keys the IVR actually honours. `0` is never a dead end (D37).
 
   menu.invalid:
-    text_th: "ขออภัยค่ะ ไม่พบหมายเลขที่ท่านเลือก กรุณาลองอีกครั้ง"
+    text_th: >-
+      ขออภัยค่ะ ไม่พบหมายเลขที่ท่านเลือก
+      กด 9 เพื่อฟังตัวเลือกอีกครั้ง หรือกด 0 เพื่อติดต่อเจ้าหน้าที่
+    note: >-
+      Says sorry and names the two keys that always work. There is NO attempt limit
+      behind this line (`D82`) - a caller may press the wrong key all day and will keep
+      being offered the menu, because a caller pressing buttons is present and trying.
 
   menu.language:
     text_th: "สำหรับภาษาไทย กด 1 · For English, press 2"
@@ -148,22 +151,17 @@ prompts:
 
   input.operator:
     text_th: "กำลังโอนสายไปยังเจ้าหน้าที่ค่ะ กรุณารอสักครู่"
-
-  # --- optional identification (D20: this is the rung that reaches L3) -----------------
-  identify.request:
-    text_th: "เพื่อความปลอดภัย กรุณากดเลขบัตรประชาชน 4 หลักสุดท้าย แล้วกดเครื่องหมายสี่เหลี่ยม"
     note: >-
-      Optional, and skipped entirely when the app already verified them. A caller who
-      declines still reaches the right queue - identification buys disclosure, not routing.
+      `0` means "stop asking and put me through with whatever you know" (`D83`). It is a
+      shortcut, not a separate route: the queue comes from the same evidence ladder as
+      every other outcome, so a caller who already chose a product line keeps it.
 
-  identify.ok:
-    text_th: "ขอบคุณค่ะ ยืนยันตัวตนเรียบร้อยแล้ว"
-
-  identify.failed:
-    text_th: "ขออภัยค่ะ ข้อมูลไม่ตรงกับที่ระบบมีอยู่ เจ้าหน้าที่จะตรวจสอบกับท่านอีกครั้ง"
-    note: >-
-      Says what happens next rather than just refusing. A failed IVR check is not a failed
-      call: the agent verifies on the line instead (D42), so the caller is not turned away.
+  # NOTE: there is deliberately NO pre-call identification step (`D84`). Asking a caller
+  # to key their citizen id before anyone says hello would promote them to L3 with no
+  # human in the loop, which is exactly what `D44` refuses - a lookup returns evidence,
+  # and only the agent attests. The agent's own keypad capture during the call does the
+  # same job better, with judgement attached. The `identify.*` prompts were written and
+  # then removed; the guard test would flag them as unreachable now.
 
   # --- the queue -----------------------------------------------------------------------
   queue.position:

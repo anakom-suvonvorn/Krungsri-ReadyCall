@@ -141,9 +141,13 @@ class MenuSettings:
     barge_in: bool
     repeat_key: str
     operator_key: str
-    max_attempts: int
     timeout_s: float
     invalid_prompt: str
+    #: NOT an attempt limit. A wrong key is never a strike (`D82`) — this exists only to
+    #: stop a stuck DTMF sender looping for ever, and is set far past human behaviour.
+    runaway_press_guard: int = 40
+    #: Silence IS bounded, because it does not prove anybody is there. One re-prompt.
+    max_silences: int = 2
 
 
 @dataclass(frozen=True, slots=True)
@@ -401,9 +405,10 @@ class DomainPack:
             barge_in=bool(settings_raw.get("barge_in", True)),
             repeat_key=str(settings_raw.get("repeat_key", "9")),
             operator_key=str(settings_raw.get("operator_key", "0")),
-            max_attempts=int(settings_raw.get("max_attempts", 3)),
             timeout_s=float(settings_raw.get("timeout_s", 7)),
             invalid_prompt=str(settings_raw.get("invalid_prompt", "menu.invalid")),
+            runaway_press_guard=int(settings_raw.get("runaway_press_guard", 40)),
+            max_silences=int(settings_raw.get("max_silences", 2)),
         )
         menus = {
             menu_id: MenuSpec(

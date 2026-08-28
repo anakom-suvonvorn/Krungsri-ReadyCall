@@ -118,13 +118,46 @@ class TestNeverADeadEnd:
         # What they already told us is kept: the operator still gets the product line.
         assert step.outcome.product_line is ProductLine.HEALTH
 
-    def test_three_wrong_presses_go_to_a_queue_not_a_hang_up(
-        self, machine: IvrMachine, pack: DomainPack
-    ) -> None:
-        _, step = _walk(machine, ["8", "8", "8"], did=pack.did("+6621234000"))
+    def test_a_wrong_key_is_never_a_strike(self, machine: IvrMachine, pack: DomainPack) -> None:
+        """`D82`. There is no attempt limit. Ending the menu after N mistakes traded the
+        good answer we were about to get for a guaranteed mediocre one — and a caller
+        pressing buttons is a caller who is present and trying."""
+        run, _ = machine.begin(call_session_id="c", did=pack.did("+6621234000"))
+        for _ in range(12):
+            step = machine.on_digit(run, "8")
+            assert step.expects_input, "the caller is still being offered the menu"
+            assert not run.finished
+
+        # And the right key still works afterwards, with a clean path.
+        machine.on_digit(run, "2")
+        step = machine.on_digit(run, "4")
+        assert step.outcome is not None
+        assert step.outcome.kind is IvrOutcomeKind.ROUTED
+        assert step.outcome.path == ("2", "4")
+        assert step.outcome.pressed.count("8") == 12, "the mistakes are kept as a UX signal"
+
+    def test_a_stuck_sender_is_still_bounded(self, machine: IvrMachine, pack: DomainPack) -> None:
+        """The guard is for a MACHINE, not a person: a DTMF sender repeating one digit
+        for ever. It sits far past anything a human would do, and even then the caller
+        reaches a queue rather than a dial tone."""
+        guard = pack.menu_settings.runaway_press_guard
+        assert guard >= 20, "a guard a human could hit is an attempt limit by another name"
+
+        run, _ = machine.begin(call_session_id="c", did=pack.did("+6621234000"))
+        for _ in range(guard):
+            step = machine.on_digit(run, "8")
         assert step.outcome is not None
         assert step.outcome.kind is IvrOutcomeKind.EXHAUSTED
-        assert step.outcome.reason == "unrecognised_x3"
+        assert step.outcome.reason.startswith("runaway_input")
+
+    def test_the_apology_names_the_two_keys_that_always_work(
+        self, prompts: PromptPack, pack: DomainPack
+    ) -> None:
+        """With no attempt limit, the way out has to be spoken — otherwise "press again"
+        is the only advice a lost caller ever gets."""
+        invalid = prompts.spec(pack.menu_settings.invalid_prompt).text_th
+        assert pack.menu_settings.repeat_key in invalid
+        assert pack.menu_settings.operator_key in invalid
 
     def test_a_wrong_press_replays_the_menu_with_an_apology_first(
         self, machine: IvrMachine, pack: DomainPack

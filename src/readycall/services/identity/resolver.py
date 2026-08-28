@@ -81,6 +81,17 @@ class IdentityResolver:
             )
 
         # --- L3: IVR verification (DOB / last 4 of citizen id / policy number) --------
+        #
+        # **The live IVR never supplies this** (`D84`). Asking a caller to key their
+        # citizen id before anyone says hello would promote them to L3 with no human in
+        # the loop, which is precisely what `D44` refuses — a lookup returns evidence,
+        # and only the agent attests. The agent's own keypad capture does the same job
+        # during the call, with judgement attached.
+        #
+        # The rung is kept rather than deleted because `D25`'s after-hours voicemail path
+        # has **no agent at all**, and is the one place a self-service check would have to
+        # stand on its own. Anything wiring this up owes a decision entry saying why the
+        # missing human is acceptable there.
         if ivr_verified_customer_id:
             return IdentityResolution(
                 method=IdentityMethod.IVR_VERIFY,

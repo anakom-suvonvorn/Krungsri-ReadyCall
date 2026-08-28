@@ -65,36 +65,6 @@
       "storage_ref": "prompt://e0e1ff07267571f2"
     },
     {
-      "clip_key": "82efbd1d132725ac49f56f48e04aba66",
-      "prompt_id": "identify.failed",
-      "text": "ขออภัยค่ะ ข้อมูลไม่ตรงกับที่ระบบมีอยู่ เจ้าหน้าที่จะตรวจสอบกับท่านอีกครั้ง",
-      "voice": "th-TH-female-1",
-      "slots": {},
-      "duration_ms": 11100.0,
-      "sample_rate": 16000,
-      "storage_ref": "prompt://c8abd008d7edc1c2"
-    },
-    {
-      "clip_key": "6959fa6ce5e750529399769b59067b60",
-      "prompt_id": "identify.ok",
-      "text": "ขอบคุณค่ะ ยืนยันตัวตนเรียบร้อยแล้ว",
-      "voice": "th-TH-female-1",
-      "slots": {},
-      "duration_ms": 5100.0,
-      "sample_rate": 16000,
-      "storage_ref": "prompt://498c93e67f06c152"
-    },
-    {
-      "clip_key": "26fb70ad44bc13f38ccef9b8ccc305eb",
-      "prompt_id": "identify.request",
-      "text": "เพื่อความปลอดภัย กรุณากดเลขบัตรประชาชน 4 หลักสุดท้าย แล้วกดเครื่องหมายสี่เหลี่ยม",
-      "voice": "th-TH-female-1",
-      "slots": {},
-      "duration_ms": 12000.0,
-      "sample_rate": 16000,
-      "storage_ref": "prompt://c9e4b9a279980f7a"
-    },
-    {
       "clip_key": "be69220d26ddcbd72de238851ead89f7",
       "prompt_id": "input.none",
       "text": "ไม่ได้รับการกดหมายเลขค่ะ กรุณาลองอีกครั้ง",
@@ -185,14 +155,14 @@
       "storage_ref": "prompt://b2738e8b64c2bc57"
     },
     {
-      "clip_key": "131d0d6c9fb77f815e8cad6f68072c05",
+      "clip_key": "06d1f581d809ca48a0787dcd281bf049",
       "prompt_id": "menu.invalid",
-      "text": "ขออภัยค่ะ ไม่พบหมายเลขที่ท่านเลือก กรุณาลองอีกครั้ง",
+      "text": "ขออภัยค่ะ ไม่พบหมายเลขที่ท่านเลือก กด 9 เพื่อฟังตัวเลือกอีกครั้ง หรือกด 0 เพื่อติดต่อเจ้าหน้าที่",
       "voice": "th-TH-female-1",
       "slots": {},
-      "duration_ms": 7650.0,
+      "duration_ms": 14400.0,
       "sample_rate": 16000,
-      "storage_ref": "prompt://8bcfa73b8eddeb3b"
+      "storage_ref": "prompt://2f7f949490e04974"
     },
     {
       "clip_key": "d374f2f2cae43e38e887d7aa3de317f8",

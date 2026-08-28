@@ -1996,3 +1996,89 @@ menu ordering, which turned out to have consequences the design had not spelled 
   options that were *already* in position one and two, so it asserted a reordering that
   never happened; and entering the second menu reset the record of the first having been
   personalised, so the call reported itself as ordinary. Both would have passed review.
+
+---
+
+_`D82`–`D84` added 2026-08-26. All three came from the user reviewing the built IVR and
+pushing back on rules I had carried over from `ARCHITECTURE.md` without re-examining them._
+
+## D82. A wrong keypress is never a strike; only silence is bounded
+- **Problem:** the menu ended after three unrecognised presses and routed the caller to a
+  queue. That came straight from `D37`'s "three unrecognised presses, or silence twice, →
+  the general queue", written to guarantee a caller is never *trapped*. Symmetrical, tidy,
+  and — as the user pointed out — wrong on the keypress half.
+- **The distinction the old rule missed:** *a wrong key proves somebody is there.* Silence
+  does not. Those are opposite evidence and they deserve opposite handling.
+  - **Silence** may mean the handset is on a table. Looping forever leaves them in limbo,
+    so one re-prompt and then a human is right. **Unchanged.**
+  - **A wrong key** means an awake caller pressing buttons. Ending the menu there trades
+    the *good* answer we were seconds from getting for a *guaranteed mediocre* one — and
+    the whole of `D37` rests on those two keypresses being the most reliable routing signal
+    in the system. Giving up on them to hit a tidy limit throws away the product's floor to
+    enforce a rule that was protecting against something else.
+- **Decision:** **no attempt limit.** An unrecognised press says sorry, names the two keys
+  that always work, and offers the menu again — for as long as the caller keeps pressing.
+- **What replaces the ceiling.** `menu.invalid` now *speaks the way out*
+  («กด 9 เพื่อฟังตัวเลือกอีกครั้ง หรือกด 0 เพื่อติดต่อเจ้าหน้าที่»), which the old wording did not.
+  With a limit, "try again" was survivable advice because the system eventually rescued
+  you; without one, the escape has to be said out loud every time. A test asserts both keys
+  appear in that line.
+- **The remaining number is not a limit.** `runaway_press_guard: 40` exists for a **stuck
+  DTMF sender** repeating one digit forever — a machine failure, not a person — and sits far
+  past any human behaviour. A test asserts it is at least 20, on the grounds that a guard a
+  caller could plausibly reach is an attempt limit wearing a different name.
+- **Tradeoffs:** a caller *can* now stay in the menu indefinitely by actively pressing wrong
+  keys. They can leave at any moment with one key, the silence rules still catch them the
+  moment they stop, and "trapped by their own continued input" is a materially different
+  situation from "trapped by the system".
+
+## D83. `0` is a shortcut through the evidence ladder, not a separate route
+- **Problem:** the user challenged whether an operator key is needed at all: the menus
+  already have catch-alls on both layers, so `0` looked like a second way to do the same
+  thing — and worse, *"a path where we know nothing about the person at all."*
+- **They were right about the implementation.** `queue_for` special-cased `OPERATOR` and
+  jumped to the DID's default queue, **discarding a product line the caller had already
+  chosen**. Someone who pressed `2` for health and then `0` landed in `q_general`. That is
+  exactly the information loss they described, and it was the only real argument against
+  the key.
+- **Decision:** delete the special case. Pressing `0` ends the walk and the queue is chosen
+  by the **same ladder as every other outcome** — explicit intent, then the line's catch-all,
+  then the DID's assumption, then general. `0` is therefore not a new path: it is *"stop
+  asking and put me through with whatever you already know."*
+- **Why keep the key at all**, rather than relying on the catch-alls:
+  - it is **the** universal convention. Callers press `0` whether or not we implement it;
+    the choice is between honouring it and answering "invalid";
+  - reaching the catch-all through the menu costs two more keypresses and a full listen,
+    which is the wrong ask for someone distressed, elderly, or on a bad line;
+  - the spoken hint «กด 0 เพื่อติดต่อเจ้าหน้าที่» stays **true** — they do reach a person.
+- **The outcome kind stays distinct.** `OPERATOR` still differs from `EXHAUSTED` in the
+  record, because *"gave up on the menu"* and *"kept mis-pressing"* are different facts and
+  the first is a UX signal worth watching. Distinct **measurement**, identical **routing**.
+- **Rejected: moving repeat onto `0`.** It only becomes free if the operator key goes, and
+  `9`-repeats / `0`-operator is the pairing callers already have muscle memory for. Keeping
+  both conventional costs one key and buys familiarity.
+
+## D84. No pre-call identity check in the IVR; the agent's keypad does that job
+- **Problem:** `ARCHITECTURE.md` §6 and `D20` both describe an optional IVR step — key the
+  last four of your citizen id — that promotes the caller to **L3_VERIFIED**. Prompts for it
+  were written during P3. The user objected to anything that has the customer keying
+  identity *before* reaching an agent.
+- **Decision:** **removed.** The `identify.*` prompts and their roles are deleted, and the
+  orphan check would flag them if they came back.
+- **Reasoning, and it is a consistency argument rather than a preference:** an automated
+  check that promotes to L3 with **no human in the loop** is precisely what `D44` refuses —
+  *a lookup returns evidence, never an action; only the agent attests.* The attestation
+  service already spells out why `IVR_VERIFY` does not count as system-verified: keying four
+  digits is a knowledge check, and a family member in the same room knows those digits. One
+  rung of the ladder was contradicting the rule the rest of it is built on.
+- **Nothing is lost**, because the replacement is strictly better and already built: the
+  agent starts a keypad capture during the call (`D43`, `D44`), the lookup ladder says
+  **which rung matched** (`D66`), and a person weighs it and attests. Judgement attached.
+- **It also removes a PDPA-awkward collection.** Asking for a citizen id before anyone has
+  said hello is a sensitive ask with weak justification, and it violates the menu's own
+  principle of not asking for what is not needed (`D37`, `D48`).
+- **The resolver rung is kept, and documented as reserved.** `IdentityResolver` still accepts
+  `ivr_verified_customer_id`; nothing supplies it. It survives deletion for one reason:
+  `D25`'s after-hours voicemail path has **no agent at all**, and is the one place a
+  self-service check would have to stand alone. Anything wiring it up owes a decision entry
+  saying why the missing human is acceptable there.

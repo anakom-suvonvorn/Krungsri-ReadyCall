@@ -20,10 +20,25 @@ version: 1
 settings:
   barge_in: true              # a keypress interrupts the prompt; menus feel slow otherwise
   repeat_key: "9"             # "กด 9 เพื่อฟังอีกครั้ง"
-  operator_key: "0"           # always reaches a human; never a dead end
-  max_attempts: 3             # after 3 unrecognised presses -> general queue, not a hang-up
+  operator_key: "0"           # "stop asking, put me through with whatever you know" (D83)
   invalid_prompt: menu.invalid
-  timeout_s: 7                # silence -> re-prompt once, then general queue
+  timeout_s: 7
+
+  # A WRONG KEY IS NOT A STRIKE (D82). There is no attempt limit: an unrecognised press
+  # says sorry, points at 9 and 0, and offers the menu again, for as long as the caller
+  # keeps pressing. Ending the menu after N mistakes traded a good answer we were about
+  # to get for a guaranteed mediocre one - and a caller pressing buttons is a caller who
+  # is present and trying, which is the opposite of a reason to give up on them.
+  #
+  # This number is NOT that limit. It is a runaway guard against a stuck DTMF sender
+  # repeating one digit for ever - a machine failure, not a person - and it is set far
+  # beyond anything a human would do.
+  runaway_press_guard: 40
+
+  # SILENCE IS DIFFERENT, and bounded on purpose. A wrong key proves somebody is there;
+  # silence does not. They may have put the phone down, so looping forever leaves them
+  # in limbo - one re-prompt, then route them to a human.
+  max_silences: 2
 
 # --- personalisation (D37) -----------------------------------------------------------
 #

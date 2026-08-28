@@ -4,10 +4,14 @@
 while the caller waits, and adds detail a keypad cannot capture. So the floor here is
 parity with an ordinary call centre, and every rule below exists to keep it there:
 
-* three unrecognised presses go to the general queue, never to a hang-up;
-* silence re-prompts once, then does the same;
-* `9` repeats and does **not** count as a mistake — re-listening is not an error;
-* `0` reaches a human from anywhere, in every menu, always.
+* **a wrong key is never a strike** (`D82`) — sorry, here are the options again, for as
+  long as they keep pressing. Giving up after N mistakes traded the good answer we were
+  about to get for a guaranteed mediocre one;
+* silence IS bounded, because it does not prove anybody is there: one re-prompt, then
+  route to a human;
+* `9` repeats and costs nothing — re-listening is not an error;
+* `0` means *stop asking and put me through with whatever you already know* (`D83`), and
+  it routes through the **same** evidence ladder as every other outcome.
 
 Modelled as `begin` / `on_digit` / `on_timeout` / `on_hangup` returning *what to play
 next*, rather than as a loop that awaits input. The reason is `B7`: an IVR written as a
@@ -216,7 +220,11 @@ class IvrMachine:
         run.pressed.append(digit)
 
         if digit == self._settings.operator_key:
-            # `0` is never a dead end, in any menu, at any depth (`D37`).
+            # `0` is never a dead end, in any menu, at any depth (`D37`). It is not a
+            # separate route either: whatever the menu already established travels with
+            # them, and `queue_for` picks the queue from the same ladder it always uses
+            # (`D83`). The outcome kind is kept distinct only because "gave up on the
+            # menu" and "kept pressing the wrong key" are different things to measure.
             return self._finish(
                 run,
                 IvrOutcomeKind.OPERATOR,
@@ -232,13 +240,18 @@ class IvrMachine:
         option = run.presentation.resolve(digit)
         if option is None:
             run.attempts += 1
-            if run.attempts >= self._settings.max_attempts:
+            if run.attempts >= self._settings.runaway_press_guard:
+                # Not a caller who has run out of chances — a sender that is stuck. A
+                # person cannot reach this, and if they somehow did they still get a
+                # queue rather than a dial tone.
                 return self._finish(
                     run,
                     IvrOutcomeKind.EXHAUSTED,
-                    reason=f"unrecognised_x{run.attempts}",
-                    lines=[self._prompts.render(self._settings.invalid_prompt)],
+                    reason=f"runaway_input_x{run.attempts}",
+                    lines=[],
                 )
+            # Otherwise: apologise, point at the two keys that always work, and offer the
+            # menu again. Unlimited, on purpose (`D82`).
             return IvrStep(
                 lines=(
                     self._prompts.render(self._settings.invalid_prompt),
@@ -273,8 +286,10 @@ class IvrMachine:
         if run.finished or run.presentation is None:
             return IvrStep(lines=(), outcome=run.outcome)
         run.timeouts += 1
-        if run.timeouts > 1:
-            return self._finish(run, IvrOutcomeKind.EXHAUSTED, reason="silence_x2", lines=[])
+        if run.timeouts >= self._settings.max_silences:
+            return self._finish(
+                run, IvrOutcomeKind.EXHAUSTED, reason=f"silence_x{run.timeouts}", lines=[]
+            )
         return IvrStep(
             lines=(self._prompts.say(PromptRole.NO_INPUT), *run.presentation.lines),
             expects_input=True,
