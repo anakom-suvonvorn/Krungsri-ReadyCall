@@ -2,7 +2,7 @@
 
 _How the full ReadyCall system works, end to end. Read this to understand the machine._
 _Status: **design only** — nothing here is implemented yet (see `PLAN.md` for the build order)._
-_Last updated: 2026-08-25._
+_Last updated: 2026-08-26._
 
 ---
 
