@@ -131,13 +131,19 @@ parity means the awkward cases are handled at least as well as a system with no 
 | The caller does | What happens | Why that rule |
 |---|---|---|
 | presses `0` | reaches a human, from any menu, at any depth — keeping whatever the menu already established | a caller who learns `0` in one menu must not be surprised in another |
-| presses `9` | hears the menu again, and **does not spend an attempt** | re-listening is being careful, not failing |
-| presses a wrong key | apology, then the menu again; three times and they go to a queue | never a hang-up |
-| says nothing | one re-prompt, then a queue | the same |
+| presses `9` | hears the menu again, and it costs nothing | re-listening is being careful, not failing |
+| presses a wrong key | apology naming both escape keys, then the menu again — **with no limit** (`D82`) | a wrong key *proves* somebody is there. Giving up after N mistakes throws away the good answer we were seconds from getting |
+| says nothing | one re-prompt, then a queue | silence does **not** prove anybody is there, so this half stays bounded |
 | says nothing on a product-line number | that **line's** queue, not the general one (`D40`) | they told us something; throwing it away is worse service than using it |
 | hangs up | recorded as abandoned, never as routed | the record should not claim a choice nobody made |
 
 **Every dotted path still ends in a queue.** That is the floor the whole AI layer sits on.
+
+**And there is no identity step in here** (`D84`). An earlier design had the caller key the
+last four of their citizen id to reach L3. It was removed: an automated check that promotes
+with **no human in the loop** is exactly what `D44` refuses — *a lookup returns evidence,
+never an action, and only the agent attests.* The agent's own keypad capture does the same
+job during the call, with judgement attached.
 
 Two orderings on this diagram are not stylistic. The **recording notice comes before any
 menu**, on every call, whichever number was dialled — and it is not the same thing as

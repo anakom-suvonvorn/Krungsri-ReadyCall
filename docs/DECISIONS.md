@@ -2082,3 +2082,66 @@ pushing back on rules I had carried over from `ARCHITECTURE.md` without re-exami
   `D25`'s after-hours voicemail path has **no agent at all**, and is the one place a
   self-service check would have to stand alone. Anything wiring it up owes a decision entry
   saying why the missing human is acceptable there.
+
+## D85. How close an agent is to free is a *conditional* prediction, and the curve is emergent
+_Proposed by the user as a shaped preference over elapsed ACW. Adopted, with the shape
+derived rather than tuned. Implemented as a projection; **not yet wired into matching.**_
+
+- **Problem:** `D73` fixed `expected_free_in(agent)` as *remaining call time + expected ACW*
+  and left the second term as "whatever ACW distribution the metrics show". That is the term
+  that actually decides things, and nothing computed it.
+- **The user's proposal**, in their words: record each agent's average ACW; treat an agent as
+  more and more appropriate to match as elapsed time approaches that average; keep the
+  preference *rising* past the average up to a peak around one standard deviation; and then
+  **decline**, because an agent far past their usual wrap-up evidently has more work than
+  usual on this one.
+- **That last instinct is right, and it is not obvious.** The naive model — "they average two
+  minutes, so at 1:30 they are 30 seconds away" — is wrong for task durations, which are
+  **right-skewed**: many short wrap-ups, a few very long ones. For such a distribution the
+  *expected remaining* time falls and then **rises**, because having already run long is
+  evidence of being a long one. It is the same reason the wait for a bus that is already
+  late gets longer, not shorter.
+- **Decision:** model ACW as **log-normal per agent** and score on
+  `E[T − t | T > t]` — the expected remaining time, *conditioned* on how long this wrap-up
+  has already run. The preference curve the user drew then **falls out of the model** instead
+  of being tuned:
+
+  ```
+  elapsed    0s     60s    120s   180s   300s   600s   1200s
+  remaining  140s   83s    59s    54s    55s    69s    98s      <- falls, then rises
+  readiness  0.10   0.25   0.37   0.41   0.40   0.32   0.20     <- peaks, then declines
+  ```
+
+  (measured, from a twelve-sample history with a 128 s median). The peak lands past the
+  median without anybody placing it there, and it **moves with the data** — which a fixed
+  "mean + 1σ" constant could not do.
+- **Why not the literal `mean + k·σ` peak:** it needs a `k` nobody can justify, it assumes
+  symmetry that duration data does not have, and it would have to be re-tuned per queue and
+  per phase. The conditional expectation needs no `k` and is a quantity you can state in a
+  sentence: *how much longer this is likely to take.*
+- **Shrinkage is not optional.** On demo day an agent has three completed wrap-ups, and a
+  mean and standard deviation from three samples is noise dressed as a measurement. Every
+  estimate is blended toward the population with a prior weight, so an agent **earns** their
+  own curve and borrows everyone else's until then. `is_mostly_borrowed` is exposed so any
+  screen showing this can say which it is.
+- **It is a SCORE, never a filter** (`D22`: hard filters exclude, they do not down-rank).
+  This directly answers the user's own caveat about load: when every other agent is on a
+  call, the one in a long wrap-up must still be reachable. Preferring someone less is not
+  refusing them, and only the first is safe. It also inherits `D22`'s standing guard that
+  deferral **never leaves an agent idle**.
+- **Where it plugs in:** as the ACW term of `expected_free_in(agent)`, feeding **deferral**.
+  It is deliberately *not* part of `fit` — fit is about whether this agent suits this caller,
+  and availability is a different question that must not be able to out-vote skill.
+- **The ladder `D73` already defined still ranks above it**, because an observed event beats
+  any prediction: wrap-up **saved** is the strongest signal, ACW-not-saved gets this curve,
+  and mid-call is weakest because the entire ACW is still ahead of them.
+- **Status: implemented and parked.** `services/agents/acw_stats.py`, covered by its own suite including
+  an assertion that the curve *has* the falling-then-rising shape — if that ever inverts, the
+  matcher would start preferring the agents least likely to be free while every individual
+  decision still looked defensible. Nothing calls it yet: `D73` keeps deferral off until P6
+  brings real ACW data, and turning it on against invented numbers would be the same mistake
+  in a new place. It is **derived, not stored** (`D78`) — a completed `Assignment` already
+  carries both ends of ACW, so no table was added.
+- **Future:** the same profile is the honest input to a "likely free in ~2 min" indicator on
+  a supervisor board, and it improves on its own as the AI-drafted wrap-up shortens ACW —
+  which is the product claim `D45` and `D73` are both built around.

@@ -317,9 +317,9 @@
 
 <div class="wrap">
   <p>
-    Three things are worth trying before reading on. Press <strong>8</strong> three times and watch
-    where you end up — it is a queue, not a dial tone. Press <strong>9</strong> five times and watch
-    the attempt counter refuse to move. And switch the caller to <em>recognised</em>, then press
+    Three things are worth trying before reading on. Press <strong>8</strong> ten times — nothing
+    happens to you, because a wrong key is never a strike. Press <strong>9</strong> as often as you
+    like, for the same reason. And switch the caller to <em>recognised</em>, then press
     <strong>4</strong> for health: the key you press and the key that gets recorded are different, and
     the panel shows both.
   </p>
@@ -468,8 +468,8 @@ outcome.pressed = ("4", "4")  # what actually happened under their thumb</pre>
       <tr><th>The caller</th><th>What happens</th><th>Why that rule</th></tr>
       <tr>
         <td class="k">presses 0</td>
-        <td>reaches a human from any menu at any depth, keeping whatever the menu already established</td>
-        <td>somebody who learns <code>0</code> in one menu must not be surprised in another</td>
+        <td>reaches a human from any depth, through the <strong>same queue ladder as every other outcome</strong></td>
+        <td>a shortcut, not a second route. It used to jump to the number's default queue and throw away a product line they had already chosen — which was the one real argument against having the key at all</td>
       </tr>
       <tr>
         <td class="k">presses 9</td>
@@ -478,13 +478,13 @@ outcome.pressed = ("4", "4")  # what actually happened under their thumb</pre>
       </tr>
       <tr>
         <td class="k">presses a wrong key</td>
-        <td>apology, then the menu again; three times and they are routed</td>
-        <td>never a hang-up</td>
+        <td>apology naming both escape keys, then the menu again — <strong>no limit</strong></td>
+        <td>a wrong key <em>proves</em> somebody is there. Ending the menu after three mistakes traded the good answer we were seconds from getting for a guaranteed mediocre one</td>
       </tr>
       <tr>
         <td class="k">says nothing</td>
         <td>one re-prompt, then routed</td>
-        <td>the same</td>
+        <td>silence does <em>not</em> prove anybody is there — they may have put the phone down — so this half stays bounded</td>
       </tr>
       <tr>
         <td class="k">says nothing on a product-line number</td>

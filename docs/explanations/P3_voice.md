@@ -285,5 +285,21 @@ the code about something that was never checked against reality.
 
 ## Changes since
 
-_Nothing yet. Append dated entries here rather than editing the body — this file is a record
+**2026-08-26 — the review pass (`D82`–`D84`).** Three rules above were changed after the
+user worked the built menu. §8's list of what the machine holds is superseded:
+
+- **there is no attempt limit any more** (`D82`). "Three wrong keys or two silences route to
+  the best queue available" was half wrong: a wrong key *proves* somebody is there and
+  silence does not, so only silence stays bounded. `menu.invalid` now names both escape keys,
+  which it has to once there is no ceiling to rescue a lost caller.
+- **`0` no longer short-circuits the queue ladder** (`D83`). `queue_for` special-cased it and
+  jumped to the DID's default, discarding a product line the caller had already chosen —
+  which was the real substance behind "the operator key introduces a path where we know
+  nothing about the person".
+- **the identify step described in §9 as "prompts written, nothing calls them" is deleted**
+  (`D84`). An automated check promoting to L3 with no human in the loop is what `D44`
+  refuses; the agent's keypad capture does the job with judgement attached. The prompt count
+  in §11 is therefore 29, not 32, and there are 17 roles, not 19.
+
+_Earlier body text stays as written — it is a record of what was true on 2026-08-25._ Append dated entries here rather than editing the body — this file is a record
 of what was true on 2026-08-25, and the "why" above stays useful even when a number moves._

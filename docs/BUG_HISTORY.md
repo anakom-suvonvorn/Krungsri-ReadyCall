@@ -426,3 +426,65 @@ than a mystery:
   normalisation, tokenisation for entity extraction.
 - **Data mapping** — a hackathon-day CSV whose columns don't match assumptions; nulls where the model
   requires values; duplicate customer ids.
+
+## B10. A call could sit in `WRAP_UP` for the rest of the shift
+_Found by the user driving the workstation, 2026-08-26._
+
+- **Symptoms**, exactly as reported: end a call, then press a presence state **without**
+  saving the wrap-up. The report panel vanishes, but the customer's details stay in the
+  middle column and the identity controls stay live on the right — a "half finished state".
+  Take another call afterwards and everything behaves perfectly. Then save *that* call's
+  wrap-up, and **the first call's details come back and never leave**, no matter how many
+  calls follow.
+- **Root cause.** Declaring a next state ends after-call work (`D45`) and marks
+  `acw_ended_at`, but **nothing closed the call**. It stayed in `CallState.WRAP_UP`, and
+  `_active_call_id()` returns the most recent assignment whose call is `IN_CALL` **or**
+  `WRAP_UP`. So:
+  1. call A is stranded in `WRAP_UP` → it is still "this agent's active call" → its identity
+     and brief keep rendering;
+  2. `_wrapping_call_id()` correctly returns `None` (ACW *did* end), so the wrap-up panel
+     unmounts — which is why the screen looked half-dressed rather than obviously wrong;
+  3. call B arrives, is newer, and wins the sort → everything looks fixed;
+  4. B is saved and goes `CLOSED` → the sort falls through to A, still in `WRAP_UP` → A
+     returns and stays, because nothing will ever close it.
+- **Investigation.** The report reads like a UI bug and it is not; the client renders exactly
+  what the snapshot says. Following `_active_call_id` to its `live_states` set made it
+  immediate. The tell was step 4 — a bug that *heals* and then *relapses* is almost always a
+  fallback in a sort, not a rendering fault.
+- **Fix.** Ending ACW now closes the call when no wrap-up was filed, with the transition
+  reason `acw_ended_without_wrapup`.
+- **What was deliberately NOT done: blocking the state buttons until the form is saved.**
+  That was the reported instinct and it would have worked, but it re-couples the two things
+  `D45` exists to separate — ACW ends when the *person* says so, not when our form is
+  satisfied — and it traps an agent who needs to step away. `D45`'s other half also survives
+  intact: **no wrap-up is invented.** The absence of a `call_wrapups` row is still exactly
+  the record that none was filed, which is what `11_persistence.md` promises.
+- **Verification.** Three regression tests, each confirmed to **fail with the fix reverted**,
+  including the user's precise A-then-B-then-relapse sequence.
+- **Lesson.** *A bug that fixes itself and then comes back is a fallback, not a redraw.* And
+  more generally: two functions that answer nearly the same question (`_active_call_id` and
+  `_wrapping_call_id`) will eventually disagree about an edge case, and the edge case is
+  where the state machine was left unfinished.
+
+## B11. A saved wrap-up still looked like outstanding work
+_Found by the user in the same pass._
+
+- **Symptoms:** pressing บันทึก (save) left the whole form on screen, fully editable, with
+  only a small badge to say it had worked — whereas บันทึกแล้วพร้อมรับสาย cleared it
+  immediately. Same underlying action, two completely different-looking outcomes.
+- **Root cause.** The panel renders while `system_state == after_call_work`, which is
+  **correct** (`D45`: saving closes the record, ACW keeps running). The second button also
+  declares a state, which ends ACW and unmounts the panel as a side effect. So the
+  inconsistency the user saw was real, but only one of the two behaviours was wrong: the
+  saved form should not still look like a form.
+- **Fix.** Once saved, the panel collapses to a **read-only summary that reads the record
+  back** — disposition, notes, follow-up — with the next-state action still offered. The ACW
+  bar stays either way, because after-call work genuinely has not ended, and the panel now
+  says so in a sentence.
+- **And the missing feedback.** Saving closes a record the agent can no longer see, so
+  success and a silently-failed request looked identical. A green confirmation now appears
+  on both save paths (`aria-live`, 3.2 s, `prefers-reduced-motion` respected).
+- **Lesson.** When the only feedback for an action is something *disappearing*, there is no
+  feedback at all — the failure case looks the same. Anything whose success is invisible
+  needs a visible acknowledgement, and one disposition list serving both the form and the
+  summary means the two cannot drift.

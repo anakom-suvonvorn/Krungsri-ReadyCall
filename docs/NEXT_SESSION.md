@@ -1,7 +1,7 @@
 # NEXT_SESSION
 
 _The live working state. READ THIS FIRST every session. Keep it short and current._
-_Last updated: 2026-08-25._
+_Last updated: 2026-08-26._
 
 ---
 
@@ -13,9 +13,8 @@ assembled before the phone is answered, which agent should take it and why, the 
 and a human accepts with the screen already right — and now **the caller keys their own way
 to the right queue through a real menu, hearing real (pre-rendered) Thai**.
 
-Verified **2026-08-25**: **496 tests** — 454 pass + 42 skipped without the Postgres
-container, 493 pass + 3 skipped with it (the three are FK cases the in-memory backend
-cannot have). `ruff check` + `ruff format --check` clean over 141 files,
+Verified **2026-08-26**: **512 tests** — 470 pass + 42 skipped without the Postgres
+container (the 42 are the database cases). `ruff check` + `ruff format --check` clean over 141 files,
 `mypy --strict` clean over 106, all scenarios replay, 60/60 diagrams current.
 
 ### The four sessions of review since P2b, in one place
@@ -101,6 +100,16 @@ than a hang-up · personalised ordering with its evidence · **a menu is compose
 clip** (`D80`) · **`menu_path` is canonical whatever was pressed** (`D81`) · both fake IVR
 walks retired — `run_scenario.py`'s `# P1:` and `demo.py`'s `# P2b:`.
 
+**P3 review pass (`D82`–`D84`, `B10`, `B11`).** Driven by the user working the screen and
+the menu. **A wrong keypress is never a strike** — no attempt limit, and `menu.invalid` now
+speaks both escape keys, because without a ceiling "try again" stops being survivable advice
+(`D82`) · **`0` walks the same queue ladder as everything else** (`D83`); it used to
+short-circuit to the DID default and throw away a chosen product line · **the pre-call
+identity step is gone** (`D84`) — promoting to L3 with no human in the loop is what `D44`
+refuses · **`B10`**: ending ACW without saving left the call in `WRAP_UP` for the shift ·
+**`B11`**: a saved wrap-up still looked like unfinished work, and had no visible
+confirmation.
+
 **P2b review pass.** The opening line asks an **open question** below L2 (`D55`) · the
 recommended-action chain written down (`D56`) · `other` challenge + a **named** third party
 (`D57`) · the agent sees the digits, `mask()` is for logs (`D58`) · `agent_intent` is a
@@ -134,7 +143,14 @@ reversing `D20`'s display gating).
 1. **P3 step 4** — media, VAD and the STT worker. The only part with hardware risk, and the
    only part of P3 not started. Full briefing below.
 2. **P4** — analysis and brief v2+ with Claude and Typhoon compared on the golden set.
-3. **Small and worth doing when convenient:**
+3. **`D85` is implemented and parked.** `services/agents/acw_stats.py` predicts how close
+   an agent in wrap-up is to being free, conditioned on how long it has already run — which
+   makes the preference curve rise, peak past the median, then fall, **from the data rather
+   than a tuned constant**. Its own suite asserts the curve shape itself. **Nothing calls it**:
+   `D73` keeps deferral off until P6 brings real ACW data, and switching it on against
+   invented numbers would repeat the mistake in a new place. Wire it into
+   `expected_free_in()` when P6 lands, as a **score, never a filter**.
+4. **Small and worth doing when convenient:**
    - `call_intents` and `app_context_events` are still in memory. Neither loses anything a
      restart cares about — an intent expires in 15 minutes and screen events are TTL-pruned
      — which is why they were left, but the tables are trivial if the demo ever needs them.
@@ -412,6 +428,24 @@ Facts about *this laptop* rather than the repo, so a fresh session does not redi
   want the numbering to actually move.
 - **Never hardcode an insurance literal in `services/`** — it goes in `config/` (`D28`).
 - **Never `datetime.now()` or a raw random id** outside `clock.py`/`ids.py` (`D35`).
+- **A wrong keypress is NEVER a strike; only silence is bounded** (`D82`). They are opposite
+  evidence — a wrong key proves somebody is there, silence does not — so do not "tidy" them
+  back into one symmetrical rule. `runaway_press_guard` is for a stuck DTMF sender, and a
+  test asserts it stays ≥ 20 so it cannot quietly become an attempt limit again.
+- **`0` must never short-circuit the queue ladder** (`D83`). That was the actual bug behind
+  the "operator introduces a path where we know nothing" objection: it jumped to the DID
+  default and discarded a product line the caller had already chosen.
+- **There is no pre-call identity step, on purpose** (`D84`). Anything that promotes assurance
+  with no human in the loop contradicts `D44`. The resolver's `ivr_verified_customer_id` rung
+  is deliberately fed by nothing; it is reserved for `D25`'s voicemail path, which has no
+  agent at all, and wiring it up owes a decision entry.
+- **Ending ACW must close the call** (`B10`). `D45` decouples "I finished the form" from "I am
+  done with this call", but a call left in `WRAP_UP` stays the agent's ACTIVE call and the
+  screen keeps rendering that customer — then relapses the moment a later call closes. Do not
+  fix this by blocking the state buttons: that re-couples exactly what `D45` separated.
+- **When the only feedback is something DISAPPEARING, there is no feedback** (`B11`). Success
+  and a silently-failed request look identical. Anything whose success is invisible needs an
+  acknowledgement.
 - **A `%% HANDWRITTEN` banner is a CLAIM, and hand-drawn diagrams rot.** The generated ones
   cannot drift; the other 46 can, and a sweep on 2026-08-26 found two still teaching decisions
   that had been **reversed** (`brief_gating` on `D74`, `identity_promotion` on `D65`) plus a

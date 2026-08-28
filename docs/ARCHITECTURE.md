@@ -249,8 +249,7 @@ can be edited without a studio and the audio is deterministic and offline-safe.
         ├── STEP 2: why are you calling?   ← skipped if the app gave a specific plan
         │     "กด 1 แจ้งอุบัติเหตุ  กด 2 ขอความช่วยเหลือฉุกเฉิน  ...  กด 6 เรื่องอื่นๆ"
         │
-        ├── (optional) identify, for full service at L0/L1:
-        │     "กรุณากดเลขบัตรประชาชน 4 หลักสุดท้าย" → assurance L3
+        │   (no identity step - removed, D84. The agent's keypad does it, with judgement)
         ▼
   ►► QUEUE IS NOW KNOWN. Nothing after this point is required for routing. ◄◄
         │
@@ -295,11 +294,17 @@ call centre" rather than "a call centre that knows nothing."
 - **Skip what we already know.** App tap → line and often intent; product DID → line.
   Asking a question we know the answer to is bad service.
 - **Reserved keys are consistent everywhere:** `9` repeat, `0` operator. A caller who
-  learns `0` in one menu must not be surprised in another.
+  learns `0` in one menu must not be surprised in another. `0` is a **shortcut through the
+  normal queue ladder**, not a separate route (`D83`) — whatever the menu already
+  established travels with them.
 - **Every reason menu has a catch-all** ("เรื่องอื่นๆ" → `<line>.other`), so an unexpected
   reason lands with the right line's generalist instead of trapping the caller.
 - **At most seven options**, because past that people stop listening and press `0`.
-- Three unrecognised presses, or silence twice, → the general queue. Never a hang-up.
+- **A wrong key is never a strike** (`D82`): no attempt limit, and the apology names both
+  escape keys every time. **Silence is bounded** — one re-prompt, then a human — because a
+  wrong key proves somebody is there and silence does not.
+- **No identity step** (`D84`). It was designed and removed: an automated check promoting to
+  L3 with no human in the loop is what `D44` refuses. The agent's keypad capture does it.
 
 ### Personalised menu ordering
 

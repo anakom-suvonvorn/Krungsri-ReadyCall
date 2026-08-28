@@ -1,7 +1,7 @@
 # PROJECT_STATE
 
 _What this project is, what exists, what doesn't, and where everything lives._
-_Last updated: 2026-08-25._
+_Last updated: 2026-08-26._
 
 ---
 
@@ -44,9 +44,9 @@ roster) are still fakes. An agent signs in at `/workstation`, a caller keys thei
 real menu to the right queue, the desk rings, the brief is already there, and the disclosure gate
 moves when the agent attests.
 
-Verified on 2026-08-25: **496 tests** — 454 pass + 42 skipped without the Postgres container,
-493 pass + 3 skipped with it (the three are FK cases the in-memory backend cannot have).
-`ruff check` and `ruff format --check` clean over 141 files, `mypy --strict`
+Verified on 2026-08-25: **512 tests** — 470 pass + 42 skipped without the Postgres container
+(the 42 are the database cases).
+`ruff check` and `ruff format --check` clean over 144 files, `mypy --strict`
 clean over **106** source files, and all three scenarios replay byte-identically. The database
 suites ran against a **live Postgres**, and a restart was verified outside pytest with two real
 uvicorn processes.
@@ -360,8 +360,8 @@ performing by hand, i.e. what the next services take over (`D36`).
 
 | | |
 |---|---|
-| Source files | 141 Python files (`src/` 104 + `tests/` + `scripts/` + `mock/`) |
-| Tests | 496, all passing, ~100 s (137 store contract + restart across 3 backends; 51 on the prompt pack and the IVR) |
+| Source files | 144 Python files (`src/` 104 + `tests/` + `scripts/` + `mock/`) |
+| Tests | 512, all passing, ~100 s (137 store contract + restart across 3 backends; 51 on the prompt pack and the IVR) |
 | Ports defined | 8 (telephony, stt, llm, tts, core_data, event_bus, blob_storage, agent_directory) |
 | Persisted tables | **9** + Alembic, verified on a live Postgres. Presence, the waiting pool and the live identity are deliberately **not** among them (`D78`) |
 | Adapters | 9 fakes/nulls + a caching/circuit-breaking decorator; no real vendor adapter yet |
