@@ -436,6 +436,71 @@ ol.actions li {
   max-width: 90vw;
 }
 
+/* The success variant. Saving a wrap-up closes a record the agent can no longer see, so
+   the only other feedback is something LEAVING the screen — which is indistinguishable
+   from a silent failure. */
+.toast.ok {
+  background: rgba(52, 211, 153, 0.14);
+  border-color: rgba(52, 211, 153, 0.45);
+  color: var(--ok);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+.toast.ok .tick {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--ok);
+  color: #06281d;
+  font-size: 13px;
+  font-weight: 700;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .toast.ok {
+    animation: toast-in 0.18s ease-out;
+  }
+  @keyframes toast-in {
+    from {
+      opacity: 0;
+      transform: translate(-50%, 6px);
+    }
+    to {
+      opacity: 1;
+      transform: translate(-50%, 0);
+    }
+  }
+}
+
+/* The saved wrap-up, read back. */
+.saved-note {
+  background: rgba(52, 211, 153, 0.1);
+  border: 1px solid rgba(52, 211, 153, 0.3);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+}
+.saved-note b {
+  color: var(--ok);
+}
+.saved-summary {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  margin: 0 0 12px;
+  font-size: 13px;
+}
+.saved-summary dt {
+  color: var(--muted, #9aa4b2);
+}
+.saved-summary dd {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
 /* --- sign-in ------------------------------------------------------------ */
 
 .signin {

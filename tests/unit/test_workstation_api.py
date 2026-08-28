@@ -963,3 +963,88 @@ def test_a_demo_caller_who_presses_nothing_is_not_stranded(client: Any) -> None:
 def test_pressing_zero_reaches_a_human_through_the_api(client: Any) -> None:
     body = place_call(client, did="+6621234000", keys=["0"], ignore_hours=True)
     assert body["queue_id"] == "q_general"
+
+
+# --- B10: leaving ACW without saving must not strand the call -----------------------------
+
+
+def _run_one_call(client: Any, clock: ManualClock, *, intent_code: str, number: str) -> str:
+    """Offer -> accept -> end. Leaves the agent in ACW with the call in WRAP_UP."""
+    placed = place_call(client, intent_code=intent_code, caller_number=number, ignore_hours=True)
+    offer = client.get("/v1/agent/me").json()["offer"]
+    assert offer is not None, placed
+    client.post(f"/v1/agent/offers/{offer['assignment_id']}/accept")
+    clock.advance(60)
+    client.post(f"/v1/agent/calls/{placed['call_session_id']}/end", json={})
+    return str(placed["call_session_id"])
+
+
+def test_declaring_a_state_without_saving_still_ends_the_call(
+    client: Any, clock: ManualClock
+) -> None:
+    """`B10`. `D45` says the PERSON ends after-call work and nothing auto-saves a wrap-up.
+    Both still hold — but the CALL must not sit in `WRAP_UP` for ever, because while it
+    does it counts as this agent's active call."""
+    sign_in_agent(client, "A006")
+    client.post("/v1/agent/state", json={"agent_intent": "ready"})
+    call_id = _run_one_call(client, clock, intent_code="health.ipd.preauth", number="0812345678")
+
+    wrapping = client.get("/v1/agent/me").json()
+    assert wrapping["active_call_session_id"] == call_id
+    assert wrapping["wrapup_saved"] is False
+
+    # The agent walks away from the form and declares a next state instead.
+    client.post("/v1/agent/state", json={"agent_intent": "lunch"})
+
+    after = client.get("/v1/agent/me").json()
+    assert after["presence"]["system_state"] != "after_call_work"
+    assert after["active_call_session_id"] is None, "the call must not still be active"
+    assert after["wrapup_call_session_id"] is None
+    assert after["identity"] is None, "nobody is on the phone, so nobody is on screen"
+    assert after["brief"] is None
+
+
+def test_no_wrapup_is_invented_for_a_call_nobody_wrapped_up(
+    client: Any, clock: ManualClock
+) -> None:
+    """The absence IS the record (`D45`). Closing the call must not fabricate a
+    disposition just to tidy the state machine — so the form can no longer be saved
+    against it, and nothing filed one on the agent's behalf."""
+    sign_in_agent(client, "A006")
+    client.post("/v1/agent/state", json={"agent_intent": "ready"})
+    call_id = _run_one_call(client, clock, intent_code="health.ipd.preauth", number="0812345678")
+    client.post("/v1/agent/state", json={"agent_intent": "lunch"})
+
+    late = client.post(
+        f"/v1/agent/calls/{call_id}/wrapup",
+        json={"disposition": "advice_given", "notes": ""},
+    )
+    assert late.status_code == 400, "the call is closed; there is nothing left to wrap up"
+    assert "wrap-up" in late.text or "wrap_up" in late.text
+
+
+def test_a_stranded_call_does_not_come_back_after_the_next_one(
+    client: Any, clock: ManualClock
+) -> None:
+    """The exact sequence that surfaced this: abandon the form on call A, handle call B
+    normally, save B — and A used to reappear on screen and stay for the rest of the
+    shift, because `_active_call_id` fell back to whatever was still in `WRAP_UP`."""
+    sign_in_agent(client, "A006")
+    client.post("/v1/agent/state", json={"agent_intent": "ready"})
+
+    first = _run_one_call(client, clock, intent_code="health.ipd.preauth", number="0812345678")
+    client.post("/v1/agent/state", json={"agent_intent": "ready"})  # no save — the bug's trigger
+
+    second = _run_one_call(client, clock, intent_code="health.claim.status", number="0898887777")
+    assert client.get("/v1/agent/me").json()["active_call_session_id"] == second
+
+    client.post(
+        f"/v1/agent/calls/{second}/wrapup",
+        json={"disposition": "advice_given", "notes": ""},
+    )
+    client.post("/v1/agent/state", json={"agent_intent": "ready"})
+
+    final = client.get("/v1/agent/me").json()
+    assert final["active_call_session_id"] != first, "the stranded call came back"
+    assert final["active_call_session_id"] is None
+    assert final["brief"] is None, "the screen must be empty between calls"

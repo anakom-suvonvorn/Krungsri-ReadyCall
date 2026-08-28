@@ -871,6 +871,16 @@ export function QueueStrip({ queues }: { queues: Queue[] }) {
 
 // --- wrap-up (D45, D59) ---------------------------------------------------
 
+/** Disposition codes and their Thai labels, in one place: the form offers them and the
+ *  saved summary reads them back, and two copies would eventually disagree. */
+const DISPOSITIONS: Record<string, string> = {
+  advice_given: "ให้คำแนะนำแล้ว",
+  claim_opened: "เปิดเคลม",
+  document_sent: "ส่งเอกสาร",
+  escalated: "ส่งต่อ",
+  callback_scheduled: "นัดโทรกลับ",
+};
+
 export function WrapupPanel({
   presence,
   saved,
@@ -903,21 +913,75 @@ export function WrapupPanel({
   const draining = presence.agent_intent === "draining";
   const canOfferReady = presence.declarable.includes("ready") && !draining && !lastCallSpent;
 
+  // Once saved, the form collapses to a read-only confirmation. Leaving the editable
+  // fields on screen made a finished record look like outstanding work — the agent could
+  // not tell at a glance whether they still owed anything (`B11`). ACW itself keeps
+  // running either way, which is `D45` and is what the line below says.
+  if (saved) {
+    return (
+      <div className="panel">
+        <h2>สรุปหลังจบสาย</h2>
+        <div className="saved-note">
+          <b>บันทึกเรียบร้อยแล้ว</b>
+          <div className="faint">
+            บันทึกของสายนี้ปิดแล้ว — งานหลังสายยังไม่จบจนกว่าคุณจะเลือกสถานะถัดไป
+          </div>
+        </div>
+        <dl className="saved-summary">
+          <dt>ผลการติดต่อ</dt>
+          <dd>{DISPOSITIONS[disposition] ?? disposition}</dd>
+          {notes.trim() && (
+            <>
+              <dt>บันทึกการสนทนา</dt>
+              <dd>{notes}</dd>
+            </>
+          )}
+          {followUp && (
+            <>
+              <dt>ติดตามต่อ</dt>
+              <dd>ต้องติดตามต่อ</dd>
+            </>
+          )}
+        </dl>
+        <div className="row">
+          {canOfferReady && (
+            <button
+              className="primary"
+              onClick={() => onSaveAndDeclare(payload(), "ready")}
+              disabled={busy}
+            >
+              พร้อมรับสาย
+            </button>
+          )}
+          {draining && (
+            <button
+              className="primary"
+              onClick={() => onSaveAndDeclare(payload(), "draining")}
+              disabled={busy}
+            >
+              กลับสู่โหมดไม่รับสายใหม่
+            </button>
+          )}
+        </div>
+        <div className="hint">เลือกสถานะอื่นได้ที่แผงสถานะทางซ้าย</div>
+      </div>
+    );
+  }
+
   return (
     <div className="panel">
       <h2>สรุปหลังจบสาย</h2>
-      {saved && <span className="badge ok">บันทึกแล้ว</span>}
       <p className="faint">
         การบันทึกจะปิด “บันทึกของสายนี้” เท่านั้น — งานหลังสายจะจบเมื่อคุณเลือกสถานะถัดไป
       </p>
 
       <div className="stack" style={{ marginTop: 8 }}>
         <select value={disposition} onChange={(e) => setDisposition(e.target.value)}>
-          <option value="advice_given">ให้คำแนะนำแล้ว</option>
-          <option value="claim_opened">เปิดเคลม</option>
-          <option value="document_sent">ส่งเอกสาร</option>
-          <option value="escalated">ส่งต่อ</option>
-          <option value="callback_scheduled">นัดโทรกลับ</option>
+          {Object.entries(DISPOSITIONS).map(([code, label]) => (
+            <option key={code} value={code}>
+              {label}
+            </option>
+          ))}
         </select>
         <textarea
           rows={4}
@@ -935,7 +999,7 @@ export function WrapupPanel({
           ต้องติดตามต่อ
         </label>
         <div className="row">
-          <button onClick={() => onSave(payload())} disabled={busy || saved}>
+          <button onClick={() => onSave(payload())} disabled={busy}>
             บันทึก
           </button>
           {canOfferReady && (

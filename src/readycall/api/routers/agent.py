@@ -157,6 +157,15 @@ async def declare_state(
             await container.assignments.note_acw_ended(
                 assignment_id=assignment.assignment_id, declared_intent=str(intent)
             )
+            # And the call itself must leave `WRAP_UP`, saved or not (`B10`). Leaving it
+            # open kept it "active", so the workstation went on rendering that customer
+            # long after the agent had moved on — and the moment a LATER call closed, the
+            # stale one came back and stayed for the rest of the shift.
+            session = await container.calls.get(assignment.call_session_id)
+            if session is not None and session.state is CallState.WRAP_UP:
+                await container.assignments.close_unwrapped(
+                    session, assignment_id=assignment.assignment_id
+                )
 
     out = await _presence_out(container, who.agent_id)
     await container.hub.send(who.agent_id, "presence", out.model_dump(mode="json"))

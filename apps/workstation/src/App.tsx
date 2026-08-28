@@ -40,10 +40,20 @@ export default function App() {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /** A short confirmation for actions whose only other feedback is something *leaving*
+   *  the screen. Saving a wrap-up closes a record the agent cannot see afterwards, so
+   *  without this the successful case and the silently-failed one look identical. */
+  const [toast, setToast] = useState<string | null>(null);
   const [muted, setMuted] = useState(false);
   const [held, setHeld] = useState(false);
   /** `server - browser`, in ms, sampled once per snapshot. See `B8`. */
   const [skew, setSkew] = useState(0);
+
+  useEffect(() => {
+    if (toast === null) return;
+    const id = window.setTimeout(() => setToast(null), 3200);
+    return () => window.clearTimeout(id);
+  }, [toast]);
 
   const signedIn = snapshot !== null;
   const now = useSecondTicker(signedIn);
@@ -235,9 +245,11 @@ export default function App() {
               saved={snapshot.wrapup_saved}
               busy={busy}
               onSave={(payload) =>
-                run(() => api.saveWrapup(wrapupCallId, payload)).then(
-                  (next) => next && setSnapshot(next),
-                )
+                run(() => api.saveWrapup(wrapupCallId, payload)).then((next) => {
+                  if (!next) return;
+                  setSnapshot(next);
+                  setToast("บันทึกสรุปเรียบร้อยแล้ว");
+                })
               }
               // Two requests behind one button, deliberately (`D45`): saving closes the
               // call RECORD, declaring ends after-call work, and either may happen alone.
@@ -246,7 +258,11 @@ export default function App() {
                   if (!snapshot.wrapup_saved) await api.saveWrapup(wrapupCallId, payload);
                   await api.declare(intent);
                   return api.me();
-                }).then((next) => next && setSnapshot(next))
+                }).then((next) => {
+                  if (!next) return;
+                  setSnapshot(next);
+                  setToast("บันทึกสรุปเรียบร้อยแล้ว");
+                })
               }
             />
           )}
@@ -301,6 +317,15 @@ export default function App() {
           />
         </div>
       </div>
+
+      {toast && (
+        <div className="toast ok" role="status" aria-live="polite">
+          <span className="tick" aria-hidden="true">
+            ✓
+          </span>
+          {toast}
+        </div>
+      )}
 
       {/* The ACW banner lives HERE, not inside the wrap-up form. Saving the form closes
           the call record (`D45`) and used to unmount the only visible ACW timer with it,

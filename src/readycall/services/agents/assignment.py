@@ -338,6 +338,25 @@ class AssignmentService:
         )
         return assignment
 
+    async def close_unwrapped(self, session: CallSession, *, assignment_id: str) -> Assignment:
+        """End a call whose agent left after-call work without filing a wrap-up.
+
+        `D45` says ACW ends when the **person** says so, and nothing may auto-save a
+        wrap-up on their behalf. Both still hold: this writes no `call_wrapups` row and
+        invents no disposition. What it does is stop the CALL from sitting in `WRAP_UP`
+        for ever, which is a different thing entirely and was a real bug (`B10`) — the
+        call stayed active, so the workstation kept rendering that customer's identity and
+        brief, and once a later call closed, the stale one surfaced again and never left.
+
+        The absence of a wrap-up row is still the record that none was filed — exactly
+        what `D45` wanted to preserve. The transition reason says so out loud.
+        """
+        assignment = self._require(assignment_id)
+        await self._orchestrator.transition(
+            session, CallState.CLOSED, reason="acw_ended_without_wrapup"
+        )
+        return assignment
+
     async def note_acw_ended(self, *, assignment_id: str, declared_intent: str) -> Assignment:
         """Record the ACW close-out on the assignment after the agent declared.
 
