@@ -38,6 +38,7 @@ from readycall.adapters.llm.rulebased import RuleBasedLlm
 from readycall.adapters.stt.scripted import ScriptedSttEngine, ScriptedTurn
 from readycall.adapters.telephony.simulated import SimulatedTelephonyProvider
 from readycall.clock import ManualClock
+from readycall.config import load_settings
 from readycall.console import enable_utf8
 from readycall.domain import events as ev
 from readycall.domain.enums import (
@@ -47,18 +48,24 @@ from readycall.domain.enums import (
     EntryChannel,
     ProductLine,
     RatingSource,
+    SpeakerRole,
 )
-from readycall.domain.models import CallIntent, CaseBrief, ContextSnapshot
+from readycall.domain.models import CallIntent, CaseBrief, ContextSnapshot, TranscriptTurn
 from readycall.domainpack import DomainPack
 from readycall.services.brief import BriefBuilder
 from readycall.services.call_orchestrator import CallOrchestrator, InMemoryCallSessionRepository
 from readycall.services.context import ContextAssembler
 from readycall.services.identity import IdentityResolver, InMemoryCallIntentStore, hash_token
+from readycall.services.intake.service import IntakeService
 from readycall.services.ivr.personalise import PersonalisationInputs
 from readycall.services.ivr.service import IvrService, ScriptedChoices
 from readycall.voiceprompts import PromptPack
 
 CONSENT_BY_NAME = {s.value: s for s in ConsentScope}
+
+#: What pressing 1 on the intake offer grants by itself (`D88`). Listing these in a
+#: scenario's `consent:` block as well would record the same fact twice.
+_OFFER_GRANTS = frozenset({ConsentScope.RECORDING, ConsentScope.AI_PROCESSING})
 
 
 @dataclass(slots=True)
@@ -166,6 +173,15 @@ class ScenarioRun:
             telephony=self.telephony,
             orchestrator=self.orchestrator,
             clock=self.clock,
+        )
+        self.intake = IntakeService(
+            pack=self.pack,
+            prompts=self.prompts,
+            telephony=self.telephony,
+            orchestrator=self.orchestrator,
+            clock=self.clock,
+            bus=self.bus,
+            settings=load_settings(config_dir=root / "config"),
         )
 
         self.snapshot: ContextSnapshot | None = None
@@ -294,12 +310,18 @@ class ScenarioRun:
                 "menu reordered for this caller: " + "; ".join(ivr_result.promoted_because)
             )
 
+        # Consent the OFFER does not cover. Pressing 1 grants `recording` and
+        # `ai_processing` together (`D88`), so listing them here as well would write the
+        # same fact twice; `health_data` is a genuinely separate scope (`D14`) and is the
+        # only one that still needs its own row.
         for name in sc.consents:
             scope = CONSENT_BY_NAME.get(name)
             if scope is None:
                 raise SystemExit(f"unknown consent scope in scenario: {name!r}")
+            if scope in _OFFER_GRANTS:
+                continue
             session = await orch.record_consent(
-                session, scope=scope, granted=True, basis="ivr_keypress"
+                session, scope=scope, granted=True, basis="ivr_keypress", channel="ivr"
             )
         self.clock.advance(sc.seconds("ivr", 8.0))
 
@@ -318,24 +340,54 @@ class ScenarioRun:
         )
         session.brief_version = self.brief.version
 
-        # --- intake (enrichment, never routing) ---------------------------------------
-        may_intake = session.may_run_intake and not sc.declines_intake and bool(sc.turns)
-        if may_intake:
-            session = await orch.transition(
-                session, CallState.INTAKE_ACTIVE, reason="consent_given_press_1"
-            )
-            session.intake_id = ids.intake_id()
-            # P1: the media gateway and VAD land in P3.
+        # --- the hold: position, offer, and the recording if they want one -------------
+        #
+        # The real service since P3 step 4. Only the keypress is scripted, exactly as the
+        # menu's is: `declined: true` presses 2, a scenario with turns presses 1, and a
+        # scenario with neither says nothing and falls through to hold.
+        intake_keys = ["2"] if sc.declines_intake else (["1"] if sc.turns else [])
+        hold = await self.intake.run_offer(
+            session,
+            caller=ScriptedChoices(intake_keys),
+            position=3,
+            # No wait estimate is produced anywhere yet, so the caller hears their
+            # position and no invented number (`D89`).
+            wait_minutes=None,
+        )
+        self.notes.append(
+            f"hold: {len(hold.played)} lines played, keys {'/'.join(hold.pressed) or '-'}"
+            f" -> consent={hold.consented}, {hold.degraded}"
+        )
+
+        # P3-media: the media gateway and VAD land in the next slice, so the utterances
+        # come from the scripted engine on the scenario's own timings rather than from
+        # audio. Everything downstream of `on_turn` is the production path.
+        if hold.recording:
             await self.stt.warmup()
-            for _ in sc.turns:
+            for seq, _ in enumerate(sc.turns, start=1):
                 result = await self.stt.transcribe_utterance([])
                 if not result.text:
                     break
                 self.transcript.append(result.text)
+                await self.intake.on_turn(
+                    session.call_session_id,
+                    TranscriptTurn(
+                        turn_id=ids.turn_id(),
+                        call_session_id=session.call_session_id,
+                        seq=seq,
+                        speaker_role=SpeakerRole.CUSTOMER,
+                        text=result.text,
+                        t_start_ms=result.t_start_ms,
+                        t_end_ms=result.t_end_ms,
+                        asr_confidence=result.confidence,
+                        engine=result.engine,
+                        engine_version=result.engine_version,
+                    ),
+                )
                 self.clock.advance(sc.seconds("per_turn", 4.0))
-            session = await orch.transition(
-                session, CallState.INTAKE_COMPLETE, reason="silence_timeout"
-            )
+            # They stopped talking. One re-prompt, then the recording closes (`D88`).
+            await self.intake.on_silence(session.call_session_id)
+            await self.intake.on_silence(session.call_session_id)
         elif sc.declines_intake:
             self.notes.append(
                 "caller pressed 2 - routing already settled by the menu, so the brief is "
@@ -354,6 +406,11 @@ class ScenarioRun:
             session, CallState.OFFERED, reason=f"offered_to:{sc.agent_id}"
         )
         self.clock.advance(sc.seconds("offer", 6.0))
+        # The offer window IS the intake's grace period (`D21`), so this is what closes
+        # the hold - including for a caller who never answered the offer at all.
+        final = await self.intake.on_agent_accepted(session.call_session_id)
+        if final is not None and final.kind is not None:
+            self.notes.append(f"hold ended on accept: {final.kind}")
         await self.telephony.bridge(telephony_call_id, f"sip:{sc.agent_id}@readycall.local")
         session = await orch.transition(session, CallState.IN_CALL, reason="agent_accepted")
 

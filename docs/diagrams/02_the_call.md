@@ -120,7 +120,15 @@ The consent branch matters just as much. If the caller presses 2, or says nothin
 no recording, no transcript, no AI — **and the call proceeds normally**. Consent gates the
 intake, never the call (`D14`). Health data is its own separate scope, because bundling it
 into one yes/no would mean a motor-claim caller consenting to health processing to report a
-dent.
+dent. *(That scope is still asked for by nothing — see `Q24`.)*
+
+Two details of that branch are worth reading off the diagram, because both were choices
+(`D88`). **One keypress grants both scopes** the intake needs, because the line the caller
+just heard says exactly what will happen, and asking twice for one thing already agreed to
+in a single sentence is worse service without being better privacy. And **pressing 2 writes
+a `granted=False` row rather than nothing**: an empty consent list cannot tell you whether
+the caller refused or was never asked, and an agent staring at a thin brief needs to know
+which — the first means do not raise it, the second means you may.
 
 ---
 

@@ -1,7 +1,7 @@
 # DECISIONS
 
 _Significant engineering decisions and their rationale. Append new ones at the bottom; never silently reverse one without a new entry explaining why._
-_Last updated: 2026-08-26._
+_Last updated: 2026-08-31._
 
 Format per entry: **Problem → Decision → Reasoning → Alternatives → Tradeoffs → Future.**
 
@@ -476,8 +476,8 @@ _`D37`–`D38` added 2026-08-19 after a design review of the call flow._
     a product-line DID gives the line. Asking a question we know the answer to is bad
     service.
   - `config/menus.yaml` holds the tree. Reserved keys are consistent everywhere (`9`
-    repeat, `0` operator), every reason menu has a catch-all option, and no menu exceeds
-    seven spoken options — all enforced by tests.
+    repeat — **and `9` is the only one; `D86` removed the operator key**), every reason menu
+    has a catch-all option, and no menu exceeds seven spoken options — all enforced by tests.
 - **Reasoning:** This re-frames the product honestly. **The base is parity with what
   already exists** — reliable keypad routing that needs no AI, no consent and no speech.
   **The AI is the delta on top**: it makes the agent's screen useful rather than making
@@ -495,8 +495,9 @@ _`D37`–`D38` added 2026-08-19 after a design review of the call flow._
   status quo and bets routing on the least reliable component. Menu-only with no AI —
   that is just today's call centre.
 - **Tradeoffs:** Two extra keypresses for callers who would rather just talk. Mitigated by
-  skipping the menu whenever we already know, by personalised ordering, and by `0` always
-  reaching a human.
+  skipping the menu whenever we already know, by personalised ordering, and by every menu
+  ending in a spoken "เรื่องอื่นๆ" that reaches a generalist. *(Originally "by `0` always
+  reaching a human" — `D86` removed that key, and the catch-all does the job.)*
 - **Consequence for matching:** the queue is known at `QUEUED` rather than after intake, so
   `D23`'s confidence-weighted intent blend now has a *reliable* prior (the keypress) rather
   than a guess. Speech refines it; it no longer has to establish it.
@@ -2232,3 +2233,109 @@ _Proposed by the user, and it resolves a tension `B10`'s fix had left half-open.
 - **Future:** the same list is where an AI-drafted wrap-up would surface for approval, and
   the count is a supervisor signal on its own — an agent with six unfiled records is telling
   you something about their day.
+
+
+## D88. The intake offer is its own machine, and a strategy consumes turns rather than frames
+_P3 step 4a. The first thing built below `ARCHITECTURE.md` §6's "queue is now known" line._
+
+Four choices, all made while building the offer, all of which could reasonably have gone
+the other way.
+
+### 1. A second machine, not two more states on the end of the IVR
+
+`services/ivr/machine.py` decides **where the call goes**; `services/intake/hold.py` decides
+**how much the agent will know when it gets there**. Those are the two halves of `D37` — the
+keypad is the floor, the AI is the delta — and the architecture already draws a line between
+them in the flow diagram. Adding `OFFERING` and `RECORDING` to `IvrMachine` would have put
+routing rules and enrichment rules in one file with one outcome type, and the first person to
+add "if the caller declined, route them differently" would have found nothing in the way.
+
+The cost is a second machine with a similar shape. The benefit is that
+`test_every_answer_leaves_the_queue_exactly_where_the_menu_put_it` is a statement about
+module boundaries and not just about today's code.
+
+### 2. `run_offer` stops at the answer; the recording outlives it
+
+The first version looped until the intake finished, and it was wrong in a way that only
+showed up when a scripted caller pressed `1` and the loop immediately "heard" them fall
+silent. The three things that actually end a recording are a **VAD silence**, the **maximum
+duration**, and **an agent pressing Accept** — and the last one arrives on a different
+connection, seconds later, from a different person (`D21`).
+
+So the driver returns as soon as the offer is answered, the hold stays live in
+`IntakeService._live`, and `on_silence` / `on_max_duration` / `on_agent_accepted` /
+`on_hangup` are entry points the media layer will drive when it exists. Keeping the loop
+would have meant this file owning a media loop that does not exist and **inventing what it
+reports** — which is the family of mistake `B3`, `B4`, `B7` and `B8` all belong to.
+
+`api/routers/agent.py` calls `on_agent_accepted` **before** `assignments.accept`, so the last
+of the transcript is attached to the call before the agent's screen renders it.
+
+### 3. `IntakeStrategy` takes `TranscriptTurn`, not a media stream
+
+`ARCHITECTURE.md` §7 drew `start(session, media: MediaStream)`. It takes turns instead.
+
+- **It is the seam in the right place.** The media gateway, the resampler, the VAD and the
+  STT worker are all *one* concern — turning audio into sentences — and every strategy wants
+  the sentences. `PassiveRecordIntake` would have accepted a stream only to hand it straight
+  to the transcriber.
+- **It made the whole seam buildable today, with no GPU, no audio and no telephony.** That is
+  not a convenience: it is the reason `D10`'s protocol now has a real implementation and a
+  test suite three phases before the hardware risk lands.
+- `ConversationalAgentIntake` will need more than turns, but what it actually needs is a
+  **TTS output channel and barge-in**, not raw input frames — and those belong in its
+  constructor, where they can be typed properly.
+
+### 4. Pressing 1 grants both consent scopes; pressing 2 records the refusal
+
+`session.may_run_intake` requires `recording` **and** `ai_processing` (`D14`). Two options:
+ask twice, or grant both on one keypress.
+
+- **One keypress.** The prompt says exactly what will happen — *"we will record what you say,
+  and the agent will see it the moment they answer"* — so a single `1` is informed consent to
+  both, and asking twice for one thing the caller already agreed to in one sentence is worse
+  service without being better privacy. Both rows carry `basis="ivr_keypress_1"`, so the
+  evidence is on the record either way.
+- **`health_data` stays separate** and is *not* granted by the offer. It is sensitive data
+  under the PDPA and it needs its own ask, which nothing does yet — see `Q24`.
+- **Pressing 2 writes `granted=False`, not nothing.** *"They said no"* and *"we never asked"*
+  are different facts, and a call whose consent list is simply empty cannot tell you which
+  happened. The report distinguishes them too: `intake_declined` versus `no_consent`, so the
+  agent looking at a thin brief gets the honest reason (`D14`).
+
+### The smaller rules, and where each comes from
+
+| Rule | Why |
+|---|---|
+| the offer is asked **at most twice** | enrichment is not worth nagging about; the re-offer at `INTAKE_REOFFER_AFTER_S` exists because a long wait genuinely changes the caller's mind |
+| **a wrong key replays the offer, unlimited** | `D82` — a wrong key proves somebody is there. What bounds the loop is silence, not a strike count |
+| **silence at the offer gets no re-prompt** | unlike the menu. The second chance already exists and is better placed; re-prompting a caller who ignored an offer is nagging |
+| **silence during a recording gets one** | they pressed `1`, so they asked to be heard. Different evidence, different rule |
+| `9` repeats, here as everywhere | a caller who learned it in the menu must not find it means something else thirty seconds later |
+| **keys do nothing while holding** | nobody asked a question, so replying would be answering something the caller never said |
+| **other keys are ignored mid-recording** | interrupting a sentence to apologise for a mis-hit is worse than the mis-hit |
+| the strategy **never guesses `degraded`** | no turns can mean silence *or* a dead transcriber, and only the driver knows which. A strategy inventing `stt_unavailable` puts a claim on the agent's screen that nothing checked |
+| `reoffer_due()` runs in **`sweep_once`** | `B7` exactly: the only thing that happens at ninety seconds is that the wait got long, so nothing else is around to carry it |
+
+### What this does not do
+
+No audio, no VAD, no STT worker, no recording to storage, no live transcript on the
+workstation. Turns arrive through `IntakeService.on_turn` and today nothing calls it except
+tests and the scenario runner. That is the next slice, and it is the one with the GPU in it.
+
+## D89. The caller hears their queue position; they hear a wait estimate only when there is one
+_Split out of `D88` because it is a product rule, not a mechanism._
+
+- **Problem.** `queue.position` says *"you are number {position}, about {wait_minutes}
+  minutes"*. We can count a queue exactly. We cannot yet predict how long it takes to drain —
+  there is no handle-time data, `estimated_wait_s` is passed `None` everywhere, and `D85`'s
+  machinery for exactly this is implemented and deliberately parked until P6.
+- **Decision:** three lines instead of one. `queue.position` when both are known,
+  **`queue.position_only`** when only the position is, and `queue.hold` when neither is.
+- **Reasoning.** A made-up "about three minutes" is a promise, and it becomes a visible lie
+  at minute eight — to the one caller least inclined to forgive it. Saying only what we know
+  is standard call-centre practice and costs nothing. This is `D18`'s "show, do not claim"
+  applied to the caller rather than to the agent.
+- **What switches the fuller line on:** real handle-time data at P6. Nothing else has to
+  change — the prompt, its slots and its warm renders already exist.
+- **Tradeoff:** one more clip in the pack (64, up from 63) and a branch in `_position_lines`.

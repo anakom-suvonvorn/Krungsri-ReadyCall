@@ -1,21 +1,23 @@
 # NEXT_SESSION
 
 _The live working state. READ THIS FIRST every session. Keep it short and current._
-_Last updated: 2026-08-26._
+_Last updated: 2026-08-31._
 
 ---
 
 ## Where things stand right now
 
-**P0 · P1 · P1b · P2a · P2b · P2c complete. P3 steps 1–3 done.** The system knows who is
-calling and how much to believe it, why they are calling, everything we hold about them
+**P0 · P1 · P1b · P2a · P2b · P2c complete. P3 done except the audio.** The system knows who
+is calling and how much to believe it, why they are calling, everything we hold about them
 assembled before the phone is answered, which agent should take it and why, the desk rings
-and a human accepts with the screen already right — and now **the caller keys their own way
-to the right queue through a real menu, hearing real (pre-rendered) Thai**.
+and a human accepts with the screen already right — the caller keys their own way to the
+right queue through a real menu hearing real (pre-rendered) Thai — and now, **once the queue
+is settled, they hear their position, are offered the pre-call recording, and take it or
+refuse it or ignore it, all three reaching the same agent**.
 
-Verified **2026-08-26**: **519 tests** — 477 pass + 42 skipped without the Postgres
-container (the 42 are the database cases). `ruff check` + `ruff format --check` clean over 141 files,
-`mypy --strict` clean over 106, all scenarios replay, 60/60 diagrams current.
+Verified **2026-08-31**: **558 tests** — 516 pass + 42 skipped without the Postgres
+container (the 42 are the database cases). `ruff check` + `ruff format --check` clean over 151 files,
+`mypy --strict` clean over 112, all scenarios replay, 61/61 diagrams current, prompt pack fresh.
 
 ### The four sessions of review since P2b, in one place
 
@@ -89,16 +91,29 @@ write durably, restore at startup · presence, the waiting pool and the live ide
 **derived, never stored twice** (`D76`, `D78`) · `Container` reads `STORAGE_BACKEND` ·
 a restart is proved by **ending a process**, in pytest and again with real uvicorn.
 
-**P3 (steps 1–3) — the line.** `config/voice_prompts.yaml`: **32 prompts**, declared slots,
-and a `flow:` table mapping **19 roles** to ids so `services/` holds no prompt literals
+**P3 (steps 1–3) — the line.** `config/voice_prompts.yaml`: **29 prompts**, declared slots,
+and a `flow:` table mapping **17 roles** to ids so `services/` holds no prompt literals
 (`D28`) · the guard that every referenced id resolves, **both directions**, as a startup
 gate *and* a test · `scripts/build_prompts.py` hash-cached by (text, voice, engine), deduped
-by rendered text to **63 clips**, committed manifest asserted fresh · **`services/ivr/`** —
+by rendered text to **64 clips**, committed manifest asserted fresh · **`services/ivr/`** —
 greeting + notice → product menu (skipped when the DID or app said) → reason menu → queue,
-with `0` always reaching a human, `9` free, and every failure path ending in a queue rather
-than a hang-up · personalised ordering with its evidence · **a menu is composed, not one
-clip** (`D80`) · **`menu_path` is canonical whatever was pressed** (`D81`) · both fake IVR
-walks retired — `run_scenario.py`'s `# P1:` and `demo.py`'s `# P2b:`.
+with `9` the only reserved key (`D86`), a wrong press never a strike (`D82`), and every
+failure path ending in a queue rather than a hang-up · personalised ordering with its
+evidence · **a menu is composed, not one clip** (`D80`) · **`menu_path` is canonical whatever
+was pressed** (`D81`) · both fake IVR walks retired — `run_scenario.py`'s `# P1:` and
+`demo.py`'s `# P2b:`.
+
+**P3 step 4a — the offer (`D88`, `D89`).** `services/intake/`: **`hold.py`**, a second no-I/O
+machine for everything *below* the "queue is now known" line — position, the press-1/press-2
+offer, one re-offer, the recording and its four endings · **`strategy.py`**, the `D10` seam,
+which takes **`TranscriptTurn`s rather than a media stream** so the whole thing is buildable
+and testable with no GPU, no audio and no telephony · **`passive.py`**, `PassiveRecordIntake`
+with an idempotent `finalize()` because the accept and the hang-up genuinely race ·
+**`service.py`**, the driver — which **returns as soon as the caller answers** and leaves the
+intake live, because `D21`'s offer window IS the grace period and the accept endpoint is what
+ends it · one keypress grants both consent scopes and **a refusal is recorded, not nothing** ·
+`reoffer_due()` runs in `sweep_once` (`B7`, pre-empted) · the caller hears their **position
+with no invented wait** (`D89`) · the scenario runner's intake stand-in is retired.
 
 **P3 review pass (`D82`–`D84`, `D86`, `D87`, `B10`, `B11`).** Driven by the user working the screen and
 the menu. **A wrong keypress is never a strike** — no attempt limit, and `menu.invalid` now
@@ -144,8 +159,10 @@ reversing `D20`'s display gating).
 
 ## Next steps (in order)
 
-1. **P3 step 4** — media, VAD and the STT worker. The only part with hardware risk, and the
-   only part of P3 not started. Full briefing below.
+1. **P3 step 4b** — media, VAD and the STT worker. The only part with hardware risk, and the
+   only part of P3 left. **Step zero is `uv add --optional ml …`, which has NOT been done** —
+   it is a multi-gigabyte download and was deliberately left for the user to green-light.
+   Full briefing below.
 2. **P4** — analysis and brief v2+ with Claude and Typhoon compared on the golden set.
 3. **`D85` is implemented and parked.** `services/agents/acw_stats.py` predicts how close
    an agent in wrap-up is to being free, conditioned on how long it has already run — which
@@ -163,11 +180,17 @@ reversing `D20`'s display gating).
 
 `grep -rn "# P2b:" src/` lists the steps a real IVR will drive that the demo endpoint fakes.
 
-## Starting P3 step 4 — read this before opening anything else
+## Starting P3 step 4b — read this before opening anything else
 
-Steps 1–3 are done and needed no GPU. **Step 4 is the GPU half**, and it is the only part
-of the whole project with hardware risk. `explanations/P3_voice.md` covers what was built
-and why; `diagrams/12_the_menu.md` draws it.
+Steps 1–3 and **step 4a (the offer)** are done and needed no GPU. **What is left is the GPU
+half**, and it is the only part of the whole project with hardware risk.
+`explanations/P3_voice.md` covers what was built and why; `diagrams/12_the_menu.md` draws it,
+including §12.6 on the hold.
+
+**The socket is already there.** `IntakeService.on_turn(call_session_id, turn)` accepts a
+`TranscriptTurn` and publishes it; `on_silence` and `on_max_duration` end a recording. Today
+only tests and the scenario runner call them. Step 4b is the thing that turns audio into
+those calls — and nothing above it has to change when it lands.
 
 ### What now exists that step 4 plugs into
 
@@ -176,14 +199,16 @@ and why; `diagrams/12_the_menu.md` draws it.
 | **`services/ivr/`** | the walk is real and drives the simulated telephony adapter. Step 4 adds what happens *after* the queue, not another menu. |
 | **`voice_prompts.yaml`** | `intake.offer`, `intake.start`, `intake.done`, `intake.declined`, `intake.reoffer`, `voicemail.*` and `rating.request` are **written, rendered and mapped to roles**. They are text waiting for the machinery that plays them; nothing calls those roles yet. |
 | **`ports/stt.py`** | streaming-first (`D9`): `AudioFrame` is **16 kHz mono float32, always**, and the media gateway normalises before anyone sees it. Per-utterance and in-memory, so no PII lands on disk. |
+| **`services/intake/`** | the offer, the consent, the strategy seam and the live-hold registry all exist (`D88`). `on_turn` / `on_silence` / `on_max_duration` are the three entry points the media side drives. |
 | **`adapters/stt/scripted.py`** | the fake that keeps every test and the stage-safe demo path off the GPU. It honours `warmup()`, so swapping to Thonburian is one env var. |
 | **`IvrResult`** | already carries `queue_id`, the intent and its `intent_source`. Whatever runs intake reads a finished routing decision rather than making one. |
 
 ### What does NOT exist (checked against disk 2026-08-25)
 
 `prompts/th/` (the LLM prompt tree — `prompts/voice/manifest.json` is the *audio* one and
-does exist) · `services/intake/` · `services/transcription/` · `services/analysis/` ·
-`media/` · `workers/` · `observability/` · `config/core_mapping.yaml` · `tests/golden/`
+does exist) · `services/transcription/` · `services/analysis/` · `media/` · `workers/` ·
+`observability/` · `config/core_mapping.yaml` · `tests/golden/`
+*(`services/intake/` existed on this list until 2026-08-31. It exists now.)*
 
 **And the `ml` extra is still commented out in `pyproject.toml`**, so `uv sync --extra ml`
 fails today. The intended set is on that commented line: `torch`, `transformers`,
@@ -204,22 +229,26 @@ needed it and an unused multi-gigabyte dependency in the lockfile is a cost with
   Whisper's silence-loop. Change: `silero-vad` as a dependency, never a runtime
   `torch.hub.load` — a network fetch during a live call is unacceptable.
 - **`D21`: the offer window IS the intake grace period.** Intake keeps recording until the
-  agent presses Accept; nobody waits longer and no sentence is lost.
+  agent presses Accept; nobody waits longer and no sentence is lost. **Already wired**:
+  `accept_offer` calls `intake.on_agent_accepted` before `assignments.accept`, and it
+  finalises as `is_partial=True`. Proved on a running server, not just in a test.
 - **`D26`: both legs are forked separately** — speaker labels come from the topology, not
   from a diarisation model.
 - **`D30`**: Thonburian stays default; Typhoon ASR is benchmarked against it on the same
   audio rather than argued about.
-- **`D10`: intake is a STRATEGY.** `PassiveRecordIntake` for v1, same `IntakeResult` as the
-  future conversational one. Do not inline it into the orchestrator.
+- **`D10`: intake is a STRATEGY.** `PassiveRecordIntake` **is built**, same `IntakeResult` as
+  the future conversational one. Do not inline it into the orchestrator — and note `D88`: the
+  strategy takes **turns, not frames**, so the transcriber sits on the far side of the seam.
 
 ### Suggested order
 
 1. **`uv add --optional ml …`** first — it is the slow one, and everything else can be
-   written while it downloads.
-2. **The intake offer in the IVR** (press 1 / press 2, re-offer once). Pure keypad, no
-   audio, and it finishes the flow the prompts already describe.
+   written while it downloads. **Ask before running it**: it is a multi-gigabyte download on
+   the user's laptop, and the docs' own note applies — an unused dependency in the lockfile
+   is a cost with no payer until something needs it.
+2. ~~The intake offer~~ — **done** (`D88`).
 3. **Media gateway + VAD**, against a WAV file rather than a phone, so endpointing can be
-   tuned without telephony.
+   tuned without telephony. It ends by calling `IntakeService.on_turn` / `on_silence`.
 4. **The STT worker and the bake-off**, which is where the 3050 risk actually is.
 
 ### The hardware reality, stated plainly
@@ -248,6 +277,7 @@ Whoever has the strongest GPU should own the demo machine.
 | **Q21** | **Which storage backend does the DEMO run on?** `memory` is the default and needs nothing; `postgres` is what survives a restart, and it is what makes the persistence work visible on stage at all. Running it on the day adds a container to the list of things that can fail, against `PLAN.md`'s risk register — *never depend on the venue*. Leaning: **rehearse on `postgres`, keep `memory` as the one-keystroke fallback**, since both pass the same suite. | Not decided |
 
 | **Q22** | **Does the committed prompt pack carry actual audio once a real voice is chosen?** `D24` calls the checked-in pack the offline fallback, which is the whole reason the IVR works with no internet — but `CLAUDE.md` says never commit audio. That rule means *call recordings*, not TTS output of our own sentences, so the two are probably compatible; 63 short Thai clips is a few MB. Undecided because there is no audio yet. | Manifest only, for now |
+| **Q24** | **A health-line caller speaks health data into a recording nobody consented to hold as such.** `D14` makes `health_data` a separate scope; the offer grants only `recording` and `ai_processing` (`D88`). Three options: a third keypress (honest, and it lengthens the longest prompt in the system on the line where callers are most distressed); name the scope in the offer's wording on health lines (one keypress, three scopes); or gate the *extraction* at P4 so health entities are never pulled without it. **Leaning: the second plus the third.** Decide before P4 writes an entity extractor — that is the first code that can breach it. | Not asked for |
 | **Q23** | **Personalised menus renumber, and a human on a real keypad has no `ScriptedChoices`.** Every automated caller presses canonical keys and is translated (`D81`), so nothing in the suite or the demo endpoint can get this wrong. But at P5 a person reading a rehearsal script off paper will press what the script says, and for a recognised persona the numbers may have moved. Either rehearse with the persona that will actually be used, or set `personalisation.enabled: false` for the demo. | Enabled; decide before the day |
 
 Resolved: rating is an event (`D46`) · single project (`D34`) · Asterisk · RTX 3050 · Claude
@@ -430,6 +460,28 @@ Facts about *this laptop* rather than the repo, so a fresh session does not redi
   test asserted a reordering that never happened, because motor and health are canonically
   keys `1` and `2` and promoting them changed nothing. Use travel/life (`3`/`4`) when you
   want the numbering to actually move.
+- **The intake driver STOPS at the answer, on purpose** (`D88`). `run_offer` returns the
+  moment the caller presses 1 or 2, and the hold stays in `IntakeService._live`. The three
+  things that end a recording — a VAD silence, the max duration, an agent pressing Accept —
+  all arrive from **outside**, and the last one arrives on another connection seconds later
+  (`D21`). If you "finish" that loop you will be inventing what a media layer that does not
+  exist would have reported, which is `B3`/`B4`/`B7`/`B8`'s entire family. The first version
+  did exactly this and a scripted caller exposed it: press `1`, run out of script, and the
+  loop hears a silence that never happened.
+- **A strategy takes TURNS, not frames** (`D88`). The media gateway, the resampler, the VAD
+  and the STT worker are one concern and they sit on the far side of the seam. That is the
+  only reason the seam has a real implementation, and its own suite, three phases before
+  the GPU it will run beside.
+- **`declined` and `ignored` are different facts** (`D88`). Pressing 2 writes a
+  `granted=False` consent row; saying nothing writes none. An agent looking at a thin brief
+  needs to know which — the first means do not raise it, the second means you may. Do not
+  "simplify" the refusal row away.
+- **The strategy never guesses `degraded`.** No turns can mean the caller said nothing or
+  that the transcriber was down, and only the driver can tell. A strategy inventing
+  `stt_unavailable` puts a claim on the agent's screen that nothing checked.
+- **The caller hears their position, never an invented wait** (`D89`). We can count a queue;
+  we cannot yet predict how long it drains. `queue.position_only` exists for exactly this,
+  and the fuller `queue.position` line switches on when P6 brings handle-time data.
 - **Never hardcode an insurance literal in `services/`** — it goes in `config/` (`D28`).
 - **Never `datetime.now()` or a raw random id** outside `clock.py`/`ids.py` (`D35`).
 - **There is NO operator key** (`D86`, reversing `D83`). `9` is the only reserved key. The
@@ -461,6 +513,11 @@ Facts about *this laptop* rather than the repo, so a fresh session does not redi
 - **When the only feedback is something DISAPPEARING, there is no feedback** (`B11`). Success
   and a silently-failed request look identical. Anything whose success is invisible needs an
   acknowledgement.
+- **The prose rots the same way the diagrams do.** The `D86` sweep fixed the `.mmd` files and
+  missed five *prose* claims that `0` reaches a human — in `ARCHITECTURE.md`'s degradation
+  table, `PLAN.md`'s P3 summary, `DATA_MODEL.md`'s note on `pressed`, `DECISIONS.md`'s own
+  `D37`, and `diagrams/12_the_menu.md`'s reserved-key table. Grep for the *behaviour*, not
+  just the decision id: `grep -rn '`0`' docs/`.
 - **A `%% HANDWRITTEN` banner is a CLAIM, and hand-drawn diagrams rot.** The generated ones
   cannot drift; the other 46 can, and a sweep on 2026-08-26 found two still teaching decisions
   that had been **reversed** (`brief_gating` on `D74`, `identity_promotion` on `D65`) plus a

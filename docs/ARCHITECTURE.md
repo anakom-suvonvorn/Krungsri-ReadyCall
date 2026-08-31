@@ -1,8 +1,10 @@
 # ARCHITECTURE
 
 _How the full ReadyCall system works, end to end. Read this to understand the machine._
-_Status: **design only** — nothing here is implemented yet (see `PLAN.md` for the build order)._
-_Last updated: 2026-08-26._
+_Status: **partly built**. P0–P2c are implemented, and P3 is built through the intake
+offer; the audio, the analysis passes and the telephony integration are still design.
+Each section says what is real where it matters. See `PLAN.md` for the build order._
+_Last updated: 2026-08-31._
 
 ---
 
@@ -216,11 +218,14 @@ customer (if any), product, snapshot and queue.
 
 ## 6. Data flow B — the line, the IVR, and pre-call intake
 
-> **Built as of P3 down to the queue.** `services/ivr/` walks the real menu, plays real
-> (pre-rendered) lines, and hands back a queue — the scenario runner and the demo endpoint
-> both use it. What is **not** built is everything below the queue line in the diagram: the
-> intake offer, the recording, and the transcription. `diagrams/12_the_menu.md` draws the
-> built half; `explanations/P3_voice.md` covers it at length.
+> **Built as of P3 step 4a, down to and including the offer.** `services/ivr/` walks the
+> real menu and hands back a queue; `services/intake/` then announces the position, makes the
+> offer, records the consent and opens an intake that **outlives the request that started
+> it** (`D21`, `D88`). The scenario runner and the demo endpoint both drive the real
+> services. What is **not** built is the audio: no media gateway, no VAD, no STT worker, no
+> recording to storage, and no live transcript on the workstation. Turns arrive through
+> `IntakeService.on_turn` and nothing calls it yet except tests and scenarios.
+> `diagrams/12_the_menu.md` draws it; `explanations/P3_voice.md` covers it at length.
 >
 > Two things the build changed about this section as written. A menu is **not one clip** —
 > personalised ordering makes that impossible, so it is a lead-in plus one line per option
@@ -254,7 +259,8 @@ can be edited without a studio and the audio is deterministic and offline-safe.
   ►► QUEUE IS NOW KNOWN. Nothing after this point is required for routing. ◄◄
         │
         ▼
-[queue position + estimated wait]  "ขณะนี้ท่านอยู่ลำดับที่ 3 ..."
+[queue position]  "ขณะนี้ท่านอยู่ในลำดับที่ 3"
+   (the wait in minutes is spoken ONLY when there is a real estimate - D89)
         │
         ▼
 [intake offer]  ← the ENRICHMENT layer
@@ -268,7 +274,10 @@ can be edited without a studio and the audio is deterministic and offline-safe.
 [beep] record…                 hold music, menu-derived brief
    │
    └─ stops on: press 1 again  ·  silence > INTAKE_SILENCE_TIMEOUT_S (default 6s)
-                ·  max duration (default 180s)  ·  agent accepts the offer
+                ·  max duration (default 180s)  ·  agent accepts the offer (D21)
+
+  All four arrive from OUTSIDE the driver that made the offer (`D88`): the offer loop
+  returns as soon as the caller answers, and the hold stays live until one of them fires.
 ```
 
 ### Why the menu leads
@@ -282,7 +291,7 @@ So the split is now explicit:
 
 | Layer | Gives | Needs | If it fails |
 |---|---|---|---|
-| **Keypad menu** (the base) | Product line + reason → **the queue** | Nothing. No AI, no consent, no speech, no network | It cannot really fail; `0` always reaches a human |
+| **Keypad menu** (the base) | Product line + reason → **the queue** | Nothing. No AI, no consent, no speech, no network | It cannot really fail; every menu ends in a spoken **"เรื่องอื่นๆ"** (`D86`) |
 | **AI intake** (the delta) | The *detail*: which hospital, which plate, how urgent, what happened | Consent, audio, STT, LLM | Routing is unaffected — it was never the AI's job |
 
 The base is **parity with what already exists**. The AI makes the agent's screen useful; it
@@ -299,7 +308,8 @@ call centre" rather than "a call centre that knows nothing."
   than a convention the caller has to know.
 - **Every reason menu has a catch-all** ("เรื่องอื่นๆ" → `<line>.other`), so an unexpected
   reason lands with the right line's generalist instead of trapping the caller.
-- **At most seven options**, because past that people stop listening and press `0`.
+- **At most seven options**, because past that people stop listening and start pressing
+  keys at random.
 - **A wrong key is never a strike** (`D82`): no attempt limit, and the apology names both
   escape keys every time. **Silence is bounded** — one re-prompt, then a human — because a
   wrong key proves somebody is there and silence does not.
@@ -371,14 +381,24 @@ which one ran:
 
 ```python
 class IntakeStrategy(Protocol):
-    async def start(self, session: CallSession, media: MediaStream) -> None: ...
+    async def start(self, session: CallSession) -> str: ...          # returns intake_id
     async def on_turn(self, turn: TranscriptTurn) -> None: ...
-    async def finalize(self, reason: FinalizeReason) -> IntakeResult: ...
+    async def finalize(
+        self, reason: FinalizeReason, *, degraded: DegradationReason = NONE
+    ) -> IntakeResult: ...
 ```
+
+**Turns in, not frames in** (`D88`, amending this signature as originally drawn). The media
+gateway, the resampler, the VAD and the STT worker are one concern — turning audio into
+sentences — and they sit on the far side of the seam, so a strategy is a pure function of
+what was *said*. That is what let the whole seam be built, implemented and tested three
+phases before the hardware it will eventually run on. `degraded` is passed **in** rather than
+inferred: no turns can mean the caller said nothing or that the transcriber was down, and a
+strategy guessing between them would put a claim on the agent's screen that nothing checked.
 
 | Strategy | Behaviour | Status |
 |---|---|---|
-| `PassiveRecordIntake` | Listens. Records, transcribes, summarises. The pitched v1. | Phase P3 |
+| `PassiveRecordIntake` | Listens. Records, transcribes, summarises. The pitched v1. | ✅ built (P3 step 4a); audio still to come |
 | `GuidedPromptIntake` | Pre-rendered TTS asks for the specific slots the detected intent still needs; the caller answers; slots fill. | P8 |
 | `ConversationalAgentIntake` | Full-duplex voice agent with barge-in, streaming TTS, and read-only tool access to the caller's own data. Can genuinely help while waiting — and is the natural after-hours agent. | Future |
 

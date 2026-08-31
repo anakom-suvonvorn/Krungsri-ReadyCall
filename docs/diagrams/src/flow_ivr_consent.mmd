@@ -1,5 +1,6 @@
-%% HANDWRITTEN. Checked against ARCHITECTURE.md S6 + D37 + D14 + D80 + D81
-%% + services/ivr/machine.py (BUILT at P3; the consent step below is still step 4)
+%% HANDWRITTEN. Checked against ARCHITECTURE.md S6 + D37 + D14 + D80 + D81 + D82
+%% + D86 + D88 + D89, and against services/ivr/machine.py + services/intake/hold.py
+%% (BUILT through the offer at P3 step 4a; only the AUDIO below is still missing)
 sequenceDiagram
     autonumber
     participant C as Customer
@@ -7,6 +8,7 @@ sequenceDiagram
     participant IVR as IvrMachine
     participant PP as PromptPack
     participant PACK as DomainPack
+    participant HOLD as HoldMachine
     participant ORCH as CallOrchestrator
 
     C->>TEL: dials +6621234000 (general hotline)
@@ -33,20 +35,30 @@ sequenceDiagram
     PACK-->>IVR: line health, intent health.coverage.query
     IVR->>PACK: queue_for_intent - intent to skill to queue
     PACK-->>IVR: q_health_policy
-
-    Note over IVR,ORCH: ROUTING IS NOW SETTLED. No AI has run. (D37)
-
-    Note over IVR,C: EVERYTHING BELOW IS P3 STEP 4 - not built yet.<br/>The prompts exist and are rendered. Nothing plays them.
-    IVR->>C: "ให้บันทึกเสียงเพื่อเตรียมข้อมูลไหมคะ กด 1 ตกลง กด 2 ไม่"
-    alt presses 1
-        C->>IVR: 1
-        IVR->>ORCH: record_consent(recording + ai_processing)
-        ORCH-->>IVR: intake may run
-    else presses 2, or says nothing
-        C->>IVR: 2
-        IVR->>ORCH: no consent recorded
-        Note right of ORCH: the call proceeds anyway (D14). The brief<br/>stays context-only - and is still correctly routed.
-    end
     ORCH->>ORCH: enqueue(q_health_policy)
 
-    Note over C,ORCH: and every path that is NOT this one still ends in a queue:<br/>0 reaches a human from any depth, 9 repeats for free,<br/>three wrong keys or two silences route rather than hang up.
+    Note over IVR,ORCH: ROUTING IS NOW SETTLED. No AI has run. (D37)<br/>Nothing below this line can change where the call goes.
+
+    Note over HOLD,C: BUILT at P3 step 4a (D88). What is still missing is the AUDIO.
+    HOLD->>C: "ขณะนี้ท่านอยู่ในลำดับที่ 3"
+    Note right of HOLD: the position only. The wait in minutes is spoken<br/>ONLY when there is a real estimate, and there is<br/>none until P6 brings handle-time data (D89).
+    HOLD->>C: "กด 1 เพื่อบันทึกข้อความ กด 2 เพื่อรอสายตามปกติ"
+
+    alt presses 1
+        C->>HOLD: 1
+        HOLD->>ORCH: record_consent(recording + ai_processing), basis ivr_keypress_1
+        Note right of ORCH: ONE keypress, BOTH scopes (D88). The prompt said<br/>exactly what would happen. health_data is separate<br/>and is still not asked for anywhere (Q24).
+        ORCH->>ORCH: QUEUED -> INTAKE_ACTIVE
+        HOLD->>C: "กรุณาเล่าเรื่อง... เมื่อเสร็จแล้วกด 1 อีกครั้ง"
+        Note over HOLD,C: the driver RETURNS HERE. The recording outlives it,<br/>and is ended from outside by a VAD silence, the max<br/>duration, or an agent pressing Accept (D21, D88).
+    else presses 2
+        C->>HOLD: 2
+        HOLD->>ORCH: record_consent(ai_processing, granted=FALSE)
+        Note right of ORCH: the REFUSAL is recorded, not nothing. "They said no"<br/>and "we never asked" are different facts, and an empty<br/>consent list cannot tell you which happened (D88).
+        HOLD->>C: "ได้ค่ะ กรุณาถือสายรอเจ้าหน้าที่"
+    else says nothing
+        HOLD->>C: "กรุณาถือสายรอสักครู่ค่ะ"
+        Note right of HOLD: no re-prompt here, unlike the menu. The second<br/>chance is the re-offer at INTAKE_REOFFER_AFTER_S,<br/>and it is asked at most once more (D88).
+    end
+
+    Note over C,ORCH: every path proceeds, and the call is already correctly routed (D14).<br/>A wrong key is NEVER a strike (D82) - sorry, here are the options again.<br/>There is no operator key (D86): the way out is the menu's own "เรื่องอื่นๆ".

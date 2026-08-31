@@ -1,7 +1,7 @@
 # DATA_MODEL
 
 _The two databases, every table, and — most importantly — how the bank's half gets swapped out for the real thing on hackathon day._
-_Status: **partly built as of P2c**. Last updated: 2026-08-25._
+_Status: **partly built as of P2c**. Last updated: 2026-08-31._
 
 > **What is real today (`P2c`, complete):** **nine tables** with an Alembic migration,
 > verified against a live Postgres — `call_sessions`, `call_state_transitions`,
@@ -179,8 +179,9 @@ intervals, the STT/LLM model choice, and the degradation thresholds. Demo-day tu
 require a code change.
 
 **`menu_path` is worth keeping** even though `menu_intent_code` summarises it: it is the most reliable
-intent evidence in the system (`D37`), and a confused path — repeated re-listens, wrong turns, a `0`
-to the operator — is a UX signal that no other field captures.
+intent evidence in the system (`D37`), and a confused path — repeated re-listens, wrong turns,
+falling back to "เรื่องอื่นๆ" — is a UX signal that no other field captures. *(This said "a `0`
+to the operator" until `D86` removed that key.)*
 
 ---
 

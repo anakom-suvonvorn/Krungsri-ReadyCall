@@ -71,8 +71,8 @@ rewriting everything around it.
 
 `D10` makes intake a **swappable strategy** behind one output contract:
 
-- **Passive** (P3, the one we build first): "เล่าปัญหาได้เลยค่ะ" — the customer talks, we
-  listen and transcribe. No AI in the loop with the customer at all.
+- **Passive** (**built**, P3 step 4a): "กรุณาเล่าเรื่องที่ต้องการติดต่อ..." — the customer
+  talks, we listen and transcribe. No AI in the loop with the customer at all.
 - **Guided** (P8): TTS asks for the specific missing slots — which hospital, what date.
 - **Conversational** (P8): a real back-and-forth AI caller.
 
@@ -83,6 +83,14 @@ workstation, storage — can tell which one ran.
 Getting that output contract right *now*, while the simplest strategy is the only one built,
 is what makes the ambitious version a swap later instead of a rebuild. The seam is cheap
 today and very expensive to retrofit.
+
+**A strategy is handed turns, not audio** (`D88`). `ARCHITECTURE.md` first drew
+`start(session, media)`, which would have put the media gateway, the resampler, the VAD and
+the STT worker on the *strategy's* side of the seam — four things that are really one
+concern, turning audio into sentences. Moving them across made a strategy a pure function of
+what was **said**, which is why `PassiveRecordIntake` could be written, implemented and
+tested three phases before the GPU it will eventually run beside. What it still lacks is
+anything feeding it: `IntakeService.on_turn` is called by tests and scenarios only.
 
 The prompts themselves are pre-rendered TTS clips built from a YAML file of Thai text
 (`D24`), not recorded audio and not live synthesis — so changing wording is editing a line

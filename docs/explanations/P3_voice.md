@@ -309,5 +309,44 @@ user worked the built menu. §8's list of what the machine holds is superseded:
   refuses; the agent's keypad capture does the job with judgement attached. The prompt count
   in §11 is therefore 29, not 32, and there are 17 roles, not 19.
 
+**2026-08-31 — step 4a: the offer, and everything below the queue line.** §9 said the intake
+prompts were "text waiting for the machinery that plays them". The machinery now exists, and
+`services/intake/` is the second half of this phase.
+
+- **it is a separate machine, not two more states on the IVR** (`D88`). `IvrMachine` decides
+  where the call goes; `HoldMachine` decides how much the agent will know when it gets there.
+  Those are the two halves of `D37`, and putting them in one file with one outcome type would
+  have left nothing standing between "the caller declined" and "route them differently". The
+  test that guards it is one assertion: record, decline and ignore all land in the same queue.
+- **the driver stops at the answer, and the recording outlives it.** The first version looped
+  until the intake finished, and it was wrong in a way only a scripted caller exposed — press
+  `1`, run out of script, and the loop "hears" a silence that never happened. The three things
+  that actually end a recording (a VAD silence, the maximum duration, an agent pressing
+  Accept) all arrive from outside, and the last one arrives seconds later on another
+  connection (`D21`). Keeping the loop would have meant owning a media loop that does not
+  exist and **inventing what it reports** — `B3`, `B4`, `B7` and `B8`'s whole family.
+- **the seam takes turns, not frames** (`D88`, amending `ARCHITECTURE.md` §7 as drawn). That
+  is why `PassiveRecordIntake` is written, implemented and tested three phases before the GPU
+  it will run beside, rather than being a protocol nobody has ever run.
+- **pressing 2 records the refusal.** "They said no" and "we never asked" are different facts,
+  and an empty consent list cannot tell you which happened. Two scenario tests asserted
+  `session.consents == ()` for the declining caller and correctly failed; they now assert the
+  better fact — nothing granted, and the refusal on the record with its basis.
+- **the caller hears their position and no invented wait** (`D89`). Counting a queue and
+  predicting how long it drains are different problems, and only the first is solved.
+- **numbers:** 29 prompts, 17 roles, **64 clips** (up one, for `queue.position_only`), 558
+  tests (516 pass + 42 skipped without the container), 61 diagrams.
+- **the sweep gained `reoffer_due()`.** `B7` in advance rather than in hindsight: the only
+  thing that happens at `INTAKE_REOFFER_AFTER_S` is that the wait got long, so nothing else
+  is around to carry it, and its test moves nothing but the clock.
+- **the scenario runner's intake stand-in is retired.** Its `# P1:` marker for the media
+  gateway is now `# P3-media:` and covers only the utterances themselves; the offer, the
+  consent, the state transitions and the ending on accept are all the production path.
+- **what is still missing is exactly the audio**: no media gateway, no VAD, no STT worker, no
+  encrypted recording, no live transcript on the workstation. `IntakeService.on_turn` is the
+  socket it plugs into, and today only tests and scenarios call it. **`Q24` is open**: a
+  health-line caller speaks health data into a recording whose `health_data` scope nothing
+  asks for.
+
 _Earlier body text stays as written — it is a record of what was true on 2026-08-25._ Append dated entries here rather than editing the body — this file is a record
 of what was true on 2026-08-25, and the "why" above stays useful even when a number moves._

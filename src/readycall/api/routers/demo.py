@@ -32,6 +32,7 @@ from readycall.api.schemas import (
     DemoLoginRequest,
     DemoLoginResponse,
     DemoPersona,
+    IntakeOut,
     PlaceCallRequest,
     PlaceCallResponse,
 )
@@ -40,6 +41,7 @@ from readycall.domain.enums import CallState, ProductLine, Urgency
 from readycall.errors import ConfigError
 from readycall.logging import get_logger
 from readycall.services.identity.resolver import hash_token
+from readycall.services.intake.service import HoldReport
 from readycall.services.ivr.personalise import PersonalisationInputs
 from readycall.services.ivr.service import ScriptedChoices
 from readycall.services.matching.scoring import WaitingCall
@@ -283,6 +285,20 @@ async def place_call(
             assurance=str(resolution.assurance),
         )
 
+    # Below the "queue is now known" line: the position, the offer, and the recording if
+    # they want one (`ARCHITECTURE.md` section 6). It runs BEFORE matching for the same
+    # reason a real caller hears it before an agent frees up - and it deliberately does
+    # not run to completion. A caller still talking stays live, and `D21` ends them when
+    # the agent presses Accept, which is a different request entirely.
+    hold = await container.intake.run_offer(
+        session,
+        caller=ScriptedChoices(list(body.intake_keys)),
+        position=_queue_position(container, queue_id),
+        # No wait estimate yet, so the caller hears their position and no invented
+        # number (`D89`). P6's handle-time data is what switches the fuller line on.
+        wait_minutes=None,
+    )
+
     await container.orchestrator.transition(session, CallState.MATCHED, reason="ready_for_matching")
     container.dispatch.admit(
         session,
@@ -310,6 +326,31 @@ async def place_call(
         assurance=str(resolution.assurance),
         offered_to=result.offered[0] if result.offered else None,
         unplaced_reason=result.unplaced.get(session.call_session_id),
+        intake=_intake_out(hold),
+    )
+
+
+def _queue_position(container: ContainerDep, queue_id: str) -> int:
+    """Where this caller sits, counted rather than estimated.
+
+    Everyone already waiting on the same queue is ahead of them, so the arriving caller is
+    one past that. It is a fact we hold, unlike the wait in minutes (`D89`).
+    """
+    return sum(1 for call in container.dispatch.waiting() if call.queue_id == queue_id) + 1
+
+
+def _intake_out(hold: HoldReport) -> IntakeOut:
+    return IntakeOut(
+        outcome=str(hold.kind) if hold.kind else None,
+        consented=hold.consented,
+        recording=hold.recording,
+        offers_made=hold.offers_made,
+        intake_id=hold.intake_id,
+        turn_count=len(hold.result.turns) if hold.result else 0,
+        is_partial=hold.result.is_partial if hold.result else False,
+        degraded=str(hold.degraded),
+        played=hold.played,
+        pressed=hold.pressed,
     )
 
 

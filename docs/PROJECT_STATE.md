@@ -1,7 +1,7 @@
 # PROJECT_STATE
 
 _What this project is, what exists, what doesn't, and where everything lives._
-_Last updated: 2026-08-26._
+_Last updated: 2026-08-31._
 
 ---
 
@@ -37,14 +37,15 @@ The spine runs. A full call lifecycle - arrival, IVR, consent, queue, intake, ma
 handshake, the live call, wrap-up, rating, closed - executes end to end on fake adapters with no
 telephony, no GPU, no database and no API key.
 
-As of P3 the identity ladder, **the IVR itself**, the context assembler, the brief builder, the
-public API, the matching engine, agent presence, the offer handshake and the React workstation are
-all real services doing real work - only the *edges* (phone, speech, AI, the bank's data, the agent
-roster) are still fakes. An agent signs in at `/workstation`, a caller keys their way through the
-real menu to the right queue, the desk rings, the brief is already there, and the disclosure gate
-moves when the agent attests.
+As of P3 the identity ladder, **the IVR itself**, **the intake offer**, the context assembler,
+the brief builder, the public API, the matching engine, agent presence, the offer handshake and
+the React workstation are all real services doing real work - only the *edges* (phone, speech,
+AI, the bank's data, the agent roster) are still fakes. An agent signs in at `/workstation`, a
+caller keys their way through the real menu to the right queue, hears their position, is offered
+the recording and either takes it or does not, the desk rings, the brief is already there, and
+the disclosure gate moves when the agent attests.
 
-Verified on 2026-08-25: **519 tests** — 477 pass + 42 skipped without the Postgres container
+Verified on 2026-08-31: **558 tests** — 516 pass + 42 skipped without the Postgres container
 (the 42 are the database cases).
 `ruff check` and `ruff format --check` clean over 144 files, `mypy --strict`
 clean over **106** source files, and all three scenarios replay byte-identically. The database
@@ -116,7 +117,7 @@ FullProject/
 ├─ uv.lock  .python-version  .env.example  .gitignore
 ├─ README.md*
 ├─ docs/*                    # ← this documentation system
-│  └─ diagrams/*           # 60 diagrams + 12 explanation pages; a quarter generated from source
+│  └─ diagrams/*           # 61 diagrams + 12 explanation pages; a quarter generated from source
 ├─ config/*                  # ← the entire insurance-specific "domain pack" (D28)
 │  ├─ core_mapping.yaml      # bank-data field mapping (swap target, DATA_MODEL §4)
 │  ├─ matching_weights.yaml* # fit + urgency weights, tunable at runtime
@@ -173,6 +174,11 @@ FullProject/
 │  │  │  ├─ presentation.py* #   a menu as THIS caller hears it, + the mapping back (D80/D81)
 │  │  │  ├─ personalise.py*  #   which options come first, and the evidence for each (D37)
 │  │  │  └─ service.py*      #   the async driver. Plays lines, holds no rules
+│  │  ├─ intake/*            # P3 step 4a. Everything BELOW "the queue is known" (D88)
+│  │  │  ├─ hold.py*         #   position, offer, re-offer, recording. NO I/O either (B7)
+│  │  │  ├─ strategy.py*     #   the IntakeStrategy seam. Turns in, not frames in (D10/D88)
+│  │  │  ├─ passive.py*      #   PassiveRecordIntake: listen, keep every word, say nothing
+│  │  │  └─ service.py*      #   the driver + the LIVE holds an accept has to end (D21)
 │  │  ├─ wrapup/             service.py  callbacks.py
 │  │  └─ metrics/            rollups.py
 │  ├─ media/                 # the media gateway (audio I/O, resampling, framing, recording)
@@ -274,18 +280,23 @@ process**, twice: under `TestClient` and with two real uvicorn processes against
 Postgres · ☑ Alembic no longer churns foreign keys, and the suite has its own database
 (`D79`)
 
-**P3 — voice, IVR & intake v1** (steps 1-3 done; step 4 is the GPU half)
-☑ `config/voice_prompts.yaml` — **32 prompts**, 19 flow roles, declared slots · ☑ the guard that
+**P3 — voice, IVR & intake v1** (steps 1-3 and step 4a done; the audio is what remains)
+☑ `config/voice_prompts.yaml` — **29 prompts**, 17 flow roles, declared slots · ☑ the guard that
 every referenced prompt id resolves, **in both directions**, as a startup gate and a test · ☑
-`scripts/build_prompts.py` — hash-cached by (text, voice, engine), deduped to **63 clips**,
+`scripts/build_prompts.py` — hash-cached by (text, voice, engine), deduped to **64 clips**,
 committed manifest asserted fresh (`D24`) · ☑ **`services/ivr/`**: greeting + notice, menu-first
-routing, reserved keys, retries, silence, personalised ordering with its evidence (`D37`) · ☑ a
-menu is composed, not one clip (`D80`) · ☑ `menu_path` is canonical whatever was pressed (`D81`) ·
-☑ the scenario runner and the demo endpoint hand the walk over — no faked IVR left anywhere
-☐ prompt studio · ☐ real TTS voice (the null engine renders no audio) · ☐ identify step (L3 by
-keypad) · ☐ press-1/2 intake offer · ☐ post-call rating keypress · ☐ media gateway (per-leg fork) ·
-☐ recording + encryption · ☐ VAD endpointing · ☐ streaming STT worker · ☐ **STT bake-off on the
-3050** · ☐ incremental turns · ☐ ring-time grace
+routing, one reserved key, unlimited wrong presses (`D82`), silence bounded, personalised ordering
+with its evidence (`D37`) · ☑ a menu is composed, not one clip (`D80`) · ☑ `menu_path` is canonical
+whatever was pressed (`D81`) · ☑ no operator key (`D86`) · ☑ **`services/intake/`**: queue position,
+the press-1/press-2 offer, the re-offer driven by the sweep, consent granted and refusals recorded,
+the `IntakeStrategy` seam with `PassiveRecordIntake`, and **ring-time grace** — the accept endpoint
+finalises a live intake as partial (`D21`, `D88`) · ☑ position without an invented wait (`D89`) ·
+☑ the scenario runner and the demo endpoint hand both walks over — no faked IVR or intake anywhere
+☐ prompt studio · ☐ real TTS voice (the null engine renders no audio) · ☐ post-call rating keypress ·
+☐ media gateway (per-leg fork) · ☐ recording + encryption · ☐ VAD endpointing · ☐ streaming STT
+worker · ☐ **STT bake-off on the 3050** · ☐ incremental turns persisted · ☐ live transcript on the
+workstation
+*(The identify step is not pending — it was designed and removed, `D84`.)*
 
 **P4 — analysis & case brief** ☐ intent taxonomy + classifier · ☐ entity extraction · ☐ rolling
 summary · ☐ brief versioning · ☐ confidence calibration · ☐ NBA playbooks · ☐ suggested opening ·
@@ -356,23 +367,23 @@ performing by hand, i.e. what the next services take over (`D36`).
 
 ---
 
-## 8. Real numbers (as of 2026-08-25)
+## 8. Real numbers (as of 2026-08-31)
 
 | | |
 |---|---|
-| Source files | 144 Python files (`src/` 104 + `tests/` + `scripts/` + `mock/`) |
-| Tests | 519, all passing, ~100 s (137 store contract + restart across 3 backends; 51 on the prompt pack and the IVR) |
+| Source files | 149 Python files (`src/` 110 + `tests/` + `scripts/` + `mock/`) |
+| Tests | 558, all passing, ~115 s (137 store contract + restart across 3 backends; 55 on the prompt pack and the IVR; 39 on the hold and the intake seam) |
 | Ports defined | 8 (telephony, stt, llm, tts, core_data, event_bus, blob_storage, agent_directory) |
 | Persisted tables | **9** + Alembic, verified on a live Postgres. Presence, the waiting pool and the live identity are deliberately **not** among them (`D78`) |
 | Adapters | 9 fakes/nulls + a caching/circuit-breaking decorator; no real vendor adapter yet |
-| Spoken lines | 32 prompts + 19 flow roles -> **63 distinct clips** after dedupe (`D80`); rendered by the null engine, so a manifest rather than audio |
+| Spoken lines | 29 prompts + 17 flow roles -> **64 distinct clips** after dedupe (`D80`); rendered by the null engine, so a manifest rather than audio |
 | Call states | 15, transition table self-validated (the rating is an event, not a state — `D46`) |
 | Event types | 19 |
 | Scenarios | 3 (in-app happy path, cold-call motor claim, fully degraded) |
 | Mock core | 3 customers, 4 policies across 4 product lines, 5 products, 5 interactions, 2 claims |
 | Intent taxonomy | 28 intents across 5 lines, each with a catch-all (revisit during the hackathon) |
 | Generated mock data | 2,000 customers / 2,292 policies / 5,880 interactions (seeded, gitignored) |
-| Diagrams | 60 (14 generated from source, 46 hand-drawn), across 12 explanation pages |
+| Diagrams | 61 (14 generated from source, 47 hand-drawn), across 12 explanation pages |
 
 ---
 
@@ -389,12 +400,16 @@ enforced by a lint check.
 
 ## 10. What comes next
 
-**P3 step 4** — the GPU half: the media gateway with per-leg forking, encrypted recording, Silero
-VAD endpointing, the streaming Thai STT worker, and the bake-off on the RTX 3050. Then **P4**
-(analysis and the brief v2+, Claude vs Typhoon measured rather than argued).
+**P3 step 4b** — the GPU half, and the only part of the project with hardware risk: the media
+gateway with per-leg forking, encrypted recording, Silero VAD endpointing, the streaming Thai STT
+worker, and the bake-off on the RTX 3050. **The `ml` extra is still commented out in
+`pyproject.toml`**, and declaring it is step zero. Then **P4** (analysis and the brief v2+, Claude
+vs Typhoon measured rather than argued).
 
-P3's first three steps are done, and they needed no model and no audio hardware: every spoken line
-is text in one file rendered at build time, and the keypad menu that actually routes the call is a
-real service driving the real menu — the scenario runner and the demo endpoint both hand it the
-walk now. See `explanations/P3_voice.md` for the reasoning, `diagrams/12_the_menu.md` for the
-picture, and `NEXT_SESSION.md` for the live state.
+Everything above the audio is done, and none of it needed a model or a sound card: every spoken
+line is text in one file rendered at build time, the keypad menu that routes the call is a real
+service, and so is the offer that runs after it — a caller now hears their position, is offered
+the recording, and either takes it, refuses it (recorded as a refusal) or ignores it, and all
+three reach the same queue. `IntakeService.on_turn` is the socket the transcriber plugs into; it
+exists, it is tested, and nothing feeds it yet. See `explanations/P3_voice.md` for the reasoning,
+`diagrams/12_the_menu.md` for the picture, and `NEXT_SESSION.md` for the live state.

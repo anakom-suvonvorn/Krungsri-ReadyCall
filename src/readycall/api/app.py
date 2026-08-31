@@ -54,19 +54,26 @@ async def sweep_once(container: Container) -> None:
     * `PresenceService.sweep()` — heartbeat expiry. A closed laptop is supposed to fall out
       of presence on a TTL; instead it stayed `AVAILABLE` and kept being chosen.
 
+    `IntakeService.reoffer_due()` joined them rather than being scheduled by whichever
+    request queued the call. It is the same shape of trap: the re-offer at
+    `INTAKE_REOFFER_AFTER_S` fires *because the wait got long*, and nothing else about the
+    call happens at that moment to carry it.
+
     Exceptions are logged and swallowed: this loop must survive a bad tick, because the
     thing it drives is the thing that recovers from bad ticks.
     """
     try:
         expired = await container.dispatch.expire_offers()
         dropped = await container.presence.sweep()
+        reoffered = await container.intake.reoffer_due()
         result = await container.dispatch.tick()
-        if expired or dropped or result.offered:
+        if expired or dropped or reoffered or result.offered:
             log.info(
                 "sweep",
                 offers_expired=len(expired),
                 agents_dropped=len(dropped),
-                re_offered=len(result.offered),
+                calls_offered=len(result.offered),
+                intake_reoffers=len(reoffered),
             )
     except Exception:
         log.exception("sweep failed")

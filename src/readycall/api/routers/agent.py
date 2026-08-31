@@ -184,6 +184,12 @@ async def accept_offer(
     session = await container.calls.get(assignment.call_session_id)
     if session is None:
         raise HTTPException(status_code=404, detail="unknown call")
+    # `D21` lands here: the offer window IS the intake's grace period, so a caller who
+    # was still talking when this agent was rung has kept talking until this moment. The
+    # intake finalises as **partial** - everything said is kept, the brief renders it as
+    # unfinished, and nobody waited a second longer for it. Before `accept`, so the last
+    # of the transcript is attached to the call the agent is about to see.
+    await container.intake.on_agent_accepted(session.call_session_id)
     try:
         await container.assignments.accept(session, assignment_id=assignment_id)
     except PermanentError as exc:

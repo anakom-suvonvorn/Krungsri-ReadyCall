@@ -666,6 +666,66 @@
       "storage_ref": "prompt://38ed2ec0493ceaae"
     },
     {
+      "clip_key": "6dac980bf01a26a27c100ad211fc2412",
+      "prompt_id": "queue.position_only",
+      "text": "ขณะนี้ท่านอยู่ในลำดับที่ 3",
+      "voice": "th-TH-female-1",
+      "slots": {
+        "position": "3"
+      },
+      "duration_ms": 3900.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://7ad105a93fc6abad"
+    },
+    {
+      "clip_key": "9cf31f426b78e578f75633579ac20c4f",
+      "prompt_id": "queue.position_only",
+      "text": "ขณะนี้ท่านอยู่ในลำดับที่ 4",
+      "voice": "th-TH-female-1",
+      "slots": {
+        "position": "4"
+      },
+      "duration_ms": 3900.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://2d322c1cfd0f45d2"
+    },
+    {
+      "clip_key": "a1f43a4d4c43c842ea8cf5213a17b74a",
+      "prompt_id": "queue.position_only",
+      "text": "ขณะนี้ท่านอยู่ในลำดับที่ 1",
+      "voice": "th-TH-female-1",
+      "slots": {
+        "position": "1"
+      },
+      "duration_ms": 3900.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://b0e2fcf0748b6254"
+    },
+    {
+      "clip_key": "d6866a18d2672b058bafc7df5d718512",
+      "prompt_id": "queue.position_only",
+      "text": "ขณะนี้ท่านอยู่ในลำดับที่ 5",
+      "voice": "th-TH-female-1",
+      "slots": {
+        "position": "5"
+      },
+      "duration_ms": 3900.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://24c19ef96b138da1"
+    },
+    {
+      "clip_key": "ebda8e73a79aaaf3c661b7fc288fad58",
+      "prompt_id": "queue.position_only",
+      "text": "ขณะนี้ท่านอยู่ในลำดับที่ 2",
+      "voice": "th-TH-female-1",
+      "slots": {
+        "position": "2"
+      },
+      "duration_ms": 3900.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://d23607bbe1aec2d6"
+    },
+    {
       "clip_key": "d95cd7ce7643b73ef17ac17a583409e6",
       "prompt_id": "rating.request",
       "text": "กรุณาให้คะแนนความพึงพอใจ จาก 1 ถึง 5 โดย 5 คือพอใจมากที่สุด",

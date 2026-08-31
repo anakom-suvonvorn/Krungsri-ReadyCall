@@ -116,7 +116,7 @@ async def test_the_menu_routes_the_call_with_no_identity_and_no_ai() -> None:
     session = await run.execute()
 
     assert session.customer_id is None
-    assert session.consents == ()
+    assert not session.may_run_intake
     assert run.transcript == []
 
     assert session.menu_path == ("2", "4")
@@ -177,10 +177,15 @@ async def test_the_thinnest_possible_call_still_completes() -> None:
     session = await run.execute()
 
     assert session.customer_id is None
-    assert session.consents == ()
     assert not session.may_run_intake
     assert run.transcript == []
     assert session.state is CallState.CLOSED
+
+    # Nothing was GRANTED - but the refusal itself is on the record (`D88`). "They said
+    # no" and "we never asked" are different facts, and a call whose consent list is
+    # simply empty cannot tell you which of the two happened.
+    assert [(c.scope, c.granted) for c in session.consents] == [(ConsentScope.AI_PROCESSING, False)]
+    assert session.consents[0].basis == "ivr_keypress_2"
 
     # It skipped intake entirely and went straight from the queue to matching.
     visited = [t.to_state for t in session.transitions]

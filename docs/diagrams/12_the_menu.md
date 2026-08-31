@@ -130,7 +130,7 @@ parity means the awkward cases are handled at least as well as a system with no 
 
 | The caller does | What happens | Why that rule |
 |---|---|---|
-| presses `0` | reaches a human, from any menu, at any depth — keeping whatever the menu already established | a caller who learns `0` in one menu must not be surprised in another |
+| presses `0` | nothing special — it is an unrecognised digit like any other, so: sorry, here are the options again (`D86`) | the way out is the menu's own spoken **"เรื่องอื่นๆ"**, which every reason menu ends in. A shortcut to a destination the menu already offers costs a reserved key and buys two keypresses |
 | presses `9` | hears the menu again, and it costs nothing | re-listening is being careful, not failing |
 | presses a wrong key | apology naming both escape keys, then the menu again — **with no limit** (`D82`) | a wrong key *proves* somebody is there. Giving up after N mistakes throws away the good answer we were seconds from getting |
 | says nothing | one re-prompt, then a queue | silence does **not** prove anybody is there, so this half stays bounded |
@@ -193,6 +193,70 @@ notice, and not a single question.
 
 ---
 
+## 12.6 What happens once the queue is known
+
+The menu stops here. Everything below is **enrichment**, and the page it is on matters: a
+separate machine, `services/intake/hold.py`, with a separate outcome type, because the IVR
+decides *where the call goes* and this decides *how much the agent will know when it gets
+there* (`D88`).
+
+![the hold and the intake offer](hold_offer.svg)
+
+The caller hears their **position** and then the offer. They hear the wait in minutes only
+when there is a real estimate to give — and there is none yet, because counting a queue and
+predicting how long it takes to drain are different problems and only the first is solved
+(`D89`). An invented *"about three minutes"* becomes a visible lie at minute eight, to the
+caller least inclined to forgive it.
+
+### The three answers, and why none of them is a failure
+
+| They press | What happens | What the agent gets |
+|---|---|---|
+| **1** | `recording` **and** `ai_processing` granted on one keypress, basis `ivr_keypress_1`; the call moves to `INTAKE_ACTIVE` | a transcript, once there is audio |
+| **2** | `ai_processing` recorded as **`granted=False`** — the refusal, not silence | a menu-derived brief, marked `intake_declined` |
+| *nothing* | one line: "please hold" | a menu-derived brief, marked `no_consent` |
+
+The last two rows are the point. *"They said no"* and *"we never asked"* are different facts,
+and a call whose consent list is simply empty cannot tell you which happened — so an agent
+looking at a thin brief would have no way to know whether to ask. Both are outcomes, not
+errors: the queue was settled before any of this ran, and a test asserts exactly that.
+
+```python
+for keys in (["1"], ["2"], []):
+    ...
+assert queues == ["q_health_policy"] * 3
+```
+
+### The recording outlives the thing that started it
+
+`run_offer` returns the moment the caller answers. That looks like an unfinished loop and is
+the opposite: the three things that actually end a recording are a **VAD silence**, the
+**maximum duration**, and **an agent pressing Accept** — and the last arrives seconds later,
+from a different person, on a different connection (`D21`). So the hold stays live, and
+`api/routers/agent.py` finalises it on accept, *before* the assignment is accepted, so the
+tail of the transcript is attached to the call the agent is about to see.
+
+Verified on a running server rather than argued about:
+
+```
+intake started    call_01M1C7KX…  strategy=passive
+hold settled      … outcome=waiting  recording=True     <- offer out, still talking
+intake finalized  … partial=True  reason=offer_accepted <- the agent pressed Accept
+hold settled      … outcome=cut_short recording=False
+```
+
+`is_partial` matters downstream: a brief must render *"cut off mid-sentence"* differently
+from *"finished their thought"*, and under a busy queue the first is the **expected** ending.
+
+### What is still missing here
+
+The audio. No media gateway, no VAD, no STT worker, no recording to storage, no live
+transcript on the workstation. Turns arrive through `IntakeService.on_turn`, and today the
+only things that call it are the test suite and the scenario runner. That is the next slice,
+and it is the one with the GPU in it.
+
+---
+
 ## Where to go from here
 
 - **`../reading/the_line.html`** — a **readable, interactive twin** of this page. Open it in
@@ -203,9 +267,10 @@ notice, and not a single question.
   the closest this layer gets to something you can poke at, which is most of why it exists.
   This page and that one must be updated together.
 - **[Routing](04_routing.md)** — why the menu leads at all, and the tree it walks.
-- **[Voice & AI](07_voice_and_ai.md)** — what runs *after* this, while the caller waits.
+- **[Voice & AI](07_voice_and_ai.md)** — the strategy seam the offer feeds, and what
+  runs on the transcript once there is one.
 - `explanations/P3_voice.md` — the same material at length, with what was rejected.
-- `DECISIONS.md` `D24`, `D37`, `D80`, `D81` — the decisions themselves.
+- `DECISIONS.md` `D24`, `D37`, `D80`, `D81`, `D86`, `D88`, `D89` — the decisions themselves.
 
 ---
 

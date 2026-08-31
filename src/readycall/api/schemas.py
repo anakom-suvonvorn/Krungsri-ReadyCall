@@ -491,6 +491,11 @@ class PlaceCallRequest(ApiModel):
     intent_code: str | None = Field(default=None, max_length=64)
     #: Menu keypresses, in order. At P3 these come from real DTMF.
     keys: tuple[str, ...] = ()
+    #: Keypresses for the intake offer, which happens *after* the queue is decided and is
+    #: therefore a separate script: `("1",)` records, `("2",)` holds, `()` says nothing and
+    #: falls through to hold. Separate from `keys` so a demo cannot accidentally spend a
+    #: menu press on the offer, or the reverse.
+    intake_keys: tuple[str, ...] = ()
     #: Seconds already waited, so a demo can show a caller near their SLA without waiting.
     waited_s: float = Field(default=0.0, ge=0.0, le=3600.0)
     #: DEMO: place the call even when the queue's schedule says it is shut. Rehearsals
@@ -498,6 +503,27 @@ class PlaceCallRequest(ApiModel):
     #: closed for one of them. It stands in for nothing in the real system — production
     #: has no such flag, and the closed-queue path (`D25`) is exercised by leaving it off.
     ignore_hours: bool = False
+
+
+class IntakeOut(ApiModel):
+    """How the pre-call intake went — including, deliberately, when it did not happen.
+
+    `declined` and `ignored` are outcomes, not errors (`D19`): the menu already routed the
+    call, so the agent still gets a brief. What they must not get is a thin brief with no
+    explanation, which is why `degraded` travels with it (`D14`).
+    """
+
+    outcome: str | None = None
+    consented: bool | None = None
+    recording: bool = False
+    offers_made: int = 0
+    intake_id: str | None = None
+    turn_count: int = 0
+    is_partial: bool = False
+    degraded: str = "none"
+    #: Prompt ids, in order — the spoken half of "show, do not claim" (`D18`).
+    played: tuple[str, ...] = ()
+    pressed: tuple[str, ...] = ()
 
 
 class PlaceCallResponse(ApiModel):
@@ -511,6 +537,8 @@ class PlaceCallResponse(ApiModel):
     offered_to: str | None = None
     #: Which of `D50`'s two reasons applies, when nobody could take the call.
     unplaced_reason: str | None = None
+    #: What the hold produced (`D88`). `null` when the queue was shut and nobody held.
+    intake: IntakeOut | None = None
 
 
 # --- the brief, as it crosses the wire ---------------------------------------------

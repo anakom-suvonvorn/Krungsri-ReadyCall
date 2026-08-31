@@ -67,6 +67,7 @@ from readycall.services.identity.attestation import AttestationService
 from readycall.services.identity.intents import IntentService
 from readycall.services.identity.resolver import IdentityResolver
 from readycall.services.identity.store import InMemoryCallIntentStore
+from readycall.services.intake.service import IntakeService
 from readycall.services.ivr.service import IvrService
 from readycall.services.matching.engine import MatchingEngine
 from readycall.services.matching.scoring import WaitingCall
@@ -188,6 +189,18 @@ class Container:
             telephony=self.telephony,
             orchestrator=self.orchestrator,
             clock=self.clock,
+        )
+        #: Everything below the "queue is now known" line (`ARCHITECTURE.md` section 6):
+        #: the queue position, the intake offer, and the recording that outlives the
+        #: request that started it, because an agent accepting is what ends it (`D21`).
+        self.intake = IntakeService(
+            pack=self.pack,
+            prompts=self.prompts,
+            telephony=self.telephony,
+            orchestrator=self.orchestrator,
+            clock=self.clock,
+            bus=self.bus,
+            settings=settings,
         )
         self.hub = AgentHub(clock=self.clock)
         self.presence = PresenceService(

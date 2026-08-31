@@ -1,7 +1,7 @@
 # PLAN
 
 _The master build plan for the full system: what gets built, in what order, and what "done" means for each phase._
-_Last updated: 2026-08-25._
+_Last updated: 2026-08-31._
 
 ---
 
@@ -178,9 +178,12 @@ started. `explanations/P3_voice.md` covers the built half; `diagrams/12_the_menu
   `D81` — the key pressed is not the key stored; every press resolves to canonical, so
   `menu_path` means the same thing on every call.
 - **`services/ivr/`**: greeting + recording notice → product-line menu (skipped when the DID
-  or the app already said) → reason menu → queue. `0` reaches a human from any depth, `9`
-  repeats without spending an attempt, three wrong keys or two silences route rather than
-  hang up, and a product-line number with no keypress still reaches that line's queue.
+  or the app already said) → reason menu → queue. `9` repeats without spending an attempt,
+  a wrong key is never a strike (`D82`), two silences route rather than hang up, and a
+  product-line number with no keypress still reaches that line's queue.
+  *(As written this said "`0` reaches a human from any depth" and "three wrong keys …
+  route"; `D82` removed the attempt limit and `D86` removed the operator key. The way out
+  of a menu is its own spoken "เรื่องอื่นๆ".)*
   Personalised ordering with the evidence attached. No I/O in the machine, so a timeout is a
   method call (`B7`).
 - **Handover complete.** `run_scenario.py`'s `# P1:` IVR marker and `demo.py`'s `# P2b:` are
@@ -191,9 +194,9 @@ started. `explanations/P3_voice.md` covers the built half; `diagrams/12_the_menu
 - A **real TTS voice**: `TTS_ENGINE=null` synthesises nothing today, so the pack is a manifest.
   Choose on a listening test of the actual 63 lines, not a spec sheet. Plus the checked-in
   audio pack and the admin **prompt studio** page.
-- The **identify step** (keypad → L3), the **press-1/press-2 intake offer** with its re-offer,
-  and the **post-call rating keypress**. All three have prompts and roles already; nothing
-  calls them yet.
+- ✅ **The press-1/press-2 intake offer, with its re-offer** — `services/intake/` (`D88`).
+  The identify step is **gone**, not pending (`D84`). The **post-call rating keypress** still
+  has a prompt and a role and nothing calling it.
 - Media Gateway: AudioSocket + WebSocket media servers, **per-leg forking**, resampling to
   16 kHz mono float32, framing, encrypted recording to MinIO, per-recording key refs.
 - Consent gate (IVR keypress + in-app toggle) writing `consents` before a single frame is analysed.
@@ -206,14 +209,17 @@ started. `explanations/P3_voice.md` covers the built half; `diagrams/12_the_menu
 - **STT bake-off on the real hardware**: Thonburian-HF vs Thonburian-CT2 vs distilled vs Typhoon ASR —
   WER, p95 utterance latency, VRAM — recorded in `PROJECT_STATE.md` (`D30`, `INTEGRATIONS.md` §2.1).
 - `TranscriptTurn` events + incremental DB writes; live transcript in the agent desktop.
-- `IntakeStrategy` seam with `PassiveRecordIntake`; `finalize(reason)`; **ring-time grace** (`D21`).
+- ✅ `IntakeStrategy` seam with `PassiveRecordIntake`; `finalize(reason)`; **ring-time
+  grace** (`D21`) — the accept endpoint finalises a live intake as partial, proved on a
+  running server. Turns arrive through `IntakeService.on_turn`; nothing feeds it yet.
 
 **Exit criteria**
 - Utterance end → turn visible **p95 < 1.5 s** on the RTX 3050, with the chosen engine named and the
   bake-off table recorded.
 - ✅ A caller who presses 2, and a caller who consents to nothing, both still reach **the correct
   queue** with a menu-derived brief — because routing never depended on the AI (`D37`).
-  *(The queue half is proved; the press-2 offer itself is step 4.)*
+  Proved end to end: `test_every_answer_leaves_the_queue_exactly_where_the_menu_put_it`,
+  and three live calls (record / decline / ignore) all landing in `q_health_policy`.
 - ✅ A caller on the general hotline with an unrecognised number reaches the right specialist purely by
   keypad. That is the floor, and it must be at least as good as an ordinary call centre.
   *(`anonymous_declined` replays it: keys 2/4 → `q_health_policy`, no identity, no consent.)*

@@ -1,0 +1,60 @@
+%% HANDWRITTEN. Checked against services/intake/hold.py + D88 + D21 + D82 + D14
+%% The four phases of the hold, and the four ways out of a recording.
+stateDiagram-v2
+    direction TB
+
+    [*] --> OFFERING: begin() - position, then the offer
+
+    state OFFERING {
+        direction LR
+        ask: "กด 1 บันทึก / กด 2 รอสาย"
+        wrong: wrong key -> sorry, and the offer again
+        ask --> wrong: any other digit
+        wrong --> ask: UNLIMITED (D82)
+    }
+
+    OFFERING --> RECORDING: presses 1<br/>consent: recording + ai_processing<br/>QUEUED -> INTAKE_ACTIVE
+    OFFERING --> HOLDING: presses 2<br/>consent: ai_processing GRANTED=FALSE
+    OFFERING --> HOLDING: silence<br/>(no re-prompt - the re-offer is the second chance)
+    OFFERING --> HOLDING: runaway_press_guard<br/>(stuck DTMF sender, not a person)
+
+    RECORDING --> RECORDING: 1st silence -> one re-prompt<br/>any key except 1 -> IGNORED, do not interrupt them
+    RECORDING --> HOLDING: presses 1 again (CUSTOMER_DONE)
+    RECORDING --> HOLDING: 2nd silence (SILENCE_TIMEOUT)
+    RECORDING --> HOLDING: max duration (MAX_DURATION)
+
+    HOLDING --> OFFERING: reoffer() at INTAKE_REOFFER_AFTER_S<br/>ONCE, and never to someone who already recorded
+
+    RECORDING --> DONE: agent accepts -> CUT_SHORT, is_partial (D21)
+    HOLDING --> DONE: agent accepts -> RECORDED / DECLINED / IGNORED
+    OFFERING --> DONE: agent accepts before they answered -> IGNORED
+    RECORDING --> DONE: hangs up -> ABANDONED, is_partial
+    HOLDING --> DONE: hangs up -> ABANDONED
+    DONE --> [*]
+
+    note left of OFFERING
+        Nothing on this diagram can change the QUEUE.
+        Routing was settled by the menu before begin()
+        was called (D37), so DECLINED and IGNORED are
+        outcomes, not failures - the agent still gets a
+        menu-derived brief, with the reason attached.
+    end note
+
+    note right of RECORDING
+        The machine has NO I/O (B7). Every arrow that
+        fires because time passed - both silences, the
+        max duration, the re-offer - is an ordinary
+        method call, so each one has a test in which
+        nothing happens except the clock moving.
+
+        And the driver STOPS at the answer (D88): the
+        three arrows out of RECORDING all arrive from
+        outside, seconds later, on another connection.
+    end note
+
+    note right of DONE
+        finalize_reason travels on the outcome, and
+        NO_CONSENT is the honest default: the reason
+        there is no transcript is that we were never
+        allowed one, and the brief has to say so (D14).
+    end note

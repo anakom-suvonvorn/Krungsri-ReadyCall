@@ -16,12 +16,18 @@ Built for the Krungsri Universe × KMITL Hackathon (*Reimagine Insurance Brokera
 
 ## Status
 
-**P0 · P1 · P1b · P2a · P2b · P2c complete. P3 steps 1–3 done.**
+**P0 · P1 · P1b · P2a · P2b · P2c complete. P3 done except the audio.**
 
-The identity ladder, the keypad IVR, the context assembler, the brief builder, the public API, the
-matching engine, agent presence, the offer handshake, the React workstation and the database layer
-are all real services doing real work. Only the *edges* are still fakes: the phone, the speech model,
-the LLM, the bank's data and the agent roster.
+The identity ladder, the keypad IVR, the intake offer, the context assembler, the brief builder,
+the public API, the matching engine, agent presence, the offer handshake, the React workstation and
+the database layer are all real services doing real work. Only the *edges* are still fakes: the
+phone, the speech model, the LLM, the bank's data and the agent roster.
+
+A caller keys their way to the right queue, hears their position, is offered the pre-call recording
+and either takes it or does not — and all three answers reach the same agent, because the menu
+settled the routing before any of it ran. What is missing is the audio itself: no media gateway, no
+voice activity detection and no speech-to-text worker, so the transcript socket
+(`IntakeService.on_turn`) is real and nothing feeds it.
 
 **Everything below runs with no services, no API keys, no GPU and no database.** That is deliberate
 (`docs/DECISIONS.md` `D3`): every external dependency sits behind a port with a working fake, so you
@@ -174,7 +180,8 @@ Or set `MMDC=/path/to/mmdc`. The renderer drives a headless browser; if it canno
 
 ### 6. Speech-to-text — *not available yet*
 
-P3 step 4. `uv sync --extra ml` **fails today** because the extra is still commented out in
+P3 step 4b, the only part of the project with hardware risk. `uv sync --extra ml` **fails
+today** because the extra is still commented out in
 `pyproject.toml`. Until then `STT_ENGINE=scripted` returns canned transcripts, which is what every
 test and the stage-safe demo path use.
 
@@ -239,9 +246,12 @@ telephony, no GPU, no database, no network. Deterministic: two runs are byte-ide
 
 | Scenario | What it exercises |
 |---|---|
-| `anonymous_declined.yaml` | the floor — unrecognised caller, no app, no consent, routed by keypad alone |
+| `anonymous_declined.yaml` | the floor — unrecognised caller, no app, declines the recording, routed by keypad alone |
 | `pattheera_ipd.yaml` | the app path — verified identity, both menu questions already answered |
 | `roadside_motor_claim.yaml` | a cold call to a product-line number, identity guessed from caller ID |
+
+  A scenario's `intake:` block drives the real offer: `declined: true` presses **2**, a scenario
+  with `turns:` presses **1**, and one with neither says nothing and falls through to hold.
 
 ### Simulate the matcher under load
 
@@ -422,7 +432,7 @@ the same reason.
 | [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md) | Stack, folder map, feature status, constraints |
 | [`docs/DECISIONS.md`](docs/DECISIONS.md) | Why it is built this way (`D1`…) |
 | [`docs/BUG_HISTORY.md`](docs/BUG_HISTORY.md) | Solved bugs (`B1`…) — search here first |
-| [`docs/diagrams/`](docs/diagrams/README.md) | 60 diagrams across 12 themed pages; 14 generated from source |
+| [`docs/diagrams/`](docs/diagrams/README.md) | 61 diagrams across 12 themed pages; 14 generated from source |
 | [`docs/explanations/`](docs/explanations/) | One plain-language walkthrough per phase |
 | [`docs/reading/`](docs/reading/) | Interactive pages — open in a browser, no build step |
 

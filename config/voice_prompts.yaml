@@ -51,6 +51,7 @@ flow:
   menu_reserved_hint: menu.reserved_hint
   no_input: input.none
   queue_position: queue.position
+  queue_position_only: queue.position_only
   queue_hold: queue.hold
   intake_offer: intake.offer
   intake_reoffer: intake.reoffer
@@ -168,6 +169,22 @@ prompts:
       - { position: 3, wait_minutes: 2 }
       - { position: 4, wait_minutes: 3 }
       - { position: 5, wait_minutes: 4 }
+
+  queue.position_only:
+    text_th: "ขณะนี้ท่านอยู่ในลำดับที่ {position}"
+    slots: [position]
+    warm:
+      - { position: 1 }
+      - { position: 2 }
+      - { position: 3 }
+      - { position: 4 }
+      - { position: 5 }
+    note: >-
+      The position with no time attached, played whenever there is no wait estimate to
+      attach (D89). We can always count the queue; we cannot yet predict how long it takes
+      to drain, and a made-up "about 3 minutes" is the kind of confident wrong number this
+      project keeps having to dig out (D18). The fuller line takes over when P6 brings the
+      handle-time data D85 already knows how to use.
 
   queue.hold:
     text_th: "กรุณาถือสายรอสักครู่ค่ะ"
