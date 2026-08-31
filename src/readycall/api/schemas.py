@@ -411,6 +411,29 @@ class ChallengeOut(ApiModel):
     requires_note: bool = False
 
 
+class PendingWrapupOut(ApiModel):
+    """A call this agent handled and never filed a wrap-up for (`D87`).
+
+    Derived, not stored (`D78`): an assignment whose ACW has ended with no `call_wrapups`
+    row *is* the backlog entry. Nothing marks a call as owing one.
+    """
+
+    call_session_id: str
+    #: When the conversation itself ended, so the list can be ordered oldest-first and the
+    #: agent can see which one has been waiting.
+    ended_at: datetime | None = None
+    #: How long the agent was in after-call work before they left it. Useful context when
+    #: coming back cold: a 4-second ACW means they left immediately.
+    acw_seconds: float | None = None
+    intent_code: str | None = None
+    intent_label_th: str | None = None
+    #: Only when the identity of THAT call permits it (`D74`). A backlog row is still a
+    #: disclosure surface, and it renders long after the call — so it is gated like any
+    #: other, from the resolution rather than from whatever the snapshot happens to hold.
+    customer_name_th: str | None = None
+    assurance: str = "l0_anonymous"
+
+
 class WorkstationSnapshot(ApiModel):
     """Everything the workstation needs to render itself from cold.
 
@@ -446,6 +469,11 @@ class WorkstationSnapshot(ApiModel):
     #: session_id` deliberately covers only IN_CALL and WRAP_UP, so it drops to `null` on
     #: save — correct for "which call can I still act on", useless for "what am I wrapping".
     wrapup_call_session_id: str | None = None
+    #: Calls this agent left after-call work on without filing anything (`D87`). `D45`
+    #: says the person decides when ACW ends, so they are free to walk away mid-form —
+    #: but the record still has to be fileable afterwards, or "free to leave" quietly
+    #: means "the note is lost". Oldest first.
+    pending_wrapups: tuple[PendingWrapupOut, ...] = ()
 
 
 class PlaceCallRequest(ApiModel):

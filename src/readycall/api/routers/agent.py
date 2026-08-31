@@ -39,6 +39,7 @@ from readycall.api.schemas import (
     EndCallRequest,
     IdentityOut,
     OfferOut,
+    PendingWrapupOut,
     QueueOut,
     WorkstationSnapshot,
     WrapupRequest,
@@ -251,15 +252,30 @@ async def save_wrapup(
     session = await container.calls.get(call_session_id)
     if session is None or assignment is None:
         raise HTTPException(status_code=404, detail="unknown call")
-    if session.state is not CallState.WRAP_UP:
+    # Two states may be wrapped up. The obvious one is `WRAP_UP` — the agent is sitting
+    # in after-call work right now. The other is a call they walked away from without
+    # filing (`D87`): `D45` lets them leave, so the record has to stay fileable
+    # afterwards, or "free to leave" quietly means "the note is lost".
+    from_backlog = session.state is CallState.CLOSED and call_session_id not in container.wrapups
+    if session.state is not CallState.WRAP_UP and not from_backlog:
         raise HTTPException(status_code=400, detail=f"call is {session.state}, not in wrap-up")
     try:
-        await container.assignments.save_wrapup(
-            session,
-            assignment_id=assignment.assignment_id,
-            disposition=body.disposition,
-            was_edited=body.was_edited,
-        )
+        if from_backlog:
+            # Already closed, so there is no transition to make — only the record to file.
+            await container.assignments.note_wrapup_filed_late(
+                assignment_id=assignment.assignment_id,
+                call_session_id=call_session_id,
+                disposition=body.disposition,
+                was_edited=body.was_edited,
+                trace_id=session.trace_id,
+            )
+        else:
+            await container.assignments.save_wrapup(
+                session,
+                assignment_id=assignment.assignment_id,
+                disposition=body.disposition,
+                was_edited=body.was_edited,
+            )
     except PermanentError as exc:
         raise _bad_request(exc) from exc
     wrapup = CallWrapup(
@@ -727,6 +743,7 @@ async def _snapshot(container: Any, agent_id: str) -> WorkstationSnapshot:
         # Not saying so forced the client to remember it locally, which lost it on refresh
         # and never showed it at all once the call id went away on save (`D68`).
         wrapup_saved=wrapping_id is not None and wrapping_id in container.wrapups,
+        pending_wrapups=await _pending_wrapups(container, agent_id),
     )
 
 
@@ -740,6 +757,49 @@ async def _active_call_id(container: Any, agent_id: str) -> str | None:
         if session is not None and session.state in live_states:
             return str(assignment.call_session_id)
     return None
+
+
+async def _pending_wrapups(container: Any, agent_id: str) -> tuple[PendingWrapupOut, ...]:
+    """Calls this agent handled and never filed anything for (`D87`).
+
+    Derived, not stored (`D78`): "ACW has ended AND there is no wrap-up" is the backlog
+    entry. Nothing flags a call as owing one, so nothing can disagree about whether it does.
+    """
+    rows: list[PendingWrapupOut] = []
+    for assignment in container.assignments.for_agent(agent_id):
+        if assignment.acw_ended_at is None:
+            continue  # still in after-call work, or never got there
+        if assignment.call_session_id in container.wrapups:
+            continue
+        session = await container.calls.get(assignment.call_session_id)
+        if session is None:
+            continue
+        intent_code = session.menu_intent_code
+        spec = container.pack.intents.get(intent_code) if intent_code else None
+
+        # A backlog row is a disclosure surface like any other, and it renders long after
+        # the call — so the name is gated on that call's identity, not on the current one.
+        resolution = container.identity_for_call.get(assignment.call_session_id)
+        name: str | None = None
+        if resolution is not None and resolution.may_see_record:
+            snapshot_id = container.snapshot_for_call.get(assignment.call_session_id)
+            snapshot = await container.snapshots.get(snapshot_id) if snapshot_id else None
+            customer = snapshot.payload.customer if snapshot else None
+            name = customer.polite_name_th if customer else None
+
+        rows.append(
+            PendingWrapupOut(
+                call_session_id=str(assignment.call_session_id),
+                ended_at=assignment.acw_started_at,
+                acw_seconds=assignment.acw_seconds,
+                intent_code=intent_code,
+                intent_label_th=spec.label_th if spec else None,
+                customer_name_th=name,
+                assurance=str(resolution.assurance) if resolution else "l0_anonymous",
+            )
+        )
+    # Oldest first: the one that has been waiting longest is the one to clear.
+    return tuple(sorted(rows, key=lambda row: (row.ended_at is None, row.ended_at)))
 
 
 def _wrapping_call_id(container: Any, agent_id: str) -> str | None:

@@ -60,13 +60,7 @@ def work_list(prompts: PromptPack, pack: DomainPack) -> list[SpokenLine]:
         for option in menu.options:
             lines.append(prompts.say(PromptRole.MENU_OPTION, key=option.key, label=option.label_th))
     settings = pack.menu_settings
-    lines.append(
-        prompts.say(
-            PromptRole.MENU_RESERVED_HINT,
-            repeat_key=settings.repeat_key,
-            operator_key=settings.operator_key,
-        )
-    )
+    lines.append(prompts.say(PromptRole.MENU_RESERVED_HINT, repeat_key=settings.repeat_key))
 
     unique: dict[tuple[str, str], SpokenLine] = {}
     for line in lines:

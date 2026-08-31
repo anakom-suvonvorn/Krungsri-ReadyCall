@@ -204,20 +204,15 @@ class TestRendering:
         with pytest.raises(ConfigError, match="unexpected"):
             prompts.say(PromptRole.QUEUE_HOLD, position=3)
 
-    def test_the_reserved_hint_speaks_the_keys_the_ivr_actually_honours(
+    def test_the_reserved_hint_speaks_the_key_the_ivr_actually_honours(
         self, prompts: PromptPack, pack: DomainPack
     ) -> None:
-        """`D37`: `9` repeats and `0` reaches a human, in every menu. The spoken hint is
-        rendered from the same settings the IVR reads, so it cannot promise a key that
-        does nothing."""
+        """`9` repeats, in every menu, and it is the only reserved key left (`D86`). The
+        hint is rendered from the same settings the IVR reads, so it cannot promise a key
+        that does nothing."""
         settings = pack.menu_settings
-        line = prompts.say(
-            PromptRole.MENU_RESERVED_HINT,
-            repeat_key=settings.repeat_key,
-            operator_key=settings.operator_key,
-        )
+        line = prompts.say(PromptRole.MENU_RESERVED_HINT, repeat_key=settings.repeat_key)
         assert settings.repeat_key in line.text
-        assert settings.operator_key in line.text
 
     def test_every_menu_option_can_be_spoken(self, prompts: PromptPack, pack: DomainPack) -> None:
         """`D80`: a menu is a lead-in plus one rendered line per option. If the template

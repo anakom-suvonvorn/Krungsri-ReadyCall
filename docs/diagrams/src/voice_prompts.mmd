@@ -7,7 +7,6 @@ flowchart LR
         role_menu_option["menu_option"]:::role
         role_menu_reserved_hint["menu_reserved_hint"]:::role
         role_no_input["no_input"]:::role
-        role_operator["operator"]:::role
         role_queue_position["queue_position"]:::role
         role_queue_hold["queue_hold"]:::role
         role_intake_offer["intake_offer"]:::role
@@ -40,7 +39,6 @@ flowchart LR
     p_greeting_motor_claim["greeting.motor_claim"]:::static
     p_greeting_travel["greeting.travel"]:::static
     p_input_none["input.none"]:::static
-    p_input_operator["input.operator"]:::static
     p_intake_declined["intake.declined"]:::static
     p_intake_done["intake.done"]:::static
     p_intake_offer["intake.offer"]:::static
@@ -56,7 +54,7 @@ flowchart LR
 {key, label}"]:::dyn
     p_menu_product_line["menu.product_line"]:::static
     p_menu_reserved_hint["menu.reserved_hint
-{repeat_key, operator_key}"]:::dyn
+{repeat_key}"]:::dyn
     p_menu_travel_reason["menu.travel_reason"]:::static
     p_notice_recording["notice.recording"]:::static
     p_queue_hold["queue.hold"]:::static
@@ -75,7 +73,6 @@ flowchart LR
     role_menu_option --> p_menu_option
     role_menu_reserved_hint --> p_menu_reserved_hint
     role_no_input --> p_input_none
-    role_operator --> p_input_operator
     role_queue_hold --> p_queue_hold
     role_queue_position --> p_queue_position
     role_rating_request --> p_rating_request

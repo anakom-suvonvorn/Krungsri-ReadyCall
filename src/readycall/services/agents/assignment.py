@@ -357,6 +357,42 @@ class AssignmentService:
         )
         return assignment
 
+    async def note_wrapup_filed_late(
+        self,
+        *,
+        assignment_id: str,
+        call_session_id: str,
+        disposition: str,
+        was_edited: bool,
+        trace_id: str | None,
+    ) -> Assignment:
+        """File a wrap-up for a call that already closed unwrapped (`D87`).
+
+        The call is `CLOSED` and stays `CLOSED` — there is no state to move, only a record
+        to write. Kept separate from `save_wrapup` precisely so the two cannot be confused:
+        that one closes a call, this one fills a hole, and a `CLOSED -> CLOSED` transition
+        would be a lie in the timeline either way.
+
+        The event says `filed_late` so the metric can tell a wrap-up written during ACW
+        from one written twenty minutes afterwards. Both are real; they are not the same.
+        """
+        assignment = self._require(assignment_id)
+        await self._bus.publish(
+            ev.WrapupSaved(
+                call_session_id=call_session_id,
+                occurred_at=self._clock.now(),
+                trace_id=trace_id,
+                agent_id=assignment.agent_id,
+                disposition=disposition,
+                was_edited=was_edited,
+                # No live ACW to measure — it ended when they walked away, and the
+                # assignment already carries how long it ran.
+                acw_seconds=assignment.acw_seconds,
+                filed_late=True,
+            )
+        )
+        return assignment
+
     async def note_acw_ended(self, *, assignment_id: str, declared_intent: str) -> Assignment:
         """Record the ACW close-out on the assignment after the agent declared.
 

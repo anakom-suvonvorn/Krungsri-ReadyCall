@@ -50,7 +50,6 @@ flow:
   menu_option: menu.option
   menu_reserved_hint: menu.reserved_hint
   no_input: input.none
-  operator: input.operator
   queue_position: queue.position
   queue_hold: queue.hold
   intake_offer: intake.offer
@@ -124,20 +123,20 @@ prompts:
       `menus.yaml`, so the wording of an option lives in exactly one file.
 
   menu.reserved_hint:
-    text_th: "กด {repeat_key} เพื่อฟังอีกครั้ง กด {operator_key} เพื่อติดต่อเจ้าหน้าที่"
-    slots: [repeat_key, operator_key]
+    text_th: "กด {repeat_key} เพื่อฟังอีกครั้ง"
+    slots: [repeat_key]
     note: >-
-      The keys come from `menus.yaml` settings, so the spoken hint cannot disagree with
-      the keys the IVR actually honours. `0` is never a dead end (D37).
+      The key comes from `menus.yaml` settings, so the spoken hint cannot disagree with the
+      key the IVR actually honours. There is no operator key any more (D86) - the way out
+      is the "เรื่องอื่นๆ" option, which is already spoken as part of every menu.
 
   menu.invalid:
-    text_th: >-
-      ขออภัยค่ะ ไม่พบหมายเลขที่ท่านเลือก
-      กด 9 เพื่อฟังตัวเลือกอีกครั้ง หรือกด 0 เพื่อติดต่อเจ้าหน้าที่
+    text_th: "ขออภัยค่ะ ไม่พบหมายเลขที่ท่านเลือก กด 9 เพื่อฟังตัวเลือกอีกครั้ง"
     note: >-
-      Says sorry and names the two keys that always work. There is NO attempt limit
-      behind this line (`D82`) - a caller may press the wrong key all day and will keep
-      being offered the menu, because a caller pressing buttons is present and trying.
+      Says sorry and names the repeat key. There is NO attempt limit behind this line
+      (`D82`) - a caller may press the wrong key all day and will keep being offered the
+      menu, because a caller pressing buttons is present and trying. The way OUT is the
+      "เรื่องอื่นๆ" option, which the menu speaks anyway (`D86`).
 
   menu.language:
     text_th: "สำหรับภาษาไทย กด 1 · For English, press 2"
@@ -145,16 +144,9 @@ prompts:
       NOT REACHABLE YET - `menus.yaml` has `language_menu.enabled: false` (D38). The line
       exists because the id is referenced, and the guard test would fail without it.
 
-  # --- when the caller gives us nothing, or asks for a person --------------------------
+  # --- when the caller gives us nothing ------------------------------------------------
   input.none:
     text_th: "ไม่ได้รับการกดหมายเลขค่ะ กรุณาลองอีกครั้ง"
-
-  input.operator:
-    text_th: "กำลังโอนสายไปยังเจ้าหน้าที่ค่ะ กรุณารอสักครู่"
-    note: >-
-      `0` means "stop asking and put me through with whatever you know" (`D83`). It is a
-      shortcut, not a separate route: the queue comes from the same evidence ladder as
-      every other outcome, so a caller who already chose a product line keeps it.
 
   # NOTE: there is deliberately NO pre-call identification step (`D84`). Asking a caller
   # to key their citizen id before anyone says hello would promote them to L3 with no

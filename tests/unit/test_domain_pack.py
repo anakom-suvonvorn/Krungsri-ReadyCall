@@ -149,9 +149,9 @@ class TestMenus:
             assert len(keys) == len(set(keys)), f"{menu_id} has duplicate keys"
 
     def test_reserved_keys_are_not_reused_as_options(self, menus_cfg: dict[str, Any]) -> None:
-        """Repeat and operator must mean the same thing in every menu, or callers learn
-        the wrong reflex and press 0 expecting a human."""
-        reserved = {menus_cfg["settings"]["repeat_key"], menus_cfg["settings"]["operator_key"]}
+        """Repeat must mean the same thing in every menu. It is now the ONLY reserved key
+        (`D86`) — the way out of a menu is its own spoken catch-all option."""
+        reserved = {menus_cfg["settings"]["repeat_key"]}
         for menu_id, menu in menus_cfg["menus"].items():
             keys = {o["key"] for o in menu["options"]}
             assert not (keys & reserved), f"{menu_id} reuses a reserved key"

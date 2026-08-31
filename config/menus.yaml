@@ -19,15 +19,20 @@ version: 1
 
 settings:
   barge_in: true              # a keypress interrupts the prompt; menus feel slow otherwise
-  repeat_key: "9"             # "กด 9 เพื่อฟังอีกครั้ง"
-  operator_key: "0"           # "stop asking, put me through with whatever you know" (D83)
+  repeat_key: "9"             # "กด 9 เพื่อฟังอีกครั้ง" - the ONLY reserved key (D86)
+  #
+  # There is deliberately NO operator key (D86, reversing D83). Every menu already ends in
+  # "เรื่องอื่นๆ" as a numbered, spoken option, and 0 routed to exactly the same place - so
+  # it was a shortcut that saved two keypresses and cost a reserved key, a prompt, an
+  # outcome kind and a clause in every menu hint. `0` is now simply an unrecognised key,
+  # which under D82 costs the caller nothing.
   invalid_prompt: menu.invalid
   timeout_s: 7
 
   # A WRONG KEY IS NOT A STRIKE (D82). There is no attempt limit: an unrecognised press
-  # says sorry, points at 9 and 0, and offers the menu again, for as long as the caller
-  # keeps pressing. Ending the menu after N mistakes traded a good answer we were about
-  # to get for a guaranteed mediocre one - and a caller pressing buttons is a caller who
+  # says sorry, points at the repeat key, and offers the menu again, for as long as the
+  # caller keeps pressing. Ending the menu after N mistakes traded a good answer we were
+  # about to get for a guaranteed mediocre one - and a caller pressing buttons is one who
   # is present and trying, which is the opposite of a reason to give up on them.
   #
   # This number is NOT that limit. It is a runaway guard against a stuck DTMF sender

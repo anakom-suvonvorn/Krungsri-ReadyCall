@@ -144,6 +144,19 @@ export type Brief = {
   provenance: { field: string; source: string; stale: boolean }[];
 } | null;
 
+/** A call this agent handled and never filed anything for (`D87`). Derived server-side
+ *  from "after-call work ended and no wrap-up exists", so filing one clears it by
+ *  construction — there is no flag here that could be forgotten. */
+export type PendingWrapup = {
+  call_session_id: string;
+  ended_at: string | null;
+  acw_seconds: number | null;
+  intent_code: string | null;
+  intent_label_th: string | null;
+  customer_name_th: string | null;
+  assurance: string;
+};
+
 export type Snapshot = {
   presence: Presence;
   offer: Offer | null;
@@ -166,6 +179,9 @@ export type Snapshot = {
   wrapup_saved: boolean;
   /** The call in after-call work, which outlives its own record closing (`D45`). */
   wrapup_call_session_id: string | null;
+  /** Calls left without a wrap-up, oldest first (`D87`). The agent is free to walk away
+   *  mid-form; this is what stops that meaning the note is lost. */
+  pending_wrapups: PendingWrapup[];
 };
 
 export class ApiError extends Error {

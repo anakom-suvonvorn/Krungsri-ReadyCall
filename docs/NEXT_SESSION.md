@@ -13,7 +13,7 @@ assembled before the phone is answered, which agent should take it and why, the 
 and a human accepts with the screen already right — and now **the caller keys their own way
 to the right queue through a real menu, hearing real (pre-rendered) Thai**.
 
-Verified **2026-08-26**: **512 tests** — 470 pass + 42 skipped without the Postgres
+Verified **2026-08-26**: **519 tests** — 477 pass + 42 skipped without the Postgres
 container (the 42 are the database cases). `ruff check` + `ruff format --check` clean over 141 files,
 `mypy --strict` clean over 106, all scenarios replay, 60/60 diagrams current.
 
@@ -100,7 +100,7 @@ than a hang-up · personalised ordering with its evidence · **a menu is compose
 clip** (`D80`) · **`menu_path` is canonical whatever was pressed** (`D81`) · both fake IVR
 walks retired — `run_scenario.py`'s `# P1:` and `demo.py`'s `# P2b:`.
 
-**P3 review pass (`D82`–`D84`, `B10`, `B11`).** Driven by the user working the screen and
+**P3 review pass (`D82`–`D84`, `D86`, `D87`, `B10`, `B11`).** Driven by the user working the screen and
 the menu. **A wrong keypress is never a strike** — no attempt limit, and `menu.invalid` now
 speaks both escape keys, because without a ceiling "try again" stops being survivable advice
 (`D82`) · **`0` walks the same queue ladder as everything else** (`D83`); it used to
@@ -108,7 +108,11 @@ short-circuit to the DID default and throw away a chosen product line · **the p
 identity step is gone** (`D84`) — promoting to L3 with no human in the loop is what `D44`
 refuses · **`B10`**: ending ACW without saving left the call in `WRAP_UP` for the shift ·
 **`B11`**: a saved wrap-up still looked like unfinished work, and had no visible
-confirmation.
+confirmation · **`D86` reverses `D83` the next day**: the operator key is gone entirely —
+every menu already speaks its own "เรื่องอื่นๆ", so `0` was a shortcut to a destination the
+menu already offered · **`D87`**: an unfiled wrap-up now goes to a **backlog** the agent
+clears later, which is what makes `D45`'s "the person decides when ACW ends" survivable
+instead of lossy.
 
 **P2b review pass.** The opening line asks an **open question** below L2 (`D55`) · the
 recommended-action chain written down (`D56`) · `other` challenge + a **named** third party
@@ -428,6 +432,17 @@ Facts about *this laptop* rather than the repo, so a fresh session does not redi
   want the numbering to actually move.
 - **Never hardcode an insurance literal in `services/`** — it goes in `config/` (`D28`).
 - **Never `datetime.now()` or a raw random id** outside `clock.py`/`ids.py` (`D35`).
+- **There is NO operator key** (`D86`, reversing `D83`). `9` is the only reserved key. The
+  way out of a menu is its own spoken "เรื่องอื่นๆ" option, which is why
+  `test_every_reason_menu_still_ends_in_a_catch_all` is load-bearing rather than tidy. Do
+  not re-add `0` on "it is the convention": it routed exactly where the catch-all routes.
+- **Never block the state buttons to force a wrap-up** (`D87`). It re-couples what `D45`
+  separated, traps an agent who needs to leave, and *incentivises garbage* — forced to file
+  before they can go, somebody types "." and saves, and now the record looks filed and is
+  worthless. An honest gap beats a dishonest entry. The backlog is the answer.
+- **The wrap-up backlog is DERIVED** (`D78`): "ACW ended and no `call_wrapups` row exists".
+  Do not add a flag for it — filing clears the entry by construction, and a second copy of
+  the fact is a second thing to forget to reset.
 - **A wrong keypress is NEVER a strike; only silence is bounded** (`D82`). They are opposite
   evidence — a wrong key proves somebody is there, silence does not — so do not "tidy" them
   back into one symmetrical rule. `runaway_press_guard` is for a stuck DTMF sender, and a

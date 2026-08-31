@@ -104,13 +104,7 @@ def present(
         prompts.say(PromptRole.MENU_OPTION, key=p.spoken_key, label=p.option.label_th)
         for p in presented
     ]
-    lines.append(
-        prompts.say(
-            PromptRole.MENU_RESERVED_HINT,
-            repeat_key=settings.repeat_key,
-            operator_key=settings.operator_key,
-        )
-    )
+    lines.append(prompts.say(PromptRole.MENU_RESERVED_HINT, repeat_key=settings.repeat_key))
 
     return MenuPresentation(menu_id=menu.menu_id, options=tuple(presented), lines=tuple(lines))
 

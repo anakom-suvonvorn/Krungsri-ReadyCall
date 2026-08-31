@@ -23,6 +23,7 @@ import type { Capture, Snapshot } from "./api";
 import { useSocket } from "./useSocket";
 import type { SocketMessage } from "./useSocket";
 import {
+  BacklogPanel,
   BriefPanel,
   clockSkewMs,
   CapturePanel,
@@ -44,6 +45,9 @@ export default function App() {
    *  the screen. Saving a wrap-up closes a record the agent cannot see afterwards, so
    *  without this the successful case and the silently-failed one look identical. */
   const [toast, setToast] = useState<string | null>(null);
+  /** A backlog wrap-up the agent has opened to file late (`D87`). Null means they are
+   *  either wrapping up the current call or doing nothing. */
+  const [filing, setFiling] = useState<string | null>(null);
   const [muted, setMuted] = useState(false);
   const [held, setHeld] = useState(false);
   /** `server - browser`, in ms, sampled once per snapshot. See `B8`. */
@@ -239,7 +243,34 @@ export default function App() {
           {/* Keyed on the WRAPPING call, not the active one. Saving closes the record, so
               `active_call_session_id` drops to null at that instant — which used to unmount
               this panel and take the "saved" confirmation with it (`D68`). */}
-          {wrapping && wrapupCallId && (
+          <BacklogPanel
+            pending={snapshot.pending_wrapups}
+            busy={busy}
+            onPick={setFiling}
+          />
+          {filing && (
+            <WrapupPanel
+              presence={presence}
+              saved={false}
+              busy={busy}
+              lateFor={
+                snapshot.pending_wrapups.find((row) => row.call_session_id === filing) ?? null
+              }
+              onCancel={() => setFiling(null)}
+              onSave={(payload) =>
+                run(() => api.saveWrapup(filing, payload)).then((next) => {
+                  if (!next) return;
+                  setSnapshot(next);
+                  setFiling(null);
+                  setToast("บันทึกสรุปย้อนหลังเรียบร้อยแล้ว");
+                })
+              }
+              // Filing from the backlog never touches presence: the agent may well be on
+              // another call while they do it, and `D45` keeps the two separate anyway.
+              onSaveAndDeclare={() => undefined}
+            />
+          )}
+          {!filing && wrapping && wrapupCallId && (
             <WrapupPanel
               presence={presence}
               saved={snapshot.wrapup_saved}

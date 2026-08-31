@@ -461,6 +461,10 @@ _Found by the user driving the workstation, 2026-08-26._
   the record that none was filed, which is what `11_persistence.md` promises.
 - **Verification.** Three regression tests, each confirmed to **fail with the fix reverted**,
   including the user's precise A-then-B-then-relapse sequence.
+- **Followed by `D87`.** Closing the call stopped it haunting the screen and left the
+  customer's record with a permanent hole — the agent had no way to finish what they had
+  stepped away from. The unfiled wrap-up now goes to a **backlog** they can clear later,
+  which is what makes "the person decides when ACW ends" survivable rather than lossy.
 - **Lesson.** *A bug that fixes itself and then comes back is a fallback, not a redraw.* And
   more generally: two functions that answer nearly the same question (`_active_call_id` and
   `_wrapping_call_id`) will eventually disagree about an edge case, and the edge case is

@@ -13,7 +13,16 @@
  */
 
 import { useEffect, useState } from "react";
-import type { Brief, Capture, Challenge, Identity, Offer, Presence, Queue } from "./api";
+import type {
+  Brief,
+  Capture,
+  Challenge,
+  Identity,
+  Offer,
+  PendingWrapup,
+  Presence,
+  Queue,
+} from "./api";
 
 const INTENT_LABEL: Record<string, string> = {
   not_ready: "ยังไม่พร้อม",
@@ -881,18 +890,78 @@ const DISPOSITIONS: Record<string, string> = {
   callback_scheduled: "นัดโทรกลับ",
 };
 
+/** The backlog of calls nobody filed anything for (`D87`).
+ *
+ *  `D45` says the person decides when after-call work ends, so they may leave the form
+ *  half-written — for a bathroom break, an escalation, or a mis-click on a status button
+ *  sitting right beside it. None of those should cost the customer a record, so the call
+ *  waits here instead of vanishing.
+ *
+ *  Deliberately NOT a modal and NOT a block. It is a standing offer: clear it when you
+ *  have a moment.
+ */
+export function BacklogPanel({
+  pending,
+  busy,
+  onPick,
+}: {
+  pending: PendingWrapup[];
+  busy: boolean;
+  onPick: (callId: string) => void;
+}) {
+  if (pending.length === 0) return null;
+  return (
+    <div className="panel backlog">
+      <h2>
+        สรุปที่ยังไม่ได้บันทึก <span className="badge warn">{pending.length}</span>
+      </h2>
+      <p className="faint">
+        สายที่จบแล้วแต่ยังไม่ได้บันทึกสรุป — เลือกเพื่อบันทึกย้อนหลังได้
+      </p>
+      <div className="stack">
+        {pending.map((row) => (
+          <button
+            key={row.call_session_id}
+            className="backlog-row"
+            disabled={busy}
+            onClick={() => onPick(row.call_session_id)}
+          >
+            <span className="what">
+              {row.intent_label_th ?? row.intent_code ?? "ไม่ระบุเรื่อง"}
+              {row.customer_name_th && <em> · {row.customer_name_th}</em>}
+            </span>
+            <span className="when">
+              {row.ended_at ? new Date(row.ended_at).toLocaleTimeString("th-TH", {
+                hour: "2-digit",
+                minute: "2-digit",
+              }) : "—"}
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function WrapupPanel({
   presence,
   saved,
   onSave,
   onSaveAndDeclare,
   busy,
+  lateFor = null,
+  onCancel,
 }: {
   presence: Presence;
   saved: boolean;
   onSave: (payload: Record<string, unknown>) => void;
   onSaveAndDeclare: (payload: Record<string, unknown>, intent: string) => void;
   busy: boolean;
+  /** Set when filing a call from the backlog rather than wrapping up the live one
+   *  (`D87`). Changes the framing and drops the presence buttons — the agent may be on
+   *  another call entirely while they do this. */
+  lateFor?: PendingWrapup | null;
+  onCancel?: () => void;
 }) {
   const [disposition, setDisposition] = useState("advice_given");
   const [notes, setNotes] = useState("");
@@ -909,9 +978,11 @@ export function WrapupPanel({
   // after a LAST_CALL the standing instruction has been spent (`D59`), and while DRAINING
   // they explicitly asked for no new callers. Offering "Save & Ready" in either case
   // makes the fastest button the one that undoes what they just told us.
+  const late = lateFor !== null;
   const lastCallSpent = presence.intent_reason === "last_call_fulfilled";
   const draining = presence.agent_intent === "draining";
-  const canOfferReady = presence.declarable.includes("ready") && !draining && !lastCallSpent;
+  const canOfferReady =
+    !late && presence.declarable.includes("ready") && !draining && !lastCallSpent;
 
   // Once saved, the form collapses to a read-only confirmation. Leaving the editable
   // fields on screen made a finished record look like outstanding work — the agent could
@@ -969,11 +1040,24 @@ export function WrapupPanel({
   }
 
   return (
-    <div className="panel">
-      <h2>สรุปหลังจบสาย</h2>
-      <p className="faint">
-        การบันทึกจะปิด “บันทึกของสายนี้” เท่านั้น — งานหลังสายจะจบเมื่อคุณเลือกสถานะถัดไป
-      </p>
+    <div className={`panel ${late ? "late" : ""}`}>
+      <h2>{late ? "บันทึกสรุปย้อนหลัง" : "สรุปหลังจบสาย"}</h2>
+      {late ? (
+        <p className="faint">
+          {lateFor.intent_label_th ?? lateFor.intent_code ?? "สายที่ยังไม่ได้บันทึก"}
+          {lateFor.customer_name_th ? ` · ${lateFor.customer_name_th}` : ""}
+          {lateFor.ended_at
+            ? ` · จบสายเมื่อ ${new Date(lateFor.ended_at).toLocaleTimeString("th-TH", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}`
+            : ""}
+        </p>
+      ) : (
+        <p className="faint">
+          การบันทึกจะปิด “บันทึกของสายนี้” เท่านั้น — งานหลังสายจะจบเมื่อคุณเลือกสถานะถัดไป
+        </p>
+      )}
 
       <div className="stack" style={{ marginTop: 8 }}>
         <select value={disposition} onChange={(e) => setDisposition(e.target.value)}>
@@ -1002,6 +1086,11 @@ export function WrapupPanel({
           <button onClick={() => onSave(payload())} disabled={busy}>
             บันทึก
           </button>
+          {late && onCancel && (
+            <button className="ghost" onClick={onCancel} disabled={busy}>
+              ยกเลิก
+            </button>
+          )}
           {canOfferReady && (
             <button
               className="primary"

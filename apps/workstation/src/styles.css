@@ -614,3 +614,44 @@ button.on:disabled {
   color: var(--ink-faint);
   margin-top: 4px;
 }
+
+/* The wrap-up backlog (D87). A standing offer, not a blocker: the agent chose to leave
+   after-call work and the record simply waits for them. */
+.panel.backlog h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.backlog-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  background: rgba(251, 191, 36, 0.08);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  border-radius: 8px;
+  color: inherit;
+  cursor: pointer;
+}
+.backlog-row:hover:not(:disabled) {
+  border-color: var(--warn);
+}
+.backlog-row .what {
+  font-size: 13px;
+}
+.backlog-row .what em {
+  font-style: normal;
+  color: var(--muted, #9aa4b2);
+}
+.backlog-row .when {
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  color: var(--muted, #9aa4b2);
+  white-space: nowrap;
+}
+.panel.late {
+  border-color: rgba(251, 191, 36, 0.45);
+}

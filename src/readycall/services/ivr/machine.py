@@ -10,8 +10,9 @@ parity with an ordinary call centre, and every rule below exists to keep it ther
 * silence IS bounded, because it does not prove anybody is there: one re-prompt, then
   route to a human;
 * `9` repeats and costs nothing — re-listening is not an error;
-* `0` means *stop asking and put me through with whatever you already know* (`D83`), and
-  it routes through the **same** evidence ladder as every other outcome.
+* **there is no operator key** (`D86`). Every menu ends in a spoken "เรื่องอื่นๆ" option that
+  routes to the same place `0` used to, so the shortcut cost a reserved key and bought two
+  keypresses.
 
 Modelled as `begin` / `on_digit` / `on_timeout` / `on_hangup` returning *what to play
 next*, rather than as a loop that awaits input. The reason is `B7`: an IVR written as a
@@ -44,7 +45,6 @@ log = get_logger(__name__)
 class IvrOutcomeKind(StrEnum):
     ROUTED = "routed"  # the caller chose; we know the line and the reason
     SKIPPED = "skipped"  # we already knew, so we did not ask (D37)
-    OPERATOR = "operator"  # pressed 0; never a dead end
     EXHAUSTED = "exhausted"  # gave up on the menu -> general queue, never a hang-up
     ABANDONED = "abandoned"  # hung up during the menu
 
@@ -218,19 +218,6 @@ class IvrMachine:
             return IvrStep(lines=(), outcome=run.outcome)
 
         run.pressed.append(digit)
-
-        if digit == self._settings.operator_key:
-            # `0` is never a dead end, in any menu, at any depth (`D37`). It is not a
-            # separate route either: whatever the menu already established travels with
-            # them, and `queue_for` picks the queue from the same ladder it always uses
-            # (`D83`). The outcome kind is kept distinct only because "gave up on the
-            # menu" and "kept pressing the wrong key" are different things to measure.
-            return self._finish(
-                run,
-                IvrOutcomeKind.OPERATOR,
-                reason="caller_pressed_operator",
-                lines=[self._prompts.say(PromptRole.OPERATOR)],
-            )
 
         if digit == self._settings.repeat_key:
             # Re-listening is not a mistake, so it does not spend an attempt.

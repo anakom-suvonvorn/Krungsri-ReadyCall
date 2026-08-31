@@ -1,4 +1,4 @@
-%% HANDWRITTEN. Checked against D37 + D82 + D83 + D84 + services/ivr/machine.py
+%% HANDWRITTEN. Checked against D37 + D82 + D84 + D86 + services/ivr/machine.py
 flowchart TB
     start(["call answered"]):::entry
     greet["<b>greeting</b> (per DID)<br/>+ <b>recording notice</b><br/><i>always first, every call</i>"]:::play
@@ -11,7 +11,6 @@ flowchart TB
     m2["<b>STEP 2</b> reason"]:::play
 
     routed["<b>ROUTED</b><br/>line + reason -> the queue<br/><i>before a word is transcribed</i>"]:::done
-    operator["<b>OPERATOR</b><br/>same queue ladder as everything else (D83).<br/>A shortcut, not a separate route."]:::done
     exhausted["<b>EXHAUSTED</b><br/>line's queue if we have one,<br/>general if we do not (D40)"]:::soft
     abandoned["<b>ABANDONED</b>"]:::soft
 
@@ -20,11 +19,9 @@ flowchart TB
     known -->|no| didq
     didq -->|yes, skip step 1| m2
     didq -->|no| m1
-    m1 -->|"1-5"| m2
-    m2 -->|"a reason"| routed
+    m1 -->|"1-5, incl. <b>เรื่องอื่นๆ</b>"| m2
+    m2 -->|"a reason, incl. <b>เรื่องอื่นๆ</b>"| routed
 
-    m1 -.->|"<b>0</b> from anywhere"| operator
-    m2 -.->|"<b>0</b> from anywhere"| operator
     m1 -.->|"<b>9</b> repeat - costs no attempt"| m1
     m2 -.->|"<b>9</b> repeat - costs no attempt"| m2
     m1 -.->|"<b>wrong key - NEVER a strike</b>"| m1
@@ -38,6 +35,9 @@ flowchart TB
 
     strikes["<b>a wrong key is not a strike (D82).</b> There is no attempt<br/>limit: sorry, here are the options again, for as long as they<br/>keep pressing. A wrong key PROVES somebody is there - silence<br/>does not - so only silence is bounded. The apology names both<br/>escape keys every time, because without a ceiling 'try again'<br/>stops being survivable advice on its own."]:::fix
     m1 -.- strikes
+
+    noop["<b>and there is NO operator key (D86).</b> Every menu already<br/>ends in a spoken เรื่องอื่นๆ that routes to the same place 0<br/>used to - so the shortcut cost a reserved key, a prompt and a<br/>clause in every hint, to save two keypresses. The way out is<br/>now part of the menu instead of a convention you must know."]:::fix
+    m2 -.- noop
 
     noid["<b>and there is NO identity step here (D84).</b> Asking a caller<br/>to key their citizen id before anyone says hello would reach L3<br/>with no human in the loop - exactly what D44 refuses. The agent's<br/>own keypad capture does it during the call, with judgement."]:::fix
     routed -.- noid

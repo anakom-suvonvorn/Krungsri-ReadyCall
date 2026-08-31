@@ -2033,6 +2033,8 @@ pushing back on rules I had carried over from `ARCHITECTURE.md` without re-exami
   situation from "trapped by the system".
 
 ## D83. `0` is a shortcut through the evidence ladder, not a separate route
+> **REVERSED the next day by `D86`.** The queue-ladder fix below was right and stands;
+> the *conclusion* that the key was worth keeping did not survive being questioned.
 - **Problem:** the user challenged whether an operator key is needed at all: the menus
   already have catch-alls on both layers, so `0` looked like a second way to do the same
   thing — and worse, *"a path where we know nothing about the person at all."*
@@ -2145,3 +2147,88 @@ derived rather than tuned. Implemented as a projection; **not yet wired into mat
 - **Future:** the same profile is the honest input to a "likely free in ~2 min" indicator on
   a supervisor board, and it improves on its own as the AI-drafted wrap-up shortens ACW —
   which is the product claim `D45` and `D73` are both built around.
+
+## D86. There is no operator key; the way out of a menu is the menu's own catch-all
+_Reverses `D83`, one day later, after the user pushed back on the justification rather
+than on the mechanism._
+
+- **What `D83` claimed, and what was wrong with it.** `D83` kept `0` on the grounds that it
+  is "the universal convention" and that callers have "muscle memory" for it. Pressed on
+  that, the claim does not survive:
+  - **most people rarely call their insurer.** Once or twice a year is not enough repetition
+    to build a reflex. The honest version is weaker: the convention exists *across services*
+    (banks, telcos, utilities), so people meet it more often than they call any one company.
+    That is a reason it might be *recognised*, not a reason it is *reached for*.
+  - and recognition only matters if the key buys something. Under `D83` it did not.
+- **The three points that settled it**, all the user's:
+  1. **the menu already leads with the urgent options.** An urgent caller finds their reason
+     in the first few entries, so "get me through now" is not solving an ordering problem.
+  2. **an operator press tells us nothing.** We would either treat it as an urgency signal
+     with no evidence — which `D13`'s "no uncalibrated confidence" instinct forbids — or
+     treat it as neutral, in which case it carried no information at all.
+  3. **there is no operator pool.** `0` landed in the general or line queue, which is exactly
+     where the catch-all lands. So it was a *shortcut to a destination the menu already
+     offers*, saving two keypresses in exchange for a reserved key, a prompt, an outcome
+     kind, and a clause in every menu hint.
+- **Decision:** remove it. `repeat_key` (`9`) is now the only reserved key. `0` is simply an
+  unrecognised digit, which under `D82` costs the caller nothing — sorry, here are the
+  options again.
+- **What replaces it is not "nothing".** Every menu ends in **"เรื่องอื่นๆ"**, spoken aloud as
+  a numbered option like any other, routing to that line's catch-all intent. The escape is
+  now *part of the menu* rather than a convention the caller has to already know — which is
+  strictly more accessible, not less. `test_every_reason_menu_still_ends_in_a_catch_all` was
+  a nicety before and is load-bearing now.
+- **What this costs:** a caller who does press `0` out of habit hears an apology instead of
+  being transferred. With no attempt limit (`D82`) that costs them one re-listen, and the
+  menu they then hear contains the option they wanted.
+- **The lesson worth keeping.** `D83`'s *implementation* fix was right — `0` had been
+  short-circuiting the queue ladder and discarding a chosen product line. But having fixed
+  that, `0` became provably identical to an option the menu already spoke, and a shortcut
+  that duplicates a path is a maintenance cost, not a feature. **A convention is only worth
+  honouring if it buys the caller something the alternative does not.**
+
+## D87. An unfiled wrap-up goes to a backlog, not to the bin
+_Proposed by the user, and it resolves a tension `B10`'s fix had left half-open._
+
+- **Problem.** `D45` says after-call work ends when the **person** says so — they may walk
+  away from a half-written form for a bathroom break, an escalation, the end of a shift, or
+  a mis-click on a status button sitting inches from the notes field. `B10` then closed the
+  call so it could not haunt the screen. Correct as far as it went, and **it left no way
+  back**: the customer's record simply had a hole in it, permanently. The user's question
+  was the one that exposed it — *"when they get back, how would they finish what they had
+  to leave early for?"* There was no answer.
+- **The two options that were actually on the table, and why both were worse:**
+  - **Block the state buttons until the form is saved.** Re-couples exactly what `D45`
+    separated, traps an agent who genuinely needs to leave, and — the real damage —
+    **incentivises garbage**: forced to file before they can go, somebody types "." and
+    saves. The record now exists, looks filed, and is worthless. An honest gap beats a
+    dishonest entry.
+  - **Close and forget** (what `B10` shipped). Tidy, and it loses the note.
+- **Decision:** the call still closes, and the wrap-up becomes a **backlog item**. The agent
+  files it whenever they like — after the break, between calls, at the end of the shift —
+  and the entry disappears when they do.
+- **Derived, not stored** (`D78`). "This assignment's ACW has ended **and** no `call_wrapups`
+  row exists" *is* the backlog. Nothing marks a call as owing one, so nothing can disagree
+  about whether it does, and filing clears it by construction — there is no second flag to
+  forget to reset.
+- **Details that matter:**
+  - the list is **oldest first**, and each row carries the intent label, the customer name,
+    the time, and **how long they spent in ACW before leaving** — four seconds means they
+    left immediately, which is useful context when coming back to it cold;
+  - the name is gated on **that call's** identity resolution (`D74`), not the current one. A
+    backlog row renders long after the call and is a disclosure surface like any other;
+  - filing late **never touches presence.** The agent may be on another call while they do
+    it, and `D45` keeps the two statements separate anyway;
+  - the event carries **`filed_late`**. A wrap-up written twenty minutes afterwards is still
+    real, but it is not the same as one written while the call was fresh — and an ACW metric
+    that cannot tell them apart would report the product's headline claim as better than it
+    is (`D45`, `D73`).
+- **Not a modal and not a blocker**, deliberately. It is a standing offer in the left column
+  with a count. Interrupting an agent to demand paperwork is the same mistake as blocking
+  the buttons, wearing a friendlier face.
+- **Why this is better than either alternative:** the agent keeps the freedom `D45` gave
+  them, the customer keeps their record, and an accidental keypress becomes a two-click
+  recovery instead of permanent data loss.
+- **Future:** the same list is where an AI-drafted wrap-up would surface for approval, and
+  the count is a supervisor signal on its own — an agent with six unfiled records is telling
+  you something about their day.

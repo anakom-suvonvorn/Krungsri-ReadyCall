@@ -44,7 +44,7 @@ roster) are still fakes. An agent signs in at `/workstation`, a caller keys thei
 real menu to the right queue, the desk rings, the brief is already there, and the disclosure gate
 moves when the agent attests.
 
-Verified on 2026-08-25: **512 tests** — 470 pass + 42 skipped without the Postgres container
+Verified on 2026-08-25: **519 tests** — 477 pass + 42 skipped without the Postgres container
 (the 42 are the database cases).
 `ruff check` and `ruff format --check` clean over 144 files, `mypy --strict`
 clean over **106** source files, and all three scenarios replay byte-identically. The database
@@ -361,7 +361,7 @@ performing by hand, i.e. what the next services take over (`D36`).
 | | |
 |---|---|
 | Source files | 144 Python files (`src/` 104 + `tests/` + `scripts/` + `mock/`) |
-| Tests | 512, all passing, ~100 s (137 store contract + restart across 3 backends; 51 on the prompt pack and the IVR) |
+| Tests | 519, all passing, ~100 s (137 store contract + restart across 3 backends; 51 on the prompt pack and the IVR) |
 | Ports defined | 8 (telephony, stt, llm, tts, core_data, event_bus, blob_storage, agent_directory) |
 | Persisted tables | **9** + Alembic, verified on a live Postgres. Presence, the waiting pool and the live identity are deliberately **not** among them (`D78`) |
 | Adapters | 9 fakes/nulls + a caching/circuit-breaking decorator; no real vendor adapter yet |

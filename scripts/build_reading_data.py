@@ -43,7 +43,6 @@ def extract(pack: DomainPack, prompts: PromptPack) -> dict[str, object]:
     return {
         "settings": {
             "repeat_key": pack.menu_settings.repeat_key,
-            "operator_key": pack.menu_settings.operator_key,
             "runaway_press_guard": pack.menu_settings.runaway_press_guard,
             "max_silences": pack.menu_settings.max_silences,
             "invalid_prompt": pack.menu_settings.invalid_prompt,

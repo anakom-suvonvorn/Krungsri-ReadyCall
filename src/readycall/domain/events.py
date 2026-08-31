@@ -204,6 +204,11 @@ class WrapupSaved(Event):
     disposition: str
     was_edited: bool
     acw_seconds: float | None = None
+    #: True when this was filed from the backlog rather than during after-call work
+    #: (`D87`). A wrap-up written twenty minutes later is still a real wrap-up, but it is
+    #: not the same thing as one written while the call was fresh — and a metric that
+    #: cannot tell them apart would quietly report the ACW story as better than it is.
+    filed_late: bool = False
 
 
 class RatingReceived(Event):

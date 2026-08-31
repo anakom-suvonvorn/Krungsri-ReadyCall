@@ -106,17 +106,42 @@ class TestTheFloor:
 
 
 class TestNeverADeadEnd:
-    def test_zero_reaches_a_human_from_any_menu(
+    def test_the_way_out_is_a_spoken_option_not_a_reserved_key(
         self, machine: IvrMachine, pack: DomainPack
     ) -> None:
+        """`D86`: there is no operator key. Every menu ends in its own catch-all, which is
+        read aloud like any other option — so the escape is part of the menu rather than a
+        convention the caller has to already know."""
         run, _ = machine.begin(call_session_id="c", did=pack.did("+6621234000"))
-        machine.on_digit(run, "2")  # into the health reason menu
-        step = machine.on_digit(run, pack.menu_settings.operator_key)
+        machine.on_digit(run, "5")  # เรื่องอื่นๆ at step 1
+        step = machine.on_digit(run, "7")  # เรื่องอื่นๆ at step 2
 
         assert step.outcome is not None
-        assert step.outcome.kind is IvrOutcomeKind.OPERATOR
-        # What they already told us is kept: the operator still gets the product line.
-        assert step.outcome.product_line is ProductLine.HEALTH
+        assert step.outcome.kind is IvrOutcomeKind.ROUTED
+        assert step.outcome.intent_code == "general.other"
+
+    def test_zero_is_now_just_an_unrecognised_key(
+        self, machine: IvrMachine, pack: DomainPack
+    ) -> None:
+        """And costs the caller nothing, because a wrong key is never a strike (`D82`)."""
+        run, _ = machine.begin(call_session_id="c", did=pack.did("+6621234000"))
+        step = machine.on_digit(run, "0")
+
+        assert step.expects_input
+        assert not run.finished
+        assert step.lines[0].prompt_id == pack.menu_settings.invalid_prompt
+
+    def test_every_reason_menu_still_ends_in_a_catch_all(self, pack: DomainPack) -> None:
+        """With the operator key gone this is the ONLY way out of a reason menu, so the
+        rule stops being a nicety and becomes load-bearing."""
+        for menu_id, menu in pack.menus.items():
+            if not menu_id.endswith("_reason"):
+                continue
+            assert any(
+                option.intent and pack.intents[option.intent].is_catch_all
+                for option in menu.options
+                if option.intent
+            ), menu_id
 
     def test_a_wrong_key_is_never_a_strike(self, machine: IvrMachine, pack: DomainPack) -> None:
         """`D82`. There is no attempt limit. Ending the menu after N mistakes traded the
@@ -150,14 +175,11 @@ class TestNeverADeadEnd:
         assert step.outcome.kind is IvrOutcomeKind.EXHAUSTED
         assert step.outcome.reason.startswith("runaway_input")
 
-    def test_the_apology_names_the_two_keys_that_always_work(
-        self, prompts: PromptPack, pack: DomainPack
-    ) -> None:
-        """With no attempt limit, the way out has to be spoken — otherwise "press again"
-        is the only advice a lost caller ever gets."""
+    def test_the_apology_names_the_repeat_key(self, prompts: PromptPack, pack: DomainPack) -> None:
+        """With no attempt limit, hearing the options again has to be offered — otherwise
+        "press again" is the only advice a lost caller ever gets."""
         invalid = prompts.spec(pack.menu_settings.invalid_prompt).text_th
         assert pack.menu_settings.repeat_key in invalid
-        assert pack.menu_settings.operator_key in invalid
 
     def test_a_wrong_press_replays_the_menu_with_an_apology_first(
         self, machine: IvrMachine, pack: DomainPack
@@ -387,15 +409,18 @@ class TestTheServiceEndToEnd:
         assert result.outcome.intent_code == "health.coverage.query"
         assert session.menu_path == ("2", "4")
 
-    async def test_the_operator_keeps_the_product_line_and_still_gets_a_queue(
+    async def test_the_catch_all_route_reaches_the_lines_generalist(
         self, service: IvrService, pack: DomainPack, orchestrator: CallOrchestrator
     ) -> None:
+        """`D86`: the way out of a menu is its own catch-all, and it keeps the product
+        line — which is the whole reason the operator key was not worth keeping."""
         session = await orchestrator.start_cold_call(dialled_did="+6621234222")
         did = pack.did("+6621234222")
-        result = await service.run(session, caller=ScriptedChoices(["0"]), did=did)
+        result = await service.run(session, caller=ScriptedChoices(["6"]), did=did)
 
-        assert result.outcome.kind is IvrOutcomeKind.OPERATOR
-        assert result.queue_id == did.default_queue  # type: ignore[union-attr]
+        assert result.outcome.kind is IvrOutcomeKind.ROUTED
+        assert result.outcome.intent_code == "health.other"
+        assert result.queue_id == pack.queue_for_intent("health.other")
 
     async def test_a_caller_who_says_nothing_still_reaches_their_lines_queue(
         self, service: IvrService, pack: DomainPack, orchestrator: CallOrchestrator

@@ -1008,19 +1008,113 @@ def test_no_wrapup_is_invented_for_a_call_nobody_wrapped_up(
     client: Any, clock: ManualClock
 ) -> None:
     """The absence IS the record (`D45`). Closing the call must not fabricate a
-    disposition just to tidy the state machine — so the form can no longer be saved
-    against it, and nothing filed one on the agent's behalf."""
+    disposition just to tidy the state machine."""
     sign_in_agent(client, "A006")
     client.post("/v1/agent/state", json={"agent_intent": "ready"})
     call_id = _run_one_call(client, clock, intent_code="health.ipd.preauth", number="0812345678")
     client.post("/v1/agent/state", json={"agent_intent": "lunch"})
 
-    late = client.post(
-        f"/v1/agent/calls/{call_id}/wrapup",
-        json={"disposition": "advice_given", "notes": ""},
+    after = client.get("/v1/agent/me").json()
+    assert after["wrapup_call_session_id"] is None
+    assert [row["call_session_id"] for row in after["pending_wrapups"]] == [call_id]
+
+
+# --- D87: the wrap-up backlog ---------------------------------------------------------
+
+
+def test_walking_away_puts_the_wrap_up_in_a_backlog_not_a_bin(
+    client: Any, clock: ManualClock
+) -> None:
+    """`D87`. `D45` lets the agent leave mid-form — so the record has to survive them
+    leaving, or "free to go" quietly means "the note is lost"."""
+    sign_in_agent(client, "A006")
+    client.post("/v1/agent/state", json={"agent_intent": "ready"})
+    call_id = _run_one_call(client, clock, intent_code="health.ipd.preauth", number="0812345678")
+
+    clock.advance(4)
+    client.post("/v1/agent/state", json={"agent_intent": "lunch"})
+
+    pending = client.get("/v1/agent/me").json()["pending_wrapups"]
+    assert len(pending) == 1
+    row = pending[0]
+    assert row["call_session_id"] == call_id
+    assert row["intent_code"] == "health.ipd.preauth"
+    assert row["intent_label_th"], "the agent needs to recognise which call this was"
+    assert row["acw_seconds"] == pytest.approx(4.0, abs=0.5), (
+        "how long they spent before walking away is context for coming back cold"
     )
-    assert late.status_code == 400, "the call is closed; there is nothing left to wrap up"
-    assert "wrap-up" in late.text or "wrap_up" in late.text
+
+
+def test_a_backlog_wrap_up_can_be_filed_later_and_then_clears(
+    client: Any, clock: ManualClock
+) -> None:
+    """The whole point: they stepped away, and they can still finish it afterwards."""
+    sign_in_agent(client, "A006")
+    client.post("/v1/agent/state", json={"agent_intent": "ready"})
+    call_id = _run_one_call(client, clock, intent_code="health.ipd.preauth", number="0812345678")
+    client.post("/v1/agent/state", json={"agent_intent": "lunch"})
+
+    clock.advance(1200)  # twenty minutes later, back from lunch
+    saved = client.post(
+        f"/v1/agent/calls/{call_id}/wrapup",
+        json={"disposition": "advice_given", "notes": "ตามที่คุยไว้ก่อนพัก"},
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["pending_wrapups"] == () or saved.json()["pending_wrapups"] == []
+
+
+def test_an_accidental_state_press_is_recoverable(client: Any, clock: ManualClock) -> None:
+    """The state buttons sit right beside the form. Mis-clicking one must not destroy the
+    record — it is the case that made a hard block look attractive, and the backlog
+    answers it without taking the choice away from the agent."""
+    sign_in_agent(client, "A006")
+    client.post("/v1/agent/state", json={"agent_intent": "ready"})
+    call_id = _run_one_call(client, clock, intent_code="health.ipd.preauth", number="0812345678")
+
+    client.post("/v1/agent/state", json={"agent_intent": "ready"})  # oops
+    assert client.get("/v1/agent/me").json()["pending_wrapups"][0]["call_session_id"] == call_id
+
+    filed = client.post(
+        f"/v1/agent/calls/{call_id}/wrapup",
+        json={"disposition": "advice_given", "notes": "กดพลาด"},
+    )
+    assert filed.status_code == 200
+    assert not filed.json()["pending_wrapups"]
+
+
+def test_the_backlog_holds_more_than_one_and_is_oldest_first(
+    client: Any, clock: ManualClock
+) -> None:
+    """A busy hour can leave several. They need an order, and the one that has been
+    waiting longest is the one to clear."""
+    sign_in_agent(client, "A006")
+    client.post("/v1/agent/state", json={"agent_intent": "ready"})
+
+    first = _run_one_call(client, clock, intent_code="health.ipd.preauth", number="0812345678")
+    client.post("/v1/agent/state", json={"agent_intent": "ready"})
+    clock.advance(300)
+    second = _run_one_call(client, clock, intent_code="health.claim.status", number="0898887777")
+    client.post("/v1/agent/state", json={"agent_intent": "ready"})
+
+    pending = client.get("/v1/agent/me").json()["pending_wrapups"]
+    assert [row["call_session_id"] for row in pending] == [first, second]
+
+
+def test_a_filed_wrapup_never_reappears_in_the_backlog(client: Any, clock: ManualClock) -> None:
+    """Derived, not stored (`D78`): the backlog is "ACW ended and no wrap-up exists", so
+    filing one removes it by construction — there is no second flag to forget to clear."""
+    sign_in_agent(client, "A006")
+    client.post("/v1/agent/state", json={"agent_intent": "ready"})
+    call_id = _run_one_call(client, clock, intent_code="health.ipd.preauth", number="0812345678")
+    client.post(
+        f"/v1/agent/calls/{call_id}/wrapup",
+        json={"disposition": "advice_given", "notes": "saved during ACW"},
+    )
+    client.post("/v1/agent/state", json={"agent_intent": "ready"})
+
+    assert not client.get("/v1/agent/me").json()["pending_wrapups"], (
+        "a call wrapped up during ACW was never owed anything"
+    )
 
 
 def test_a_stranded_call_does_not_come_back_after_the_next_one(

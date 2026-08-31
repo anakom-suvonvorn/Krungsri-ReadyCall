@@ -140,7 +140,6 @@ class MenuWalk:
 class MenuSettings:
     barge_in: bool
     repeat_key: str
-    operator_key: str
     timeout_s: float
     invalid_prompt: str
     #: NOT an attempt limit. A wrong key is never a strike (`D82`) — this exists only to
@@ -404,7 +403,6 @@ class DomainPack:
         settings = MenuSettings(
             barge_in=bool(settings_raw.get("barge_in", True)),
             repeat_key=str(settings_raw.get("repeat_key", "9")),
-            operator_key=str(settings_raw.get("operator_key", "0")),
             timeout_s=float(settings_raw.get("timeout_s", 7)),
             invalid_prompt=str(settings_raw.get("invalid_prompt", "menu.invalid")),
             runaway_press_guard=int(settings_raw.get("runaway_press_guard", 40)),
@@ -501,7 +499,7 @@ class DomainPack:
                 # up silently in the wrong queue.
                 problems.append(f"did {number} skips the product menu but has no product line")
 
-        reserved = {self.menu_settings.repeat_key, self.menu_settings.operator_key}
+        reserved = {self.menu_settings.repeat_key}
         for menu_id, menu in self.menus.items():
             keys = [o.key for o in menu.options]
             if len(keys) != len(set(keys)):

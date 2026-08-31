@@ -64,8 +64,8 @@ class ScriptedChoices:
 
     Keys are **canonical** — the ones in `menus.yaml`. If the menu was reordered for this
     caller, the right spoken key is looked up rather than assumed, so a scenario file keeps
-    meaning what it says (`D81`). Reserved keys (`9`, `0`) and any key the presentation
-    does not know are passed through untranslated, which is what makes "press 0" testable.
+    meaning what it says (`D81`). The repeat key, and any key the presentation does not
+    know, are passed through untranslated — which is what makes a wrong press testable.
     """
 
     def __init__(self, keys: Sequence[str]) -> None:
@@ -248,9 +248,8 @@ class IvrService:
         Knowing only the product line must still land the caller with someone who works
         on that line: dropping them into `q_general` throws away what they told us.
 
-        **Pressing `0` takes this same ladder** (`D83`). It used to jump straight to the
-        DID's default queue, which threw away a product line the caller had already
-        chosen — the one real objection to having an operator key at all.
+        There is no operator key any more (`D86`); the way out of a menu is its own
+        "เรื่องอื่นๆ" option, which lands here through `catch_all_for` like anything else.
         """
         if outcome.intent_code:
             return self._pack.queue_for_intent(outcome.intent_code)

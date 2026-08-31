@@ -295,7 +295,15 @@ user worked the built menu. §8's list of what the machine holds is superseded:
 - **`0` no longer short-circuits the queue ladder** (`D83`). `queue_for` special-cased it and
   jumped to the DID's default, discarding a product line the caller had already chosen —
   which was the real substance behind "the operator key introduces a path where we know
-  nothing about the person".
+  nothing about the person". **`D86` then removed the key entirely the next day**: with the
+  ladder fixed, `0` was provably identical to the "เรื่องอื่นๆ" option every menu already
+  speaks, so it cost a reserved key and a prompt to save two keypresses. `9` is now the only
+  reserved key.
+
+- **an unfiled wrap-up is no longer lost** (`D87`). `B10` closed the stranded call, which
+  stopped it haunting the screen and left the customer's record with a permanent hole. It
+  now goes to a **backlog** the agent clears whenever they like — which is what makes
+  `D45`'s "the person decides when after-call work ends" survivable rather than lossy.
 - **the identify step described in §9 as "prompts written, nothing calls them" is deleted**
   (`D84`). An automated check promoting to L3 with no human in the loop is what `D44`
   refuses; the agent's keypad capture does the job with judgement attached. The prompt count
