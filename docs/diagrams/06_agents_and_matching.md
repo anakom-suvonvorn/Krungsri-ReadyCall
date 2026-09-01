@@ -39,8 +39,14 @@ crash scene.
 
 **Urgency multiplies rather than adds**, and that is the design's answer to starvation. Under
 pure best-fit, a caller nobody is a great match for waits forever while better-matched
-callers overtake them. Multiplying means waiting eventually wins on its own, and a hard wait
-ceiling then drops to any-qualified-agent.
+callers overtake them. Multiplying means waiting eventually wins on its own: `wait_pressure`
+climbs toward the urgency ceiling and, past `MAX_WAIT_BEFORE_ANY_AGENT_S`, the guard returns
+`FALLBACK` so the call can no longer be **deferred** or bounced by the anti-hot-spot check.
+
+Two things this page used to get wrong. `FALLBACK` does **not** drop to "any qualified agent"
+— the solver's chosen agent still stands; what it removes is everything that could hold the
+caller back. And none of it ran until `B12`: `waiting_s` was frozen at admit time, so
+`wait_pressure` was pinned at 0 and every threshold above was unreachable.
 
 **Global, not greedy.** Greedy best-first is locally optimal and globally poor — it hands the
 one bilingual agent to the first caller who asks, then strands the caller who genuinely

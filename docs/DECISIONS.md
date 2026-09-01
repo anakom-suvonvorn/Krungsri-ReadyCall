@@ -1,7 +1,7 @@
 # DECISIONS
 
 _Significant engineering decisions and their rationale. Append new ones at the bottom; never silently reverse one without a new entry explaining why._
-_Last updated: 2026-08-31._
+_Last updated: 2026-09-01._
 
 Format per entry: **Problem → Decision → Reasoning → Alternatives → Tradeoffs → Future.**
 
@@ -274,8 +274,10 @@ _`D19`–`D31` added 2026-08-18 after the first design review with the user._
   latency, cost, and a network dependency during a stage demo.
 - **Decision:** `config/voice_prompts.yaml` holds prompt id → Thai text + voice. A build step
   (`scripts/build_prompts.py`) renders each to a WAV, cached by hash of (text, voice, engine), and
-  regenerates only what changed. The call plays cached files. Dynamic sentences (queue position, name)
-  are rendered on first use and cached by their rendered text, so they are warm within minutes.
+  regenerates only what changed. The call plays cached files. Dynamic sentences (menu option lines,
+  the reserved-key hint, and one day the caller's name) are rendered on first use and cached by their
+  rendered text, so they are warm within minutes. *(This originally said "queue position, name";
+  `D91` deleted the position line.)*
   A checked-in prompt pack is the offline fallback.
 - **Reasoning:** Edit wording in a YAML file, hear it a second later, zero call-time latency, works
   with no internet. An admin "prompt studio" page makes on-the-day tuning trivial.

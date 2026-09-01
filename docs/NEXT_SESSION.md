@@ -1,7 +1,30 @@
 # NEXT_SESSION
 
 _The live working state. READ THIS FIRST every session. Keep it short and current._
-_Last updated: 2026-08-31._
+_Last updated: 2026-09-01._
+
+---
+
+## If you have just been compacted, read this first
+
+The last four commits are the whole of the recent work and their messages are long on
+purpose — `git log -4` is the fastest way back in:
+
+```
+50b08d8  matching: D91 drops the queue position, D92 fences off the queue, B12 unfreezes the wait
+5a4067c  docs: a readable page for the layer that has no screen and no audio
+78bfa54  ivr: D90 moves repeat onto 0, and stops a prompt spelling a config value out loud
+4cd9e92  intake: P3 step 4a - the offer, the strategy seam, and the hold that outlives the request
+```
+
+**The one page that explains the current state in plain language** is
+`docs/reading/the_offer.html` (published, link in the table at the bottom). Read it before
+`services/intake/` — it is written for someone with no context at all, which after a compact
+is you.
+
+**Next up is P3 step 4b**, the audio, briefed in full further down. **Step zero is
+`uv add --optional ml …` and it has NOT been run** — it is a multi-gigabyte download on the
+user's laptop and was deliberately left for them to green-light. Ask before running it.
 
 ---
 
@@ -32,11 +55,21 @@ The pattern is worth knowing before reading any of it:
    because the correction was sampled in the same tick as the value it corrected.
 4. **`B9`** — a bare `models/` in `.gitignore` meant the **entire ORM package was never
    committed**. A whole phase looked landed; a fresh clone had no tables.
+5. **`B12` (2026-09-01)** — the matcher's anti-starvation was **fed a constant**. `waiting_s`
+   was frozen at admit time, so no caller's urgency ever grew. Found by answering a question
+   about a *prompt*, not by looking for a bug.
 
-All four are the same family as `B3` and `B4`: *a confident, plausible, wrong result that
+All five are the same family as `B3` and `B4`: *a confident, plausible, wrong result that
 no test could see.* When something looks fine, check that it is actually running — and,
 since `B9`, check that it is actually **committed**: every other verification in this
-project is a statement about the working tree, not about the repository.
+project is a statement about the working tree, not about the repository. `B12` adds a rung
+below that: check that what is running is being handed **live** arguments.
+
+**The 2026-09-01 session is worth reading as a pattern.** Three of its four changes came from
+the user reasoning about the *system* rather than the code — "why tell them a queue number if
+the matcher can reorder?", "does the enrichment influence who gets the call?", "why is repeat
+on 9 now that 0 is free?". Each was right, and one of them uncovered `B12`. When the user
+questions a behaviour, read the code that implements it end to end before answering.
 
 ```bash
 uv sync --extra web
@@ -117,6 +150,16 @@ ends it · one keypress grants both consent scopes and **a refusal is recorded, 
 intake stand-in is retired · **`B12`**: a waiting caller's urgency never grew, because the
 pool fed the matcher a frozen `waiting_s`.
 
+**P3 step 4a review pass (`D90`–`D92`, `B12`), 2026-09-01.** `0` is the repeat key and `9`
+is free again (`D90`) — and moving it exposed a prompt spelling a config value into its own
+Thai, which nothing checked · **no queue position or wait estimate is ever spoken** (`D91`,
+reversing `D89` two days later): there is no line to have a position in, and the pack lost
+both prompts and both roles so it cannot come back by config · **speech may change WHO
+answers and HOW SOON, never WHICH QUEUE** (`D92`) — the boundary `D23` implied and never
+stated, written before P4 can cross it · **`B12`**: `WaitingCall` is frozen and `tick()`
+rebuilt it naming only `excluded_agent_ids`, so every caller's `waiting_s` stayed at its
+admit value and all of `D22`'s anti-starvation ran against a constant.
+
 **P3 review pass (`D82`–`D84`, `D86`, `D87`, `B10`, `B11`).** Driven by the user working the screen and
 the menu. **A wrong keypress is never a strike** — no attempt limit, and `menu.invalid` now
 speaks both escape keys, because without a ceiling "try again" stops being survivable advice
@@ -173,7 +216,17 @@ reversing `D20`'s display gating).
    `D73` keeps deferral off until P6 brings real ACW data, and switching it on against
    invented numbers would repeat the mistake in a new place. Wire it into
    `expected_free_in()` when P6 lands, as a **score, never a filter**.
-4. **Small and worth doing when convenient:**
+4. **Wire the matcher inputs that are fed by nothing** (found with `B12`, deliberately not
+   fixed with it). `WaitingCall.is_vulnerable` is set on the `Customer` and on the brief DTO
+   but **never on the `WaitingCall`**, so `customer_priority` scores 0 on every real call.
+   `last_agent_id` / `last_contact_at` are set on the **context snapshot**, never on the
+   `WaitingCall`, so `fit_continuity` scores 0 too. `scripts/run_matching.py` generates all
+   three synthetically, which is exactly why the simulator looks like it exercises them —
+   the same illusion as `B4`. It is a wiring job with one real decision in it: *where should
+   continuity data reach the pool from*, given `D78` forbids a database read on the matcher's
+   hot path. The snapshot is already in `container.snapshots`; the honest options are to pass
+   it at `admit()` or to keep a small projection.
+5. **Small and worth doing when convenient:**
    - `call_intents` and `app_context_events` are still in memory. Neither loses anything a
      restart cares about — an intent expires in 15 minutes and screen events are TTL-pruned
      — which is why they were left, but the tables are trivial if the demo ever needs them.
@@ -286,7 +339,7 @@ Resolved: rating is an event (`D46`) · single project (`D34`) · Asterisk · RT
 + Typhoon compared · React workstation with the softphone in it · web customer simulator ·
 menu-first flow (`D37`).
 
-## The machine, as left on 2026-08-25
+## The machine, as left on 2026-09-01
 
 Facts about *this laptop* rather than the repo, so a fresh session does not rediscover them.
 
@@ -305,8 +358,19 @@ Facts about *this laptop* rather than the repo, so a fresh session does not redi
   needs it, and `--check` works without rendering.
 - **Node is on `PATH`**, so `apps/workstation` can be rebuilt. `dist/` is gitignored and
   still uncommitted (`Q17`).
-- The **dev database currently holds one call** from the live restart check. Harmless; the
-  suite no longer touches that database at all.
+- The **dev database currently holds one call** from the live restart check, plus a handful
+  from the 2026-08-31 browser verification of the intake offer. Harmless; the suite no longer
+  touches that database at all.
+- **Port 8000 gets left holding a stale server.** Twice now a `uv run python -m
+  readycall.entrypoints.api` from an earlier session was still bound, and the new one failed
+  to bind while its log still printed `api ready` — which reads exactly like a working start.
+  `Get-NetTCPConnection -LocalPort 8000 -State Listen` finds it; the process must be stopped
+  before the new code is being served. **The server does not reload Python changes**, so a
+  stale process also serves stale code.
+- **The in-app browser pane cannot open `file://` URLs or a signed-in `claude.ai` artifact.**
+  It stays on whatever it had. To eyeball a `docs/reading/*.html` page, navigate to the repo
+  path and screenshot the tab it opens (it lands in a NEW tab id — check `tabs_context`),
+  and expect the first `screenshot` to time out once and succeed on retry.
 
 ## Things to be careful about (live landmines)
 

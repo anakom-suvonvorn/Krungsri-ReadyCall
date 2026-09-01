@@ -193,3 +193,23 @@ _Append here rather than editing above._
   `--seed 123` the old text was flatly wrong.
 - `chosen_agent_id is None` means **three** things, not two — the third is a deliberate
   `DEFER`. Filter it out before reasoning about unplaced callers.
+
+- **2026-09-01 — none of the anti-starvation described above was actually running (`B12`).**
+  `WaitingCall` is frozen, and `DispatchService.tick()` rebuilt it with `replace()` naming
+  **only** `excluded_agent_ids` — so `waiting_s` kept whatever `admit()` was given (`0.0` on
+  the demo path) for the entire life of the call. `wait_pressure` was pinned at 0, `sla_risk`
+  never fired, and neither the 180 s ceiling nor the 60 s defer cap was ever reachable. §2's
+  argument was right and the code executed it against a constant. `tick()` now refreshes
+  `waiting_s` from `session.wait_seconds(now)`, and two tests move nothing but the clock.
+- **§4's "`FALLBACK` to any qualified agent" is not what `FALLBACK` does.** The solver's
+  chosen agent still stands; what the guard removes past the ceiling is the **deferral** and
+  the **anti-hot-spot check**, so nothing can hold the caller back any longer. Fit is never
+  ignored — `score = fit × urgency` throughout.
+- **Two scoring inputs are still fed by nothing on the live path.** `customer_priority`
+  reads `WaitingCall.is_vulnerable`, which is set on the `Customer` and on the brief DTO but
+  never on the `WaitingCall`; `fit_continuity` reads `last_agent_id` / `last_contact_at`,
+  which the context assembler sets on the **snapshot**, not on the `WaitingCall`. Both score
+  **0 on every real call**. `run_matching.py` generates all three synthetically, which is
+  precisely why the simulator looks like it exercises them — the same illusion as `B4`.
+- **Speech may move urgency and fit, never `queue_id` or `required_skill`** (`D92`). §2 lists
+  "situational urgency" as an input; today it is the *keypad's* intent, from config.

@@ -1,4 +1,4 @@
-%% HANDWRITTEN. Checked against ARCHITECTURE.md S8 + D22 + D23 + D38
+%% HANDWRITTEN. Checked against ARCHITECTURE.md S8 + D22 + D23 + D38 + D92 + B12
 sequenceDiagram
     autonumber
     participant Q as Waiting pool
@@ -10,7 +10,8 @@ sequenceDiagram
     Note over Q,WS: ONE pool - not one queue per agent (D22)
 
     loop every tick, and on every relevant event
-        M->>Q: all waiting calls
+        M->>Q: all waiting calls, REBUILT with a live accrued wait
+        Note right of Q: B12 lived exactly here. WaitingCall is frozen and<br/>the tick rebuilds it with replace() - but it named<br/>only excluded_agent_ids, so waiting_s kept its<br/>admit-time value and every threshold below was<br/>unreachable. Fields you do not name are a decision.
         M->>PR: all offerable agents
         Note right of PR: two axes: what the PLATFORM knows,<br/>and what the PERSON chose (D33)
 
@@ -21,7 +22,8 @@ sequenceDiagram
         Note right of M: skill_match + continuity +<br/>historical_fit - load_penalty
 
         M->>M: urgency multiplier per call
-        Note right of M: wait_pressure + sla_risk + customer_priority<br/>+ situational. This is what stops starvation.
+        Note right of M: wait_pressure + sla_risk + customer_priority<br/>+ situational, clamped 1.0..3.0. Multiplying is<br/>what stops starvation - waiting eventually wins<br/>on its own merit.
+        Note right of M: situational = the intent the KEYPAD chose. Speech<br/>may refine urgency and fit, never queue_id or<br/>required_skill (D92).
 
         M->>SOLV: cost matrix
         SOLV-->>M: globally optimal assignment

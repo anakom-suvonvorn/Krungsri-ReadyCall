@@ -1,7 +1,7 @@
 # INTEGRATIONS
 
 _Every external thing the system touches: the port that hides it, the adapters behind it, and the config that selects one._
-_Status: **mostly design; the persistence stack is real.** Last updated: 2026-08-25._
+_Status: **mostly design; the persistence stack is real.** Last updated: 2026-09-01._
 
 > **Real as of P2c (complete):** SQLAlchemy 2.0 (async) + Alembic + `asyncpg`, against
 > Postgres 16 in `infra/docker-compose.yml`, verified on a live container — **nine tables**,
@@ -293,9 +293,12 @@ config change and a re-run.
    which is what makes a stage demo safe.
 4. Editing wording is a YAML change plus a re-render; an admin **prompt studio** page lets someone
    change a sentence and hear it seconds later — ideal for tuning on the day.
-5. **Dynamic sentences** (queue position, wait estimate, the caller's name) are rendered on first use
-   and cached by their rendered text, so they warm up within minutes of a new deployment. A prompt
-   may also declare `warm:` values so the *first* caller does not pay for it either.
+5. **Dynamic sentences** (menu option lines, the reserved-key hint and the apology that names it,
+   and — when they land — the caller's name) are rendered on first use and cached by their
+   **rendered text**, so they warm up within minutes of a new deployment. A prompt may also declare
+   `warm:` values so the *first* caller does not pay for it either. *(A queue-position line was the
+   original example here and is gone: `D91` removed it, because the matcher has no queue order to
+   report.)*
    **A menu is a special case and is always composed** (`D80`): personalised ordering means the
    order differs per caller, so no single baked clip can exist. Lead-in + one option line each +
    the reserved-key hint, with the labels read from `menus.yaml` so they exist in one file only.

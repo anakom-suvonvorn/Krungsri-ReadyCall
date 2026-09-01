@@ -1,7 +1,7 @@
 # PLAN
 
 _The master build plan for the full system: what gets built, in what order, and what "done" means for each phase._
-_Last updated: 2026-08-31._
+_Last updated: 2026-09-01._
 
 ---
 
@@ -118,7 +118,11 @@ _Split in practice: **P2a the engine (done, 2026-08-24)** and **P2b the workstat
 - 20 simulated concurrent callers + 20 agents (3 real browser sessions) match deterministically;
   replaying the same scenario twice yields identical decisions.
 - The rationale panel explains a real assignment in a sentence a judge understands.
-- No starvation: with a skewed skill mix, the wait-time p99 stays under the configured ceiling.
+- ⚠️ No starvation: with a skewed skill mix, the wait-time p99 stays under the configured ceiling.
+  **This was recorded as met on 2026-08-24 and was not** (`B12`, found 2026-09-01). The pool fed
+  the matcher a `waiting_s` frozen at admit time, so `wait_pressure` stayed at 0 and the ceiling
+  was unreachable — the mechanism was written, correct, and driven by a constant. Fixed; the
+  criterion now needs re-measuring under load, which is the part that was never run.
 - Match → brief rendered **< 1 s**.
 
 **Status 2026-08-24.** Met, except the multi-browser load test: the handshake, presence, the

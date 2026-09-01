@@ -23,9 +23,11 @@ the public API, the matching engine, agent presence, the offer handshake, the Re
 the database layer are all real services doing real work. Only the *edges* are still fakes: the
 phone, the speech model, the LLM, the bank's data and the agent roster.
 
-A caller keys their way to the right queue, hears their position, is offered the pre-call recording
-and either takes it or does not — and all three answers reach the same agent, because the menu
-settled the routing before any of it ran. What is missing is the audio itself: no media gateway, no
+A caller keys their way to the right queue, is offered the pre-call recording and either takes it,
+refuses it or ignores it — and all three answers reach the same agent, because the menu settled the
+routing before any of it ran. They are deliberately **not** told a position in the queue: the matcher
+re-solves the whole caller × agent matrix every tick, so there is no arrival order to report
+(`docs/DECISIONS.md` `D91`). What is missing is the audio itself: no media gateway, no
 voice activity detection and no speech-to-text worker, so the transcript socket
 (`IntakeService.on_turn`) is real and nothing feeds it.
 

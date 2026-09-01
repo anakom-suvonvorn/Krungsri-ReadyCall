@@ -4,7 +4,7 @@ _How the full ReadyCall system works, end to end. Read this to understand the ma
 _Status: **partly built**. P0–P2c are implemented, and P3 is built through the intake
 offer; the audio, the analysis passes and the telephony integration are still design.
 Each section says what is real where it matters. See `PLAN.md` for the build order._
-_Last updated: 2026-08-31._
+_Last updated: 2026-09-01._
 
 ---
 
@@ -455,18 +455,46 @@ is why a wrong or missing transcript can no longer send anyone to the wrong queu
 
 ### Urgency — what stops starvation
 
+**As built** (`services/matching/scoring.py`), not as originally sketched:
+
 ```
-urgency = w_wait     * min(1, wait_s / TARGET_WAIT_S) ** WAIT_CURVE
-        + w_sla      * sla_breach_risk
-        + w_priority * customer_priority      # tier, vulnerability flags
-        + w_situation* situational_urgency    # "at an accident scene", "admitted tomorrow"
+wait_pressure = min(total_wait_s / sla_seconds, 2.0)   # relative to THIS queue's SLA
+sla_risk      = 1.0 if total_wait_s >= sla_seconds else 0.0
+
+urgency = clamp(
+    URGENCY_MIN + w_wait      * wait_pressure
+                + w_sla       * sla_risk
+                + w_priority  * customer_priority     # vulnerability flag
+                + w_situation * situational_urgency,  # the intent's default urgency
+    URGENCY_MIN, URGENCY_MAX)                         # 1.0 .. 3.0
+
+score = fit * urgency
 ```
 
-`situational_urgency` comes from the intake analysis and is one of the most demonstrable wins: a caller
-at a crash site should not queue behind a routine renewal question.
+Wait pressure is measured against **the queue's own SLA**, not a global target: 40 s is nothing on a
+120 s policy question and nearly a breach on a 45 s pre-authorisation. There is no `WAIT_CURVE`
+exponent — the earlier sketch had one and the implementation does not.
 
-Above `MAX_WAIT_BEFORE_ANY_AGENT_S` (default 180 s) **fit is ignored entirely** — connect to anyone
-qualified. That is the hard anti-starvation guarantee.
+`situational_urgency` is **`intent_urgency`, from `config/intents.yaml`, keyed by the intent the
+keypad chose.** Speech may refine it once P4 lands, but under `D92` it may only move urgency and the
+fit signals — never `queue_id` or `required_skill`.
+
+**How starvation is actually prevented.** Waiting drives `wait_pressure` toward the `URGENCY_MAX`
+ceiling, and urgency *multiplies* fit, so a long waiter eventually dominates the matrix on their own.
+Past `MAX_WAIT_BEFORE_ANY_AGENT_S` (default 180 s) the guard additionally returns `FALLBACK`, which
+**skips the deferral and the anti-hot-spot check** so nothing can hold the caller back any longer.
+
+> Two corrections worth keeping. `FALLBACK` does **not** mean "fit is ignored and we connect to
+> anyone" — the solver's chosen agent still stands; what changes is that the call can no longer be
+> deferred or bounced by the hot-spot guard. And none of this ran at all until `B12`: the pool fed
+> the matcher a `waiting_s` frozen at admit time, so `wait_pressure` was pinned at 0 and every
+> threshold above was unreachable.
+
+**Still fed by nothing on the live path:** `customer_priority` (the vulnerability flag is set on the
+`Customer` and on the brief, never on the `WaitingCall`) and `fit_continuity` (`last_agent_id` /
+`last_contact_at` are set on the context snapshot, never on the `WaitingCall`). Both score 0 on every
+real call today; `scripts/run_matching.py` generates them synthetically, which is exactly why the
+simulator looks like it exercises them.
 
 ### The match itself
 

@@ -33,10 +33,11 @@ So: edit Thai in YAML, re-render, hear it a second later, and the call itself ma
 network request at all.
 
 **The cache key is `hash(text, voice, engine)` — not the prompt id.** That one choice does
-two jobs. Editing a single line re-renders exactly that line and reuses the other 62 —
-measured, not claimed. And two prompts that say the same words become **one clip**, which
-is what makes a line like *"ขณะนี้ท่านอยู่ในลำดับที่ 3"* worth caching at all — everyone third in the
-queue hears the same file.
+two jobs. Editing a single line re-renders exactly that line and reuses the rest —
+measured, not claimed. And two prompts that say the same words become **one clip**: the
+option line *"กด 3 ติดตามสถานะเคลม"* is key `3` in both the motor and the health reason
+menu, so it is rendered once and played by both. That dedupe is not an optimisation
+detail — it is what collapses one clip per menu entry into one per distinct sentence.
 
 The manifest is committed and a test asserts it is fresh, the same argument as the
 generated diagrams: a pack that ships stale is worse than no pack, because the caller hears
