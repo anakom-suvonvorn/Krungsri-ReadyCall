@@ -449,3 +449,148 @@ def test_weights_reject_a_negative_weight(tmp_path) -> None:
     bad.write_text(yaml.safe_dump(raw), encoding="utf-8")
     with pytest.raises(ConfigError, match="negative"):
         MatchingWeights.load(bad)
+
+
+# --- B12: the accrued wait has to be LIVE, not whatever was passed at admit -------------
+
+
+class _RecordingEngine:
+    """Stands in for `MatchingEngine` and keeps what the dispatcher handed it."""
+
+    def __init__(self) -> None:
+        self.seen: list[list[WaitingCall]] = []
+
+    async def match(self, calls, presence):
+        self.seen.append(list(calls))
+        return []
+
+
+class _NoAssignments:
+    def open_offer_for(self, call_session_id: str):
+        return None
+
+    def excluded_agents(self, call_session_id: str) -> tuple[str, ...]:
+        return ()
+
+
+class _NoPresence:
+    def snapshot(self) -> dict[str, AgentPresence]:
+        return {}
+
+
+class _NoNotifier:
+    async def send(self, agent_id: str, kind: str, payload: dict) -> None:
+        return None
+
+    async def broadcast(self, kind: str, payload: dict) -> None:
+        return None
+
+
+async def test_a_waiting_caller_accrues_urgency_while_only_the_clock_moves() -> None:
+    """`B12`. `WaitingCall` is frozen and `tick()` rebuilds it — but it used to refresh
+    only `excluded_agent_ids`, so `waiting_s` stayed at whatever `admit()` was given.
+
+    That fed `score_urgency` a constant: `wait_pressure` never rose, `sla_risk` never
+    fired, and neither did the ceiling that drops a caller to any-qualified-agent. All of
+    `D22`'s anti-starvation was written, correct, and driven by nothing — `B7`'s family.
+
+    The test moves nothing but the clock, which is the only way to catch it.
+    """
+    from readycall.domain.enums import CallState, EntryChannel
+    from readycall.domain.models import CallSession
+    from readycall.services.agents.dispatch import DispatchService
+
+    clock = ManualClock()
+    engine = _RecordingEngine()
+    dispatch = DispatchService(
+        engine=engine,  # type: ignore[arg-type]
+        assignments=_NoAssignments(),  # type: ignore[arg-type]
+        presence=_NoPresence(),  # type: ignore[arg-type]
+        notifier=_NoNotifier(),  # type: ignore[arg-type]
+        clock=clock,
+    )
+
+    session = CallSession(
+        call_session_id="call_1",
+        trace_id="trace_1",
+        entry_channel=EntryChannel.HOTLINE,
+        state=CallState.MATCHED,
+        created_at=clock.now(),
+        queued_at=clock.now(),
+        queue_id="q_health_policy",
+    )
+    dispatch.admit(
+        session,
+        WaitingCall(
+            call_session_id="call_1",
+            queue_id="q_health_policy",
+            required_skill="health.policy",
+            intent_code="health.coverage.query",
+            intent_urgency=Urgency.NORMAL,
+            waiting_s=0.0,
+            sla_seconds=120,
+        ),
+    )
+
+    await dispatch.tick()
+    clock.advance(200)
+    await dispatch.tick()
+
+    first, second = engine.seen[0][0], engine.seen[1][0]
+    assert first.total_wait_s == 0.0
+    assert second.total_wait_s == pytest.approx(200.0), "the wait must be recomputed, not frozen"
+
+    weights = MatchingWeights.load(REPO_ROOT / "config" / "matching_weights.yaml")
+    assert score_urgency(first, weights).sla_risk == 0.0
+    assert score_urgency(second, weights).sla_risk == 1.0
+    assert second.total_wait_s >= weights.max_wait_before_any_agent_s, (
+        "past the ceiling the guard must be able to fall back to any qualified agent"
+    )
+
+
+async def test_a_demo_callers_pre_accrued_wait_survives_the_refresh() -> None:
+    """`waited_s` on the demo endpoint exists so a rehearsal can show a caller near their
+    SLA without waiting. It rides on `waiting_credit_s` now, which is the field for wait
+    that survives being re-scored — otherwise `B12`'s fix would silently delete it."""
+    from readycall.domain.enums import CallState, EntryChannel
+    from readycall.domain.models import CallSession
+    from readycall.services.agents.dispatch import DispatchService
+
+    clock = ManualClock()
+    engine = _RecordingEngine()
+    dispatch = DispatchService(
+        engine=engine,  # type: ignore[arg-type]
+        assignments=_NoAssignments(),  # type: ignore[arg-type]
+        presence=_NoPresence(),  # type: ignore[arg-type]
+        notifier=_NoNotifier(),  # type: ignore[arg-type]
+        clock=clock,
+    )
+    session = CallSession(
+        call_session_id="call_2",
+        trace_id="trace_2",
+        entry_channel=EntryChannel.HOTLINE,
+        state=CallState.MATCHED,
+        created_at=clock.now(),
+        queued_at=clock.now(),
+        queue_id="q_health_policy",
+    )
+    dispatch.admit(
+        session,
+        WaitingCall(
+            call_session_id="call_2",
+            queue_id="q_health_policy",
+            required_skill="health.policy",
+            intent_code="health.coverage.query",
+            intent_urgency=Urgency.NORMAL,
+            waiting_s=0.0,
+            waiting_credit_s=95.0,
+            sla_seconds=120,
+        ),
+    )
+
+    await dispatch.tick()
+    clock.advance(30)
+    await dispatch.tick()
+
+    assert engine.seen[0][0].total_wait_s == pytest.approx(95.0)
+    assert engine.seen[1][0].total_wait_s == pytest.approx(125.0), "credit + live elapsed"

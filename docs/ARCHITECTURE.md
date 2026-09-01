@@ -219,7 +219,7 @@ customer (if any), product, snapshot and queue.
 ## 6. Data flow B — the line, the IVR, and pre-call intake
 
 > **Built as of P3 step 4a, down to and including the offer.** `services/ivr/` walks the
-> real menu and hands back a queue; `services/intake/` then announces the position, makes the
+> real menu and hands back a queue; `services/intake/` then acknowledges the wait, makes the
 > offer, records the consent and opens an intake that **outlives the request that started
 > it** (`D21`, `D88`). The scenario runner and the demo endpoint both drive the real
 > services. What is **not** built is the audio: no media gateway, no VAD, no STT worker, no
@@ -259,8 +259,10 @@ can be edited without a studio and the audio is deterministic and offline-safe.
   ►► QUEUE IS NOW KNOWN. Nothing after this point is required for routing. ◄◄
         │
         ▼
-[queue position]  "ขณะนี้ท่านอยู่ในลำดับที่ 3"
-   (the wait in minutes is spoken ONLY when there is a real estimate - D89)
+[hold]  "กรุณาถือสายรอสักครู่ค่ะ"
+   NO position and NO wait estimate are ever spoken (D91). There is no line to
+   have a position in: the matcher re-solves the whole call x agent matrix every
+   tick, so arrival order is not an input and a number would be a promise we break.
         │
         ▼
 [intake offer]  ← the ENRICHMENT layer
@@ -344,6 +346,9 @@ entirely (`D22`), but "qualified" must still include understanding the caller.
 Design points worth arguing about (all runtime-tunable):
 
 - **The recording notice comes first**, before any menu, because it has to.
+- **No queue position, and no wait estimate** (`D91`). Announcing either implies FIFO, and this
+  matcher is not FIFO — waiting raises urgency, urgency multiplies fit, and the whole matrix is
+  re-solved each tick, so both overtaking directions happen by design.
 - **Press 2 is a first-class outcome, not a failure.** The call proceeds with a context-only brief and
   the agent screen says so. (`D19`)
 - **Re-offer once.** If the caller pressed 2 and the wait exceeds `INTAKE_REOFFER_AFTER_S` (default

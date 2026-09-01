@@ -52,8 +52,6 @@ class PromptRole(StrEnum):
     MENU_OPTION = "menu_option"
     MENU_RESERVED_HINT = "menu_reserved_hint"
     NO_INPUT = "no_input"
-    QUEUE_POSITION = "queue_position"
-    QUEUE_POSITION_ONLY = "queue_position_only"
     QUEUE_HOLD = "queue_hold"
     INTAKE_OFFER = "intake_offer"
     INTAKE_REOFFER = "intake_reoffer"

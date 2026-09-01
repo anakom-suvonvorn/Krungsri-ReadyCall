@@ -70,21 +70,24 @@ def _played(*steps: object) -> list[str]:
 
 
 class TestWhatIsSaid:
-    def test_the_position_comes_before_the_offer(self, machine: HoldMachine) -> None:
-        """Offering to record something before saying how long the wait is reads as a
-        stalling tactic. The caller's own question goes first."""
-        _, step = machine.begin(call_session_id="call_1", position=3, wait_minutes=2)
-        assert _played(step) == ["queue.position", "intake.offer"]
+    def test_no_queue_position_is_ever_spoken(
+        self, machine: HoldMachine, prompts: PromptPack
+    ) -> None:
+        """`D91`, reversing `D89`. There is no line to have a position in: the matcher
+        scores every waiting caller against every free agent as `fit x urgency` and
+        re-solves the whole matrix each tick, so arrival order is not an input anywhere.
 
-    def test_a_position_with_no_estimate_says_only_the_position(self, machine: HoldMachine) -> None:
-        """`D89`: we can count a queue and we cannot yet predict how long it drains, so
-        the caller hears the half we actually know."""
-        _, step = machine.begin(call_session_id="call_1", position=3)
-        assert _played(step) == ["queue.position_only", "intake.offer"]
-
-    def test_knowing_neither_falls_back_to_please_hold(self, machine: HoldMachine) -> None:
+        A number would be a promise the system does not keep — and it would be broken
+        most often for the low-urgency callers most likely to have believed it. Asserted
+        on the prompt pack as well as the machine, so re-adding the line cannot be done
+        by config alone.
+        """
         _, step = machine.begin(call_session_id="call_1")
         assert _played(step) == ["queue.hold", "intake.offer"]
+
+        assert "queue.position" not in prompts.prompts
+        assert "queue.position_only" not in prompts.prompts
+        assert not any("position" in role.value for role in PromptRole)
 
     def test_the_offer_names_the_keys_the_machine_actually_honours(
         self, prompts: PromptPack
@@ -104,7 +107,7 @@ class TestWhatIsSaid:
 
     def test_the_reoffer_uses_the_shorter_wording(self, machine: HoldMachine) -> None:
         """They have heard the pitch. Repeating it verbatim is nagging with extra words."""
-        run, _ = machine.begin(call_session_id="call_1", position=1)
+        run, _ = machine.begin(call_session_id="call_1")
         machine.on_digit(run, "2")
         assert _played(machine.reoffer(run)) == ["intake.reoffer"]
 
@@ -114,7 +117,7 @@ class TestWhatIsSaid:
 
 class TestAnsweringTheOffer:
     def test_pressing_one_starts_a_recording(self, machine: HoldMachine) -> None:
-        run, _ = machine.begin(call_session_id="call_1", position=1)
+        run, _ = machine.begin(call_session_id="call_1")
         step = machine.on_digit(run, "1")
 
         assert run.phase is HoldPhase.RECORDING
@@ -125,7 +128,7 @@ class TestAnsweringTheOffer:
     def test_pressing_two_is_a_first_class_outcome(self, machine: HoldMachine) -> None:
         """`D19`/`D37`: the menu already routed the call, so declining costs nothing that
         matters. The acknowledgement must not sound like a lost opportunity."""
-        run, _ = machine.begin(call_session_id="call_1", position=1)
+        run, _ = machine.begin(call_session_id="call_1")
         step = machine.on_digit(run, "2")
 
         assert run.phase is HoldPhase.HOLDING
@@ -136,7 +139,7 @@ class TestAnsweringTheOffer:
     def test_silence_at_the_offer_closes_it_without_nagging(self, machine: HoldMachine) -> None:
         """Unlike the menu, silence here gets no re-prompt: the second chance already
         exists and is better placed, at `INTAKE_REOFFER_AFTER_S`."""
-        run, _ = machine.begin(call_session_id="call_1", position=1)
+        run, _ = machine.begin(call_session_id="call_1")
         step = machine.on_timeout(run)
 
         assert run.phase is HoldPhase.HOLDING
@@ -148,7 +151,7 @@ class TestAnsweringTheOffer:
     ) -> None:
         """`D82`, applied here for the same reason: a wrong key proves somebody is there.
         What bounds the loop is silence, not a count."""
-        run, _ = machine.begin(call_session_id="call_1", position=1)
+        run, _ = machine.begin(call_session_id="call_1")
         for _ in range(12):
             step = machine.on_digit(run, "7")
             assert _played(step) == ["menu.invalid", "intake.offer"]
@@ -163,7 +166,7 @@ class TestAnsweringTheOffer:
         """A caller who learned the repeat key in the menu must not find it means
         something else thirty seconds later. It moved to `0` in `D90` and it moved in
         both machines at once, because both read it from `menus.yaml`."""
-        run, _ = machine.begin(call_session_id="call_1", position=1)
+        run, _ = machine.begin(call_session_id="call_1")
         step = machine.on_digit(run, pack.menu_settings.repeat_key)
         assert _played(step) == ["intake.offer"]
         assert run.phase is HoldPhase.OFFERING
@@ -173,7 +176,7 @@ class TestAnsweringTheOffer:
     ) -> None:
         """The guard is for stuck hardware, not for a person — `runaway_press_guard` sits
         far past anything a human does, and reaching it just stops replying."""
-        run, _ = machine.begin(call_session_id="call_1", position=1)
+        run, _ = machine.begin(call_session_id="call_1")
         for _ in range(pack.menu_settings.runaway_press_guard):
             step = machine.on_digit(run, "7")
         assert run.phase is HoldPhase.HOLDING
@@ -182,7 +185,7 @@ class TestAnsweringTheOffer:
     def test_keys_do_nothing_while_holding(self, machine: HoldMachine) -> None:
         """Nobody asked a question, so nothing answers. An apology here would be replying
         to something the caller never said."""
-        run, _ = machine.begin(call_session_id="call_1", position=1)
+        run, _ = machine.begin(call_session_id="call_1")
         machine.on_digit(run, "2")
         step = machine.on_digit(run, "5")
         assert step.lines == ()
@@ -194,7 +197,7 @@ class TestAnsweringTheOffer:
 
 class TestTheRecording:
     def _recording(self, machine: HoldMachine):  # type: ignore[no-untyped-def]
-        run, _ = machine.begin(call_session_id="call_1", position=1)
+        run, _ = machine.begin(call_session_id="call_1")
         machine.on_digit(run, "1")
         return run
 
@@ -247,7 +250,7 @@ class TestEndings:
     ) -> None:
         """`D21`: the offer window IS the grace period. Nobody waited longer and no
         sentence was thrown away — but the brief has to know it was cut."""
-        run, _ = machine.begin(call_session_id="call_1", position=1)
+        run, _ = machine.begin(call_session_id="call_1")
         machine.on_digit(run, "1")
         step = machine.on_agent_accepted(run)
 
@@ -259,7 +262,7 @@ class TestEndings:
     def test_an_agent_accepting_after_a_finished_recording_is_not_partial(
         self, machine: HoldMachine
     ) -> None:
-        run, _ = machine.begin(call_session_id="call_1", position=1)
+        run, _ = machine.begin(call_session_id="call_1")
         machine.on_digit(run, "1")
         machine.on_digit(run, "1")
         step = machine.on_agent_accepted(run)
@@ -273,12 +276,12 @@ class TestEndings:
     ) -> None:
         """Two different facts. "They said no" is evidence; "they never answered" is
         our silence, not theirs, and only one of them justifies a thin brief."""
-        declined, _ = machine.begin(call_session_id="call_1", position=1)
+        declined, _ = machine.begin(call_session_id="call_1")
         machine.on_digit(declined, "2")
         out = machine.on_agent_accepted(declined).outcome
         assert out is not None and out.kind is HoldOutcomeKind.DECLINED
 
-        ignored, _ = machine.begin(call_session_id="call_2", position=1)
+        ignored, _ = machine.begin(call_session_id="call_2")
         machine.on_timeout(ignored)
         out2 = machine.on_agent_accepted(ignored).outcome
         assert out2 is not None and out2.kind is HoldOutcomeKind.IGNORED
@@ -287,7 +290,7 @@ class TestEndings:
     def test_hanging_up_mid_sentence_still_keeps_what_was_said(self, machine: HoldMachine) -> None:
         """The voicemail path (`D25`) runs the same pipeline, so a caller who gave up
         halfway still has something worth calling them back about."""
-        run, _ = machine.begin(call_session_id="call_1", position=1)
+        run, _ = machine.begin(call_session_id="call_1")
         machine.on_digit(run, "1")
         step = machine.on_hangup(run)
 
@@ -303,7 +306,7 @@ class TestEndings:
 
 class TestTheReoffer:
     def test_it_is_offered_exactly_once_more(self, machine: HoldMachine) -> None:
-        run, _ = machine.begin(call_session_id="call_1", position=1)
+        run, _ = machine.begin(call_session_id="call_1")
         machine.on_digit(run, "2")
 
         assert machine.may_reoffer(run)
@@ -312,14 +315,14 @@ class TestTheReoffer:
         assert not machine.may_reoffer(run), "twice is an offer, three times is nagging"
 
     def test_somebody_already_recording_is_never_interrupted(self, machine: HoldMachine) -> None:
-        run, _ = machine.begin(call_session_id="call_1", position=1)
+        run, _ = machine.begin(call_session_id="call_1")
         machine.on_digit(run, "1")
         assert not machine.may_reoffer(run)
 
     def test_somebody_who_already_recorded_has_nothing_left_to_be_offered(
         self, machine: HoldMachine
     ) -> None:
-        run, _ = machine.begin(call_session_id="call_1", position=1)
+        run, _ = machine.begin(call_session_id="call_1")
         machine.on_digit(run, "1")
         machine.on_digit(run, "1")
         assert run.phase is HoldPhase.HOLDING
@@ -446,7 +449,7 @@ class TestTheServiceEndToEnd:
         Asking twice for one thing they already agreed to is worse service, not better
         privacy (`D14`)."""
         session = await self._queued(orchestrator)
-        await service.run_offer(session, caller=ScriptedChoices(["1"]), position=1)
+        await service.run_offer(session, caller=ScriptedChoices(["1"]))
 
         assert session.has_consent(ConsentScope.RECORDING)
         assert session.has_consent(ConsentScope.AI_PROCESSING)
@@ -460,7 +463,7 @@ class TestTheServiceEndToEnd:
         """ "They said no" and "we never asked" are different facts and the record has to
         be able to tell them apart."""
         session = await self._queued(orchestrator)
-        report = await service.run_offer(session, caller=ScriptedChoices(["2"]), position=1)
+        report = await service.run_offer(session, caller=ScriptedChoices(["2"]))
 
         refusals = [c for c in session.consents if not c.granted]
         assert [c.scope for c in refusals] == [ConsentScope.AI_PROCESSING]
@@ -473,7 +476,7 @@ class TestTheServiceEndToEnd:
         self, service: IntakeService, orchestrator: CallOrchestrator
     ) -> None:
         session = await self._queued(orchestrator)
-        report = await service.run_offer(session, caller=ScriptedChoices([]), position=1)
+        report = await service.run_offer(session, caller=ScriptedChoices([]))
 
         assert report.consented is None
         assert report.degraded is DegradationReason.NO_CONSENT
@@ -485,7 +488,7 @@ class TestTheServiceEndToEnd:
         """`D21` in one assertion: `run_offer` returns while the caller is still talking,
         because the thing that ends them is an agent pressing Accept somewhere else."""
         session = await self._queued(orchestrator)
-        report = await service.run_offer(session, caller=ScriptedChoices(["1"]), position=1)
+        report = await service.run_offer(session, caller=ScriptedChoices(["1"]))
 
         assert report.recording
         assert report.result is None
@@ -495,7 +498,7 @@ class TestTheServiceEndToEnd:
         self, service: IntakeService, orchestrator: CallOrchestrator
     ) -> None:
         session = await self._queued(orchestrator)
-        await service.run_offer(session, caller=ScriptedChoices(["1"]), position=1)
+        await service.run_offer(session, caller=ScriptedChoices(["1"]))
         await service.on_turn(
             session.call_session_id, _turn(session.call_session_id, 1, "ผมนอนโรงพยาบาลครับ")
         )
@@ -516,7 +519,7 @@ class TestTheServiceEndToEnd:
         then the offer is not the question being asked any more, and the thing listening
         is the open channel."""
         session = await self._queued(orchestrator)
-        await service.run_offer(session, caller=ScriptedChoices(["1"]), position=1)
+        await service.run_offer(session, caller=ScriptedChoices(["1"]))
         report = await service.on_digit(session.call_session_id, "1")
 
         assert report is not None
@@ -535,7 +538,7 @@ class TestTheServiceEndToEnd:
         """Driven from outside for `B7`'s reason: a VAD silence is something the media
         side reports, so it is an entry point, not a loop this file owns."""
         session = await self._queued(orchestrator)
-        await service.run_offer(session, caller=ScriptedChoices(["1"]), position=1)
+        await service.run_offer(session, caller=ScriptedChoices(["1"]))
 
         await service.on_silence(session.call_session_id)
         assert session.state is CallState.INTAKE_ACTIVE, "one nudge, they did ask to speak"
@@ -547,7 +550,7 @@ class TestTheServiceEndToEnd:
         self, service: IntakeService, orchestrator: CallOrchestrator
     ) -> None:
         session = await self._queued(orchestrator)
-        await service.run_offer(session, caller=ScriptedChoices(["1"]), position=1)
+        await service.run_offer(session, caller=ScriptedChoices(["1"]))
         await service.on_max_duration(session.call_session_id)
         assert session.state is CallState.INTAKE_COMPLETE
 
@@ -565,7 +568,7 @@ class TestTheServiceEndToEnd:
         `INTAKE_REOFFER_AFTER_S` is that the wait got long, so a driver has to exist and a
         test has to move nothing but the clock."""
         session = await self._queued(orchestrator)
-        await service.run_offer(session, caller=ScriptedChoices(["2"]), position=1)
+        await service.run_offer(session, caller=ScriptedChoices(["2"]))
 
         assert await service.reoffer_due() == [], "not due yet"
 
@@ -582,7 +585,7 @@ class TestTheServiceEndToEnd:
         """The whole point of asking twice: a caller who said no at ten seconds may well
         say yes at two minutes."""
         session = await self._queued(orchestrator)
-        await service.run_offer(session, caller=ScriptedChoices(["2"]), position=1)
+        await service.run_offer(session, caller=ScriptedChoices(["2"]))
         clock.advance(Settings(config_dir=CONFIG).intake_reoffer_after_s + 1)
         await service.reoffer_due()
 
@@ -604,7 +607,7 @@ class TestTheServiceEndToEnd:
         queues = []
         for keys in (["1"], ["2"], []):
             session = await self._queued(orchestrator)
-            await service.run_offer(session, caller=ScriptedChoices(keys), position=1)
+            await service.run_offer(session, caller=ScriptedChoices(keys))
             await service.on_agent_accepted(session.call_session_id)
             queues.append(session.queue_id)
         assert queues == ["q_health_policy"] * 3

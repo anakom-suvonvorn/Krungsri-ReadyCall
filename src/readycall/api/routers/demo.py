@@ -290,14 +290,7 @@ async def place_call(
     # reason a real caller hears it before an agent frees up - and it deliberately does
     # not run to completion. A caller still talking stays live, and `D21` ends them when
     # the agent presses Accept, which is a different request entirely.
-    hold = await container.intake.run_offer(
-        session,
-        caller=ScriptedChoices(list(body.intake_keys)),
-        position=_queue_position(container, queue_id),
-        # No wait estimate yet, so the caller hears their position and no invented
-        # number (`D89`). P6's handle-time data is what switches the fuller line on.
-        wait_minutes=None,
-    )
+    hold = await container.intake.run_offer(session, caller=ScriptedChoices(list(body.intake_keys)))
 
     await container.orchestrator.transition(session, CallState.MATCHED, reason="ready_for_matching")
     container.dispatch.admit(
@@ -312,7 +305,12 @@ async def place_call(
                 if intent_code
                 else Urgency.NORMAL
             ),
-            waiting_s=body.waited_s,
+            # `waiting_s` is now recomputed from `queued_at` on every tick (`B12`), so a
+            # value set here would be overwritten. The demo's "already waited N seconds"
+            # affordance therefore rides on `waiting_credit_s`, which is exactly what that
+            # field is for - accrued wait that survives being re-scored.
+            waiting_s=0.0,
+            waiting_credit_s=body.waited_s,
             sla_seconds=spec.sla_seconds,
         ),
     )
@@ -328,15 +326,6 @@ async def place_call(
         unplaced_reason=result.unplaced.get(session.call_session_id),
         intake=_intake_out(hold),
     )
-
-
-def _queue_position(container: ContainerDep, queue_id: str) -> int:
-    """Where this caller sits, counted rather than estimated.
-
-    Everyone already waiting on the same queue is ahead of them, so the arriving caller is
-    one past that. It is a fact we hold, unlike the wait in minutes (`D89`).
-    """
-    return sum(1 for call in container.dispatch.waiting() if call.queue_id == queue_id) + 1
 
 
 def _intake_out(hold: HoldReport) -> IntakeOut:

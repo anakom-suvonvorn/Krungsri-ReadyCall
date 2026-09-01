@@ -50,8 +50,6 @@ flow:
   menu_option: menu.option
   menu_reserved_hint: menu.reserved_hint
   no_input: input.none
-  queue_position: queue.position
-  queue_position_only: queue.position_only
   queue_hold: queue.hold
   intake_offer: intake.offer
   intake_reoffer: intake.reoffer
@@ -163,35 +161,12 @@ prompts:
   # then removed; the guard test would flag them as unreachable now.
 
   # --- the queue -----------------------------------------------------------------------
-  queue.position:
-    text_th: "ขณะนี้ท่านอยู่ในลำดับที่ {position} รอสายประมาณ {wait_minutes} นาที"
-    slots: [position, wait_minutes]
-    # Pre-rendered for the shallow end of the queue, which is where nearly every caller
-    # is. Deeper positions render on first use and are cached from then on (D24) - the
-    # point of `warm` is only that the FIRST caller does not pay for it either.
-    warm:
-      - { position: 1, wait_minutes: 1 }
-      - { position: 2, wait_minutes: 1 }
-      - { position: 3, wait_minutes: 2 }
-      - { position: 4, wait_minutes: 3 }
-      - { position: 5, wait_minutes: 4 }
-
-  queue.position_only:
-    text_th: "ขณะนี้ท่านอยู่ในลำดับที่ {position}"
-    slots: [position]
-    warm:
-      - { position: 1 }
-      - { position: 2 }
-      - { position: 3 }
-      - { position: 4 }
-      - { position: 5 }
-    note: >-
-      The position with no time attached, played whenever there is no wait estimate to
-      attach (D89). We can always count the queue; we cannot yet predict how long it takes
-      to drain, and a made-up "about 3 minutes" is the kind of confident wrong number this
-      project keeps having to dig out (D18). The fuller line takes over when P6 brings the
-      handle-time data D85 already knows how to use.
-
+  # NOTE: there is deliberately NO queue-position line (`D91`, reversing `D89`). Both
+  # `queue.position` and `queue.position_only` existed here and were removed: the matcher
+  # scores every waiting caller against every free agent as `fit x urgency` and re-solves
+  # the whole matrix each tick, so arrival order is not an input and nobody HAS a position.
+  # Speaking one would be a promise the system does not keep - broken most often for the
+  # low-urgency callers most likely to have believed it.
   queue.hold:
     text_th: "กรุณาถือสายรอสักครู่ค่ะ"
 

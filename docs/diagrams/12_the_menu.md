@@ -202,11 +202,17 @@ there* (`D88`).
 
 ![the hold and the intake offer](hold_offer.svg)
 
-The caller hears their **position** and then the offer. They hear the wait in minutes only
-when there is a real estimate to give — and there is none yet, because counting a queue and
-predicting how long it takes to drain are different problems and only the first is solved
-(`D89`). An invented *"about three minutes"* becomes a visible lie at minute eight, to the
-caller least inclined to forgive it.
+The caller hears a plain **"please hold"** and then the offer — **no position and no wait
+estimate** (`D91`, reversing `D89`). There is no line to have a position in: the matcher
+builds a full call × agent matrix and re-solves it with the Hungarian algorithm every tick,
+so arrival order is not an input anywhere and both overtaking directions happen by design.
+A 200-second waiter beats a fresh CRITICAL caller on urgency alone; a fresh CRITICAL caller
+who reaches a specialist beats the waiter on `fit × urgency`. Either way an announced number
+is a promise the system breaks — most often for the low-urgency callers most likely to have
+believed it.
+
+`D89`'s mistake is the instructive part: *"we can count a queue exactly"* is true, and
+irrelevant. **Counting a pool is not ranking it.**
 
 ### The three answers, and why none of them is a failure
 

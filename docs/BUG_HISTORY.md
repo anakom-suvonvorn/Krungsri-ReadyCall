@@ -1,7 +1,7 @@
 # BUG_HISTORY
 
 _Solved bugs and the lessons they bought. **Search this file FIRST when debugging** — the answer may already be here._
-_Last updated: 2026-08-26._
+_Last updated: 2026-09-01._
 
 Format per entry:
 
@@ -492,3 +492,56 @@ _Found by the user in the same pass._
   feedback at all — the failure case looks the same. Anything whose success is invisible
   needs a visible acknowledgement, and one disposition list serving both the form and the
   summary means the two cannot drift.
+
+## B12. A waiting caller's urgency never grew, so nothing about starvation actually worked
+_Found 2026-09-01, while checking whether announcing a queue position made sense. Nobody was
+looking for this._
+
+- **Symptoms:** none visible. Every test passed, `run_matching.py --calls 25` produced
+  sensible-looking assignments, and the anti-starvation behaviour `D22` describes was
+  documented in three places. What nothing showed was that a caller who had been holding for
+  ten minutes scored exactly the same as one who had just arrived.
+- **Root cause:** `WaitingCall` is a frozen dataclass admitted once into
+  `DispatchService._waiting`. Each tick rebuilds it — but with `replace()` naming **only**
+  `excluded_agent_ids`. Every other field, `waiting_s` included, kept its admit-time value
+  for the entire life of the call. On the demo path that value was `body.waited_s`, defaulting
+  to `0.0`.
+- **What that disabled, measured against the real scoring code:**
+
+  ```
+  the pool's frozen view                 what it should have been
+  t=  0s  wait_pressure=0.00  u=1.300    t=  0s  0.00  u=1.300
+  t= 60s  wait_pressure=0.00  u=1.300    t= 60s  0.50  u=1.800
+  t=120s  wait_pressure=0.00  u=1.300    t=120s  1.00  u=3.000   <- SLA breach
+  t=600s  wait_pressure=0.00  u=1.300    t=600s  2.00  u=3.000   <- any-qualified fallback
+  ```
+
+  So `wait_pressure` was pinned at 0, `sla_risk` never fired, the 180 s
+  `max_wait_before_any_agent_s` fallback never fired, and neither did the 60 s cap that stops
+  a caller being deferred indefinitely. **The entire mechanism `D22` exists for was written,
+  correct, and driven by a constant.**
+- **Investigation:** the question was not "is there a bug" — it was the user asking whether
+  telling a caller their queue position made sense given a Hungarian matcher. Reading
+  `score_urgency` to answer that showed `total_wait_s` mattered enormously; reading `tick()`
+  to see where it came from showed it never changed.
+- **Fix:** `tick()` now also refreshes `waiting_s` from `session.wait_seconds(now)` — the
+  pool already holds the session, and `CallSession.wait_seconds` already existed. The demo's
+  "arrives having already waited N seconds" flag moved onto **`waiting_credit_s`**, which is
+  the field for accrued wait that survives being re-scored, so it composes with live elapsed
+  time instead of being overwritten.
+- **Verification:** two tests in which **only the clock moves**. One asserts a caller's
+  `total_wait_s` reaches 200 s and crosses both the SLA and the any-qualified ceiling; the
+  other asserts the demo's pre-accrued 95 s still adds to live elapsed time. Both were
+  confirmed to fail when the fix is reverted.
+- **Lesson — and it is `B7`'s, one level down.** `B7` was *nothing called the driver*. This is
+  *the driver ran and was handed a stale argument*, which is strictly harder to see: the code
+  executes, the logs look healthy, and the value is merely wrong. **When a frozen object is
+  rebuilt with `replace()`, the fields you did not name are a decision.** Write them down or
+  they rot silently.
+- **What this found next to it.** Three more matcher inputs are still fed by nothing on the
+  live path: `is_vulnerable` (set on the `Customer` and on the brief DTO, never on the
+  `WaitingCall`), and `last_agent_id` / `last_contact_at` (set on the context snapshot, never
+  on the `WaitingCall`). So `customer_priority` and `continuity` score **0 on every real
+  call** today. `run_matching.py` generates all three synthetically, which is exactly why the
+  simulator looks like it exercises them. Not fixed here — it is a wiring job with its own
+  decisions about where continuity data should come from — but it is now written down.

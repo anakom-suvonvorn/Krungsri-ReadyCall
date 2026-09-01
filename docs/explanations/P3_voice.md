@@ -348,5 +348,28 @@ prompts were "text waiting for the machinery that plays them". The machinery now
   health-line caller speaks health data into a recording whose `health_data` scope nothing
   asks for.
 
+**2026-09-01 — `D90`, `D91`, `D92` and `B12`.** Three of these came from the user reading the
+system rather than the code, which is the pattern worth noticing.
+
+- **repeat moved from `9` to `0`** (`D90`). `D86` freed the key and admitted one cost — a
+  caller pressing `0` out of habit got an apology. Moving repeat there deletes that cost.
+  Moving it also exposed a prompt spelling a config value into its own Thai (`"กด 9"`), which
+  nothing checked; it is a `{repeat_key}` slot now.
+- **the queue position is gone entirely** (`D91`, reversing `D89` two days after writing it).
+  There is no line to have a position in: the matcher re-solves the whole caller × agent
+  matrix every tick, so arrival order is not an input and both overtaking directions happen by
+  design. `D89`'s reasoning — *"we can count a queue exactly"* — was true and irrelevant.
+  **Counting a pool is not ranking it.** `queue.position` and `queue.position_only` are
+  deleted from the pack and from `PromptRole`.
+- **speech may change who answers and how soon, never which queue** (`D92`). `D23` implied it
+  and never said it; `required_skill` comes from the queue spec, so a speech-revised intent
+  could have re-routed the product line and quietly ended `D37`.
+- **`B12`**: `WaitingCall` is frozen and `tick()` rebuilt it naming only `excluded_agent_ids`,
+  so `waiting_s` never moved. `wait_pressure` stayed at 0, `sla_risk` never fired, and neither
+  did the any-qualified ceiling — all of `D22`'s anti-starvation, driven by a constant. Found
+  while answering the position question, not by looking for it.
+- **numbers now:** 27 prompts, 15 roles, **54 clips**, 559 tests (517 pass + 42 skipped
+  without the container), 61 diagrams.
+
 _Earlier body text stays as written — it is a record of what was true on 2026-08-25._ Append dated entries here rather than editing the body — this file is a record
 of what was true on 2026-08-25, and the "why" above stays useful even when a number moves._

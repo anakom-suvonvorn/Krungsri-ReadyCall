@@ -12,7 +12,7 @@ is calling and how much to believe it, why they are calling, everything we hold 
 assembled before the phone is answered, which agent should take it and why, the desk rings
 and a human accepts with the screen already right — the caller keys their own way to the
 right queue through a real menu hearing real (pre-rendered) Thai — and now, **once the queue
-is settled, they hear their position, are offered the pre-call recording, and take it or
+is settled, they are offered the pre-call recording, and take it or
 refuse it or ignore it, all three reaching the same agent**.
 
 Verified **2026-08-31**: **559 tests** — 517 pass + 42 skipped without the Postgres
@@ -91,11 +91,11 @@ write durably, restore at startup · presence, the waiting pool and the live ide
 **derived, never stored twice** (`D76`, `D78`) · `Container` reads `STORAGE_BACKEND` ·
 a restart is proved by **ending a process**, in pytest and again with real uvicorn.
 
-**P3 (steps 1–3) — the line.** `config/voice_prompts.yaml`: **29 prompts**, declared slots,
-and a `flow:` table mapping **17 roles** to ids so `services/` holds no prompt literals
+**P3 (steps 1–3) — the line.** `config/voice_prompts.yaml`: **27 prompts**, declared slots,
+and a `flow:` table mapping **15 roles** to ids so `services/` holds no prompt literals
 (`D28`) · the guard that every referenced id resolves, **both directions**, as a startup
 gate *and* a test · `scripts/build_prompts.py` hash-cached by (text, voice, engine), deduped
-by rendered text to **64 clips**, committed manifest asserted fresh · **`services/ivr/`** —
+by rendered text to **54 clips**, committed manifest asserted fresh · **`services/ivr/`** —
 greeting + notice → product menu (skipped when the DID or app said) → reason menu → queue,
 with `0` the only reserved key (`D86`, `D90`), a wrong press never a strike (`D82`), and every
 failure path ending in a queue rather than a hang-up · personalised ordering with its
@@ -103,8 +103,8 @@ evidence · **a menu is composed, not one clip** (`D80`) · **`menu_path` is can
 was pressed** (`D81`) · both fake IVR walks retired — `run_scenario.py`'s `# P1:` and
 `demo.py`'s `# P2b:`.
 
-**P3 step 4a — the offer (`D88`, `D89`).** `services/intake/`: **`hold.py`**, a second no-I/O
-machine for everything *below* the "queue is now known" line — position, the press-1/press-2
+**P3 step 4a — the offer (`D88`, `D91`).** `services/intake/`: **`hold.py`**, a second no-I/O
+machine for everything *below* the "queue is now known" line — the press-1/press-2
 offer, one re-offer, the recording and its four endings · **`strategy.py`**, the `D10` seam,
 which takes **`TranscriptTurn`s rather than a media stream** so the whole thing is buildable
 and testable with no GPU, no audio and no telephony · **`passive.py`**, `PassiveRecordIntake`
@@ -112,8 +112,10 @@ with an idempotent `finalize()` because the accept and the hang-up genuinely rac
 **`service.py`**, the driver — which **returns as soon as the caller answers** and leaves the
 intake live, because `D21`'s offer window IS the grace period and the accept endpoint is what
 ends it · one keypress grants both consent scopes and **a refusal is recorded, not nothing** ·
-`reoffer_due()` runs in `sweep_once` (`B7`, pre-empted) · the caller hears their **position
-with no invented wait** (`D89`) · the scenario runner's intake stand-in is retired.
+`reoffer_due()` runs in `sweep_once` (`B7`, pre-empted) · **no queue position is spoken**
+(`D91`, reversing `D89` — there is no line to have a position in) · the scenario runner's
+intake stand-in is retired · **`B12`**: a waiting caller's urgency never grew, because the
+pool fed the matcher a frozen `waiting_s`.
 
 **P3 review pass (`D82`–`D84`, `D86`, `D87`, `B10`, `B11`).** Driven by the user working the screen and
 the menu. **A wrong keypress is never a strike** — no attempt limit, and `menu.invalid` now
@@ -479,9 +481,26 @@ Facts about *this laptop* rather than the repo, so a fresh session does not redi
 - **The strategy never guesses `degraded`.** No turns can mean the caller said nothing or
   that the transcriber was down, and only the driver can tell. A strategy inventing
   `stt_unavailable` puts a claim on the agent's screen that nothing checked.
-- **The caller hears their position, never an invented wait** (`D89`). We can count a queue;
-  we cannot yet predict how long it drains. `queue.position_only` exists for exactly this,
-  and the fuller `queue.position` line switches on when P6 brings handle-time data.
+- **NEVER speak a queue position or a wait estimate** (`D91`, reversing `D89`). There is no
+  line to have a position in: the matcher solves the whole call x agent matrix every tick, so
+  arrival order is not an input, and both overtaking directions happen by design — a
+  200-second waiter beats a fresh CRITICAL caller on urgency alone, and a fresh CRITICAL
+  caller with a better-fitting agent beats the waiter. `queue.position` and
+  `queue.position_only` were **deleted** from the pack and from `PromptRole` so the line
+  cannot come back by config alone. The mistake `D89` made is worth remembering: *we can
+  count a pool* is not *we can rank it*.
+- **Speech may change WHO answers and HOW SOON, never WHICH QUEUE** (`D92`). The keypad owns
+  `queue_id` and `required_skill`; the intent blend `D23` describes may move `intent_urgency`
+  and the fit signals only. P4 is the first code that can break this — write the test with
+  the blend, not after it.
+- **The matcher's inputs are a frozen snapshot unless something refreshes them** (`B12`).
+  `WaitingCall` is frozen and `tick()` rebuilds it with `replace()`; anything not named there
+  keeps its admit-time value for the whole call. `waiting_s` is now recomputed from
+  `session.queued_at` every tick. **Still fed by nothing:** `is_vulnerable` (it is set on the
+  Customer and on the brief, never on the `WaitingCall`), `last_agent_id` / `last_contact_at`
+  (set on the context snapshot, never on the `WaitingCall`), and `waiting_credit_s` outside
+  the demo path. So `customer_priority` and `continuity` currently score 0 on every real
+  call, and `run_matching.py` hides it by generating them synthetically.
 - **Never hardcode an insurance literal in `services/`** — it goes in `config/` (`D28`).
 - **Never `datetime.now()` or a raw random id** outside `clock.py`/`ids.py` (`D35`).
 - **There is NO operator key, and `0` is the REPEAT key** (`D86` removed the operator,

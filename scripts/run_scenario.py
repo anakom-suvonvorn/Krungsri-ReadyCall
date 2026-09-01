@@ -346,14 +346,7 @@ class ScenarioRun:
         # menu's is: `declined: true` presses 2, a scenario with turns presses 1, and a
         # scenario with neither says nothing and falls through to hold.
         intake_keys = ["2"] if sc.declines_intake else (["1"] if sc.turns else [])
-        hold = await self.intake.run_offer(
-            session,
-            caller=ScriptedChoices(intake_keys),
-            position=3,
-            # No wait estimate is produced anywhere yet, so the caller hears their
-            # position and no invented number (`D89`).
-            wait_minutes=None,
-        )
+        hold = await self.intake.run_offer(session, caller=ScriptedChoices(intake_keys))
         self.notes.append(
             f"hold: {len(hold.played)} lines played, keys {'/'.join(hold.pressed) or '-'}"
             f" -> consent={hold.consented}, {hold.degraded}"

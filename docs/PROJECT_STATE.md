@@ -41,7 +41,7 @@ As of P3 the identity ladder, **the IVR itself**, **the intake offer**, the cont
 the brief builder, the public API, the matching engine, agent presence, the offer handshake and
 the React workstation are all real services doing real work - only the *edges* (phone, speech,
 AI, the bank's data, the agent roster) are still fakes. An agent signs in at `/workstation`, a
-caller keys their way through the real menu to the right queue, hears their position, is offered
+caller keys their way through the real menu to the right queue, is offered
 the recording and either takes it or does not, the desk rings, the brief is already there, and
 the disclosure gate moves when the agent attests.
 
@@ -176,7 +176,7 @@ FullProject/
 │  │  │  ├─ personalise.py*  #   which options come first, and the evidence for each (D37)
 │  │  │  └─ service.py*      #   the async driver. Plays lines, holds no rules
 │  │  ├─ intake/*            # P3 step 4a. Everything BELOW "the queue is known" (D88)
-│  │  │  ├─ hold.py*         #   position, offer, re-offer, recording. NO I/O either (B7)
+│  │  │  ├─ hold.py*         #   the offer, re-offer, recording. NO I/O either (B7)
 │  │  │  ├─ strategy.py*     #   the IntakeStrategy seam. Turns in, not frames in (D10/D88)
 │  │  │  ├─ passive.py*      #   PassiveRecordIntake: listen, keep every word, say nothing
 │  │  │  └─ service.py*      #   the driver + the LIVE holds an accept has to end (D21)
@@ -282,16 +282,17 @@ Postgres · ☑ Alembic no longer churns foreign keys, and the suite has its own
 (`D79`)
 
 **P3 — voice, IVR & intake v1** (steps 1-3 and step 4a done; the audio is what remains)
-☑ `config/voice_prompts.yaml` — **29 prompts**, 17 flow roles, declared slots · ☑ the guard that
+☑ `config/voice_prompts.yaml` — **27 prompts**, 15 flow roles, declared slots · ☑ the guard that
 every referenced prompt id resolves, **in both directions**, as a startup gate and a test · ☑
-`scripts/build_prompts.py` — hash-cached by (text, voice, engine), deduped to **64 clips**,
+`scripts/build_prompts.py` — hash-cached by (text, voice, engine), deduped to **54 clips**,
 committed manifest asserted fresh (`D24`) · ☑ **`services/ivr/`**: greeting + notice, menu-first
 routing, one reserved key, unlimited wrong presses (`D82`), silence bounded, personalised ordering
 with its evidence (`D37`) · ☑ a menu is composed, not one clip (`D80`) · ☑ `menu_path` is canonical
-whatever was pressed (`D81`) · ☑ no operator key (`D86`) · ☑ **`services/intake/`**: queue position,
+whatever was pressed (`D81`) · ☑ no operator key (`D86`) · ☑ **`services/intake/`**:
 the press-1/press-2 offer, the re-offer driven by the sweep, consent granted and refusals recorded,
 the `IntakeStrategy` seam with `PassiveRecordIntake`, and **ring-time grace** — the accept endpoint
-finalises a live intake as partial (`D21`, `D88`) · ☑ position without an invented wait (`D89`) ·
+finalises a live intake as partial (`D21`, `D88`) · ☑ **no queue position spoken at all** (`D91`,
+reversing `D89`) — there is no line to have a position in ·
 ☑ the scenario runner and the demo endpoint hand both walks over — no faked IVR or intake anywhere
 ☐ prompt studio · ☐ real TTS voice (the null engine renders no audio) · ☐ post-call rating keypress ·
 ☐ media gateway (per-leg fork) · ☐ recording + encryption · ☐ VAD endpointing · ☐ streaming STT
@@ -377,7 +378,7 @@ performing by hand, i.e. what the next services take over (`D36`).
 | Ports defined | 8 (telephony, stt, llm, tts, core_data, event_bus, blob_storage, agent_directory) |
 | Persisted tables | **9** + Alembic, verified on a live Postgres. Presence, the waiting pool and the live identity are deliberately **not** among them (`D78`) |
 | Adapters | 9 fakes/nulls + a caching/circuit-breaking decorator; no real vendor adapter yet |
-| Spoken lines | 29 prompts + 17 flow roles -> **64 distinct clips** after dedupe (`D80`); rendered by the null engine, so a manifest rather than audio |
+| Spoken lines | 27 prompts + 15 flow roles -> **54 distinct clips** after dedupe (`D80`); rendered by the null engine, so a manifest rather than audio |
 | Call states | 15, transition table self-validated (the rating is an event, not a state — `D46`) |
 | Event types | 19 |
 | Scenarios | 3 (in-app happy path, cold-call motor claim, fully degraded) |
@@ -409,7 +410,7 @@ vs Typhoon measured rather than argued).
 
 Everything above the audio is done, and none of it needed a model or a sound card: every spoken
 line is text in one file rendered at build time, the keypad menu that routes the call is a real
-service, and so is the offer that runs after it — a caller now hears their position, is offered
+service, and so is the offer that runs after it — a caller is now offered
 the recording, and either takes it, refuses it (recorded as a refusal) or ignores it, and all
 three reach the same queue. `IntakeService.on_turn` is the socket the transcriber plugs into; it
 exists, it is tested, and nothing feeds it yet. See `explanations/P3_voice.md` for the reasoning,

@@ -342,8 +342,8 @@
   <section>
     <h2><span class="num">01</span>The one-paragraph version</h2>
     <p class="lede">Before this, the call went: menu → queue → wait silently → an agent answers.
-      Now it goes: menu → queue → <em>“you are number three”</em> → <em>“would you like to
-      describe your problem while you wait?”</em> → they say yes, no, or nothing → an agent answers.</p>
+      Now it goes: menu → queue → <em>“please hold”</em> → <em>“would you like to describe your
+      problem while you wait?”</em> → they say yes, no, or nothing → an agent answers.</p>
     <p>That is the entire feature. What took the work was making sure the middle part
       <strong>cannot break the beginning</strong>.</p>
   </section>
@@ -358,7 +358,7 @@
     <p>So the design splits the call in half, and the split is load-bearing:</p>
 
     <figure>
-      <svg viewBox="0 0 640 236" role="img" aria-label="A vertical flow: greeting and recording notice, then two menu questions, then a horizontal line labelled the queue is now known, below which sit the queue position, the intake offer and the recording. Everything above the line is labelled the floor; everything below is labelled the delta.">
+      <svg viewBox="0 0 640 236" role="img" aria-label="A vertical flow: greeting and recording notice, then two menu questions, then a horizontal line labelled the queue is now known, below which sit a please-hold line and the intake offer. Everything above the line is labelled the floor; everything below is labelled the delta.">
         <defs>
           <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
             <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
@@ -386,7 +386,7 @@
           <line x1="275" y1="134" x2="275" y2="160" stroke="currentColor" marker-end="url(#ar)"/>
 
           <rect x="150" y="162" width="250" height="26" rx="3" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="4 3"/>
-          <text x="275" y="179" text-anchor="middle">“you are number three”</text>
+          <text x="275" y="179" text-anchor="middle">“please hold”</text>
 
           <line x1="275" y1="188" x2="275" y2="200" stroke="currentColor" marker-end="url(#ar)"/>
 
@@ -427,8 +427,8 @@
     <h2><span class="num">03</span>What the caller actually hears now</h2>
     <p>All of it is real, pre-rendered Thai from one YAML file — no studio, no live synthesis,
       works with no internet:</p>
-    <pre><code>ขณะนี้ท่านอยู่ในลำดับที่ 3
-   “You are number three in the queue.”
+    <pre><code>กรุณาถือสายรอสักครู่ค่ะ
+   “Please hold for a moment.”
 
 ระหว่างรอสาย ท่านสามารถเล่าเรื่องที่ต้องการติดต่อไว้ล่วงหน้าได้
 เจ้าหน้าที่จะเห็นข้อมูลทันทีที่รับสาย
@@ -437,14 +437,27 @@
     The agent will see it the moment they answer.
     Press 1 to record a message, press 2 to keep holding.”</code></pre>
 
-    <h3>They hear their position. They do not hear a made-up wait.</h3>
-    <p>The original line was <em>“you are number three, about two minutes”</em>. We can count a
-      queue exactly. We cannot yet predict how long it takes to drain — there is no handle-time
-      data, and the machinery for that is written but deliberately switched off until real call
-      volumes exist.</p>
-    <p>So there are now three lines instead of one, and the caller only ever hears the half we
-      actually know. An invented <em>“about two minutes”</em> is a promise, and it becomes a
-      visible lie at minute eight — to the one caller least inclined to forgive it.</p>
+    <h3>No position, and no estimated wait. That took two goes to get right.</h3>
+    <p>The first version said <em>“you are number three, about two minutes.”</em> Then
+      <em>“you are number three”</em>, on the reasoning that we can count a queue exactly even
+      though we cannot predict how long it drains.</p>
+    <p><strong>Both were wrong, because there is no line to have a position in.</strong> The
+      matcher builds a full caller × agent matrix and re-solves it every tick. Arrival order is
+      not an input anywhere. What the code was actually computing was <em>the size of the pool
+      when you arrived</em> — and then saying it out loud as though it were a place in a queue.</p>
+    <p>Here is the real scoring code on three callers, one queue, one free agent:</p>
+    <pre><code>caller                                      urgency    fit    score
+arrived 1st, waited 200s, routine             3.000  0.650    1.950
+arrived 2nd, waited  90s, routine             2.050  0.650    1.333
+arrived 3rd, waited   0s, EMERGENCY           2.200  1.050    2.310  &lt;- answered first</code></pre>
+    <p>Give all three the same fit and the 200-second waiter wins instead — waiting pushes
+      urgency to its ceiling and beats an emergency on its own. <strong>Both overtakes are the
+      design working correctly</strong>, and both make an announced number a promise the system
+      breaks. Worse, it breaks it most often for low-urgency callers — the patient ones, most
+      likely to have believed it.</p>
+    <p>So the caller now hears <span class="th">“กรุณาถือสายรอสักครู่ค่ะ”</span> and nothing
+      else. The lesson is small and sharp: <em>we can count a pool</em> is not <em>we can rank
+      it</em>.</p>
   </section>
 
   <section>
@@ -612,7 +625,34 @@ hold settled      … outcome=cut_short recording=False</code></pre>
   </section>
 
   <section>
-    <h2><span class="num">08</span>What is still missing</h2>
+    <h2><span class="num">08</span>What the recording is allowed to change</h2>
+    <p class="lede">It can change <strong>who</strong> answers and <strong>how soon</strong>.
+      It can never change <strong>which queue</strong>.</p>
+    <p>That boundary is now written down (<code>D92</code>), because it was implied and never
+      stated — and the code that could break it hasn't been written yet, which is the right
+      moment to fix a rule.</p>
+    <div class="scroller">
+      <table>
+        <thead><tr><th>Decided by</th><th>What it sets</th><th>Can speech move it?</th></tr></thead>
+        <tbody>
+          <tr><td>the keypad</td><td><code>queue_id</code>, <code>required_skill</code></td><td><strong>No.</strong> Frozen once the menu ends</td></tr>
+          <tr><td>the keypad, refined by speech</td><td><code>intent_urgency</code></td><td>Yes — how soon, relative to others on the same queue</td></tr>
+          <tr><td>context and history</td><td>the fit signals</td><td>Yes — which agent, within the queue</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>The reason is the worst case. Under this rule a mis-transcription costs the caller a
+      slightly less ideal agent on the right queue. Without it, the least reliable component in
+      the system gets to move them off the right queue entirely — and the keypress is the one
+      piece of intent the caller <em>deliberately</em> gave us.</p>
+    <p>A caller genuinely in the wrong queue is a <strong>transfer</strong>, done by a human who
+      has actually spoken to them. Re-routing should have a person attached.</p>
+    <p><strong>Today none of it is wired anyway.</strong> Every matcher input traces back to the
+      menu; the transcript reaches the agent's screen and nothing else.</p>
+  </section>
+
+  <section>
+    <h2><span class="num">09</span>What is still missing</h2>
     <p class="lede">The audio. All of it.</p>
     <p>There is no media gateway, no voice-activity detection, no speech-to-text worker, and no
       encrypted recording. The socket they plug into is real and tested —
@@ -627,7 +667,7 @@ hold settled      … outcome=cut_short recording=False</code></pre>
   </section>
 
   <section>
-    <h2><span class="num">09</span>Where all of this is written down</h2>
+    <h2><span class="num">10</span>Where all of this is written down</h2>
     <p>New code, five files:</p>
     <div class="scroller">
       <table>
@@ -635,7 +675,7 @@ hold settled      … outcome=cut_short recording=False</code></pre>
           <tr><th>File</th><th>What it is</th></tr>
         </thead>
         <tbody>
-          <tr><td><code>services/intake/hold.py</code></td><td>the machine: position, offer, re-offer, recording, and its four endings. No input or output of any kind, so every rule is testable</td></tr>
+          <tr><td><code>services/intake/hold.py</code></td><td>the machine: the offer, re-offer, recording, and its four endings. No input or output of any kind, so every rule is testable</td></tr>
           <tr><td><code>services/intake/strategy.py</code></td><td>the swappable seam — today it listens, one day it will talk back</td></tr>
           <tr><td><code>services/intake/passive.py</code></td><td>the listening version: keep every word, say nothing</td></tr>
           <tr><td><code>services/intake/service.py</code></td><td>the driver, plus the register of recordings still running</td></tr>
@@ -651,7 +691,7 @@ hold settled      … outcome=cut_short recording=False</code></pre>
           <tr><th>Where</th><th>What went in</th></tr>
         </thead>
         <tbody>
-          <tr><td><code>DECISIONS.md</code></td><td><strong>D88</strong> the offer and the four choices behind it · <strong>D89</strong> position without an invented wait · <strong>D90</strong> repeat moves to <code>0</code></td></tr>
+          <tr><td><code>DECISIONS.md</code></td><td><strong>D88</strong> the offer and the four choices behind it · <strong>D90</strong> repeat moves to <code>0</code> · <strong>D91</strong> no queue position, ever · <strong>D92</strong> speech may not change the queue</td></tr>
           <tr><td><code>diagrams/12_the_menu.md</code></td><td>a new <strong>§12.6</strong> on everything below the queue line</td></tr>
           <tr><td><code>diagrams/src/hold_offer.mmd</code></td><td>new — the machine's four phases and every way out</td></tr>
           <tr><td><code>diagrams/src/flow_ivr_consent.mmd</code></td><td>rewritten — it still showed this as unbuilt</td></tr>
@@ -679,7 +719,7 @@ hold settled      … outcome=cut_short recording=False</code></pre>
   <footer>
     <p><strong>Verified</strong> — 559 tests (517 pass, 42 skipped without the database container) ·
       lint, formatting and strict type-checking clean over 151 files · all three scenarios replay ·
-      61/61 diagrams and the voice pack fresh.</p>
+      61/61 diagrams and the voice pack fresh (54 clips, down from 64).</p>
     <p><strong>Read next</strong> — <code>docs/reading/the_line.html</code> has a working keypad you
       can press your way through · <code>docs/diagrams/12_the_menu.md</code> is the same material
       with the diagrams · <code>docs/DECISIONS.md</code> D88–D90 is the argument in full.</p>

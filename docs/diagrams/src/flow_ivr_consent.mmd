@@ -1,5 +1,5 @@
 %% HANDWRITTEN. Checked against ARCHITECTURE.md S6 + D37 + D14 + D80 + D81 + D82
-%% + D86 + D88 + D89, and against services/ivr/machine.py + services/intake/hold.py
+%% + D86 + D88 + D91 + D92, and against services/ivr/machine.py + services/intake/hold.py
 %% (BUILT through the offer at P3 step 4a; only the AUDIO below is still missing)
 sequenceDiagram
     autonumber
@@ -40,8 +40,8 @@ sequenceDiagram
     Note over IVR,ORCH: ROUTING IS NOW SETTLED. No AI has run. (D37)<br/>Nothing below this line can change where the call goes.
 
     Note over HOLD,C: BUILT at P3 step 4a (D88). What is still missing is the AUDIO.
-    HOLD->>C: "ขณะนี้ท่านอยู่ในลำดับที่ 3"
-    Note right of HOLD: the position only. The wait in minutes is spoken<br/>ONLY when there is a real estimate, and there is<br/>none until P6 brings handle-time data (D89).
+    HOLD->>C: "กรุณาถือสายรอสักครู่ค่ะ"
+    Note right of HOLD: NO position and NO wait estimate (D91). There is no<br/>line to have a position in - the matcher re-solves the<br/>whole call x agent matrix every tick, so arrival order<br/>is not an input and a number would be a promise we break.
     HOLD->>C: "กด 1 เพื่อบันทึกข้อความ กด 2 เพื่อรอสายตามปกติ"
 
     alt presses 1

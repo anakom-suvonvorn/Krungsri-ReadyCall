@@ -136,40 +136,20 @@ class HoldMachine:
 
     # --- starting ---------------------------------------------------------------------
 
-    def begin(
-        self,
-        *,
-        call_session_id: str,
-        position: int | None = None,
-        wait_minutes: int | None = None,
-    ) -> tuple[HoldRun, HoldStep]:
-        """Say where they are in the queue, then make the offer.
+    def begin(self, *, call_session_id: str) -> tuple[HoldRun, HoldStep]:
+        """Acknowledge the wait, then make the offer.
 
-        The position comes first because it is the thing the caller actually wants to
-        know. An offer to record something, delivered before anyone has said how long the
-        wait is, reads as a stalling tactic.
+        **No queue position is spoken, and that is a decision** (`D91`, reversing `D89`).
+        There is no line to have a position in: the matcher scores every waiting caller
+        against every free agent as `fit x urgency` and re-solves the whole matrix each
+        tick, so arrival order is not an input anywhere. A number would be a promise the
+        system deliberately does not keep - and it would be broken most often for the
+        low-urgency callers most likely to have believed it.
         """
         run = HoldRun(call_session_id=call_session_id)
-        lines = [*self._position_lines(position, wait_minutes)]
-        return run, self._offer(run, lines, role=PromptRole.INTAKE_OFFER)
-
-    def _position_lines(self, position: int | None, wait_minutes: int | None) -> list[SpokenLine]:
-        """Say exactly as much as we actually know, and no more (`D89`).
-
-        Three lines rather than one, because counting a queue and predicting how long it
-        takes to drain are different problems and we have only solved the first. An
-        invented "about three minutes" is the kind of confident wrong number that reads
-        as a lie the moment the caller is still waiting at minute eight.
-        """
-        if position is None:
-            return [self._prompts.say(PromptRole.QUEUE_HOLD)]
-        if wait_minutes is None:
-            return [self._prompts.say(PromptRole.QUEUE_POSITION_ONLY, position=position)]
-        return [
-            self._prompts.say(
-                PromptRole.QUEUE_POSITION, position=position, wait_minutes=wait_minutes
-            )
-        ]
+        return run, self._offer(
+            run, [self._prompts.say(PromptRole.QUEUE_HOLD)], role=PromptRole.INTAKE_OFFER
+        )
 
     def _offer(self, run: HoldRun, lines: list[SpokenLine], *, role: PromptRole) -> HoldStep:
         run.phase = HoldPhase.OFFERING

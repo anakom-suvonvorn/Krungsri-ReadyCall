@@ -110,11 +110,9 @@ class IntakeService:
         session: CallSession,
         *,
         caller: CallerInput,
-        position: int | None = None,
-        wait_minutes: int | None = None,
         max_steps: int = 200,
     ) -> HoldReport:
-        """Announce the wait, make the offer, and return the moment it is answered.
+        """Acknowledge the wait, make the offer, and return the moment it is answered.
 
         **It stops at the answer, deliberately.** A caller who pressed 1 is now talking,
         and what ends that is a silence the media side detects, the maximum duration, or
@@ -122,11 +120,7 @@ class IntakeService:
         which is a different request entirely (`D21`). Looping on would mean owning a
         media loop that does not exist yet and inventing what it reports.
         """
-        run, step = self._machine.begin(
-            call_session_id=session.call_session_id,
-            position=position,
-            wait_minutes=wait_minutes,
-        )
+        run, step = self._machine.begin(call_session_id=session.call_session_id)
         live = _LiveHold(
             session=session,
             run=run,

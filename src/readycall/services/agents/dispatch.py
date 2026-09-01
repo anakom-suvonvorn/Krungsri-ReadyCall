@@ -170,12 +170,21 @@ class DispatchService:
         if not offerable:
             return DispatchResult(offered=[], decisions=[], unplaced={})
 
+        now = self._clock.now()
         calls = [
-            # Rebuilt each tick so an agent who has since declined is excluded (`D52`).
-            # `replace` rather than mutation: `WaitingCall` is frozen, and the matcher
-            # holding a reference that changes under it is a bug waiting to happen.
+            # Rebuilt each tick so an agent who has since declined is excluded (`D52`),
+            # **and so the caller's accrued wait is current** (`B12`). `replace` rather
+            # than mutation: `WaitingCall` is frozen, and the matcher holding a reference
+            # that changes under it is a bug waiting to happen.
+            #
+            # `waiting_s` used to be whatever was passed at `admit()` and never moved
+            # again, which fed `score_urgency` a constant: `wait_pressure` stayed at 0,
+            # `sla_risk` never fired, and neither did the wait ceiling that drops a caller
+            # to any-qualified-agent. The whole of `D22`'s anti-starvation was written,
+            # correct, and driven by nothing.
             replace(
                 self._waiting[call_session_id][1],
+                waiting_s=self._waiting[call_session_id][0].wait_seconds(now),
                 excluded_agent_ids=self._assignments.excluded_agents(call_session_id),
             )
             for call_session_id in offerable

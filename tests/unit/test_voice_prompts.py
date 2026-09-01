@@ -187,17 +187,18 @@ class TestTheTextItself:
 
 class TestRendering:
     def test_a_dynamic_prompt_fills_its_slots(self, prompts: PromptPack) -> None:
-        line = prompts.say(PromptRole.QUEUE_POSITION, position=3, wait_minutes=2)
+        line = prompts.say(PromptRole.MENU_OPTION, key="3", label="ติดตามสถานะเคลม")
         assert "3" in line.text
+        assert "ติดตามสถานะเคลม" in line.text
         assert "{" not in line.text
         assert line.is_dynamic
 
     def test_a_missing_slot_raises_rather_than_reaching_the_caller(
         self, prompts: PromptPack
     ) -> None:
-        """The alternative is the caller hearing the word "position" in English."""
+        """The alternative is a caller hearing the literal word "label" read aloud."""
         with pytest.raises(ConfigError, match="missing"):
-            prompts.say(PromptRole.QUEUE_POSITION, position=3)
+            prompts.say(PromptRole.MENU_OPTION, key="3")
 
     def test_an_unexpected_slot_raises_too(self, prompts: PromptPack) -> None:
         """Means the call site and the wording have drifted apart."""
@@ -279,13 +280,15 @@ class TestTheClipCache:
         assert clip_key(text, voice, engine) != clip_key("สวัสดี", "v1", "null")
 
     def test_the_same_rendered_text_is_the_same_clip(self, prompts: PromptPack) -> None:
-        """Why dynamic lines are cacheable at all: everyone third in the queue hears the
-        same clip, so the pack warms up in minutes rather than never."""
-        first = prompts.say(PromptRole.QUEUE_POSITION, position=3, wait_minutes=2)
-        second = prompts.say(PromptRole.QUEUE_POSITION, position=3, wait_minutes=2)
+        """Why dynamic lines are cacheable at all. "กด 3 ติดตามสถานะเคลม" is key `3` in
+        both the motor and the health menu, so it is rendered once and played by both —
+        which is what dedupes the pack from one clip per menu entry down to one per
+        distinct sentence."""
+        first = prompts.say(PromptRole.MENU_OPTION, key="3", label="ติดตามสถานะเคลม")
+        second = prompts.say(PromptRole.MENU_OPTION, key="3", label="ติดตามสถานะเคลม")
         assert first.clip_key("null") == second.clip_key("null")
 
-        different = prompts.say(PromptRole.QUEUE_POSITION, position=4, wait_minutes=2)
+        different = prompts.say(PromptRole.MENU_OPTION, key="4", label="ติดตามสถานะเคลม")
         assert different.clip_key("null") != first.clip_key("null")
 
 

@@ -7,8 +7,6 @@ flowchart LR
         role_menu_option["menu_option"]:::role
         role_menu_reserved_hint["menu_reserved_hint"]:::role
         role_no_input["no_input"]:::role
-        role_queue_position["queue_position"]:::role
-        role_queue_position_only["queue_position_only"]:::role
         role_queue_hold["queue_hold"]:::role
         role_intake_offer["intake_offer"]:::role
         role_intake_reoffer["intake_reoffer"]:::role
@@ -60,10 +58,6 @@ flowchart LR
     p_menu_travel_reason["menu.travel_reason"]:::static
     p_notice_recording["notice.recording"]:::static
     p_queue_hold["queue.hold"]:::static
-    p_queue_position["queue.position
-{position, wait_minutes}"]:::dyn
-    p_queue_position_only["queue.position_only
-{position}"]:::dyn
     p_rating_request["rating.request"]:::static
     p_voicemail_offer["voicemail.offer"]:::static
     p_voicemail_start["voicemail.start"]:::static
@@ -78,8 +72,6 @@ flowchart LR
     role_menu_reserved_hint --> p_menu_reserved_hint
     role_no_input --> p_input_none
     role_queue_hold --> p_queue_hold
-    role_queue_position --> p_queue_position
-    role_queue_position_only --> p_queue_position_only
     role_rating_request --> p_rating_request
     role_recording_notice --> p_notice_recording
     role_voicemail_offer --> p_voicemail_offer

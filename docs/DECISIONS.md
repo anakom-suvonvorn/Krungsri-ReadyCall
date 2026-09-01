@@ -2328,6 +2328,10 @@ workstation. Turns arrive through `IntakeService.on_turn` and today nothing call
 tests and the scenario runner. That is the next slice, and it is the one with the GPU in it.
 
 ## D89. The caller hears their queue position; they hear a wait estimate only when there is one
+> ⚠️ **REVERSED by `D91` (2026-09-01).** The position itself is gone too. This entry's
+> reasoning — *"we can count a queue exactly"* — is true and irrelevant: counting a pool
+> is not ranking it, and the matcher re-solves the whole matrix each tick, so nobody has
+> a position. Kept as a record of the mistake, which is the interesting part.
 _Split out of `D88` because it is a product rule, not a mechanism._
 
 - **Problem.** `queue.position` says *"you are number {position}, about {wait_minutes}
@@ -2384,3 +2388,81 @@ _Amends `D86`. Proposed by the user, one session after the operator key was remo
   prompt may spell it out.** Worth grepping the pack for others.
 - **Cost:** one re-rendered clip (`menu.invalid` becomes dynamic, warmed at `0`), and two
   tests replaced because the behaviour they described genuinely changed.
+
+## D91. The caller is never told a queue position, because there is no queue to have one in
+_Reverses `D89`, two days later. The user asked whether announcing a position made sense
+given the matcher, and it does not._
+
+- **What `D89` claimed, and the exact error.** `D89` split the position line in two so the
+  caller heard *"you are number three"* without an invented wait, on the grounds that **"we
+  can count a queue exactly; we cannot yet predict how long it drains."** The first clause is
+  true and **irrelevant**. Counting a pool is not ranking it. I conflated *we can count* with
+  *we can rank*, which is the same shape as `B3`, `B4` and `B7`: a confident, plausible,
+  wrong result that every test agreed with because no test asked the question.
+- **There is no line.** `MatchingEngine.match()` builds a full call x agent matrix and solves
+  it with the Hungarian algorithm **every tick** (`D22`, `D49`). Arrival order is not an input
+  anywhere in `WaitingCall`, `score_fit` or `score_urgency`. What `_queue_position()` actually
+  computed was `len(pool on this queue) + 1` — *the size of the pool at the moment you
+  arrived* — and that number was then spoken as **"ลำดับที่ 3"**, position three.
+- **The number is wrong in both directions, and both are correct behaviour.** Measured against
+  the real scoring code, one queue, one free agent:
+
+  | caller | urgency | fit | score |
+  |---|---|---|---|
+  | arrived 1st, waited 200 s, routine | 3.000 | 0.650 | 1.950 |
+  | arrived 2nd, waited 90 s, routine | 2.050 | 0.650 | 1.333 |
+  | arrived 3rd, waited 0 s, **emergency**, reaches a specialist | 2.200 | 1.050 | **2.310** |
+
+  The third caller is answered first. Give all three the same fit and the 200-second waiter
+  wins instead — waiting drives `wait_pressure` to the urgency ceiling and beats CRITICAL on
+  its own. **Both overtakes are the design working**, and both make an announced position a
+  promise the system breaks.
+- **The damage is asymmetric.** Overtaking lands hardest on low-urgency callers — who are
+  exactly the patient ones most likely to have believed the number and least likely to
+  complain about anything else.
+- **Decision:** no position, no estimated wait. The caller hears **"กรุณาถือสายรอสักครู่ค่ะ"**
+  and then the offer. `queue.position` and `queue.position_only` are **deleted** from the
+  pack, and `QUEUE_POSITION` / `QUEUE_POSITION_ONLY` from `PromptRole`, so the line cannot be
+  re-added by config alone. The pack drops from 64 clips to 54.
+- **Alternatives considered, and why not:**
+  - **speak the true count** — *"there are 3 calls waiting"*. Literally true and cheap, but a
+    caller hears it as *"3 ahead of me"*, which is the same broken promise in a thinner
+    disguise.
+  - **state the policy** — *"calls are answered in order of urgency"*. Honest, and a better
+    story than a fake position. Rejected **for now** only because it is a new Thai line that
+    wants a native check, and because saying nothing is already correct. Worth revisiting
+    with Krungsri: it pre-empts the *"why did they get through first"* complaint, which is
+    the real operational cost of non-FIFO answering.
+  - **compute a real rank and re-announce it** — it would go stale within a tick, and it
+    would sometimes have to announce a number going **up**, which is worse than silence.
+- **What this costs:** a caller in a long queue now gets no progress feedback at all. That is
+  a genuine loss and it is the reason to revisit the policy line later. It is still better
+  than a number we contradict.
+- **The rule worth keeping.** *Never speak a number the system does not treat as binding.*
+  `D18` says show, do not claim — this is that rule pointed at the caller instead of the agent.
+
+## D92. Speech may change WHO answers and HOW SOON, never WHICH QUEUE
+_The boundary `D23` implied and never stated. Written before P4 builds the intent blend,
+because P4 is the first code that can cross it._
+
+- **Problem.** `D23` says the effective intent is a confidence-weighted blend of the
+  keypad/app/DID intent and the speech-derived one, and that fit is recomputed on every
+  `analysis.brief.updated`. It never says what the blend is allowed to *move*. Since
+  `WaitingCall.required_skill` is derived from the queue spec, a speech-revised intent could
+  silently re-route the product line — and `D37`'s floor would stop being a floor.
+- **Decision:** the keypad owns **`queue_id` and `required_skill`**, and speech may not
+  change either. Speech may move **`intent_urgency`** and the **fit signals** — so it decides
+  which agent within the queue, and how soon relative to other callers on it.
+- **Reasoning.** The worst case has to stay survivable. Under this rule a mis-transcription
+  costs the caller a slightly less ideal agent on the right queue; under the alternative it
+  costs them the right queue entirely, decided by the least reliable component in the system
+  (`D12`, `D37`). The keypress is also the one piece of intent evidence the caller
+  *deliberately* gave us — overriding it with an inference is the wrong way round.
+- **This is not a limitation, it is the product's shape.** "The AI makes the agent's screen
+  useful; it does not make the routing possible" is only true if something enforces it.
+- **Where it will be enforced:** whatever P4 writes must produce a *new urgency and new fit
+  inputs*, never a new `queue_id`. A test should assert that a transcript cannot change
+  `session.queue_id` after `QUEUED` — write it with the blend, not after.
+- **The escape hatch that already exists.** A caller genuinely in the wrong queue is a
+  **transfer** (`D63`), performed by a human who has spoken to them. That is the right place
+  for it: re-routing is a judgement with a person attached, exactly like `D44`'s attestation.
