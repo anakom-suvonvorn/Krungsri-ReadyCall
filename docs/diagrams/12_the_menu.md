@@ -130,8 +130,8 @@ parity means the awkward cases are handled at least as well as a system with no 
 
 | The caller does | What happens | Why that rule |
 |---|---|---|
-| presses `0` | nothing special — it is an unrecognised digit like any other, so: sorry, here are the options again (`D86`) | the way out is the menu's own spoken **"เรื่องอื่นๆ"**, which every reason menu ends in. A shortcut to a destination the menu already offers costs a reserved key and buys two keypresses |
-| presses `9` | hears the menu again, and it costs nothing | re-listening is being careful, not failing |
+| presses `0` **expecting an operator** | hears the menu again rather than an apology (`D90`) | the way out is the menu's own spoken **"เรื่องอื่นๆ"**, which every reason menu ends in. `D86` removed the operator because it routed exactly where the catch-all routes; `D90` then put repeat on the freed key, so the old habit now buys something useful |
+| presses `0` | hears the menu again, and it costs nothing | re-listening is being careful, not failing — and `0` is where a lost caller's thumb already goes (`D90`) |
 | presses a wrong key | apology naming both escape keys, then the menu again — **with no limit** (`D82`) | a wrong key *proves* somebody is there. Giving up after N mistakes throws away the good answer we were seconds from getting |
 | says nothing | one re-prompt, then a queue | silence does **not** prove anybody is there, so this half stays bounded |
 | says nothing on a product-line number | that **line's** queue, not the general one (`D40`) | they told us something; throwing it away is worse service than using it |

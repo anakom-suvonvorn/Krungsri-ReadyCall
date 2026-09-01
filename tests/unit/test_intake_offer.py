@@ -38,7 +38,7 @@ from readycall.services.intake.passive import PassiveRecordIntake
 from readycall.services.intake.service import IntakeService
 from readycall.services.intake.strategy import IntakeStrategy
 from readycall.services.ivr.service import ScriptedChoices
-from readycall.voiceprompts import PromptPack
+from readycall.voiceprompts import PromptPack, PromptRole
 from tests.conftest import REPO_ROOT
 
 CONFIG = REPO_ROOT / "config"
@@ -85,6 +85,22 @@ class TestWhatIsSaid:
     def test_knowing_neither_falls_back_to_please_hold(self, machine: HoldMachine) -> None:
         _, step = machine.begin(call_session_id="call_1")
         assert _played(step) == ["queue.hold", "intake.offer"]
+
+    def test_the_offer_names_the_keys_the_machine_actually_honours(
+        self, prompts: PromptPack
+    ) -> None:
+        """`D90`'s lesson, applied before it bites here.
+
+        `menu.invalid` spelled "กด 9" into its Thai while `menus.yaml` owned the real
+        value, so the two could drift and nothing would fail. The offer's keys live in
+        `HoldMachine` rather than in config, but the prompt still spells them out — so
+        this is the test that stops the Thai and the code disagreeing about which button
+        records.
+        """
+        for role in (PromptRole.INTAKE_OFFER, PromptRole.INTAKE_REOFFER):
+            text = prompts.say(role).text
+            assert f"กด {HoldMachine.RECORD_KEY} " in text, role
+            assert f"กด {HoldMachine.HOLD_KEY} " in text, role
 
     def test_the_reoffer_uses_the_shorter_wording(self, machine: HoldMachine) -> None:
         """They have heard the pitch. Repeating it verbatim is nagging with extra words."""
@@ -144,8 +160,9 @@ class TestAnsweringTheOffer:
     def test_the_repeat_key_means_the_same_thing_it_means_everywhere_else(
         self, machine: HoldMachine, pack: DomainPack
     ) -> None:
-        """A caller who learned `9` in the menu must not find it means something else
-        thirty seconds later."""
+        """A caller who learned the repeat key in the menu must not find it means
+        something else thirty seconds later. It moved to `0` in `D90` and it moved in
+        both machines at once, because both read it from `menus.yaml`."""
         run, _ = machine.begin(call_session_id="call_1", position=1)
         step = machine.on_digit(run, pack.menu_settings.repeat_key)
         assert _played(step) == ["intake.offer"]

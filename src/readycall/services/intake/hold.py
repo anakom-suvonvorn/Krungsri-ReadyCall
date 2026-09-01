@@ -237,8 +237,9 @@ class HoldMachine:
             return HoldStep(lines=(self._prompts.say(PromptRole.INTAKE_DECLINED),))
 
         if digit == self._settings.repeat_key:
-            # Same key as everywhere else in the call. A caller who learned `9` in the
-            # menu must not find it means something different thirty seconds later.
+            # Same key as everywhere else in the call. A caller who learned the repeat
+            # key in the menu must not find it means something different thirty
+            # seconds later (`D90` moved it; it moved in both places at once).
             return HoldStep(lines=(self._prompts.say(self._offer_role(run)),), expects_input=True)
 
         run.wrong_presses += 1
@@ -253,7 +254,9 @@ class HoldMachine:
             return HoldStep(lines=())
         return HoldStep(
             lines=(
-                self._prompts.render(self._settings.invalid_prompt),
+                self._prompts.render(
+                    self._settings.invalid_prompt, repeat_key=self._settings.repeat_key
+                ),
                 self._prompts.say(self._offer_role(run)),
             ),
             expects_input=True,

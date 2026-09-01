@@ -120,16 +120,22 @@ class TestNeverADeadEnd:
         assert step.outcome.kind is IvrOutcomeKind.ROUTED
         assert step.outcome.intent_code == "general.other"
 
-    def test_zero_is_now_just_an_unrecognised_key(
+    def test_zero_now_repeats_the_menu_instead_of_apologising(
         self, machine: IvrMachine, pack: DomainPack
     ) -> None:
-        """And costs the caller nothing, because a wrong key is never a strike (`D82`)."""
+        """`D90`. `D86` removed the operator meaning and admitted one cost: a caller who
+        pressed `0` out of habit heard an apology. Moving repeat onto the freed key
+        deletes that cost — they now hear the options again, which is the closest thing
+        to help this menu can give them."""
+        assert pack.menu_settings.repeat_key == "0"
         run, _ = machine.begin(call_session_id="c", did=pack.did("+6621234000"))
         step = machine.on_digit(run, "0")
 
         assert step.expects_input
         assert not run.finished
-        assert step.lines[0].prompt_id == pack.menu_settings.invalid_prompt
+        assert run.attempts == 0, "repeating is not a mistake"
+        assert step.lines[0].prompt_id != pack.menu_settings.invalid_prompt
+        assert step.lines[0].prompt_id == pack.menus["product_line"].prompt
 
     def test_every_reason_menu_still_ends_in_a_catch_all(self, pack: DomainPack) -> None:
         """With the operator key gone this is the ONLY way out of a reason menu, so the
@@ -177,9 +183,20 @@ class TestNeverADeadEnd:
 
     def test_the_apology_names_the_repeat_key(self, prompts: PromptPack, pack: DomainPack) -> None:
         """With no attempt limit, hearing the options again has to be offered — otherwise
-        "press again" is the only advice a lost caller ever gets."""
-        invalid = prompts.spec(pack.menu_settings.invalid_prompt).text_th
-        assert pack.menu_settings.repeat_key in invalid
+        "press again" is the only advice a lost caller ever gets.
+
+        Asserted on the RENDERED line, not the template. The template used to spell the
+        digit out (`"กด 9 …"`) while `menus.yaml` owned the real value, so the two could
+        disagree silently and the apology could name a key the IVR no longer honoured.
+        It is a declared slot now (`D90`), and this is the test that keeps it one.
+        """
+        spec = prompts.spec(pack.menu_settings.invalid_prompt)
+        assert "repeat_key" in spec.slots, "the key must come from menus.yaml, not the text"
+
+        line = prompts.render(
+            pack.menu_settings.invalid_prompt, repeat_key=pack.menu_settings.repeat_key
+        )
+        assert pack.menu_settings.repeat_key in line.text
 
     def test_a_wrong_press_replays_the_menu_with_an_apology_first(
         self, machine: IvrMachine, pack: DomainPack
@@ -191,8 +208,8 @@ class TestNeverADeadEnd:
         assert step.lines[1].prompt_id == pack.menus["product_line"].prompt
 
     def test_repeating_is_not_a_mistake(self, machine: IvrMachine, pack: DomainPack) -> None:
-        """`9` must not spend an attempt. Someone who did not catch the options the first
-        time is being careful, not failing."""
+        """The repeat key must not spend an attempt. Someone who did not catch the options
+        the first time is being careful, not failing."""
         run, _ = machine.begin(call_session_id="c", did=pack.did("+6621234000"))
         for _ in range(5):
             step = machine.on_digit(run, pack.menu_settings.repeat_key)

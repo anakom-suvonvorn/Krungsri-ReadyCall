@@ -145,14 +145,16 @@
       "storage_ref": "prompt://b2738e8b64c2bc57"
     },
     {
-      "clip_key": "abe6ca9dbd673cf330a10343529838cb",
+      "clip_key": "e3df70fc48090a08da8a88d3bd93b343",
       "prompt_id": "menu.invalid",
-      "text": "ขออภัยค่ะ ไม่พบหมายเลขที่ท่านเลือก กด 9 เพื่อฟังตัวเลือกอีกครั้ง",
+      "text": "ขออภัยค่ะ ไม่พบหมายเลขที่ท่านเลือก กด 0 เพื่อฟังตัวเลือกอีกครั้ง",
       "voice": "th-TH-female-1",
-      "slots": {},
+      "slots": {
+        "repeat_key": "0"
+      },
       "duration_ms": 9600.0,
       "sample_rate": 16000,
-      "storage_ref": "prompt://f7cda7e8d8bea57b"
+      "storage_ref": "prompt://5fa651cb6775376a"
     },
     {
       "clip_key": "d374f2f2cae43e38e887d7aa3de317f8",
@@ -559,16 +561,16 @@
       "storage_ref": "prompt://57d4bb316275c5e1"
     },
     {
-      "clip_key": "7f0f74471aa7e26cf8071eb210a53f2d",
+      "clip_key": "ced8e865d7af1d64c2c8b5c7ebb8be37",
       "prompt_id": "menu.reserved_hint",
-      "text": "กด 9 เพื่อฟังอีกครั้ง",
+      "text": "กด 0 เพื่อฟังอีกครั้ง",
       "voice": "th-TH-female-1",
       "slots": {
-        "repeat_key": "9"
+        "repeat_key": "0"
       },
       "duration_ms": 3150.0,
       "sample_rate": 16000,
-      "storage_ref": "prompt://526042999a0b7ca4"
+      "storage_ref": "prompt://594ca6571a90feb6"
     },
     {
       "clip_key": "eda40a966c052b036dbcc7b1561a112b",

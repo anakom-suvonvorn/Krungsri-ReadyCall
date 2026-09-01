@@ -15,7 +15,7 @@ right queue through a real menu hearing real (pre-rendered) Thai — and now, **
 is settled, they hear their position, are offered the pre-call recording, and take it or
 refuse it or ignore it, all three reaching the same agent**.
 
-Verified **2026-08-31**: **558 tests** — 516 pass + 42 skipped without the Postgres
+Verified **2026-08-31**: **559 tests** — 517 pass + 42 skipped without the Postgres
 container (the 42 are the database cases). `ruff check` + `ruff format --check` clean over 151 files,
 `mypy --strict` clean over 112, all scenarios replay, 61/61 diagrams current, prompt pack fresh.
 
@@ -97,7 +97,7 @@ and a `flow:` table mapping **17 roles** to ids so `services/` holds no prompt l
 gate *and* a test · `scripts/build_prompts.py` hash-cached by (text, voice, engine), deduped
 by rendered text to **64 clips**, committed manifest asserted fresh · **`services/ivr/`** —
 greeting + notice → product menu (skipped when the DID or app said) → reason menu → queue,
-with `9` the only reserved key (`D86`), a wrong press never a strike (`D82`), and every
+with `0` the only reserved key (`D86`, `D90`), a wrong press never a strike (`D82`), and every
 failure path ending in a queue rather than a hang-up · personalised ordering with its
 evidence · **a menu is composed, not one clip** (`D80`) · **`menu_path` is canonical whatever
 was pressed** (`D81`) · both fake IVR walks retired — `run_scenario.py`'s `# P1:` and
@@ -484,10 +484,15 @@ Facts about *this laptop* rather than the repo, so a fresh session does not redi
   and the fuller `queue.position` line switches on when P6 brings handle-time data.
 - **Never hardcode an insurance literal in `services/`** — it goes in `config/` (`D28`).
 - **Never `datetime.now()` or a raw random id** outside `clock.py`/`ids.py` (`D35`).
-- **There is NO operator key** (`D86`, reversing `D83`). `9` is the only reserved key. The
-  way out of a menu is its own spoken "เรื่องอื่นๆ" option, which is why
-  `test_every_reason_menu_still_ends_in_a_catch_all` is load-bearing rather than tidy. Do
-  not re-add `0` on "it is the convention": it routed exactly where the catch-all routes.
+- **There is NO operator key, and `0` is the REPEAT key** (`D86` removed the operator,
+  `D90` moved repeat onto it). It is the only reserved key. The way out of a menu is its own
+  spoken "เรื่องอื่นๆ" option, which is why `test_every_reason_menu_still_ends_in_a_catch_all`
+  is load-bearing rather than tidy. Do not re-add an operator on "it is the convention": it
+  routed exactly where the catch-all routes — and `0` is not free any more anyway.
+- **Never spell the repeat key into a prompt's text** (`D90`). `menu.invalid` said "กด 9"
+  as a literal while `menus.yaml` owned the real value, so moving the key would have left
+  the apology naming a digit the IVR no longer honoured — and nothing would have failed.
+  It is a declared `{repeat_key}` slot now, and a test asserts it stays one.
 - **Never block the state buttons to force a wrap-up** (`D87`). It re-couples what `D45`
   separated, traps an agent who needs to leave, and *incentivises garbage* — forced to file
   before they can go, somebody types "." and saves, and now the record looks filed and is

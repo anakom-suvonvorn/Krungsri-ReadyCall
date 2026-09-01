@@ -207,7 +207,7 @@ class TestRendering:
     def test_the_reserved_hint_speaks_the_key_the_ivr_actually_honours(
         self, prompts: PromptPack, pack: DomainPack
     ) -> None:
-        """`9` repeats, in every menu, and it is the only reserved key left (`D86`). The
+        """`0` repeats, in every menu, and it is the only reserved key left (`D86`, `D90`). The
         hint is rendered from the same settings the IVR reads, so it cannot promise a key
         that does nothing."""
         settings = pack.menu_settings

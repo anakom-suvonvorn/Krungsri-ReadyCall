@@ -1,4 +1,4 @@
-%% HANDWRITTEN. Checked against D37 + D80 + D81 + D86
+%% HANDWRITTEN. Checked against D37 + D80 + D81 + D86 + D90
 flowchart TB
     subgraph anon["<b>ANONYMOUS CALLER</b> - nothing known"]
         a1["<i>lead-in</i><br/>กรุณาเลือกประเภทประกัน..."]:::lead
@@ -7,7 +7,7 @@ flowchart TB
         a4["กด 3 ประกันเดินทาง"]:::opt
         a5["กด 4 ประกันชีวิต"]:::opt
         a6["กด 5 เรื่องอื่นๆ"]:::opt
-        a7["<i>hint</i><br/>กด 9 เพื่อฟังอีกครั้ง"]:::lead
+        a7["<i>hint</i><br/>กด 0 เพื่อฟังอีกครั้ง"]:::lead
         a1 --> a2 --> a3 --> a4 --> a5 --> a6 --> a7
     end
 

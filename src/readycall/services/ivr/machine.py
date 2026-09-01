@@ -9,7 +9,8 @@ parity with an ordinary call centre, and every rule below exists to keep it ther
   about to get for a guaranteed mediocre one;
 * silence IS bounded, because it does not prove anybody is there: one re-prompt, then
   route to a human;
-* `9` repeats and costs nothing — re-listening is not an error;
+* `0` repeats and costs nothing — re-listening is not an error, and `0` is where a lost
+  caller's thumb already goes (`D90`);
 * **there is no operator key** (`D86`). Every menu ends in a spoken "เรื่องอื่นๆ" option that
   routes to the same place `0` used to, so the shortcut cost a reserved key and bought two
   keypresses.
@@ -241,7 +242,9 @@ class IvrMachine:
             # menu again. Unlimited, on purpose (`D82`).
             return IvrStep(
                 lines=(
-                    self._prompts.render(self._settings.invalid_prompt),
+                    self._prompts.render(
+                        self._settings.invalid_prompt, repeat_key=self._settings.repeat_key
+                    ),
                     *run.presentation.lines,
                 ),
                 expects_input=True,

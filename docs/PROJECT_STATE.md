@@ -45,7 +45,7 @@ caller keys their way through the real menu to the right queue, hears their posi
 the recording and either takes it or does not, the desk rings, the brief is already there, and
 the disclosure gate moves when the agent attests.
 
-Verified on 2026-08-31: **558 tests** — 516 pass + 42 skipped without the Postgres container
+Verified on 2026-08-31: **559 tests** — 517 pass + 42 skipped without the Postgres container
 (the 42 are the database cases).
 `ruff check` and `ruff format --check` clean over 144 files, `mypy --strict`
 clean over **106** source files, and all three scenarios replay byte-identically. The database
@@ -372,7 +372,7 @@ performing by hand, i.e. what the next services take over (`D36`).
 | | |
 |---|---|
 | Source files | 149 Python files (`src/` 110 + `tests/` + `scripts/` + `mock/`) |
-| Tests | 558, all passing, ~115 s (137 store contract + restart across 3 backends; 55 on the prompt pack and the IVR; 39 on the hold and the intake seam) |
+| Tests | 559, all passing, ~113 s (137 store contract + restart across 3 backends; 56 on the prompt pack and the IVR; 40 on the hold and the intake seam) |
 | Ports defined | 8 (telephony, stt, llm, tts, core_data, event_bus, blob_storage, agent_directory) |
 | Persisted tables | **9** + Alembic, verified on a live Postgres. Presence, the waiting pool and the live identity are deliberately **not** among them (`D78`) |
 | Adapters | 9 fakes/nulls + a caching/circuit-breaking decorator; no real vendor adapter yet |

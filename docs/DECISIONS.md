@@ -475,9 +475,10 @@ _`D37`–`D38` added 2026-08-19 after a design review of the call flow._
   - The menu is **skipped when we already know**: the app tap gives line and often intent;
     a product-line DID gives the line. Asking a question we know the answer to is bad
     service.
-  - `config/menus.yaml` holds the tree. Reserved keys are consistent everywhere (`9`
-    repeat — **and `9` is the only one; `D86` removed the operator key**), every reason menu
-    has a catch-all option, and no menu exceeds seven spoken options — all enforced by tests.
+  - `config/menus.yaml` holds the tree. Reserved keys are consistent everywhere (`0`
+    repeat — **and it is the only one**: `D86` removed the operator key, `D90` moved repeat
+    onto it), every reason menu has a catch-all option, and no menu exceeds seven spoken
+    options — all enforced by tests.
 - **Reasoning:** This re-frames the product honestly. **The base is parity with what
   already exists** — reliable keypad routing that needs no AI, no consent and no speech.
   **The AI is the delta on top**: it makes the agent's screen useful rather than making
@@ -2171,9 +2172,12 @@ than on the mechanism._
      where the catch-all lands. So it was a *shortcut to a destination the menu already
      offers*, saving two keypresses in exchange for a reserved key, a prompt, an outcome
      kind, and a clause in every menu hint.
-- **Decision:** remove it. `repeat_key` (`9`) is now the only reserved key. `0` is simply an
+- **Decision:** remove it. `repeat_key` is now the only reserved key. `0` is simply an
   unrecognised digit, which under `D82` costs the caller nothing — sorry, here are the
   options again.
+  _(**Amended by `D90`, 2026-08-31:** repeat then MOVED onto the freed `0`. The bullet below
+  about "a caller who does press `0` out of habit hears an apology" is therefore no longer
+  true, and that is the whole reason for the move.)_
 - **What replaces it is not "nothing".** Every menu ends in **"เรื่องอื่นๆ"**, spoken aloud as
   a numbered option like any other, routing to that line's catch-all intent. The escape is
   now *part of the menu* rather than a convention the caller has to already know — which is
@@ -2311,7 +2315,7 @@ ask twice, or grant both on one keypress.
 | **a wrong key replays the offer, unlimited** | `D82` — a wrong key proves somebody is there. What bounds the loop is silence, not a strike count |
 | **silence at the offer gets no re-prompt** | unlike the menu. The second chance already exists and is better placed; re-prompting a caller who ignored an offer is nagging |
 | **silence during a recording gets one** | they pressed `1`, so they asked to be heard. Different evidence, different rule |
-| `9` repeats, here as everywhere | a caller who learned it in the menu must not find it means something else thirty seconds later |
+| the repeat key works here too | a caller who learned it in the menu must not find it means something else thirty seconds later |
 | **keys do nothing while holding** | nobody asked a question, so replying would be answering something the caller never said |
 | **other keys are ignored mid-recording** | interrupting a sentence to apologise for a mis-hit is worse than the mis-hit |
 | the strategy **never guesses `degraded`** | no turns can mean silence *or* a dead transcriber, and only the driver knows which. A strategy inventing `stt_unavailable` puts a claim on the agent's screen that nothing checked |
@@ -2339,3 +2343,44 @@ _Split out of `D88` because it is a product rule, not a mechanism._
 - **What switches the fuller line on:** real handle-time data at P6. Nothing else has to
   change — the prompt, its slots and its warm renders already exist.
 - **Tradeoff:** one more clip in the pack (64, up from 63) and a branch in `_position_lines`.
+
+## D90. Repeat moves onto `0`, the key the operator used to occupy
+_Amends `D86`. Proposed by the user, one session after the operator key was removed._
+
+- **Problem.** `D86` removed the operator key and admitted exactly one cost: *"a caller who
+  does press `0` out of habit hears an apology instead of being transferred."* Meanwhile
+  `repeat_key` sat on `9` — where it had been put in `D83` for a reason that no longer
+  existed. `D83` explicitly rejected moving it:
+
+  > *Rejected: moving repeat onto `0`. It only becomes free if the operator key goes, and
+  > `9`-repeats / `0`-operator is the pairing callers already have muscle memory for.*
+
+  Both halves of that are now void. The operator key **did** go, so `0` **is** free; and the
+  muscle-memory claim is the one `D86` demolished — most people call their insurer once or
+  twice a year, which is not enough repetition for a reflex.
+- **Decision:** `repeat_key: "0"`. It remains the only reserved key.
+- **Reasoning, and it is better than "the key was free":**
+  - **`0` is where a lost caller's thumb already goes.** Not from muscle memory for *our*
+    menu — from the cross-service convention that `0` means *"I need a person"*. That
+    instinct is real even when the reflex is not, and it fires precisely when someone is
+    confused. Confused is exactly when hearing the options again helps most.
+  - **It deletes `D86`'s only admitted cost.** Pressing `0` out of habit used to earn an
+    apology for a key that did nothing. It now replays the menu — the closest thing to help
+    this layer can offer, and strictly more useful than *"sorry, I did not find that."*
+  - **The keypad's shape argues for it.** `0` is bottom-centre, alone on its row, findable by
+    touch. `9` is one of nine indistinguishable positions in the grid, and a caller holding a
+    phone to their ear cannot see either.
+- **What it does not change.** Still no operator, still no attempt limit (`D82`), still one
+  reserved key, and the way out of a menu is still the menu's own spoken **"เรื่องอื่นๆ"**.
+  This moves a key; it does not add a path.
+- **The bug found while moving it.** `menu.invalid` spelled the digit into its Thai text —
+  *"…กด 9 เพื่อฟังตัวเลือกอีกครั้ง"* — while `menus.yaml` owned the value the IVR actually
+  honoured. Changing `repeat_key` would have left the apology naming a key that did nothing,
+  **and nothing would have failed**: the prompt guard checks that ids resolve and that slots
+  are declared, and a hardcoded digit is neither. It is a `{repeat_key}` slot now, rendered
+  from `MenuSettings`, and `test_the_apology_names_the_repeat_key` asserts the *rendered*
+  line rather than the template so the two cannot drift apart again.
+  **The lesson is `D28`'s, in a place it had not been applied: if `config/` owns a value, no
+  prompt may spell it out.** Worth grepping the pack for others.
+- **Cost:** one re-rendered clip (`menu.invalid` becomes dynamic, warmed at `0`), and two
+  tests replaced because the behaviour they described genuinely changed.

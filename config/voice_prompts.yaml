@@ -132,12 +132,18 @@ prompts:
       is the "เรื่องอื่นๆ" option, which is already spoken as part of every menu.
 
   menu.invalid:
-    text_th: "ขออภัยค่ะ ไม่พบหมายเลขที่ท่านเลือก กด 9 เพื่อฟังตัวเลือกอีกครั้ง"
+    text_th: "ขออภัยค่ะ ไม่พบหมายเลขที่ท่านเลือก กด {repeat_key} เพื่อฟังตัวเลือกอีกครั้ง"
+    slots: [repeat_key]
+    warm:
+      - { repeat_key: "0" }
     note: >-
-      Says sorry and names the repeat key. There is NO attempt limit behind this line
-      (`D82`) - a caller may press the wrong key all day and will keep being offered the
-      menu, because a caller pressing buttons is present and trying. The way OUT is the
-      "เรื่องอื่นๆ" option, which the menu speaks anyway (`D86`).
+      Says sorry and names the repeat key. The key is a SLOT, not a literal: it used to
+      say "กด 9" in the text while `menus.yaml` owned the real value, so moving the key
+      would have left the apology naming a digit the IVR no longer honoured (`D90`).
+      There is NO attempt limit behind this line (`D82`) - a caller may press the wrong
+      key all day and will keep being offered the menu, because a caller pressing buttons
+      is present and trying. The way OUT is the "เรื่องอื่นๆ" option, which the menu
+      speaks anyway (`D86`).
 
   menu.language:
     text_th: "สำหรับภาษาไทย กด 1 · For English, press 2"

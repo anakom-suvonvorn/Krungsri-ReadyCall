@@ -19,13 +19,18 @@ version: 1
 
 settings:
   barge_in: true              # a keypress interrupts the prompt; menus feel slow otherwise
-  repeat_key: "9"             # "กด 9 เพื่อฟังอีกครั้ง" - the ONLY reserved key (D86)
+  repeat_key: "0"             # "กด 0 เพื่อฟังอีกครั้ง" - the ONLY reserved key (D86, D90)
   #
   # There is deliberately NO operator key (D86, reversing D83). Every menu already ends in
   # "เรื่องอื่นๆ" as a numbered, spoken option, and 0 routed to exactly the same place - so
   # it was a shortcut that saved two keypresses and cost a reserved key, a prompt, an
-  # outcome kind and a clause in every menu hint. `0` is now simply an unrecognised key,
-  # which under D82 costs the caller nothing.
+  # outcome kind and a clause in every menu hint.
+  #
+  # REPEAT THEN MOVED ONTO 0 (D90). Removing the operator meaning left the key free, and 0
+  # is the better home for a "help me" key: bottom-centre, findable by touch, and the one
+  # digit callers reach for when they are lost. A caller who presses it out of old habit
+  # now hears the options again instead of an apology - which is the closest thing to help
+  # this menu can give them, and it deletes the one cost D86 admitted to.
   invalid_prompt: menu.invalid
   timeout_s: 7
 

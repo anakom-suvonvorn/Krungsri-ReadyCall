@@ -334,8 +334,8 @@ prompts were "text waiting for the machinery that plays them". The machinery now
   better fact — nothing granted, and the refusal on the record with its basis.
 - **the caller hears their position and no invented wait** (`D89`). Counting a queue and
   predicting how long it drains are different problems, and only the first is solved.
-- **numbers:** 29 prompts, 17 roles, **64 clips** (up one, for `queue.position_only`), 558
-  tests (516 pass + 42 skipped without the container), 61 diagrams.
+- **numbers:** 29 prompts, 17 roles, **64 clips** (up one, for `queue.position_only`), 559
+  tests (517 pass + 42 skipped without the container), 61 diagrams.
 - **the sweep gained `reoffer_due()`.** `B7` in advance rather than in hindsight: the only
   thing that happens at `INTAKE_REOFFER_AFTER_S` is that the wait got long, so nothing else
   is around to carry it, and its test moves nothing but the clock.

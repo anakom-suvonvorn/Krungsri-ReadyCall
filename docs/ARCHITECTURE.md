@@ -302,10 +302,12 @@ call centre" rather than "a call centre that knows nothing."
 
 - **Skip what we already know.** App tap → line and often intent; product DID → line.
   Asking a question we know the answer to is bad service.
-- **`9` repeats, and it is the ONLY reserved key** (`D86`). There is no operator key: every
-  menu ends in a spoken **"เรื่องอื่นๆ"** that routes to that line's catch-all, so `0` was a
-  shortcut to a destination the menu already offered. The escape is part of the menu rather
-  than a convention the caller has to know.
+- **`0` repeats, and it is the ONLY reserved key** (`D86`, `D90`). There is no operator key:
+  every menu ends in a spoken **"เรื่องอื่นๆ"** that routes to that line's catch-all, so `0`
+  was a shortcut to a destination the menu already offered. The escape is part of the menu
+  rather than a convention the caller has to know. Repeat then moved onto the freed key,
+  because `0` is where a lost caller's thumb already goes — so pressing it out of old habit
+  now gets them the options again instead of an apology.
 - **Every reason menu has a catch-all** ("เรื่องอื่นๆ" → `<line>.other`), so an unexpected
   reason lands with the right line's generalist instead of trapping the caller.
 - **At most seven options**, because past that people stop listening and start pressing

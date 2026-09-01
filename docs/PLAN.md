@@ -178,7 +178,7 @@ started. `explanations/P3_voice.md` covers the built half; `diagrams/12_the_menu
   `D81` — the key pressed is not the key stored; every press resolves to canonical, so
   `menu_path` means the same thing on every call.
 - **`services/ivr/`**: greeting + recording notice → product-line menu (skipped when the DID
-  or the app already said) → reason menu → queue. `9` repeats without spending an attempt,
+  or the app already said) → reason menu → queue. `0` repeats without spending an attempt,
   a wrong key is never a strike (`D82`), two silences route rather than hang up, and a
   product-line number with no keypress still reaches that line's queue.
   *(As written this said "`0` reaches a human from any depth" and "three wrong keys …
