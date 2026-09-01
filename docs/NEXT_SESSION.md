@@ -547,7 +547,11 @@ Facts about *this laptop* rather than the repo, so a fresh session does not redi
 `docs/diagrams/README.md`. Two pages cover the parts with no screen: **`11_persistence.md`**
 (what survives a restart) and **`12_the_menu.md`** (what the caller actually hears — the
 prompt pipeline, why a menu is not one clip, and every path that does not end in a route).
-Both have readable twins in `docs/reading/` you can click through: `persistence.html` has a
+**`the_offer.html`** is the plain-language explanation of everything below the queue line —
+written because the terminal summary of `D88` left the user with no idea what had been
+built. When a slice is hard to see, write the readable page as part of finishing it, not
+after being asked. Both diagram pages have readable twins in `docs/reading/` you can click
+through: `persistence.html` has a
 **restart simulator**, `the_line.html` has a **working keypad** that walks the real menu and
 shows every press resolving back to canonical. Each must be updated with its diagram page —
 and `the_line.html`'s data is generated (`scripts/build_reading_data.py`), with a test that
@@ -610,6 +614,7 @@ URL from another conversation creates a duplicate instead.
 | Page | URL |
 |---|---|
 | `reading/the_line.html` — the keypad | https://claude.ai/code/artifact/5953f7a7-d0c4-4829-8cc7-fec2b6f5b856 |
+| `reading/the_offer.html` — what the intake offer is, in plain language | https://claude.ai/code/artifact/2c6fa04d-089f-4f4c-bfa6-fb4abc95a0af |
 | `reading/persistence.html` — the restart simulator | https://claude.ai/code/artifact/b2a03f9c-01f2-42bc-ae55-3860d901374d |
 | `reading/workstation_wiring.html` | https://claude.ai/code/artifact/23107f9a-17e5-4011-b206-b2e5809a138f |
 

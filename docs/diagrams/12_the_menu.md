@@ -266,6 +266,9 @@ and it is the one with the GPU in it.
   numbers move under you — which is `D81` as something you can do rather than read. That is
   the closest this layer gets to something you can poke at, which is most of why it exists.
   This page and that one must be updated together.
+- **`../reading/the_offer.html`** — §12.6 above in plain language, for a reader who wants
+  the *why* before the mechanism: where the line across the call is, the three answers and
+  why none of them is a failure, and the two things that were wrong the first time.
 - **[Routing](04_routing.md)** — why the menu leads at all, and the tree it walks.
 - **[Voice & AI](07_voice_and_ai.md)** — the strategy seam the offer feeds, and what
   runs on the transcript once there is one.

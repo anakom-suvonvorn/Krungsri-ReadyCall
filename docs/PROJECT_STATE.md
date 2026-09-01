@@ -117,7 +117,8 @@ FullProject/
 ├─ uv.lock  .python-version  .env.example  .gitignore
 ├─ README.md*
 ├─ docs/*                    # ← this documentation system
-│  └─ diagrams/*           # 61 diagrams + 12 explanation pages; a quarter generated from source
+│  ├─ diagrams/*           # 61 diagrams + 12 explanation pages; a quarter generated from source
+│  └─ reading/*            # readable twins: the keypad, the restart, the workstation, the offer
 ├─ config/*                  # ← the entire insurance-specific "domain pack" (D28)
 │  ├─ core_mapping.yaml      # bank-data field mapping (swap target, DATA_MODEL §4)
 │  ├─ matching_weights.yaml* # fit + urgency weights, tunable at runtime
