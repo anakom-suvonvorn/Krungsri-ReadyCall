@@ -100,7 +100,7 @@ one. See [Configuration](#configuration).
 |---|---|---|
 | `uv sync` | runtime only | the scenario runner, the matching simulator, the doc scripts |
 | `uv sync --extra web` | **+ FastAPI / uvicorn / websockets** | the API, the simulator, the workstation, **the full test suite** |
-| `uv sync --extra ml` | *(not declared yet — this fails today)* | local Thai STT, arriving with P3 step 4 |
+| `uv sync --extra ml` | **+ torch (CUDA) / transformers / faster-whisper / silero-vad** | local Thai STT. ~3 GB, needs an NVIDIA GPU, needed by nothing else (§6) |
 
 Three test files import FastAPI, so **`--extra web` is the one to use** unless you have a reason not
 to. The `ml` extra is deliberately still commented out in `pyproject.toml`: it is several gigabytes
@@ -180,12 +180,34 @@ npm install -g @mermaid-js/mermaid-cli
 Or set `MMDC=/path/to/mmdc`. The renderer drives a headless browser; if it cannot find one, set
 `PUPPETEER_EXECUTABLE_PATH` to an installed Chrome or Edge rather than downloading a second Chromium.
 
-### 6. Speech-to-text — *not available yet*
+### 6. Speech-to-text — *optional, and it needs an NVIDIA GPU to be worth installing*
 
-P3 step 4b, the only part of the project with hardware risk. `uv sync --extra ml` **fails
-today** because the extra is still commented out in
-`pyproject.toml`. Until then `STT_ENGINE=scripted` returns canned transcripts, which is what every
-test and the stage-safe demo path use.
+```bash
+uv sync --extra ml --extra web
+```
+
+**Nothing else needs this**, and it is a ~3 GB download. Every test, all three scenarios and
+the stage-safe demo path run on `STT_ENGINE=scripted`, which returns canned transcripts and
+never touches a GPU. Install it only when you are working on the audio.
+
+**`torch` comes from the CUDA index, not PyPI** (`D95`), which `pyproject.toml` already
+configures — you do not have to pass an index URL. This matters because the PyPI wheel is the
+**CPU build** and installing it fails silently: everything imports, everything runs, and
+Whisper is roughly ten times too slow with `torch.cuda.is_available()` quietly `False`.
+
+So check it, rather than assuming the install worked:
+
+```bash
+uv run python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
+```
+
+You want `2.11.0+cu128 True`. A version with **no `+cuXXX` suffix** is the CPU wheel — remove
+the venv (`uv sync --reinstall`) rather than trying to patch over it.
+
+Verified on the dev laptop: RTX 3050 Laptop (sm_86), driver 581.08, **4.00 GiB total and about
+3.2 GiB actually free** — the desktop compositor holds the rest. That is tighter than the
+"4–6 GB" the older docs assumed, and it is why the engine choice is measured (`D30`) rather
+than picked.
 
 ---
 
@@ -376,6 +398,8 @@ uv sync --extra web ──┬─▶ scenario replay          (nothing else neede
 
 docker compose up -d postgres ──▶ alembic upgrade head ──▶ STORAGE_BACKEND=postgres
                                                             └─▶ a shift survives a restart
+
+uv sync --extra ml ──▶ STT_ENGINE=thonburian  (needs an NVIDIA GPU; nothing else needs this)
 ```
 
 Nothing in the left column depends on anything in the right.
@@ -414,7 +438,7 @@ the same reason.
 | A Thai character crashes a script | Windows consoles are cp1252. The app calls `enable_utf8()`; ad-hoc scripts must too, or write to a UTF-8 file |
 | 42 tests skipped | Postgres is not running. Expected — §3 if you want them |
 | `alembic upgrade head` does nothing, but the app says *"relation does not exist"* | the version table is stamped with nothing behind it: `uv run alembic stamp base && uv run alembic upgrade head` |
-| `uv sync --extra ml` fails | correct — the extra is not declared yet (§6) |
+| `torch.cuda.is_available()` is `False` | you have the CPU wheel. The version string will lack `+cu128`. `uv sync --reinstall --extra ml` (§6) |
 | A queue is closed and a call goes to voicemail | queue hours are real. Pass `ignore_hours` on the demo endpoint, or check `config/queue_hours.yaml` |
 | `render_diagrams.py` cannot find a browser | set `PUPPETEER_EXECUTABLE_PATH` to an installed Chrome or Edge |
 
