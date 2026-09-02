@@ -118,7 +118,8 @@ FullProject/
 ├─ README.md*
 ├─ docs/*                    # ← this documentation system
 │  ├─ diagrams/*           # 62 diagrams + 12 explanation pages; a quarter generated from source
-│  └─ reading/*            # readable twins: the keypad, the restart, the workstation, the offer
+│  └─ reading/*            # readable twins: the keypad, the restart, the workstation, the offer,
+│                          #   the audio path (which also carries the verification commands)
 ├─ config/*                  # ← the entire insurance-specific "domain pack" (D28)
 │  ├─ core_mapping.yaml      # bank-data field mapping (swap target, DATA_MODEL §4)
 │  ├─ matching_weights.yaml* # fit + urgency weights, tunable at runtime
@@ -219,7 +220,8 @@ FullProject/
 │  └─ customer_sim/*         # one static HTML page, no build step (D47)
 ├─ infra/*
 │  ├─ docker-compose.yml  asterisk/  grafana/  k8s/
-├─ scripts/*                 # audit_docs, gen_diagrams, render_diagrams, run_matching, run_scenario
+├─ scripts/*                 # audit_docs, gen_diagrams, render_diagrams, run_matching, run_scenario,
+│                            #   bake_off (D30), show_audio_path (the walkthrough), make_test_audio
 └─ tests/*
    ├─ unit/*  integration/*  contracts/*  # contracts/ = the suites every impl must pass
    ├─ scenarios/*                       # end-to-end scripted calls, no telephony

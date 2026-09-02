@@ -1,0 +1,101 @@
+==============================================================================
+THE AUDIO PATH, one stage at a time
+  audio    three_utterances.wav
+  detector energy
+  engine   scripted
+==============================================================================
+
+NOTE: the default audio is three synthetic tone bursts, NOT speech. It proves
+the pipeline moves and says nothing about how well a model hears Thai. Point
+--audio at a real recording for that.
+
+==============================================================================
+STAGE 1  normalise - the only place that knows a phone is not 16 kHz mono
+==============================================================================
+Everything above this stage is promised 16 kHz mono float32, always. A phone
+line delivers none of that, so it is converted once, here, at the edge.
+
+  what arrived                        bytes  ->    samples    rate
+  --------------------------------------------------------------
+  8 kHz mono mu-law (US, Japan)         160  ->        320   16000
+  8 kHz mono A-law (THAILAND)           160  ->        320   16000
+  8 kHz STEREO mu-law                   320  ->        320   16000
+  16 kHz mono 16-bit PCM                640  ->        320   16000
+
+  Every row is 20 ms of audio and every row comes out as 320 samples at 16 kHz.
+  Nothing above this line ever has to ask which one it got.
+
+  Why BOTH companding laws exist here, shown rather than argued:
+    A-law idle bytes read correctly as A-law  -> level 0.0002  (silence)
+    the same bytes read as mu-law by mistake  -> level 0.0219  (LOUD)
+    It does not crash. It produces loud plausible noise, and the first thing
+    anybody blames is the microphone or the model. Thailand is A-law.
+
+==============================================================================
+STAGE 2 + 3  detect voice, then decide where the sentence starts and ends
+==============================================================================
+The detector answers one narrow question per 32 ms frame: is anyone speaking?
+It returns a PROBABILITY, not a verdict. Deciding where an utterance begins and
+ends is a separate job with its own rules, and those rules are inherited from the
+team's earlier Thai project rather than invented here:
+
+    speech threshold      0.65     (Silero's own default is 0.5)
+    minimum speech        500 ms   below this it is a cough
+    minimum silence       100 ms   Thai pauses mid-clause
+    pad BEFORE the start  120 ms   <- the important one
+    pad AFTER the end     60 ms
+
+  The leading pad is the one worth understanding. Whisper clips the first
+  syllable without it, and in Thai the first syllable often carries the tone that
+  decides which word it is. So the segment starts 120 ms BEFORE the detector
+  noticed anybody - 1920 samples of audio it would otherwise have thrown away.
+
+  Reading three_utterances.wav (4.5s, 16000 Hz)
+
+      time    level   speech?   what the detector saw
+  --------------------------------------------------------------
+     0.02s   0.0006      0.00   <-- back to silence
+     0.32s   0.1212      1.00   --> SPEECH
+     1.22s   0.0006      0.00   <-- back to silence
+     1.72s   0.1359      1.00   --> SPEECH
+     2.82s   0.0006      0.00   <-- back to silence
+     3.42s   0.1387      1.00   --> SPEECH
+     4.12s   0.0006      0.00   <-- back to silence
+
+  Those transitions are what the endpointer turns into whole sentences.
+
+==============================================================================
+STAGE 4 + 5  transcribe, and refuse anything that looks invented
+==============================================================================
+2026-09-02 21:13:08 [info     ] domain pack loaded             challenges=5 dids=5 intents=28 menus=6 queues=9 skills=13
+  engine: scripted (scripted on none)
+
+  #1    0.17s -  1.40s    final   สวัสดีครับ ผมขอแจ้งอุบัติเหตุรถยนต์
+  #2    1.58s -  3.00s    final   รถผมชนกับมอเตอร์ไซค์ที่แยกอโศก
+  #3    3.27s -  4.32s    final   ไม่มีใครบาดเจ็บครับ แต่รถขับต่อไม่ได้
+
+  Those go straight to `IntakeService.on_turn`, which is the method the intake
+  has had since the offer was built and nothing was calling.
+
+==============================================================================
+THE THREE GUARDS  (why they exist: a real GPU run, not a theory)
+==============================================================================
+Fed one second of DIGITAL SILENCE, Whisper on this laptop took 8578 ms and
+returned invented Thai. Fed real speech energy it took 155 ms. So a detector
+false positive is not a junk line on a screen, it is a 55x delay that blocks
+every real sentence queued behind it.
+
+Worse: fed our own vocabulary hint, it handed those very words back as if the
+caller had said them - and those are exactly the words that make a brief look
+credible. Three guards catch it. Here they are, judging real strings:
+
+                                       loop?   echo?   verdict
+  --------------------------------------------------------------------
+  what the GPU returned on silence     False    True   REFUSED
+  a repetition loop                     True   False   REFUSED
+  a genuine caller sentence            False   False   reaches the agent
+
+  (15 vocabulary terms, read from config/stt_vocabulary.yaml)
+  The third row is the one that matters most: a guard that ate real sentences
+  containing insurance words would delete exactly the calls it exists to help.
+

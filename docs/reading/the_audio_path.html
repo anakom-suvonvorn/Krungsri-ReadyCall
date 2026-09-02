@@ -1,0 +1,957 @@
+<title>Where the Sentence Goes</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&family=JetBrains+Mono:wght@400;500;700&family=Noto+Sans+Thai:wght@400;500;600&display=swap">
+
+<style>
+  /* Same house palette as the other reading pages, so these read as a set.
+     The accents are this page's own: one for a MEASURED fact, one for a hazard,
+     one for the urgency tiers. Nothing else gets colour. */
+  :root {
+    --paper:      #fbfaf7;
+    --paper-2:    #f3f1ea;
+    --paper-3:    #ebe8de;
+    --ink:        #16181d;
+    --ink-soft:   #4a4d55;
+    --ink-faint:  #7d8089;
+    --rule:       #ddd8cd;
+    --rule-soft:  #eae6dc;
+
+    --measured:    #14614a;
+    --measured-bg: #e4efea;
+    --trap:        #b8420f;
+    --trap-bg:     #fbeee7;
+    --tier:        #2f5d8c;
+    --tier-bg:     #e6edf4;
+
+    --shadow:     rgba(22,24,29,.07);
+
+    --f-display: "Fraunces", Georgia, serif;
+    --f-body:    "Newsreader", Georgia, serif;
+    --f-mono:    "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+    --f-thai:    "Noto Sans Thai", "Leelawadee UI", Tahoma, sans-serif;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper:      #14161a;
+      --paper-2:    #1b1e23;
+      --paper-3:    #23272e;
+      --ink:        #eceae4;
+      --ink-soft:   #b3b0a8;
+      --ink-faint:  #85837c;
+      --rule:       #32363d;
+      --rule-soft:  #262a30;
+      --measured:    #5cc39a;
+      --measured-bg: #14302a;
+      --trap:        #f0885a;
+      --trap-bg:     #2e1d15;
+      --tier:        #7fb0e0;
+      --tier-bg:     #17283a;
+      --shadow:     rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper:      #14161a;
+    --paper-2:    #1b1e23;
+    --paper-3:    #23272e;
+    --ink:        #eceae4;
+    --ink-soft:   #b3b0a8;
+    --ink-faint:  #85837c;
+    --rule:       #32363d;
+    --rule-soft:  #262a30;
+    --measured:    #5cc39a;
+    --measured-bg: #14302a;
+    --trap:        #f0885a;
+    --trap-bg:     #2e1d15;
+    --tier:        #7fb0e0;
+    --tier-bg:     #17283a;
+    --shadow:     rgba(0,0,0,.35);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--f-body);
+    font-size: 18px;
+    line-height: 1.65;
+    margin: 0;
+    padding: 0 1.25rem 6rem;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap  { max-width: 43rem; margin: 0 auto; }
+  .bleed { max-width: 60rem; margin-inline: auto; }
+
+  /* ---- masthead ---- */
+  header.top {
+    max-width: 43rem;
+    margin: 0 auto;
+    padding: 4.5rem 0 2rem;
+    border-bottom: 2px solid var(--ink);
+  }
+  .kicker {
+    font-family: var(--f-mono);
+    font-size: .72rem;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin: 0 0 1.2rem;
+  }
+  h1 {
+    font-family: var(--f-display);
+    font-weight: 600;
+    font-size: clamp(2.2rem, 6vw, 3.1rem);
+    line-height: 1.06;
+    letter-spacing: -.02em;
+    margin: 0 0 1rem;
+    text-wrap: balance;
+  }
+  .standfirst {
+    font-size: 1.15rem;
+    color: var(--ink-soft);
+    margin: 0 0 1.4rem;
+    text-wrap: pretty;
+  }
+
+  /* ---- sections ---- */
+  section { max-width: 43rem; margin: 0 auto; padding-top: 3.4rem; }
+  section.wide { max-width: 60rem; }
+  section.wide > p, section.wide > h2, section.wide > h3,
+  section.wide > ul, section.wide > ol, section.wide > .note,
+  section.wide > blockquote { max-width: 43rem; margin-inline: auto; }
+
+  h2 {
+    font-family: var(--f-display);
+    font-weight: 600;
+    font-size: 1.75rem;
+    line-height: 1.16;
+    letter-spacing: -.012em;
+    margin: 0 0 .5rem;
+    text-wrap: balance;
+  }
+  h3 {
+    font-family: var(--f-display);
+    font-weight: 600;
+    font-size: 1.18rem;
+    margin: 2.2rem 0 .4rem;
+    text-wrap: balance;
+  }
+  .part {
+    font-family: var(--f-mono);
+    font-size: .7rem;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    display: block;
+    margin-bottom: .5rem;
+  }
+  p { margin: 0 0 1.1rem; text-wrap: pretty; }
+  ul, ol { margin: 0 0 1.1rem; padding-left: 1.3rem; }
+  li { margin-bottom: .5rem; }
+  strong { font-weight: 600; }
+  em { font-style: italic; }
+  .th { font-family: var(--f-thai); font-size: .96em; }
+
+  code {
+    font-family: var(--f-mono);
+    font-size: .8em;
+    background: var(--paper-2);
+    border: 1px solid var(--rule-soft);
+    border-radius: 3px;
+    padding: .08em .3em;
+  }
+
+  /* ---- terminal blocks ---- */
+  .term {
+    background: var(--paper-2);
+    border: 1px solid var(--rule);
+    border-radius: 5px;
+    padding: 1rem 1.1rem;
+    margin: 0 0 1.4rem;
+    overflow-x: auto;
+  }
+  .term pre {
+    font-family: var(--f-mono);
+    font-size: .76rem;
+    line-height: 1.55;
+    margin: 0;
+    white-space: pre;
+    color: var(--ink-soft);
+  }
+  .term .cmd { color: var(--ink); font-weight: 500; }
+  .term .out { color: var(--ink-faint); }
+  .term .hit { color: var(--measured); font-weight: 500; }
+  .term .bad { color: var(--trap); font-weight: 500; }
+  .term-label {
+    font-family: var(--f-mono);
+    font-size: .66rem;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin: 0 0 .5rem;
+  }
+
+  /* ---- callouts ---- */
+  .note {
+    border-left: 3px solid var(--rule);
+    padding: .1rem 0 .1rem 1.1rem;
+    margin: 0 0 1.4rem;
+    color: var(--ink-soft);
+    font-size: .96rem;
+  }
+  .note.trap   { border-left-color: var(--trap);     background: var(--trap-bg);     padding: .9rem 1.1rem; border-radius: 0 5px 5px 0; }
+  .note.good   { border-left-color: var(--measured); background: var(--measured-bg); padding: .9rem 1.1rem; border-radius: 0 5px 5px 0; }
+  .note strong { color: var(--ink); }
+
+  /* ---- tables ---- */
+  .tablewrap { overflow-x: auto; margin: 0 0 1.4rem; }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: .88rem;
+    font-variant-numeric: tabular-nums;
+  }
+  th, td {
+    text-align: left;
+    padding: .5rem .7rem;
+    border-bottom: 1px solid var(--rule-soft);
+    vertical-align: top;
+  }
+  th {
+    font-family: var(--f-mono);
+    font-size: .66rem;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    border-bottom: 1px solid var(--rule);
+    font-weight: 500;
+  }
+  td.num { text-align: right; font-family: var(--f-mono); font-size: .82rem; }
+  tr.emph td { background: var(--trap-bg); }
+  tr.emph td.num { color: var(--trap); font-weight: 700; }
+
+  .pill {
+    display: inline-block;
+    font-family: var(--f-mono);
+    font-size: .64rem;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    padding: .16em .5em;
+    border-radius: 3px;
+    white-space: nowrap;
+  }
+  .pill.ok   { background: var(--measured-bg); color: var(--measured); }
+  .pill.no   { background: var(--trap-bg);     color: var(--trap); }
+  .pill.tier { background: var(--tier-bg);     color: var(--tier); }
+
+  /* ---- figures ---- */
+  figure { margin: 1.8rem 0 2rem; }
+  figure svg { display: block; width: 100%; height: auto; }
+  figcaption {
+    font-size: .85rem;
+    color: var(--ink-faint);
+    margin-top: .7rem;
+    max-width: 40rem;
+    text-wrap: pretty;
+  }
+  .svg-ink   { stroke: var(--ink-soft); }
+  .svg-faint { stroke: var(--rule); }
+  .svg-label { fill: var(--ink-soft); font-family: var(--f-mono); font-size: 11px; }
+  .svg-title { fill: var(--ink); font-family: var(--f-body); font-size: 13px; font-weight: 600; }
+  .svg-small { fill: var(--ink-faint); font-family: var(--f-mono); font-size: 9.5px; }
+
+  /* ---- the check-it list ---- */
+  .check { counter-reset: chk; list-style: none; padding: 0; }
+  .check > li {
+    counter-increment: chk;
+    padding: 0 0 0 2.6rem;
+    position: relative;
+    margin-bottom: 2.2rem;
+  }
+  .check > li::before {
+    content: counter(chk);
+    position: absolute;
+    left: 0; top: .1rem;
+    font-family: var(--f-mono);
+    font-size: .74rem;
+    color: var(--measured);
+    background: var(--measured-bg);
+    border-radius: 50%;
+    width: 1.75rem; height: 1.75rem;
+    display: grid; place-items: center;
+    font-weight: 700;
+  }
+  .check h3 { margin-top: 0; }
+
+  hr.sep {
+    border: 0;
+    border-top: 1px solid var(--rule);
+    margin: 3.4rem auto 0;
+    max-width: 43rem;
+  }
+
+  footer.end {
+    max-width: 43rem;
+    margin: 3.4rem auto 0;
+    padding-top: 1.6rem;
+    border-top: 2px solid var(--ink);
+    font-size: .88rem;
+    color: var(--ink-faint);
+  }
+
+  @media (max-width: 620px) {
+    body { font-size: 17px; }
+    .term pre { font-size: .68rem; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+
+<header class="top">
+  <p class="kicker">Krungsri ReadyCall · session notes · 2 September 2026</p>
+  <h1>Where the Sentence Goes</h1>
+  <p class="standfirst">
+    Three things landed this session: your idea about the queue ceiling, the GPU
+    finally doing real work, and the layer that turns a caller's voice into words on
+    the agent's screen. This is all of it in plain language — and the last section is
+    nothing but commands you can run to check I am telling the truth.
+  </p>
+  <p class="note" style="margin-bottom:0">
+    Nothing here needs you to read any code. Every claim on this page is either
+    something you can see in a terminal, or is labelled as a thing I have <em>not</em>
+    verified.
+  </p>
+</header>
+
+<!-- ============================== PART ONE ============================== -->
+<section class="wide">
+  <span class="part">Part one — your idea</span>
+  <h2>The wait ceiling now depends on how urgent you are</h2>
+
+  <p>
+    Some background, because the rest only makes sense with it. The system does
+    <strong>not</strong> answer calls in the order they arrive. Every second it looks at
+    everyone waiting and every free agent at once, and works out the best overall pairing.
+    Two things decide it: how well an agent <em>fits</em> that caller, and how <em>urgent</em>
+    the caller is. Urgency grows the longer you wait.
+  </p>
+  <p>
+    That is good — but on its own it means an unlucky caller could wait forever if
+    everyone else keeps fitting better. So there has always been a backstop: <strong>past a
+    certain wait, stop optimising and just connect them to anyone qualified.</strong>
+  </p>
+  <p>
+    Until this session that backstop was <strong>one number for everybody: 180 seconds.</strong>
+    That is what you spotted a problem with, and you were right.
+  </p>
+
+  <h3>The problem, concretely</h3>
+  <p>
+    One agent free. Two people want them. A routine policy question that has been holding
+    for 181 seconds, and someone at a crash scene who has been holding for ten.
+  </p>
+  <p>
+    The routine caller is past the single 180-second ceiling. The emergency is not. So the
+    routine caller gets rescued — handed the agent, no argument — and the emergency waits.
+    <strong>The emergency has to sit there for another 170 seconds before the system will
+    treat them as urgent by that rule.</strong> That is obviously the wrong way round, and it
+    is exactly what you proposed fixing.
+  </p>
+
+  <h3>What shipped</h3>
+  <p>
+    Each urgency level now has its own ceiling. These live in a config file, so changing
+    them is editing a text file — no code, no rebuild:
+  </p>
+
+  <div class="tablewrap wrap">
+    <table>
+      <thead>
+        <tr><th>Urgency</th><th class="num">Ceiling</th><th>Meaning, read as a promise</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><span class="pill tier">critical</span></td><td class="num">60s</td><td>at a crash scene, a medical emergency</td></tr>
+        <tr><td><span class="pill tier">high</span></td><td class="num">120s</td><td></td></tr>
+        <tr><td><span class="pill tier">normal</span></td><td class="num">180s</td><td>unchanged — this was the old single value</td></tr>
+        <tr><td><span class="pill tier">low</span></td><td class="num">270s</td><td>not in any hurry</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <figure>
+    <svg viewBox="0 0 700 250" role="img" aria-label="A time axis from zero to 300 seconds. Four ceiling marks sit at 60, 120, 180 and 270 seconds. An emergency caller who has waited 90 seconds has passed their 60-second ceiling and is rescued. A routine caller who has waited 150 seconds has not yet reached their 180-second ceiling and keeps waiting.">
+      <!-- axis -->
+      <line x1="100" y1="70" x2="660" y2="70" class="svg-faint" stroke-width="1"/>
+      <!-- ceiling ticks -->
+      <g class="svg-faint" stroke-width="1">
+        <line x1="212" y1="62" x2="212" y2="205" stroke-dasharray="3 4"/>
+        <line x1="324" y1="62" x2="324" y2="205" stroke-dasharray="3 4"/>
+        <line x1="436" y1="62" x2="436" y2="205" stroke-dasharray="3 4"/>
+        <line x1="604" y1="62" x2="604" y2="205" stroke-dasharray="3 4"/>
+      </g>
+      <text x="212" y="52" class="svg-small" text-anchor="middle">60s</text>
+      <text x="324" y="52" class="svg-small" text-anchor="middle">120s</text>
+      <text x="436" y="52" class="svg-small" text-anchor="middle">180s</text>
+      <text x="604" y="52" class="svg-small" text-anchor="middle">270s</text>
+      <text x="212" y="38" class="svg-small" text-anchor="middle" style="fill:var(--tier)">critical</text>
+      <text x="324" y="38" class="svg-small" text-anchor="middle" style="fill:var(--tier)">high</text>
+      <text x="436" y="38" class="svg-small" text-anchor="middle" style="fill:var(--tier)">normal</text>
+      <text x="604" y="38" class="svg-small" text-anchor="middle" style="fill:var(--tier)">low</text>
+      <text x="96" y="42" class="svg-small" text-anchor="end">each tier's</text>
+      <text x="96" y="55" class="svg-small" text-anchor="end">own ceiling</text>
+
+      <!-- emergency caller -->
+      <text x="96" y="112" class="svg-title" text-anchor="end">emergency</text>
+      <text x="96" y="128" class="svg-small" text-anchor="end">waited 90s</text>
+      <rect x="100" y="96" width="168" height="22" rx="3" style="fill:var(--tier-bg)"/>
+      <rect x="100" y="96" width="112" height="22" rx="3" style="fill:var(--measured-bg)"/>
+      <line x1="212" y1="90" x2="212" y2="124" style="stroke:var(--measured)" stroke-width="2"/>
+      <text x="282" y="112" class="svg-label" style="fill:var(--measured)">past their ceiling → rescued, gets the agent</text>
+
+      <!-- routine caller -->
+      <text x="96" y="182" class="svg-title" text-anchor="end">routine</text>
+      <text x="96" y="198" class="svg-small" text-anchor="end">waited 150s</text>
+      <rect x="100" y="166" width="280" height="22" rx="3" style="fill:var(--paper-3)"/>
+      <line x1="436" y1="160" x2="436" y2="194" class="svg-ink" stroke-width="2"/>
+      <text x="394" y="182" class="svg-label" text-anchor="end">still 30s short</text>
+
+      <!-- footer note -->
+      <text x="100" y="234" class="svg-small">Under ONE 180s ceiling: neither is rescued, and the routine caller wins on fit. That was the bug.</text>
+    </svg>
+    <figcaption>
+      The same two callers, contesting the same free agent. The emergency reaches
+      <em>their</em> guarantee at 60 seconds while the routine caller is still 30 seconds
+      short of theirs — so most of the time the contest never even happens.
+    </figcaption>
+  </figure>
+
+  <h3>Two details you did not ask about, but should know</h3>
+  <p>
+    <strong>If two people are <em>both</em> past their own ceiling, the more urgent goes
+    first.</strong> That was your instinct and I implemented it. Within the same tier, the
+    longest wait wins.
+  </p>
+  <p>
+    <strong>The table cuts both ways, and this half is easy to miss.</strong> A
+    <span class="pill tier">low</span> caller at 200 seconds is past the <em>old</em> 180s
+    ceiling but not their own 270s one. So they are no longer yanked out of the careful
+    matching and handed whoever is nearest — they stay where fit still counts. Being
+    "rescued" deliberately gives you a <em>worse-matched</em> agent (more on that below), so
+    not doing it to someone who is not actually suffering is a real improvement.
+  </p>
+
+  <div class="note trap">
+    <strong>The one cost, stated plainly.</strong> If emergencies keep arriving without
+    pause, a patient caller past their ceiling can be overtaken again and again. It needs a
+    genuine flood of emergencies to bite. There is an alternative ordering that self-balances
+    (rank by <em>how far past your own ceiling you are</em>, as a ratio) — I did not use it
+    because the system already treats "critical" as a category rather than a big number, and
+    "emergencies first" is something you can explain to a supervisor. It is written down as
+    the fix if this ever shows up in practice.
+  </div>
+
+  <h3>Why a rescued caller gets the <em>worst</em> qualified agent</h3>
+  <p>
+    This surprises people, so: everyone in that pool has already been checked as able to
+    handle the call. Fit only says <em>how well</em>. If a starved caller took the best
+    specialist, you would fix one person's wait by starting someone else's — the person who
+    actually needed that specialist. The promise is <em>somebody competent, right now</em>,
+    and spending the scarcest agent on it is the opposite of what the backstop is for.
+  </p>
+
+  <div class="note good">
+    <strong>Guard rail:</strong> a table where a <em>more</em> urgent tier waits
+    <em>longer</em> than a less urgent one now refuses to start the system at all. Getting it
+    backwards would otherwise be completely silent — every call still routes, and only the
+    crash-scene caller quietly waits.
+  </div>
+</section>
+
+<hr class="sep">
+
+<!-- ============================== PART TWO ============================== -->
+<section>
+  <span class="part">Part two — the GPU</span>
+  <h2>The libraries are installed, and they are the right ones</h2>
+
+  <p>
+    You asked for the CUDA build rather than the CPU one. That was the right thing to insist
+    on, and it is worth knowing why it matters so much here.
+  </p>
+
+  <div class="note trap">
+    <strong>Installing the wrong one does not fail.</strong> There is no error. Everything
+    imports, everything runs, tests pass — and the speech model runs roughly ten times too
+    slowly on the processor instead of the graphics card, while the flag that says "am I
+    using the GPU?" quietly reads <em>False</em>. You would find out on stage.
+  </div>
+
+  <p>
+    So the project now pins that one package to the CUDA download source, and the check is
+    written into the setup guide. What actually got installed and verified:
+  </p>
+
+  <div class="term wrap">
+    <p class="term-label">verified by running a real calculation on the card</p>
+<pre><span class="out">torch          </span><span class="hit">2.11.0+cu128</span><span class="out">   ← the "+cu128" is the proof
+cuda available </span><span class="hit">True</span><span class="out">
+device         NVIDIA GeForce RTX 3050 Laptop GPU
+vram total     4.00 GiB
+vram free      </span><span class="bad">3.22 GiB</span><span class="out">     ← tighter than the docs assumed
+matmul on gpu  </span><span class="hit">OK</span></pre>
+  </div>
+
+  <p>
+    That free-memory number is the one worth remembering. The project's notes said
+    "4–6 GB"; the truth is <strong>4 GB total with about 3.2 GB actually free</strong> —
+    Windows itself is holding the rest. The speech model wants most of what remains, which
+    is why the smaller, compressed version of it is the default.
+  </p>
+</section>
+
+<hr class="sep">
+
+<!-- ============================= PART THREE ============================= -->
+<section class="wide">
+  <span class="part">Part three — the main build</span>
+  <h2>Turning a voice into words on the agent's screen</h2>
+
+  <p>
+    Here is the gap this filled. Since last session, a caller could press <strong>1</strong>
+    to record a message while they wait, and there was a method sitting there ready to
+    receive their sentences — <strong>with nothing on the other end of it.</strong> The
+    plumbing from "microphone" to "that method" did not exist. Now it does.
+  </p>
+  <p>
+    Five stages. Follow one sentence through them:
+  </p>
+
+  <figure>
+    <svg viewBox="0 0 700 200" role="img" aria-label="A pipeline of five stages: raw bytes from the phone, normalise to a standard format, detect and endpoint into whole sentences, transcribe with Whisper, and three guards that refuse invented text, before reaching the agent's screen.">
+      <defs>
+        <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
+        </marker>
+      </defs>
+      <g style="color:var(--ink-soft)">
+        <g class="svg-ink" stroke-width="1.4" marker-end="url(#ar)" fill="none">
+          <line x1="132" y1="70" x2="146" y2="70"/>
+          <line x1="272" y1="70" x2="286" y2="70"/>
+          <line x1="412" y1="70" x2="426" y2="70"/>
+          <line x1="552" y1="70" x2="566" y2="70"/>
+        </g>
+      </g>
+
+      <g>
+        <rect x="10" y="40" width="120" height="60" rx="4" style="fill:var(--paper-2);stroke:var(--rule)" stroke-width="1"/>
+        <text x="70" y="64" class="svg-title" text-anchor="middle">the wire</text>
+        <text x="70" y="80" class="svg-small" text-anchor="middle">8 kHz, A-law,</text>
+        <text x="70" y="92" class="svg-small" text-anchor="middle">maybe stereo</text>
+
+        <rect x="150" y="40" width="120" height="60" rx="4" style="fill:var(--paper-2);stroke:var(--rule)" stroke-width="1"/>
+        <text x="210" y="64" class="svg-title" text-anchor="middle">normalise</text>
+        <text x="210" y="80" class="svg-small" text-anchor="middle">→ 16 kHz mono</text>
+        <text x="210" y="92" class="svg-small" text-anchor="middle">once, at the edge</text>
+
+        <rect x="290" y="40" width="120" height="60" rx="4" style="fill:var(--paper-2);stroke:var(--rule)" stroke-width="1"/>
+        <text x="350" y="64" class="svg-title" text-anchor="middle">find sentences</text>
+        <text x="350" y="80" class="svg-small" text-anchor="middle">is anyone talking?</text>
+        <text x="350" y="92" class="svg-small" text-anchor="middle">where did it end?</text>
+
+        <rect x="430" y="40" width="120" height="60" rx="4" style="fill:var(--paper-2);stroke:var(--rule)" stroke-width="1"/>
+        <text x="490" y="64" class="svg-title" text-anchor="middle">transcribe</text>
+        <text x="490" y="80" class="svg-small" text-anchor="middle">Whisper, on the</text>
+        <text x="490" y="92" class="svg-small" text-anchor="middle">graphics card</text>
+
+        <rect x="570" y="40" width="120" height="60" rx="4" style="fill:var(--trap-bg);stroke:var(--trap)" stroke-width="1.5"/>
+        <text x="630" y="64" class="svg-title" text-anchor="middle" style="fill:var(--trap)">three guards</text>
+        <text x="630" y="80" class="svg-small" text-anchor="middle" style="fill:var(--trap)">refuse anything</text>
+        <text x="630" y="92" class="svg-small" text-anchor="middle" style="fill:var(--trap)">that looks invented</text>
+      </g>
+
+      <line x1="630" y1="106" x2="630" y2="140" class="svg-ink" stroke-width="1.4" marker-end="url(#ar)" style="color:var(--ink-soft)"/>
+      <text x="630" y="158" class="svg-label" text-anchor="middle">the agent's screen</text>
+
+      <text x="10" y="180" class="svg-small">Part four of this page is about why that last box is red, and why it is not optional.</text>
+    </svg>
+    <figcaption>
+      Each box does one job and hands on. That is why the last box could be added after the
+      fact without touching any of the others.
+    </figcaption>
+  </figure>
+
+  <h3>Stage 1 — make everything look the same</h3>
+  <p>
+    A phone line does not deliver audio in the form a speech model wants. It arrives at half
+    the sample rate, compressed with one of two different schemes depending on the country,
+    and sometimes in two channels. <strong>One module converts all of it, once, at the
+    edge</strong>, so nothing further in ever has to ask what it got.
+  </p>
+  <div class="note trap">
+    <strong>Thailand uses the compression scheme called A-law</strong>; North America and
+    Japan use µ-law. Decoding one as the other <em>does not produce an error</em> — it
+    produces loud, distorted, entirely believable audio, and the first thing anyone blames is
+    the microphone or the model. Both are supported, and the format is stated rather than
+    guessed. You can see the difference for yourself in check 4 below.
+  </div>
+
+  <h3>Stage 2 and 3 — find where sentences begin and end</h3>
+  <p>
+    A detector answers one narrow question thirty times a second: <em>is anyone speaking
+    right now?</em> It returns a probability, not a yes/no. Turning that into whole sentences
+    is a separate job with its own rules — and those rules came from your earlier Thai
+    project, not from guesswork:
+  </p>
+  <ul>
+    <li><strong>Speech must last at least half a second</strong> to count. Below that it is a cough or a door.</li>
+    <li><strong>A pause under a tenth of a second does not end a sentence</strong>, because Thai speakers pause mid-clause.</li>
+    <li><strong>Each sentence is extended 120 milliseconds <em>backwards</em></strong> — this one matters most. Without it the model clips the first syllable, and in Thai the first syllable often carries the tone that decides which word it is.</li>
+  </ul>
+  <p>
+    All three of those live in one small file with no model and no audio in it, which means
+    they can be tested by feeding in a list of numbers. That is why they cannot quietly drift
+    into something that merely sounds fine on one recording.
+  </p>
+
+  <h3>Stages 4 and 5 — transcribe, then check</h3>
+  <p>
+    Finished sentences go into a queue, and one worker transcribes them one at a time. Two
+    things fall out of that, both deliberate:
+  </p>
+  <ul>
+    <li><strong>Audio keeps arriving while the model is busy.</strong> If the pipeline waited for the model, the caller would still be talking with nowhere for their words to go.</li>
+    <li><strong>Sentences stay in the order they were spoken.</strong> The obvious alternative — transcribe everything at once — finishes a two-word phrase before the long sentence that came first, and delivers the caller's words shuffled.</li>
+  </ul>
+</section>
+
+<hr class="sep">
+
+<!-- ============================== PART FOUR ============================= -->
+<section class="wide">
+  <span class="part">Part four — the interesting part</span>
+  <h2>The measurement that nearly fooled me</h2>
+
+  <p>
+    This is the part worth your attention, because it changed the design and because it is a
+    good story about not trusting your own tools.
+  </p>
+  <p>
+    I built a harness to compare speech engines — the thing that is supposed to answer "which
+    model should we use?" with numbers instead of opinions. I ran it on the real graphics
+    card. It gave me numbers. <strong>I did not believe them, and I was right not to.</strong>
+  </p>
+
+  <h3>Three of the numbers were the tool being broken, not the system</h3>
+  <div class="tablewrap wrap">
+    <table>
+      <thead><tr><th>It reported</th><th>What was actually wrong</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>0 ms</code> delay, for every engine</td>
+          <td>The stopwatch never started. It looked for the end of each sentence at an exact position, and sentences end 60 ms later than that because of the backwards-padding rule. It missed <em>every single time</em>, recorded nothing, and printed a clean zero.</td>
+        </tr>
+        <tr>
+          <td><code>0 MB</code> of graphics memory</td>
+          <td>It asked the wrong component. The speech engine manages its own memory, so the counter I used could not see a single byte of it.</td>
+        </tr>
+        <tr>
+          <td><code>11,270 ms</code> delay</td>
+          <td>I was feeding a 4.5-second file in as fast as the disk could read it, so all three sentences arrived at once and the third waited behind two others. That is a <em>backlog</em>, not a delay. Paced at real speed, the same work: <strong>553 ms</strong>.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="note">
+    A clean zero is the giveaway. A real measurement of something fast jitters; an exact
+    <code>0.0</code> across unrelated things means the instrument, not the code. This project
+    has hit that before — the very same lesson is written up from a previous session.
+  </div>
+
+  <h3>And then the real finding</h3>
+  <p>
+    With honest instruments, I measured the model directly on three inputs:
+  </p>
+
+  <div class="tablewrap wrap">
+    <table>
+      <thead><tr><th>Input</th><th class="num">Time</th><th>What came back</th></tr></thead>
+      <tbody>
+        <tr><td>0.9s of speech-like sound</td><td class="num">155 ms</td><td>nothing — correct, it was not speech</td></tr>
+        <tr><td>2.0s of speech-like sound</td><td class="num">195 ms</td><td>nothing — correct</td></tr>
+        <tr class="emph"><td><strong>1.0s of pure silence</strong></td><td class="num">8,578 ms</td><td><span class="th">"ช่วงที่สุดได้โลงในอ้าอีก นี่"</span> — invented</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    <strong>Silence costs 55 times what real speech costs, and comes back with words nobody
+    said.</strong> The invention was a known quirk and was written down. The <em>time</em> was
+    not. That changes what it means: if the detector wrongly thinks it heard something, that
+    is not one junk line on a screen — it is an eight-second blockage in front of every real
+    sentence behind it.
+  </p>
+
+  <div class="note trap">
+    <strong>And it gets worse.</strong> To help the model with insurance words, we hand it a
+    short list of terms — <span class="th">กรมธรรม์</span> (policy),
+    <span class="th">สินไหม</span> (claim), and so on. Fed silence <em>with that list</em>, it
+    returned <span class="th">"สินไหม? กรมธรรม์, ผู้เอาประกัน, ผู้เอาประกัน"</span> — three of
+    our own words, in our own file's order, as if the caller had said them.
+    <br><br>
+    That is worse than ordinary nonsense. Those are precisely the words that make a summary
+    look <em>credible</em>, and an agent reading them has no way to know they were invented.
+  </div>
+
+  <h3>The three guards</h3>
+  <ol>
+    <li><strong>Check the sound before the model sees it.</strong> If a "sentence" has no actual energy in it, it never reaches the model. Two multiplications, and it removes the eight-second problem entirely.</li>
+    <li><strong>Refuse text that is mostly our own word list.</strong> Carefully: a real sentence that merely <em>contains</em> "claim" must survive, or the guard deletes exactly the calls it was added to help. It triggers on proportion, not presence.</li>
+    <li><strong>Refuse repetition loops.</strong> This one existed already but was too easily fooled — the real output had a comma after every word, which hid the repetition from it.</li>
+  </ol>
+
+  <div class="note">
+    <strong>My own code had the same bug I was hunting.</strong> Both engines "warmed up" by
+    transcribing one second of silence — the single most expensive input the model has. Fixed
+    to use a tone.
+  </div>
+</section>
+
+<hr class="sep">
+
+<!-- ============================== PART FIVE ============================= -->
+<section>
+  <span class="part">Part five — found in passing</span>
+  <h2>The automated checks were not running at all</h2>
+  <p>
+    While working out what the audio layer was allowed to depend on, I read the file that
+    tells GitHub how to test this project — and noticed it installs the basic dependencies
+    only, while one of the test files needs the web dependencies. That means the test run
+    <strong>fails before a single test executes</strong>. Not "some tests skipped": nothing
+    ran.
+  </p>
+  <p>
+    One line, fixed. It is the same shape as a problem this project hit before, where a whole
+    phase's worth of files were silently never committed: <strong>every check we run is a
+    statement about this laptop.</strong> "It passes in the cloud" is a separate claim, and
+    nobody had checked it.
+  </p>
+  <p class="note">
+    <strong>Honest caveat:</strong> I did not look at whether those cloud runs have been
+    failing or have simply never happened. Either way the line was wrong and is now right.
+  </p>
+</section>
+
+<hr class="sep">
+
+<!-- ============================== PART SIX ============================== -->
+<section>
+  <span class="part">Part six — what I did not do</span>
+  <h2>Three things are deliberately unfinished</h2>
+
+  <h3>1. There is no engine comparison table yet, and that is on purpose</h3>
+  <p>
+    The harness that produces it is built and correct. What it needs is
+    <strong>real Thai telephone speech</strong>, plus the Thai model weights — another
+    multi-gigabyte download I left for you to approve, exactly like the libraries.
+  </p>
+  <p>
+    I could have filled that table using the synthetic test tones. I did not, because it
+    would have been meaningless: as part four shows, what the model does with tones tells you
+    about its <em>failure modes</em>, not its accuracy. A table of confident, wrong numbers is
+    worse than an empty one.
+  </p>
+  <p class="note good">
+    <strong>To finish it:</strong> put a real recording and a text file of what was actually
+    said side by side (<code>call.wav</code> and <code>call.txt</code>) and the accuracy
+    column fills itself in. A phone recording beats a clean studio one — the whole point is
+    to measure the conditions we will actually have.
+  </p>
+
+  <h3>2. Nothing saves the audio</h3>
+  <p>
+    The plan says the recording should be encrypted and stored. It is not, and nothing is
+    written to disk at all right now — everything happens in memory and is discarded. That
+    needs the encryption-key work from a later phase, and writing a caller's voice to disk
+    before that exists would be the one thing the design was careful to avoid.
+  </p>
+
+  <h3>3. The agent cannot see the transcript live yet</h3>
+  <p>
+    The sentences reach the system and are published internally. Nothing draws them on the
+    workstation screen. That is a front-end job and it is next door, not far away.
+  </p>
+</section>
+
+<hr class="sep">
+
+<!-- ============================= PART SEVEN ============================= -->
+<section class="wide">
+  <span class="part">Part seven — the important bit</span>
+  <h2>Check all of this yourself</h2>
+  <p>
+    Every command below can be run from the <code>FullProject</code> folder. Nothing needs
+    the internet, a GPU, or a database except where noted. I have listed what you should see
+    — if you see something else, I got something wrong.
+  </p>
+
+  <ol class="check">
+    <li>
+      <h3>Everything still passes</h3>
+      <p>The whole test suite, including 61 new tests from this session.</p>
+      <div class="term">
+<pre><span class="cmd">uv run pytest -q</span>
+<span class="out">590 passed, </span><span class="hit">42 skipped</span><span class="out"> in ~120s</span></pre>
+      </div>
+      <p class="note">
+        The 42 skips are the database tests — they need a Postgres container that is
+        currently stopped. That is expected and is not related to this session.
+      </p>
+    </li>
+
+    <li>
+      <h3>The queue ceilings are what I said</h3>
+      <p>Read straight out of the config file by the real code.</p>
+      <div class="term">
+<pre><span class="cmd">uv run python -c "import sys; sys.path.insert(0,'src');
+from readycall.services.matching.weights import MatchingWeights;
+from readycall.domain.enums import Urgency;
+w = MatchingWeights.load('config/matching_weights.yaml');
+[print(f'{u.value:9} {w.ceiling_for(u):5.0f}s') for u in Urgency]"</span>
+
+<span class="out">low         </span><span class="hit">270s</span>
+<span class="out">normal      </span><span class="hit">180s</span>
+<span class="out">high        </span><span class="hit">120s</span>
+<span class="out">critical     </span><span class="hit">60s</span></pre>
+      </div>
+      <p>
+        You can also just open <code>config/matching_weights.yaml</code> and read it — the
+        section is called <code>max_wait_before_any_agent_by_urgency</code> and has comments
+        explaining every line.
+      </p>
+    </li>
+
+    <li>
+      <h3>The emergency really does win now</h3>
+      <p>Eight tests specifically about the ceiling, all of them with two callers competing.</p>
+      <div class="term">
+<pre><span class="cmd">uv run pytest tests/unit/test_matching.py -q -k "ceiling or starved or emergency or patient"</span>
+<span class="out">8 passed, 33 deselected</span></pre>
+      </div>
+      <p>
+        <strong>The stronger check</strong>, if you want it: open
+        <code>tests/unit/test_matching.py</code> and read the test named
+        <code>test_an_emergency_reaches_the_ceiling_before_a_routine_caller_does</code>. It
+        is written in English and describes the exact scenario from part one. I also
+        confirmed all three new contention tests <em>fail</em> if the change is reverted —
+        a test that passes either way proves nothing.
+      </p>
+    </li>
+
+    <li>
+      <h3>Watch the audio path work, stage by stage</h3>
+      <p>
+        This is the one to run if you only run one. It walks a sound file through every
+        stage and prints what each did — no GPU needed.
+      </p>
+      <div class="term">
+<pre><span class="cmd">uv run python scripts/make_test_audio.py</span>
+<span class="cmd">uv run python scripts/show_audio_path.py</span></pre>
+      </div>
+      <p>Among other things it shows the A-law trap from part three, with real numbers:</p>
+      <div class="term">
+<pre><span class="out">A-law idle bytes read correctly as A-law  -> level </span><span class="hit">0.0002</span><span class="out">  (silence)
+the same bytes read as mu-law by mistake  -> level </span><span class="bad">0.0219</span><span class="out">  (LOUD)</span></pre>
+      </div>
+      <p>and the three guards judging the text the GPU actually produced:</p>
+      <div class="term">
+<pre><span class="out">                                       loop?   echo?   verdict
+what the GPU returned on silence     False    True   </span><span class="bad">REFUSED</span><span class="out">
+a repetition loop                     True   False   </span><span class="bad">REFUSED</span><span class="out">
+a genuine caller sentence            False   False   </span><span class="hit">reaches the agent</span></pre>
+      </div>
+      <p class="note">
+        That third row is the one I care most about. A guard that also ate real sentences
+        containing insurance words would be worse than no guard.
+      </p>
+    </li>
+
+    <li>
+      <h3>The GPU is real</h3>
+      <p>Needs the <code>ml</code> libraries installed, which they are on this machine.</p>
+      <div class="term">
+<pre><span class="cmd">uv run python -c "import torch; print(torch.__version__, torch.cuda.is_available())"</span>
+<span class="hit">2.11.0+cu128 True</span></pre>
+      </div>
+      <p>
+        The <code>+cu128</code> is the part that matters. A version with no <code>+cu</code>
+        suffix would be the CPU-only build described in part two.
+      </p>
+    </li>
+
+    <li>
+      <h3>The comparison harness runs (even though its table is empty)</h3>
+      <div class="term">
+<pre><span class="cmd">uv run python scripts/bake_off.py --engines scripted --audio tests/audio/*.wav</span>
+<span class="out">scripted   three_utterances.wav   </span><span class="hit">3 turns</span><span class="out">   ...   wer   n/a</span></pre>
+      </div>
+      <p>
+        Three sentences found in a file I generated with three sentences in it. The
+        <code>n/a</code> under accuracy is the honest gap from part six — it stays
+        <code>n/a</code> until there is a real recording with a real transcript beside it.
+      </p>
+      <p>
+        To try a real model (downloads about 75 MB the first time):
+        <code>--engines faster_whisper_tiny</code>
+      </p>
+    </li>
+
+    <li>
+      <h3>Nothing else broke</h3>
+      <div class="term">
+<pre><span class="cmd">uv run ruff check . && uv run mypy</span>
+<span class="hit">All checks passed!</span>
+<span class="hit">Success: no issues found in 126 source files</span>
+
+<span class="cmd">uv run python scripts/run_scenario.py tests/scenarios/roadside_motor_claim.yaml --quiet</span>
+<span class="out">(a full call from arrival to closed, unchanged)</span></pre>
+      </div>
+    </li>
+
+    <li>
+      <h3>Read the reasoning, if you want the long version</h3>
+      <p>Everything on this page is written up properly in the project docs:</p>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Where</th><th>What</th></tr></thead>
+          <tbody>
+            <tr><td><code>docs/DECISIONS.md</code> → <strong>D94</strong></td><td>the per-urgency ceiling — your idea, and why separate numbers beat one scaled number</td></tr>
+            <tr><td><code>docs/DECISIONS.md</code> → <strong>D95</strong></td><td>why torch comes from the CUDA source, and the measured GPU memory</td></tr>
+            <tr><td><code>docs/DECISIONS.md</code> → <strong>D96</strong></td><td>the audio path, and the four choices in it that could have gone the other way</td></tr>
+            <tr><td><code>docs/BUG_HISTORY.md</code> → <strong>B14</strong></td><td>the silence problem, all four root causes, with the measured numbers</td></tr>
+            <tr><td><code>docs/BUG_HISTORY.md</code> → <strong>B15</strong></td><td>the automated checks that were not running</td></tr>
+            <tr><td><code>docs/diagrams/07_voice_and_ai.md</code></td><td>the audio path drawn as a diagram, with the same explanation</td></tr>
+            <tr><td><code>README.md</code> → §6</td><td>how to install and check the GPU libraries</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </li>
+  </ol>
+</section>
+
+<footer class="end">
+  <p>
+    <strong>If something here does not match what you see, that is worth telling me</strong> —
+    two of the four problems in part four were found by exactly that, looking at a number and
+    saying "that cannot be right".
+  </p>
+  <p style="margin-bottom:0">
+    Krungsri ReadyCall · team HACK VIDVA · this page lives at
+    <code>docs/reading/the_audio_path.html</code> and should be updated whenever the audio
+    path changes.
+  </p>
+</footer>

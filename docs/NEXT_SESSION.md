@@ -10,6 +10,12 @@ _Last updated: 2026-09-02._
 **P3 step 4b (the audio) has landed.** The last commits are the whole of it and their
 messages are long on purpose — `git log -5` is the fastest way back in.
 
+**The page to read first is `docs/reading/the_audio_path.html`** (published, link in the
+table at the bottom). It explains this whole session in plain language and ends with a
+set of commands that verify every claim in it — written because the terminal summary of
+this work left the user with no idea what had been built, which is the second time that
+has happened. **When a slice is hard to see, the readable page is part of finishing it.**
+
 **The one thing to know before touching the audio path**: `B14`. Whisper fed near-silence
 takes **8.6 seconds** and invents Thai text — including handing back the words in
 `config/stt_vocabulary.yaml` as if the caller had said them. Three guards exist because of
@@ -758,6 +764,7 @@ URL from another conversation creates a duplicate instead.
 | Page | URL |
 |---|---|
 | `reading/the_line.html` — the keypad | https://claude.ai/code/artifact/5953f7a7-d0c4-4829-8cc7-fec2b6f5b856 |
+| `reading/the_audio_path.html` — the wait ceiling, the GPU, and the audio path, in plain language, **ending in commands that verify each claim** | https://claude.ai/code/artifact/722ddf9f-77bc-410b-8057-7f90a693ec4c |
 | `reading/the_offer.html` — what the intake offer is, in plain language | https://claude.ai/code/artifact/2c6fa04d-089f-4f4c-bfa6-fb4abc95a0af |
 | `reading/persistence.html` — the restart simulator | https://claude.ai/code/artifact/b2a03f9c-01f2-42bc-ae55-3860d901374d |
 | `reading/workstation_wiring.html` | https://claude.ai/code/artifact/23107f9a-17e5-4011-b206-b2e5809a138f |
