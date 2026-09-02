@@ -2468,3 +2468,47 @@ because P4 is the first code that can cross it._
 - **The escape hatch that already exists.** A caller genuinely in the wrong queue is a
   **transfer** (`D63`), performed by a human who has spoken to them. That is the right place
   for it: re-routing is a judgement with a person attached, exactly like `D44`'s attestation.
+
+## D93. The wait ceiling is a pre-pass, not a guard rail
+_Fixes `B13`. The user asked how a caller past the ceiling is actually handled, and the
+honest answer was: not at all._
+
+- **Problem.** `config/matching_weights.yaml` has promised, since it was written, *"past this
+  wait, drop to ANY qualified agent regardless of fit"*. The check lived in
+  `MatchingEngine._guard()`. But `_guard` only runs for a call the **solver has already
+  chosen an agent for** — a call the solver left unassigned hits `continue` several lines
+  earlier. So the ceiling could never fire for the one caller it existed to rescue.
+- **Measured before the fix**, on the real engine with one dual-skill agent:
+
+  | caller | urgency | fit | score | outcome |
+  |---|---|---|---|---|
+  | health, waited **600 s** | 3.00 | 0.10 | 0.600 | `ALL_QUALIFIED_BUSY` → **nobody** |
+  | motor, fresh, CRITICAL | 2.20 | 1.10 | 2.420 | `ASSIGN` |
+
+  Ten minutes on hold, and the ceiling never ran.
+- **Decision:** rescue **before** the optimiser. `MatchingEngine.match()` now begins with
+  `_rescue()`, which walks every caller past `MAX_WAIT_BEFORE_ANY_AGENT_S` **longest wait
+  first** and hands each one a qualified free agent. Those rows and columns are then knocked
+  out of the matrix the solver sees, so nobody is assigned twice. The full matrix is still
+  built for every pair, because `D18` needs the whole candidate list on the record.
+- **The rescued caller gets the LOWEST-fit qualified agent, not the best.** `require_skill`
+  already guarantees everyone in that pool can actually help — fit only says how well. Giving
+  a starved caller the specialist buys them a little and moves the starvation onto whoever
+  genuinely needed that specialist. The promise is *somebody competent, now*; spending the
+  scarcest agent on it is the opposite of what the ceiling is for.
+- **A rescued call never reaches `_guard`.** Deferral and the anti-hot-spot check both exist
+  to *improve* a match, and neither may apply to someone already past the ceiling — that is
+  what being past it means. The ceiling branch inside `_guard` is therefore **deleted**, not
+  left as dead code that reads like a rule.
+- **What it still cannot do.** If no qualified agent is online at all, the rescue finds
+  nothing and the caller is correctly reported as `NO_QUALIFIED_AGENT` — a roster gap, which
+  waiting cannot fix. `run_matching.py --calls 25` shows exactly one such caller, labelled as
+  such. That is the honest floor.
+- **Alternatives rejected:** *scoring* past-ceiling pairs at a large constant kept one code
+  path but needed a magic number above every reachable `fit × urgency`, and made the decision
+  record harder to read. *Accepting the behaviour and rewriting the promise* was on the table
+  and is what the previous commit's doc edits assumed — but the promise is a good one and the
+  hard filter already makes it safe.
+- **The tradeoff, stated plainly.** A fresh **CRITICAL** caller can now wait behind a starved
+  routine one when they are contesting the only qualified agent. See `Q25`: that is a real
+  cost and it is the one thing about this change worth arguing over.

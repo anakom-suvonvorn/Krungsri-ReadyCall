@@ -123,6 +123,10 @@ _Split in practice: **P2a the engine (done, 2026-08-24)** and **P2b the workstat
   the matcher a `waiting_s` frozen at admit time, so `wait_pressure` stayed at 0 and the ceiling
   was unreachable — the mechanism was written, correct, and driven by a constant. Fixed; the
   criterion now needs re-measuring under load, which is the part that was never run.
+  **And a second reason it was not met** (`B13`, same day): the ceiling that the criterion
+  names sat inside a guard that only ran for callers the solver had already placed, so it
+  could never rescue the starved caller. Both are fixed (`D93`); the load measurement is
+  still outstanding.
 - Match → brief rendered **< 1 s**.
 
 **Status 2026-08-24.** Met, except the multi-browser load test: the handshake, presence, the

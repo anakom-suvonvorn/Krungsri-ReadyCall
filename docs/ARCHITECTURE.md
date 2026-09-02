@@ -479,16 +479,26 @@ exponent — the earlier sketch had one and the implementation does not.
 keypad chose.** Speech may refine it once P4 lands, but under `D92` it may only move urgency and the
 fit signals — never `queue_id` or `required_skill`.
 
-**How starvation is actually prevented.** Waiting drives `wait_pressure` toward the `URGENCY_MAX`
-ceiling, and urgency *multiplies* fit, so a long waiter eventually dominates the matrix on their own.
-Past `MAX_WAIT_BEFORE_ANY_AGENT_S` (default 180 s) the guard additionally returns `FALLBACK`, which
-**skips the deferral and the anti-hot-spot check** so nothing can hold the caller back any longer.
+**How starvation is prevented, in two layers.**
 
-> Two corrections worth keeping. `FALLBACK` does **not** mean "fit is ignored and we connect to
-> anyone" — the solver's chosen agent still stands; what changes is that the call can no longer be
-> deferred or bounced by the hot-spot guard. And none of this ran at all until `B12`: the pool fed
-> the matcher a `waiting_s` frozen at admit time, so `wait_pressure` was pinned at 0 and every
-> threshold above was unreachable.
+1. **Gradually** — waiting drives `wait_pressure` toward the `URGENCY_MAX` ceiling, and urgency
+   *multiplies* fit, so a long waiter eventually dominates the matrix on their own merit. Within a
+   single queue this is the whole story: every caller needs the same `required_skill`, so fit is
+   identical across them and the longest waiter wins.
+2. **Absolutely** — past `MAX_WAIT_BEFORE_ANY_AGENT_S` (default 180 s) the caller is handed a
+   qualified free agent by a **pre-pass that runs before the solver** (`D93`), longest wait first,
+   taking the *lowest*-fit qualified agent so the specialists stay free for whoever needs them. A
+   rescued call is removed from the matrix the solver sees and never reaches the guard rails, so
+   nothing can defer it or bounce it.
+
+> Two bugs are buried under those two sentences, both found on 2026-09-01 and both invisible
+> within a single queue. `B12`: the pool fed the matcher a `waiting_s` frozen at admit time, so
+> `wait_pressure` was pinned at 0 and every threshold was unreachable. `B13`: the ceiling lived
+> inside `_guard`, which only runs for a call the solver already chose — so it could never fire for
+> the caller who lost the matrix, which is exactly the caller it existed to rescue.
+
+The one thing the ceiling still cannot do is conjure a skill nobody online holds. That case is
+reported as `NO_QUALIFIED_AGENT` — a roster gap, which waiting cannot fix.
 
 **Still fed by nothing on the live path:** `customer_priority` (the vulnerability flag is set on the
 `Customer` and on the brief, never on the `WaitingCall`) and `fit_continuity` (`last_agent_id` /

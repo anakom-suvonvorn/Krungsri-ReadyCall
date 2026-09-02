@@ -368,8 +368,8 @@ system rather than the code, which is the pattern worth noticing.
   so `waiting_s` never moved. `wait_pressure` stayed at 0, `sla_risk` never fired, and neither
   did the any-qualified ceiling — all of `D22`'s anti-starvation, driven by a constant. Found
   while answering the position question, not by looking for it.
-- **numbers now:** 27 prompts, 15 roles, **54 clips**, 559 tests (517 pass + 42 skipped
-  without the container), 61 diagrams.
+- **numbers now:** 27 prompts, 15 roles, **54 clips**, 61 diagrams. (Test count moved again
+  the same day with `D93`/`B13`, which are matching, not voice — see `P2a_matching.md`.)
 
 _Earlier body text stays as written — it is a record of what was true on 2026-08-25._ Append dated entries here rather than editing the body — this file is a record
 of what was true on 2026-08-25, and the "why" above stays useful even when a number moves._

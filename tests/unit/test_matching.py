@@ -381,6 +381,146 @@ async def test_past_the_wait_ceiling_takes_anyone_qualified(
     assert decision.kind is MatchKind.FALLBACK
 
 
+# --- D93 / B13: the ceiling has to survive CONTENTION, which is the only case that matters -
+#
+# The test above passes with one caller and a whole floor free, which is why the bug lived:
+# with nobody to lose to, the solver picks them anyway and `_guard` stamps FALLBACK on a
+# decision it did not actually cause. Every test below puts a second caller in the way.
+
+
+def _dual_skill_agent(agent_id: str, health: float, motor: float) -> Agent:
+    """One agent, two product lines - 6 of the 15 real agents look like this."""
+    return Agent(
+        agent_id=agent_id,
+        display_name=agent_id,
+        team="mixed",
+        languages=(AgentLanguage(language=Language.TH, level=CefrLevel.NATIVE),),
+        skills=(
+            AgentSkill(skill_code="health.policy", proficiency=health),
+            AgentSkill(skill_code="motor.claim", proficiency=motor),
+        ),
+    )
+
+
+def _health_call(cid: str, waiting_s: float, **kw: object) -> WaitingCall:
+    return make_call(
+        call_session_id=cid,
+        queue_id="q_health_policy",
+        required_skill="health.policy",
+        intent_code="health.coverage.query",
+        waiting_s=waiting_s,
+        **kw,
+    )
+
+
+async def test_a_starved_caller_beats_a_fresher_one_who_fits_better(
+    weights: MatchingWeights, clock: ManualClock
+) -> None:
+    """`B13`. The ceiling used to live in `_guard`, which only runs for a call the solver
+    ALREADY chose - so it could never fire for a caller who lost the matrix, which is
+    exactly the caller it exists to rescue.
+
+    Measured before the fix: a health caller 600 s in scored 0.600 against a fresh motor
+    caller's 2.420 for the one shared agent, and lost. The config has always promised the
+    opposite - "past this wait, drop to ANY qualified agent regardless of fit".
+    """
+    only_one = _dual_skill_agent("A_dual", health=0.10, motor=1.0)
+    engine = MatchingEngine(directory=ListDirectory([only_one]), weights=weights, clock=clock)
+    presence = {"A_dual": make_presence("A_dual", clock=clock)}
+
+    starved = _health_call("call_starved", waiting_s=600.0)
+    fresh = make_call(call_session_id="call_fresh", waiting_s=0.0, intent_urgency=Urgency.CRITICAL)
+
+    by_call = {d.call_session_id: d for d in await engine.match([starved, fresh], presence)}
+
+    assert by_call["call_starved"].kind is MatchKind.FALLBACK
+    assert by_call["call_starved"].chosen_agent_id == "A_dual"
+    # And the caller who lost is told the honest reason: a capacity shortfall, not a
+    # roster gap - someone qualified exists, they were just taken (`D50`).
+    assert by_call["call_fresh"].kind is MatchKind.ALL_QUALIFIED_BUSY
+    assert by_call["call_fresh"].chosen_agent_id is None
+
+
+async def test_the_rescue_leaves_the_specialist_for_whoever_needs_them(
+    weights: MatchingWeights, clock: ManualClock
+) -> None:
+    """`D93` takes the LOWEST-fit qualified agent, not the best.
+
+    `require_skill` already guarantees everyone in this pool can help; fit only says how
+    well. Handing a starved caller the specialist would buy them a little and move the
+    starvation onto whoever actually needed that specialist.
+    """
+    weak = make_agent("A_weak", skill="health.policy", prof=0.35)
+    strong = make_agent("A_strong", skill="health.policy", prof=0.98)
+    engine = MatchingEngine(directory=ListDirectory([strong, weak]), weights=weights, clock=clock)
+    presence = {
+        "A_weak": make_presence("A_weak", clock=clock),
+        "A_strong": make_presence("A_strong", clock=clock),
+    }
+
+    starved = _health_call("call_starved", waiting_s=400.0)
+    decision = (await engine.match([starved], presence))[0]
+
+    assert decision.kind is MatchKind.FALLBACK
+    assert decision.chosen_agent_id == "A_weak", "the specialist stays free"
+
+
+async def test_two_starved_callers_are_rescued_longest_wait_first(
+    weights: MatchingWeights, clock: ManualClock
+) -> None:
+    only_one = make_agent("A_only", skill="health.policy", prof=0.8)
+    engine = MatchingEngine(directory=ListDirectory([only_one]), weights=weights, clock=clock)
+    presence = {"A_only": make_presence("A_only", clock=clock)}
+
+    newer = _health_call("call_newer", waiting_s=200.0)
+    older = _health_call("call_older", waiting_s=900.0)
+
+    by_call = {d.call_session_id: d for d in await engine.match([newer, older], presence)}
+
+    assert by_call["call_older"].chosen_agent_id == "A_only"
+    assert by_call["call_newer"].chosen_agent_id is None
+    assert by_call["call_newer"].kind is MatchKind.ALL_QUALIFIED_BUSY
+
+
+async def test_the_rescue_never_hands_out_an_unqualified_agent(
+    weights: MatchingWeights, clock: ManualClock
+) -> None:
+    """ "Any qualified agent" is not "anyone". The hard filters still run first: a caller
+    waiting an hour must not be connected to someone who cannot help them (`D22`).
+    """
+    wrong_skill = make_agent("A_motor", skill="motor.claim", prof=1.0)
+    engine = MatchingEngine(directory=ListDirectory([wrong_skill]), weights=weights, clock=clock)
+    presence = {"A_motor": make_presence("A_motor", clock=clock)}
+
+    starved = _health_call("call_starved", waiting_s=3600.0)
+    decision = (await engine.match([starved], presence))[0]
+
+    assert decision.chosen_agent_id is None
+    assert decision.kind is MatchKind.NO_QUALIFIED_AGENT, "a roster gap; waiting cannot fix it"
+
+
+async def test_a_rescued_caller_is_never_held_back_by_a_guard(
+    weights: MatchingWeights, clock: ManualClock
+) -> None:
+    """Deferral and the anti-hot-spot check both exist to improve a match. Neither may
+    apply to someone already past the ceiling - that is the point of being past it.
+    """
+    weak = make_agent("A_weak", skill="health.policy", prof=0.30)
+    strong = make_agent("A_strong", skill="health.policy", prof=0.99)
+    engine = MatchingEngine(directory=ListDirectory([strong, weak]), weights=weights, clock=clock)
+    presence = {
+        "A_weak": make_presence("A_weak", clock=clock),
+        "A_strong": make_presence("A_strong", clock=clock),
+    }
+
+    # A fit gap far past `defer_min_fit_gap`, which would normally trigger a DEFER.
+    starved = _health_call("call_starved", waiting_s=500.0)
+    decision = (await engine.match([starved], presence))[0]
+
+    assert decision.kind is MatchKind.FALLBACK
+    assert decision.chosen_agent_id is not None
+
+
 async def test_a_critical_caller_is_never_deferred(
     directory: FixtureAgentDirectory, weights: MatchingWeights, clock: ManualClock
 ) -> None:

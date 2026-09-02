@@ -201,10 +201,19 @@ _Append here rather than editing above._
   never fired, and neither the 180 s ceiling nor the 60 s defer cap was ever reachable. §2's
   argument was right and the code executed it against a constant. `tick()` now refreshes
   `waiting_s` from `session.wait_seconds(now)`, and two tests move nothing but the clock.
-- **§4's "`FALLBACK` to any qualified agent" is not what `FALLBACK` does.** The solver's
-  chosen agent still stands; what the guard removes past the ceiling is the **deferral** and
-  the **anti-hot-spot check**, so nothing can hold the caller back any longer. Fit is never
-  ignored — `score = fit × urgency` throughout.
+- **§4's "`FALLBACK` to any qualified agent" was not what the code did — and now it is
+  (`D93`, `B13`).** The ceiling lived inside `_guard`, which only runs for a call the solver
+  **already chose an agent for**; a starved caller who lost the matrix hit `continue` several
+  lines earlier and never reached it. So the one guarantee the config had always advertised
+  could not fire for the one caller it was written for. It is a **pre-pass before the solver**
+  now: past-ceiling callers are handed a qualified free agent, longest wait first, taking the
+  *lowest*-fit one so the specialists stay free. The dead branch in `_guard` is deleted rather
+  than left reading like a rule.
+  *(This bullet replaces one written a day earlier that said "accept it, fit is never ignored"
+  — that was an accurate description of broken behaviour.)*
+- **Numbers after `D93`:** 564 tests, 34 of them on matching — five new ones all putting a
+  second caller in the way, because the ceiling test that existed gave one caller an empty
+  floor and therefore proved nothing about a contention rule.
 - **Two scoring inputs are still fed by nothing on the live path.** `customer_priority`
   reads `WaitingCall.is_vulnerable`, which is set on the `Customer` and on the brief DTO but
   never on the `WaitingCall`; `fit_continuity` reads `last_agent_id` / `last_contact_at`,

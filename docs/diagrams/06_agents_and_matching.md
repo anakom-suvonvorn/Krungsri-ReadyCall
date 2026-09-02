@@ -40,13 +40,19 @@ crash scene.
 **Urgency multiplies rather than adds**, and that is the design's answer to starvation. Under
 pure best-fit, a caller nobody is a great match for waits forever while better-matched
 callers overtake them. Multiplying means waiting eventually wins on its own: `wait_pressure`
-climbs toward the urgency ceiling and, past `MAX_WAIT_BEFORE_ANY_AGENT_S`, the guard returns
-`FALLBACK` so the call can no longer be **deferred** or bounced by the anti-hot-spot check.
+climbs toward the urgency ceiling and, inside one queue, the longest waiter takes the agent.
 
-Two things this page used to get wrong. `FALLBACK` does **not** drop to "any qualified agent"
-— the solver's chosen agent still stands; what it removes is everything that could hold the
-caller back. And none of it ran until `B12`: `waiting_s` was frozen at admit time, so
-`wait_pressure` was pinned at 0 and every threshold above was unreachable.
+**Past `MAX_WAIT_BEFORE_ANY_AGENT_S` there is a second, absolute layer** (`D93`): a pre-pass
+runs *before* the solver and hands every past-ceiling caller a qualified free agent, longest
+wait first. It takes the **lowest**-fit qualified agent on purpose — `require_skill` already
+guarantees they can help, so giving away the specialist would just move the starvation onto
+whoever needed them.
+
+Two bugs lived here until 2026-09-01, and both were invisible within a single queue. `B12`:
+`waiting_s` was frozen at admit time, so `wait_pressure` never rose and every threshold was
+unreachable. `B13`: the ceiling sat inside `_guard`, which only runs for a call the solver
+**already chose** — so it could never fire for a caller who lost the matrix, which is the
+only caller it was for.
 
 **Global, not greedy.** Greedy best-first is locally optimal and globally poor — it hands the
 one bilingual agent to the first caller who asks, then strands the caller who genuinely

@@ -545,3 +545,43 @@ looking for this._
   call** today. `run_matching.py` generates all three synthetically, which is exactly why the
   simulator looks like it exercises them. Not fixed here — it is a wiring job with its own
   decisions about where continuity data should come from — but it is now written down.
+
+## B13. The wait ceiling could never fire for the caller it existed to rescue
+_Found 2026-09-01 by the user asking how a past-ceiling caller is handled. Fixed by `D93`._
+
+- **Symptoms:** none. `test_past_the_wait_ceiling_takes_anyone_qualified` passed, the config
+  documented the behaviour, and three separate docs described it. The test gave one caller a
+  whole free floor — with nobody to lose to, the solver picked them anyway and `_guard`
+  stamped `FALLBACK` on a decision it had not actually caused.
+- **Root cause:** ordering. `MatchingEngine.match()` builds the matrix, solves it, and *then*
+  calls `_guard()` — but only for a call the solver returned an agent for:
+
+  ```python
+  chosen_index = assignment[index]
+  if chosen_index is None:
+      ...                       # ALL_QUALIFIED_BUSY / NO_QUALIFIED_AGENT
+      continue                  # <- the guard is never reached
+  agent = agents[chosen_index]
+  kind, reason = self._guard(...)   # <- the ceiling lived in here
+  ```
+
+  A starved caller who lost the matrix took the `continue`. The ceiling was checked only for
+  callers who had *already been given someone*, where all it did was suppress the deferral
+  and the hot-spot bounce.
+- **Why it survived review.** Within a single queue the bug is invisible: every caller on a
+  queue needs the same `required_skill`, so fit against a given agent is identical for all of
+  them, urgency alone decides, and the longest waiter wins. The bug needs **cross-queue
+  contention for a multi-skilled agent** — and 6 of the 15 roster agents span more than one
+  product line, so it is not exotic.
+- **Fix:** `D93` — a `_rescue()` pre-pass before the solver.
+- **Verification:** five tests, every one of them putting a second caller in the way, and all
+  five confirmed to fail with the rescue disabled. The headline case: a health caller 600 s in
+  now takes the shared agent from a fresh CRITICAL motor caller, and the loser is correctly
+  reported `ALL_QUALIFIED_BUSY` rather than as a roster gap.
+- **Lesson.** *A guard that runs after a selection can only ever veto that selection — it can
+  never rescue whoever the selection skipped.* The ceiling was written as a filter on the
+  chosen agent when it needed to be a claim on the pool. Worth checking the other guard rails
+  for the same shape: `defer_*` and the hot-spot check are both genuinely about a chosen
+  agent, so they are in the right place — the ceiling was the odd one out.
+- **And the test that hid it is the same family as `B4` and `B12`:** a scenario with no
+  contention proves nothing about a contention rule.

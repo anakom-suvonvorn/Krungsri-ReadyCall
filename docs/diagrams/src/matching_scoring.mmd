@@ -1,4 +1,5 @@
-%% HANDWRITTEN. Checked against ARCHITECTURE.md S8 + D22 + D23 + B12 + FitBreakdown model
+%% HANDWRITTEN. Checked against ARCHITECTURE.md S8 + D22 + D23 + D93 + B12 + B13
+%% + the FitBreakdown model
 flowchart TB
     PAIR["for EVERY (waiting call, free agent) pair"]:::in
 
@@ -27,7 +28,7 @@ flowchart TB
     SCORE --> SOLVE["<b>Hungarian solver</b> over the whole matrix"]:::solve
     SOLVE --> DEC[("<b>MatchingDecision</b> - persisted<br/>every candidate, every sub-score, the weights<br/>version, the solver, and how long it took")]:::store
 
-    WHY1["<b>why urgency MULTIPLIES rather than adds.</b><br/>Pure best-fit starves people: a caller nobody is<br/>a great match for waits forever while better-matched<br/>callers overtake them. The multiplier means waiting<br/>itself eventually wins - wait_pressure climbs toward<br/>the 3.0 ceiling and dominates the matrix.<br/>Past MAX_WAIT_BEFORE_ANY_AGENT_S the guard returns<br/>FALLBACK, which removes DEFER and the hot-spot check.<br/>It does NOT re-pick the agent: the solver choice stands.<br/><br/>None of this ran until B12 - waiting_s was frozen<br/>at admit time, so wait_pressure was pinned at 0."]:::note
+    WHY1["<b>why urgency MULTIPLIES rather than adds.</b><br/>Pure best-fit starves people: a caller nobody is<br/>a great match for waits forever while better-matched<br/>callers overtake them. The multiplier means waiting<br/>itself eventually wins - wait_pressure climbs toward<br/>the 3.0 ceiling and dominates the matrix.<br/><br/><b>Past MAX_WAIT_BEFORE_ANY_AGENT_S that stops being<br/>a tendency and becomes a guarantee (D93):</b> a pre-pass<br/>runs BEFORE the solver and hands the caller the<br/>lowest-fit QUALIFIED free agent, longest wait first.<br/>Lowest, not best - the specialist stays free for<br/>whoever actually needs them.<br/><br/>Two bugs lived here, both invisible inside one queue.<br/>B12: waiting_s was frozen at admit, so wait_pressure<br/>was pinned at 0. B13: the ceiling sat in _guard, which<br/>only runs for a call the solver ALREADY chose."]:::note
 
     WHY2["<b>why global rather than greedy - MEASURED (D49).</b><br/>scripts/run_matching.py --compare scores both on the<br/>same matrix. Across seven seeds greedy left between<br/><b>0.0% and 8.2%</b> on the table. So the honest claim is not<br/>'greedy is bad' - it is that greedy is usually fine and<br/>occasionally much worse, and it is worst exactly when<br/>agents are scarce relative to skill diversity, which is<br/>when routing matters most."]:::note
 

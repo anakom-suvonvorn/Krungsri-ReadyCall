@@ -3,12 +3,16 @@
 One waiting pool, not one queue per agent (`D22`). Per-agent queues look tidy and behave
 badly — a caller stuck behind one busy agent waits while three qualified people sit idle.
 
-Every tick does the same four things:
+Every tick does the same five things:
 
-1. build the candidate matrix, excluding pairs that fail a **hard filter**;
-2. score each surviving pair as `fit x urgency`;
-3. solve the whole matrix at once (`solver.hungarian`);
-4. emit a `MatchingDecision` per call — **including the ones it decided not to assign**,
+1. **rescue anyone past the wait ceiling** — hand them any qualified free agent before the
+   optimiser gets a say (`D93`). This runs FIRST on purpose, and the reason is `B13`: the
+   ceiling used to live inside `_guard`, which only runs for a call the solver *already*
+   chose, so it could never fire for the one caller it existed to rescue;
+2. build the candidate matrix, excluding pairs that fail a **hard filter**;
+3. score each surviving pair as `fit x urgency`;
+4. solve the rest of the matrix at once (`solver.hungarian`);
+5. emit a `MatchingDecision` per call — **including the ones it decided not to assign**,
    and including every candidate it considered.
 
 That last point is the difference between a system people leave switched on and one they
@@ -76,7 +80,10 @@ class MatchingEngine:
         if not agents:
             return [self._nobody_online(call, now, watch) for call in calls]
 
-        # --- 1 + 2: candidates and scores ---------------------------------------------
+        # --- 1: rescue anyone past the wait ceiling (`D93`) ----------------------------
+        rescued, reserved = self._rescue(calls, agents, presence, now=now)
+
+        # --- 2 + 3: candidates and scores ---------------------------------------------
         matrix: list[list[float]] = []
         breakdowns: list[list[tuple[FitBreakdown, float, str | None]]] = []
         for call in calls:
@@ -95,12 +102,25 @@ class MatchingEngine:
             matrix.append(row_scores)
             breakdowns.append(row_detail)
 
-        # --- 3: solve the whole matrix at once -----------------------------------------
+        # --- 4: solve what the rescue pass left behind ----------------------------------
+        #
+        # The full matrix above is still built for every pair, because `D18` needs the whole
+        # candidate list on the record. What the solver sees is that matrix with the rescued
+        # rows and the reserved columns knocked out, so it cannot hand the same agent twice.
+        remaining = [
+            [
+                solver.IMPOSSIBLE if (i in rescued or j in reserved) else matrix[i][j]
+                for j in range(len(agents))
+            ]
+            for i in range(len(calls))
+        ]
         assignment = (
-            solver.hungarian(matrix) if self._solver_name == "hungarian" else solver.greedy(matrix)
+            solver.hungarian(remaining)
+            if self._solver_name == "hungarian"
+            else solver.greedy(remaining)
         )
 
-        # --- 4: one explainable decision per call --------------------------------------
+        # --- 5: one explainable decision per call --------------------------------------
         decisions: list[MatchingDecision] = []
         for index, call in enumerate(calls):
             urgency = score_urgency(call, self._weights)
@@ -114,7 +134,7 @@ class MatchingEngine:
                 )
                 for j in range(len(agents))
             )
-            chosen_index = assignment[index]
+            chosen_index = rescued.get(index, assignment[index])
             if chosen_index is None:
                 # WHY it went unplaced, not just THAT it did (`D50`). The solver returns no
                 # column for two opposite reasons and used to report both as "no agent with
@@ -147,7 +167,12 @@ class MatchingEngine:
 
             agent = agents[chosen_index]
             fit = breakdowns[index][chosen_index][0]
-            kind, reason = self._guard(call, agent, fit, candidates, agents, breakdowns[index])
+            if index in rescued:
+                # Already past the ceiling and already given someone. Nothing in `_guard`
+                # may take that back: not the deferral, not the anti-hot-spot check.
+                kind, reason = MatchKind.FALLBACK, None
+            else:
+                kind, reason = self._guard(call, agent, fit, candidates, agents, breakdowns[index])
 
             decisions.append(
                 MatchingDecision(
@@ -178,6 +203,77 @@ class MatchingEngine:
         )
         return decisions
 
+    # --- the wait ceiling ---------------------------------------------------------------
+
+    def _rescue(
+        self,
+        calls: list[WaitingCall],
+        agents: list[Agent],
+        presence: dict[str, AgentPresence],
+        *,
+        now: datetime,
+    ) -> tuple[dict[int, int], set[int]]:
+        """Past `MAX_WAIT_BEFORE_ANY_AGENT_S`, hand them anyone qualified. Longest wait first.
+
+        Returns `(call index -> agent index, agent indices now spoken for)`.
+
+        **Why this runs before the solver and not inside `_guard`.** `_guard` is only reached
+        for a call the solver has *already* picked an agent for, so the ceiling could never
+        fire for a caller who lost the matrix — which is precisely the caller it exists to
+        rescue (`B13`). Measured before the fix: a health caller **600 s** in lost the only
+        free agent to a fresh motor caller who fitted better, and the ceiling never ran.
+
+        **Why the LOWEST-fit qualified agent, not the best.** The config's promise is *"any
+        qualified agent regardless of fit"*, and `require_skill` already guarantees every
+        candidate here can actually help — fit only says how well. Taking the specialist
+        would hand this caller the best help on the floor and move the starvation onto
+        whoever actually needed that specialist. The guarantee is *somebody competent, now*;
+        spending the scarcest agent on it buys this caller a little and costs the next one a
+        lot.
+        """
+        ceiling = self._weights.max_wait_before_any_agent_s
+        starved = sorted(
+            (i for i, call in enumerate(calls) if call.total_wait_s >= ceiling),
+            key=lambda i: calls[i].total_wait_s,
+            reverse=True,
+        )
+
+        rescued: dict[int, int] = {}
+        reserved: set[int] = set()
+        for i in starved:
+            call = calls[i]
+            options = [
+                (
+                    score_fit(
+                        call, agents[j], presence[agents[j].agent_id], self._weights, now=now
+                    ).total,
+                    agents[j].agent_id,
+                    j,
+                )
+                for j in range(len(agents))
+                if j not in reserved
+                and hard_filter(call, agents[j], presence[agents[j].agent_id], self._weights)
+                is None
+            ]
+            if not options:
+                # Every qualified agent is busy or already spoken for. The caller falls
+                # through to the solver, which will reach the same conclusion and record
+                # `ALL_QUALIFIED_BUSY` — the honest answer, and not this pass's to invent.
+                continue
+            # Sorted by agent id after fit so the choice is deterministic on a tie, which
+            # scenario replays depend on (`D35`).
+            _, _, j = min(options)
+            rescued[i] = j
+            reserved.add(j)
+            log.info(
+                "wait ceiling reached - assigning any qualified agent",
+                call_session_id=call.call_session_id,
+                agent_id=agents[j].agent_id,
+                waited_s=round(call.total_wait_s, 1),
+                ceiling_s=ceiling,
+            )
+        return rescued, reserved
+
     # --- guard rails --------------------------------------------------------------------
 
     def _guard(
@@ -190,10 +286,11 @@ class MatchingEngine:
         detail: list[tuple[FitBreakdown, float, str | None]],
     ) -> tuple[MatchKind, str | None]:
         """Decide whether to assign, fall back, or hold — and say which."""
-        # Past the ceiling, take anyone qualified. A perfect match nobody is available for
-        # is worth less than a good one who is.
-        if call.total_wait_s >= self._weights.max_wait_before_any_agent_s:
-            return MatchKind.FALLBACK, None
+        # NOTE: the wait ceiling is NOT checked here any more. It used to be, and it was
+        # unreachable for the caller who needed it: `_guard` only runs for a call the solver
+        # already chose, so a starved caller who lost the matrix never got here (`B13`).
+        # `_rescue()` now handles them before the solver runs, and a rescued call never
+        # reaches this method at all.
 
         # Anti-hot-spot: stop one strong agent absorbing every hard call in a shift.
         if len(self._recent) == self._recent.maxlen:
