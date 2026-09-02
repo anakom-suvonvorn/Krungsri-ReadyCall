@@ -35,6 +35,13 @@ class SttEngineName(StrEnum):
     CLOUD = "cloud"
 
 
+class VadEngineName(StrEnum):
+    """Which voice detector runs. `energy` needs nothing and is the CI/degraded path."""
+
+    ENERGY = "energy"
+    SILERO = "silero"
+
+
 class LlmProviderName(StrEnum):
     RULEBASED = "rulebased"
     ANTHROPIC = "anthropic"
@@ -111,8 +118,18 @@ class Settings(BaseSettings):
     # --- adapter selection (D3) ---
     telephony_provider: TelephonyProviderName = TelephonyProviderName.SIMULATED
     stt_engine: SttEngineName = SttEngineName.SCRIPTED
+    #: `silero` needs the `ml` extra (`D95`); `energy` needs nothing and is what CI
+    #: and the stage-safe path run (`D96`).
+    vad_engine: VadEngineName = VadEngineName.ENERGY
+    #: The checkpoint. `thonburian_ct2` wants the CTranslate2 build of the same model, so
+    #: leave this blank to take whichever default the chosen adapter declares.
     stt_model: str = "biodatlab/whisper-th-medium-combined"
+    #: `auto` resolves to cuda when a GPU is actually usable and cpu otherwise (`D96`).
+    #: Resolved in `build_stt`, not here, because deciding it at import time would make
+    #: Settings depend on torch.
     stt_device: str = "auto"
+    #: int8 weights, fp16 compute. The default because of what `D95` measured: 4.00 GiB
+    #: total and ~3.2 GiB free, against a medium checkpoint that wants most of it.
     stt_compute_type: str = "int8_float16"
     llm_provider: LlmProviderName = LlmProviderName.RULEBASED
     llm_model: str = "claude-sonnet-5"

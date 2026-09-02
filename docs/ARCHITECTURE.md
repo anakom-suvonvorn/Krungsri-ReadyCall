@@ -218,6 +218,16 @@ customer (if any), product, snapshot and queue.
 
 ## 6. Data flow B — the line, the IVR, and pre-call intake
 
+> **Built as of P3 step 4b — including the audio.** `media/` normalises whatever telephony
+> delivers (both G.711 laws, 8 or 16 kHz, mono or stereo) into the 16 kHz mono float32 this
+> document promises; `ports/vad.py` plus `services/transcription/` endpoint it and turn it
+> into `TranscriptTurn`s; and `TranscriptionService` feeds `IntakeService.on_turn`, which
+> had been waiting for it since `D88` (`D96`). **Still not built**: the encrypted recording
+> to object storage (P7's keys), the live transcript on the workstation, and `D30`'s
+> measured bake-off, which needs real Thai telephone audio rather than a signal generator.
+> **Read `B14` before changing anything in that path** — Whisper fed near-silence costs 8.6
+> seconds and invents domain vocabulary, and three guards exist because of it.
+>
 > **Built as of P3 step 4a, down to and including the offer.** `services/ivr/` walks the
 > real menu and hands back a queue; `services/intake/` then acknowledges the wait, makes the
 > offer, records the consent and opens an intake that **outlives the request that started

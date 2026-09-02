@@ -54,6 +54,12 @@ async def sweep_once(container: Container) -> None:
     * `PresenceService.sweep()` — heartbeat expiry. A closed laptop is supposed to fall out
       of presence on a TTL; instead it stayed `AVAILABLE` and kept being chosen.
 
+    `TranscriptionService.check_timeouts()` is the newest member and joined for exactly the
+    same reason (`D96`): a recording ends when the caller goes quiet for
+    `INTAKE_SILENCE_TIMEOUT_S` or hits `INTAKE_MAX_DURATION_S`, and on both of those the
+    only thing that has happened is that time passed. There is no request in flight to
+    notice.
+
     `IntakeService.reoffer_due()` joined them rather than being scheduled by whichever
     request queued the call. It is the same shape of trap: the re-offer at
     `INTAKE_REOFFER_AFTER_S` fires *because the wait got long*, and nothing else about the
@@ -66,14 +72,16 @@ async def sweep_once(container: Container) -> None:
         expired = await container.dispatch.expire_offers()
         dropped = await container.presence.sweep()
         reoffered = await container.intake.reoffer_due()
+        recordings = await container.transcription.check_timeouts()
         result = await container.dispatch.tick()
-        if expired or dropped or reoffered or result.offered:
+        if expired or dropped or reoffered or recordings or result.offered:
             log.info(
                 "sweep",
                 offers_expired=len(expired),
                 agents_dropped=len(dropped),
                 calls_offered=len(result.offered),
                 intake_reoffers=len(reoffered),
+                recordings_timed_out=len(recordings),
             )
     except Exception:
         log.exception("sweep failed")

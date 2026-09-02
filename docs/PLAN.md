@@ -1,7 +1,7 @@
 # PLAN
 
 _The master build plan for the full system: what gets built, in what order, and what "done" means for each phase._
-_Last updated: 2026-09-01._
+_Last updated: 2026-09-02._
 
 ---
 
@@ -222,8 +222,13 @@ started. `explanations/P3_voice.md` covers the built half; `diagrams/12_the_menu
   running server. Turns arrive through `IntakeService.on_turn`; nothing feeds it yet.
 
 **Exit criteria**
-- Utterance end → turn visible **p95 < 1.5 s** on the RTX 3050, with the chosen engine named and the
-  bake-off table recorded.
+- 🔶 Utterance end → turn visible **p95 < 1.5 s** on the RTX 3050, with the chosen engine named and
+  the bake-off table recorded. **Half met.** The harness is built and the pipeline runs on the GPU;
+  faster-whisper `tiny` at `int8_float16` measures **155 ms** per utterance containing speech, which
+  is comfortably inside the budget. The table is **not** filled, and deliberately: a real WER or
+  latency figure needs real Thai telephone audio and the Thai weights, and synthetic tones measure
+  the model's pathology rather than its performance (`B14`). Do not close `D30` from a signal
+  generator.
 - ✅ A caller who presses 2, and a caller who consents to nothing, both still reach **the correct
   queue** with a menu-derived brief — because routing never depended on the AI (`D37`).
   Proved end to end: `test_every_answer_leaves_the_queue_exactly_where_the_menu_put_it`,
@@ -231,8 +236,12 @@ started. `explanations/P3_voice.md` covers the built half; `diagrams/12_the_menu
 - ✅ A caller on the general hotline with an unrecognised number reaches the right specialist purely by
   keypad. That is the floor, and it must be at least as good as an ordinary call centre.
   *(`anonymous_declined` replays it: keys 2/4 → `q_health_policy`, no identity, no consent.)*
-- Killing the STT worker mid-call degrades to recording-only; the call is unaffected.
-- No audio ever written to local disk unencrypted.
+- 🔶 Killing the STT worker mid-call degrades to recording-only; the call is unaffected. The
+  swallow-and-log path exists in `TranscriptionStream._consume` (`D12`) and is asserted by test;
+  killing a *real* worker mid-call waits on the worker being a separate process (P5).
+- ✅ No audio ever written to local disk unencrypted — because **no audio is written to disk at
+  all** yet. Everything is per-utterance and in memory (`D9`). The encrypted recording is the
+  remaining piece and it wants P7's key management.
 - 🔶 Changing a line of Thai in `voice_prompts.yaml` changes what the caller hears after one re-render.
   *(The re-render is proved; "what the caller hears" waits on a real voice.)*
 

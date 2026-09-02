@@ -191,6 +191,9 @@ class DomainPack:
     menus: dict[str, MenuSpec]
     challenges: dict[str, ChallengeSpec]
     menu_settings: MenuSettings
+    #: Words the ASR is nudged toward (`D9`). Config, not code, because they are
+    #: insurance-specific and `services/` may not hold a policy concept (`D28`).
+    stt_vocabulary: tuple[str, ...] = ()
     language_menu: LanguageMenuSpec | None = None
     personalisation: PersonalisationSpec | None = None
     source_dir: Path = field(default=Path("config"))
@@ -285,6 +288,18 @@ class DomainPack:
 
     # --- loading ---------------------------------------------------------------------
 
+    @staticmethod
+    def _load_stt_vocabulary(directory: Path) -> tuple[str, ...]:
+        """Optional: a deployment with no jargon worth nudging simply omits the file."""
+        path = directory / "stt_vocabulary.yaml"
+        if not path.exists():
+            return ()
+        raw = _read(path)
+        terms = raw.get("terms") or []
+        if not isinstance(terms, list):
+            raise ConfigError(f"{path}: `terms` must be a list")
+        return tuple(str(t).strip() for t in terms if str(t).strip())
+
     @classmethod
     def load(cls, config_dir: Path | str = Path("config")) -> DomainPack:
         directory = Path(config_dir)
@@ -295,6 +310,7 @@ class DomainPack:
             _read(directory / "menus.yaml")
         )
         challenges = cls._load_challenges(_read(directory / "challenges.yaml"))
+        vocabulary = cls._load_stt_vocabulary(directory)
 
         pack = cls(
             intents=intents,
@@ -304,6 +320,7 @@ class DomainPack:
             menus=menus,
             challenges=challenges,
             menu_settings=settings,
+            stt_vocabulary=vocabulary,
             language_menu=language_menu,
             personalisation=personalisation,
             source_dir=directory,

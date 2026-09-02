@@ -99,3 +99,44 @@ and re-running a build step, with no studio and no per-call latency.
 ---
 
 ← [Agents & matching](06_agents_and_matching.md) · [index](README.md) · next → [Data & events](08_data_and_events.md)
+
+## 7.x The audio path — from a phone line to `on_turn`
+
+![the audio path](audio_path.svg)
+
+Built at P3 step 4b (`D96`). Five things in this picture are decisions rather than plumbing.
+
+**Normalisation happens once, at the edge.** `ports/stt.py` promises everything above it
+16 kHz mono float32 *always*, and `media/audio.py` is the only module in the system allowed
+to know that a phone call is not already that. It handles **both G.711 companding laws** —
+µ-law for North America and Japan, **A-law for Thailand** — because decoding one as the
+other does not raise. It produces loud, distorted, entirely plausible audio, and the first
+thing anybody would blame is the microphone or the model.
+
+**It is pure Python with no numpy, deliberately.** CI runs `uv sync --frozen` with no
+extras. If the audio path needed torch it would only ever execute on the one laptop with a
+GPU — `B7`'s shape exactly. The same argument is why `EnergyVad` exists alongside Silero.
+
+**The endpointer has no model, no I/O and no clock**, which is what makes `D9`'s inherited
+constants assertable against a plain list of floats. The 120 ms *leading* pad is the most
+load-bearing number in it: Whisper clips the first syllable without it, and in Thai that
+syllable frequently carries the tone that distinguishes the word.
+
+**Ingestion never waits for the model.** One queue, one consumer, one sequence counter — so
+frames keep arriving while Whisper works, and turns stay in order without a sorting step. A
+task per segment would transcribe a two-word phrase faster than the sentence before it and
+deliver the caller's words shuffled.
+
+**The two guards after the model are not tidiness, they are `B14`.** Measured on this GPU:
+one second of digital silence costs **8.6 seconds** and comes back with invented Thai — so a
+VAD false positive is a latency bomb, not just a junk turn. And fed a non-speech segment
+with our own vocabulary hint, the model returned three of `config/stt_vocabulary.yaml`'s
+terms, in that file's order, as if the caller had said them. That is worse than an ordinary
+hallucination: the invented words are exactly the domain terms that make a brief look
+credible, and the agent cannot tell. It is `D16`'s hazard one layer below where `D16` guards
+it.
+
+**What is not in this picture, and why:** the encrypted recording to object storage (P7's
+key management), the live transcript on the workstation, and any real bake-off number —
+which needs real Thai telephone speech, not a signal generator (`D30`, still open).
+

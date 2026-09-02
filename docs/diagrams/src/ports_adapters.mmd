@@ -17,11 +17,16 @@ flowchart LR
     logic --> P_llm["ports/llm.py"]:::port
     P_llm --> A_llm_rulebased["rulebased.py"]:::adapter
     logic --> P_stt["ports/stt.py"]:::port
+    P_stt --> A_stt_faster_whisper["faster_whisper.py"]:::adapter
     P_stt --> A_stt_scripted["scripted.py"]:::adapter
+    P_stt --> A_stt_thonburian_hf["thonburian_hf.py"]:::adapter
     logic --> P_telephony["ports/telephony.py"]:::port
     P_telephony --> A_telephony_simulated["simulated.py"]:::adapter
     logic --> P_tts["ports/tts.py"]:::port
     P_tts --> A_tts_null["null.py"]:::adapter
+    logic --> P_vad["ports/vad.py"]:::port
+    P_vad --> A_vad_energy["energy.py"]:::adapter
+    P_vad --> A_vad_silero["silero.py"]:::adapter
     classDef core fill:#1f6feb,stroke:#0b3d91,color:#fff
     classDef port fill:#fff4e6,stroke:#e8a33d,color:#4a2f00
     classDef adapter fill:#e9f7ef,stroke:#2f9e5f,color:#08361d

@@ -1,7 +1,7 @@
 # BUG_HISTORY
 
 _Solved bugs and the lessons they bought. **Search this file FIRST when debugging** — the answer may already be here._
-_Last updated: 2026-09-01._
+_Last updated: 2026-09-02._
 
 Format per entry:
 
@@ -585,3 +585,88 @@ _Found 2026-09-01 by the user asking how a past-ceiling caller is handled. Fixed
   agent, so they are in the right place — the ceiling was the odd one out.
 - **And the test that hid it is the same family as `B4` and `B12`:** a scenario with no
   contention proves nothing about a contention rule.
+
+## B14. Whisper on near-silence: eight seconds, and it invents the words you gave it
+_Found 2026-09-02 by running the bake-off on the real GPU and disbelieving the numbers._
+
+- **Symptoms.** Three of them, and only the first looked like a bug:
+  1. the bake-off reported a p95 latency of **0 ms** for every engine, including a real one;
+  2. it reported **0 MB** of VRAM for a model that had visibly loaded onto the card;
+  3. once both of those were fixed, `faster_whisper_tiny` reported **10-11 s** p95 on 4.5 s
+     of audio — for the *smallest* Whisper there is.
+- **Root causes — four separate ones, which is why this entry is long.**
+  - **The latency instrument never fired.** It keyed a dict on the exact packet-boundary
+    position and looked it up by `turn.t_end_ms`. The endpointer adds `pad_after_ms`, so a
+    turn's end is 60 ms past any boundary and the lookup missed **every time**. No latency
+    was ever recorded, and an empty list printed a clean `0`. A round zero across unrelated
+    things is `B3` exactly: the instrument, not the code.
+  - **The VRAM instrument was blind.** `torch.cuda.max_memory_allocated()` only sees torch's
+    own allocator, and CTranslate2 allocates through its own — so it never saw a byte of
+    faster-whisper's model. `mem_get_info()` asks the driver, which sees everything.
+  - **The feed was not paced.** Pushing a whole file in a tight loop queues every utterance
+    at once, so the third waits behind two inferences. That is a *backlog*, not a latency.
+    Measured on identical audio and identical work: **11270 ms unpaced against 553 ms paced.**
+  - **And then the real finding.** With honest instruments, a direct measurement:
+
+    ```
+    tone 0.9 s      155 ms    text: ""
+    tone 2.0 s      195 ms    text: ""
+    SILENCE 1.0 s  8578 ms    text: "ช่วงที่สุดได้โลงในอ้าอีก นี่"
+    ```
+
+    **One second of digital silence costs 8.6 seconds and comes back with invented Thai** —
+    55x the cost of real speech. `D9` documented the hallucination and never mentioned the
+    price. So a VAD false positive is not merely a junk turn on the agent's screen: it is a
+    latency bomb that blocks every genuine utterance queued behind it.
+- **Worse, it hands back our own vocabulary hint.** Fed a non-speech segment with
+  `initial_prompt` set from `config/stt_vocabulary.yaml`, the model returned
+  *"โอ้โอ้โอ้โอ้โอ้ เจ้า สินไหม? กรมธรรรม์, ผู้เอาประกัน, ผู้เอาประกัน, ผู้เอาประกัน"* — three of
+  our own terms, in our own file's order, from audio containing no speech. **That is worse
+  than an ordinary hallucination**, because the invented words are precisely the domain
+  terms that make a brief look credible, and an agent reading them has no way to know the
+  caller never said them. It is `D16`'s hazard — the model must not produce facts — one
+  layer below where `D16` guards it.
+- **My own warmup was triggering it.** Both adapters warmed on `[0.0] * 16000`: one second
+  of digital silence. A warmup written to take the first-use cost *off* the call path was
+  itself paying the single most expensive input the model has.
+- **Fix, four parts:** the two instruments corrected and the pacing added, with `--fast`
+  blanking the latency column rather than printing a wrong one; a **level gate before
+  dispatch**, so a segment with no energy never reaches the model; warmup on a tone;
+  `echoes_the_prompt()` refusing a transcription that is mostly hint vocabulary; and the
+  repetition guard taught to strip punctuation, because the observed loop was
+  `"ผู้เอาประกัน, ผู้เอาประกัน, ผู้เอาประกัน"` and a comma per word hid it from a whitespace split.
+- **Verification.** Four new tests carrying the measured numbers in their docstrings, plus
+  the two guard suites. The silence gate is asserted by counting calls that reach a fake
+  engine, so it fails if the gate is removed.
+- **Lesson, and it is a new one for this project.** Every previous entry in this family —
+  `B3`, `B4`, `B7`, `B8`, `B12`, `B13` — is *a confident, plausible, wrong result nobody
+  looked at*. This one is that **three times over in a single afternoon, in the measuring
+  apparatus itself**, and it would have been very easy to accept: a 0 ms latency looks like
+  a fast system, and 10 s looks like "well, it is a small GPU". **The moment to be most
+  suspicious of a number is when it agrees with what you already expected.** Neither zero
+  nor ten seconds was ever real.
+
+## B15. CI installed no extras, so it could not collect the test suite at all
+_Noticed 2026-09-02 while checking what constraints the audio layer had to work under._
+
+- **Symptoms:** none locally, ever. Every check passes on this laptop, because the laptop
+  has been synced with `uv sync --extra web` since P1b.
+- **Root cause:** `.github/workflows/ci.yml` ran **`uv sync --frozen`** with no extras.
+  `fastapi` lives in the `web` extra, and `tests/unit/test_api.py` imports it at module
+  level — so pytest fails during **collection**, before a single test runs. Not "some tests
+  skipped": the whole suite, plus `mypy`, which also needs the import to resolve.
+- **How it was found:** not by looking at CI. By reading the workflow to answer a different
+  question — *what can the audio layer depend on?* — and noticing the answer implied the
+  suite could not be running there either.
+- **Fix:** `uv sync --frozen --extra web`. `--extra ml` is deliberately **not** added: it is
+  ~3 GB, the runner has no GPU, and everything in the audio path except the two real model
+  adapters is dependency-free precisely so that CI exercises it (`D96`).
+- **Lesson, and it is `B9`'s exactly.** `B9` was *the gap between the working tree and the
+  repository*; this is the gap between **the working tree and CI**. Every verification this
+  project runs — tests, mypy, ruff, the scenarios — is a statement about *this machine*.
+  "CI is green" is a separate claim, and nobody had checked it. The generalisable rule:
+  **when you add an optional extra that any test imports, the CI install line is part of
+  the change.** Adding the `ml` extra today would have made this worse without fixing it.
+- **Still unverified, and stated rather than assumed:** whether CI has actually been failing
+  or has simply never run on this repository. The remote exists; the workflow's history was
+  not checked from here. Either way the line was wrong.

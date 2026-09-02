@@ -291,6 +291,52 @@ volume the two often agree exactly, and it opens up as the queue gets contested.
 - **Needs set up:** §1. **Needs running:** nothing.
 - Options: `--calls N`, `--seed N`, `--solver hungarian|greedy`, `--quiet`.
 
+### Measure the speech engines against each other
+
+```bash
+uv run python scripts/bake_off.py --list
+```
+
+- **Needs set up:** §1 for the harness itself; **§6 (the `ml` extra) for any real engine**.
+- **Needs running alongside:** nothing.
+
+`.gitignore` excludes `*.wav`, so a fresh clone has no test audio. Generate the synthetic
+smoke file first (it is three tone bursts, **not speech** — see `B14`):
+
+```bash
+uv run python scripts/make_test_audio.py
+```
+
+The `scripted` engine needs no GPU and exists to prove the harness works:
+
+```bash
+uv run python scripts/bake_off.py --engines scripted --audio tests/audio/*.wav
+```
+
+A real one downloads its weights on first use (`tiny` is ~75 MB and is the cheap check that
+CUDA is actually working end to end):
+
+```bash
+uv run python scripts/bake_off.py --engines faster_whisper_tiny --audio tests/audio/*.wav
+```
+
+**To get a WER column, put a `.txt` next to each `.wav`** containing the true transcript.
+Without one the harness reports latency and VRAM only, and prints `-` for WER rather than a
+number computed against nothing.
+
+Two things about this table that are easy to misread, and both are in the output:
+
+- **audio is paced at wall-clock speed by default.** An unpaced feed queues every utterance
+  at once and reports a *backlog* instead of a latency — measured, 11270 ms against 553 ms
+  for identical work. `--fast` measures throughput instead and blanks the latency column.
+- **WER over whitespace tokens is a phrase error rate on unsegmented Thai.** Fine for
+  ranking engines against each other; not quotable as an absolute number.
+
+⚠️ **`D30` is not closed.** Getting real numbers needs real Thai telephone speech and the
+Thai checkpoints (a further multi-gigabyte download). Synthetic audio measures the model's
+failure modes rather than its performance — see `B14`, which is worth reading before you
+believe any number this prints.
+
 ### Build the voice prompts
 
 ```bash
@@ -399,7 +445,10 @@ uv sync --extra web ──┬─▶ scenario replay          (nothing else neede
 docker compose up -d postgres ──▶ alembic upgrade head ──▶ STORAGE_BACKEND=postgres
                                                             └─▶ a shift survives a restart
 
-uv sync --extra ml ──▶ STT_ENGINE=thonburian  (needs an NVIDIA GPU; nothing else needs this)
+uv sync --extra ml ──┬─▶ STT_ENGINE=thonburian_ct2 / thonburian_hf   (needs an NVIDIA GPU)
+                     ├─▶ VAD_ENGINE=silero        (CPU; energy is the default and needs nothing)
+                     └─▶ scripts/bake_off.py with a real engine
+                     (nothing else in the system needs any of this)
 ```
 
 Nothing in the left column depends on anything in the right.
@@ -407,6 +456,17 @@ Nothing in the left column depends on anything in the right.
 ---
 
 ## Configuration
+
+The audio path is two env vars and both default to needing nothing:
+
+| Variable | Default | Notes |
+|---|---|---|
+| `STT_ENGINE` | `scripted` | `scripted` returns canned transcripts and never touches a GPU — every test, all three scenarios and the stage-safe demo path run on it. `thonburian_ct2` is faster-whisper/CTranslate2, `thonburian_hf` is the transformers pipeline. `distill`, `typhoon` and `cloud` are named but not built, and say so in the log rather than falling back silently. |
+| `VAD_ENGINE` | `energy` | `energy` needs no dependencies and is also the degradation rung. `silero` is the real one (`D9`) and needs the `ml` extra. |
+| `STT_DEVICE` | `auto` | Resolves to `cuda` when a GPU is genuinely usable, `cpu` otherwise — so a box with the extra installed and no working GPU falls back instead of dying at model load. |
+| `STT_COMPUTE_TYPE` | `int8_float16` | int8 weights, fp16 compute. The default because of the measured 4.00 GiB / ~3.2 GiB free (`D95`). |
+
+
 
 Settings come from the environment or a `.env` file, via `pydantic-settings`. Every one has a
 default that works. The full surface is documented in `docs/INTEGRATIONS.md` §7; the ones that
@@ -438,6 +498,9 @@ the same reason.
 | A Thai character crashes a script | Windows consoles are cp1252. The app calls `enable_utf8()`; ad-hoc scripts must too, or write to a UTF-8 file |
 | 42 tests skipped | Postgres is not running. Expected — §3 if you want them |
 | `alembic upgrade head` does nothing, but the app says *"relation does not exist"* | the version table is stamped with nothing behind it: `uv run alembic stamp base && uv run alembic upgrade head` |
+| `Could not locate cudnn_ops64_9.dll` | CTranslate2 cannot find the cuDNN torch already ships. The adapter adds `torch/lib` to the DLL search path itself, so this should not happen — if it does, torch is missing or is the CPU wheel (§6) |
+| The transcript contains insurance jargon the caller never said | `B14`. The model can echo `config/stt_vocabulary.yaml` back on a non-speech segment. `echoes_the_prompt()` is supposed to catch it; if something got through, that guard is the place to look — not the model |
+| Transcription is very slow and the text looks invented | Almost certainly near-silence reaching the model (`B14`: 8.6 s for one second of digital silence). Check the level gate in `TranscriptionStream._transcribe` and the VAD threshold |
 | `torch.cuda.is_available()` is `False` | you have the CPU wheel. The version string will lack `+cu128`. `uv sync --reinstall --extra ml` (§6) |
 | A queue is closed and a call goes to voicemail | queue hours are real. Pass `ignore_hours` on the demo endpoint, or check `config/queue_hours.yaml` |
 | `render_diagrams.py` cannot find a browser | set `PUPPETEER_EXECUTABLE_PATH` to an installed Chrome or Edge |

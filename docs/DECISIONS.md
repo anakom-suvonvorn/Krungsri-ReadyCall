@@ -2604,3 +2604,62 @@ _P3 step 4b, step zero. Recorded because the failure mode is invisible._
   scarcest resource on this machine with the one model that actually needs it, and
   `onnxruntime-gpu` would additionally drag in its own CUDA/cuDNN copies to disagree with
   torch's.
+
+## D96. The audio path: a ninth port for VAD, a machine for endpointing, and a gate before the model
+_P3 step 4b. The half of the phase with the hardware in it._
+
+- **Problem.** `D88` left `IntakeService.on_turn` / `on_silence` / `on_max_duration` with a
+  note saying *"nothing feeds this yet"*. Everything between a phone line and those three
+  methods had to be built: normalisation, voice detection, endpointing, the STT worker, and
+  a driver that ties them together without any of it blocking a call (`D12`).
+
+### The four choices worth recording
+
+**1. Voice activity is the ninth port.** Same argument as `SttEngine` (`D3`): it is a vendor
+model we want to be able to swap and bake off. `ports/vad.py` returns a **probability per
+frame**, not a decision — where an utterance starts and stops is a stateful judgement with
+thresholds, minimum durations and padding in it, and putting that in the adapter would mean
+re-implementing `D9`'s tuning once per vendor.
+
+**2. `EnergyVad` is not a toy, it is the reason the audio path has tests.** CI runs
+`uv sync --frozen` with no extras, so without a dependency-free detector the entire media
+layer would only ever execute on the one laptop with a GPU — which is `B7`'s shape exactly.
+It doubles as the degradation rung: if Silero fails to load on demo morning the call is
+still endpointed, slightly worse. `ARCHITECTURE` §16 needs no new row.
+
+**3. The endpointer is a machine with no I/O**, like `ivr/machine.py` and `intake/hold.py`
+before it. `D9`'s inherited constants — threshold 0.65, 500 ms minimum speech, 100 ms
+minimum silence, ~120/60 ms padding — are therefore **assertable against a list of floats**,
+with no model, no audio and no clock. The 120 ms leading pad has its own test saying why it
+exists: in Thai the first syllable often carries the tone that distinguishes the word.
+
+**4. Ingestion never waits for the model.** Finished segments go on a queue and a single
+consumer transcribes them, so frames keep being accepted while Whisper is busy, and turns
+stay in order without a sorting step. The obvious alternative — a task per segment —
+transcribes a short phrase faster than the sentence before it and delivers the caller's
+words shuffled.
+
+### What was measured rather than assumed
+
+Real inference on this GPU, faster-whisper `tiny` at `int8_float16`: **155 ms** for a
+segment with speech energy in it, against a p95 budget of 1.5 s (`ARCHITECTURE` §15). That
+is the encouraging number. The discouraging one is `B14`, below, and it changed the design.
+
+### What is deliberately NOT built
+
+- **The encrypted recording.** `ARCHITECTURE` §6 asks the gateway to write it to object
+  storage with per-recording key refs; that is P7's key management, and writing a caller's
+  audio to disk before it exists is the one thing `D9` was careful to avoid.
+- **The Thai bake-off table.** The harness is built, verified and correct — but a real WER
+  or latency figure needs **real Thai telephone speech**, and synthetic tones measure
+  Whisper's pathology rather than its performance (`B14`). `D30` is not closed, and it
+  should not be closed with numbers from a signal generator.
+- **The live transcript on the workstation**, and transcription of the agent's own leg
+  during the call, which is P6 (`D26`).
+
+### The vocabulary hint lives in `config/`
+
+`config/stt_vocabulary.yaml`, loaded by the domain pack. Thai insurance jargon is a domain
+literal and `services/` may not hold one (`D28`) — retargeting this to a hospital line
+means editing a YAML file, not the transcriber. `B14` gives that file a second, sharper
+reason to be reviewed carefully: its contents can come back out of the model's mouth.

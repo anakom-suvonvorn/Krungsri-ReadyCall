@@ -17,7 +17,15 @@ jobs:
           enable-cache: true
 
       - name: Sync dependencies
-        run: uv sync --frozen
+        # --extra web is REQUIRED, not optional. `tests/unit/test_api.py` imports fastapi
+        # at module level and fastapi lives in that extra, so a bare `uv sync --frozen`
+        # cannot even COLLECT the suite - it dies before running a single test. That is
+        # `B9`'s family again: a check that looks like it runs.
+        #
+        # `--extra ml` is deliberately NOT here. It is ~3 GB, the runner has no GPU, and
+        # the VAD contract suite skips silero on ImportError by design (`D96`). Everything
+        # else in the audio path is dependency-free precisely so CI exercises it.
+        run: uv sync --frozen --extra web
 
       - name: Lint
         run: uv run ruff check .

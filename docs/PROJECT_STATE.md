@@ -31,7 +31,7 @@ demonstrable slice, so "the demo" is the current state plus a chosen scenario (`
 
 ---
 
-## 2. Status: **P0 · P1 · P1b · P2a · P2b · P2c complete; P3 in progress**
+## 2. Status: **P0 · P1 · P1b · P2a · P2b · P2c complete; P3 complete bar the recording and the measured bake-off**
 
 The spine runs. A full call lifecycle - arrival, IVR, consent, queue, intake, matching, the offer
 handshake, the live call, wrap-up, rating, closed - executes end to end on fake adapters with no
@@ -45,7 +45,7 @@ caller keys their way through the real menu to the right queue, is offered
 the recording and either takes it or does not, the desk rings, the brief is already there, and
 the disclosure gate moves when the agent attests.
 
-Verified on 2026-09-02: **571 tests** — 529 pass + 42 skipped without the Postgres container
+Verified on 2026-09-02: **632 tests** — 590 pass + 42 skipped without the Postgres container
 (the 42 are the database cases).
 `ruff check` and `ruff format --check` clean over 144 files, `mypy --strict`
 clean over **106** source files, and all three scenarios replay byte-identically. The database
@@ -117,7 +117,7 @@ FullProject/
 ├─ uv.lock  .python-version  .env.example  .gitignore
 ├─ README.md*
 ├─ docs/*                    # ← this documentation system
-│  ├─ diagrams/*           # 61 diagrams + 12 explanation pages; a quarter generated from source
+│  ├─ diagrams/*           # 62 diagrams + 12 explanation pages; a quarter generated from source
 │  └─ reading/*            # readable twins: the keypad, the restart, the workstation, the offer
 ├─ config/*                  # ← the entire insurance-specific "domain pack" (D28)
 │  ├─ core_mapping.yaml      # bank-data field mapping (swap target, DATA_MODEL §4)
@@ -129,6 +129,7 @@ FullProject/
 │  ├─ menus.yaml*            # the IVR tree. ALSO served to the app (D48) - one menu, two surfaces
 │  ├─ voice_prompts.yaml*    # every spoken line, Thai text + slots + flow roles (D24, D80)
 │  ├─ challenges.yaml*       # how an agent may verify a caller. Served, never hardcoded twice (D72)
+│  ├─ stt_vocabulary.yaml*   # jargon the ASR is nudged toward. READ B14 BEFORE EDITING
 │  ├─ demo_personas.yaml*    # DEMO: ids only, everything displayed is read live (D47)
 │  ├─ voice_prompts.yaml     # every spoken line, as Thai text (D24)
 │  └─ playbooks/             # per-intent recommended-action playbooks. NOT YET REAL (Q19):
@@ -149,7 +150,8 @@ FullProject/
 │  │  └─ event_bus.py  blob_storage.py  agent_directory.py  notifier.py
 │  ├─ adapters/*
 │  │  ├─ telephony/  asterisk_ari.py  twilio.py  livekit.py  simulated.py
-│  │  ├─ stt/        thonburian_hf.py  faster_whisper.py  cloud.py  scripted.py
+│  │  ├─ stt/*       thonburian_hf.py*  faster_whisper.py*  scripted.py*  cloud.py
+│  │  ├─ vad/*       energy.py*  silero.py*   # the 9th port (D96)
 │  │  ├─ llm/        anthropic.py  openai_compatible.py  gemini.py  rulebased.py
 │  │  ├─ tts/        prerendered.py  azure.py  null.py   # build-time render, not live
 │  │  ├─ core_data/  mock_postgres.py  fixtures.py  http_api.py  sql_passthrough.py
@@ -162,7 +164,10 @@ FullProject/
 │  │  ├─ context/            assembler.py  snapshot.py   # Customer360 + provenance
 │  │  ├─ ivr/                flow.py  prompts.py  dtmf.py  rating.py
 │  │  ├─ intake/             base.py  passive.py  guided.py  conversational.py  slots.py
-│  │  ├─ transcription/      stream_manager.py  vad.py  turns.py  worker.py
+│  │  ├─ transcription/*     # P3 step 4b. Audio -> TranscriptTurn (D96)
+│  │  │  ├─ endpointer.py*   #   WHERE an utterance starts/stops. No model, no I/O (D9)
+│  │  │  ├─ stream.py*       #   one leg: ring buffer, ordered turns, the B14 guards
+│  │  │  └─ service.py*      #   the driver. Feeds IntakeService.on_turn at last (D88)
 │  │  ├─ analysis/           intent.py  entities.py  summary.py  brief.py
 │  │  │                      nba.py  opening.py  confidence.py  pii.py  progress.py
 │  │  ├─ matching/*          engine.py  scoring.py  solver.py  weights.py
@@ -182,8 +187,11 @@ FullProject/
 │  │  │  └─ service.py*      #   the driver + the LIVE holds an accept has to end (D21)
 │  │  ├─ wrapup/             service.py  callbacks.py
 │  │  └─ metrics/            rollups.py
-│  ├─ media/                 # the media gateway (audio I/O, resampling, framing, recording)
-│  │  ├─ gateway.py  audiosocket.py  ws_media.py  resample.py  recorder.py
+│  ├─ media/*                # the media gateway (D96)
+│  │  ├─ audio.py*           #   G.711 both laws, resample, mono. PURE PYTHON on purpose
+│  │  ├─ gateway.py*         #   per-LEG fan-out, so speaker id is structural (D26)
+│  │  ├─ sources.py*         #   replay a WAV as if it were a phone line
+│  │  └─ audiosocket.py  ws_media.py  recorder.py   # P5 / P7. NOT THERE
 │  ├─ api/*
 │  │  ├─ app.py*  deps.py*  security.py*  realtime.py*   # realtime = the agent hub
 │  │  ├─ routers/  mobile.py*  agent.py*  demo.py*  health.py*  telephony_webhooks.py  admin.py
@@ -295,9 +303,13 @@ finalises a live intake as partial (`D21`, `D88`) · ☑ **no queue position spo
 reversing `D89`) — there is no line to have a position in ·
 ☑ the scenario runner and the demo endpoint hand both walks over — no faked IVR or intake anywhere
 ☐ prompt studio · ☐ real TTS voice (the null engine renders no audio) · ☐ post-call rating keypress ·
-☐ media gateway (per-leg fork) · ☐ recording + encryption · ☐ VAD endpointing · ☐ streaming STT
-worker · ☐ **STT bake-off on the 3050** · ☐ incremental turns persisted · ☐ live transcript on the
-workstation
+☑ **media gateway (per-leg fork)** · ☑ **VAD endpointing** (`D9`'s constants, in a machine with
+no model in it) · ☑ **the VAD port + two adapters** · ☑ **the STT worker seam + two real engines**
+(faster-whisper CT2, Thonburian HF) · ☑ **the bake-off harness**, with its own instruments fixed
+twice (`B14`) · ☑ **`IntakeService.on_turn` is finally fed**, and both recording timeouts are driven
+by the sweep (`B7`) · ☐ recording + encryption (needs P7's keys) · ☐ **the bake-off TABLE** - the
+harness is ready and needs real Thai audio + the Thai weights (`D30`) · ☐ incremental turns persisted
+· ☐ live transcript on the workstation
 *(The identify step is not pending — it was designed and removed, `D84`.)*
 
 **P4 — analysis & case brief** ☐ intent taxonomy + classifier · ☐ entity extraction · ☐ rolling
@@ -373,11 +385,11 @@ performing by hand, i.e. what the next services take over (`D36`).
 
 | | |
 |---|---|
-| Source files | 149 Python files (`src/` 110 + `tests/` + `scripts/` + `mock/`) |
-| Tests | 571, all passing, ~115 s (137 store contract + restart across 3 backends; 56 on the prompt pack and the IVR; 40 on the hold and the intake seam; 41 on matching, 12 of them on the wait ceiling under contention) |
-| Ports defined | 8 (telephony, stt, llm, tts, core_data, event_bus, blob_storage, agent_directory) |
+| Source files | 168 Python files (`src/` 126 + `tests/` + `scripts/` + `mock/`) |
+| Tests | 632, all passing, ~115 s (137 store contract + restart across 3 backends; 56 on the prompt pack and the IVR; 40 on the hold and the intake seam; 41 on matching, 12 of them on the wait ceiling under contention; **61 on the audio path** - 10 on normalisation, 13 on endpointing, 11 on the VAD contract across both detectors, 19 on the transcription stream and 8 on the wiring) |
+| Ports defined | **9** (telephony, stt, **vad**, llm, tts, core_data, event_bus, blob_storage, agent_directory) - `vad` added by `D96` |
 | Persisted tables | **9** + Alembic, verified on a live Postgres. Presence, the waiting pool and the live identity are deliberately **not** among them (`D78`) |
-| Adapters | 9 fakes/nulls + a caching/circuit-breaking decorator; no real vendor adapter yet |
+| Adapters | 9 fakes/nulls + a caching/circuit-breaking decorator, **plus the first three real ones**: `SileroVad`, `FasterWhisperEngine`, `ThonburianHfEngine` |
 | Spoken lines | 27 prompts + 15 flow roles -> **54 distinct clips** after dedupe (`D80`); rendered by the null engine, so a manifest rather than audio |
 | Call states | 15, transition table self-validated (the rating is an event, not a state — `D46`) |
 | Event types | 19 |
@@ -385,7 +397,9 @@ performing by hand, i.e. what the next services take over (`D36`).
 | Mock core | 3 customers, 4 policies across 4 product lines, 5 products, 5 interactions, 2 claims |
 | Intent taxonomy | 28 intents across 5 lines, each with a catch-all (revisit during the hackathon) |
 | Generated mock data | 2,000 customers / 2,292 policies / 5,880 interactions (seeded, gitignored) |
-| Diagrams | 61 (14 generated from source, 47 hand-drawn), across 12 explanation pages |
+| GPU, measured (`D95`) | RTX 3050 Laptop, sm_86, **4.00 GiB total / ~3.2 GiB free**, torch 2.11+cu128 |
+| STT latency, measured (`B14`) | faster-whisper `tiny` int8_float16: **155 ms** per utterance with speech in it. **No Thai-model figure yet** - that needs real audio (`D30`) |
+| Diagrams | 62 (14 generated from source, 48 hand-drawn), across 12 explanation pages |
 
 ---
 

@@ -7,30 +7,24 @@ _Last updated: 2026-09-02._
 
 ## If you have just been compacted, read this first
 
-The last four commits are the whole of the recent work and their messages are long on
-purpose — `git log -4` is the fastest way back in:
+**P3 step 4b (the audio) has landed.** The last commits are the whole of it and their
+messages are long on purpose — `git log -5` is the fastest way back in.
 
-```
-50b08d8  matching: D91 drops the queue position, D92 fences off the queue, B12 unfreezes the wait
-5a4067c  docs: a readable page for the layer that has no screen and no audio
-78bfa54  ivr: D90 moves repeat onto 0, and stops a prompt spelling a config value out loud
-4cd9e92  intake: P3 step 4a - the offer, the strategy seam, and the hold that outlives the request
-```
+**The one thing to know before touching the audio path**: `B14`. Whisper fed near-silence
+takes **8.6 seconds** and invents Thai text — including handing back the words in
+`config/stt_vocabulary.yaml` as if the caller had said them. Three guards exist because of
+it and none of them is optional. Read `B14` before "simplifying" any of them.
 
-**The one page that explains the current state in plain language** is
-`docs/reading/the_offer.html` (published, link in the table at the bottom). Read it before
-`services/intake/` — it is written for someone with no context at all, which after a compact
-is you.
-
-**Next up is P3 step 4b**, the audio, briefed in full further down. **Step zero is
-`uv add --optional ml …` and it has NOT been run** — it is a multi-gigabyte download on the
-user's laptop and was deliberately left for them to green-light. Ask before running it.
-
----
+**What is NOT done, and is the honest next step:** `D30`'s bake-off table has no real
+numbers in it. The harness is built and correct; it needs **real Thai telephone speech**
+and the Thai model weights, neither of which exists on this machine. Synthetic tones
+measure the model's pathology, not its performance. Do not fill that table from a signal
+generator.
 
 ## Where things stand right now
 
-**P0 · P1 · P1b · P2a · P2b · P2c complete. P3 done except the audio.** The system knows who
+**P0 · P1 · P1b · P2a · P2b · P2c complete. P3 complete except the recording-to-storage
+and the measured bake-off.** The system knows who
 is calling and how much to believe it, why they are calling, everything we hold about them
 assembled before the phone is answered, which agent should take it and why, the desk rings
 and a human accepts with the screen already right — the caller keys their own way to the
@@ -38,9 +32,9 @@ right queue through a real menu hearing real (pre-rendered) Thai — and now, **
 is settled, they are offered the pre-call recording, and take it or
 refuse it or ignore it, all three reaching the same agent**.
 
-Verified **2026-09-02**: **571 tests** — 529 pass + 42 skipped without the Postgres
+Verified **2026-09-02**: **632 tests** — 590 pass + 42 skipped without the Postgres
 container (the 42 are the database cases). `ruff check` + `ruff format --check` clean over 151 files,
-`mypy --strict` clean over 112, all scenarios replay, 61/61 diagrams current, prompt pack fresh.
+`mypy --strict` clean over 112, all scenarios replay, 61/62 diagrams current, prompt pack fresh.
 
 ### The four sessions of review since P2b, in one place
 
@@ -193,6 +187,22 @@ strip splits **mine / all** (`D70`) · `attestable` is a server decision and a r
 (`D72`) · **assurance gates what the agent may SAY and DO, not what they may SEE** (`D74`,
 reversing `D20`'s display gating).
 
+**P3 step 4b — the audio (`D96`, `B14`).** `media/`: `audio.py` normalises **any** telephony
+shape to 16 kHz mono float32 in pure Python (both G.711 laws, because Thailand is A-law and
+decoding one as the other produces loud plausible garbage nobody would blame on the codec) ·
+`gateway.py` fans frames per **leg** (`D26`) · `sources.py` replays a WAV as if it were a
+phone, which is how endpointing gets tuned with no telephony · **`ports/vad.py` is the ninth
+port**, returning a probability rather than a decision · `adapters/vad/`: `EnergyVad` (no
+dependencies — the CI path *and* the degradation rung) and `SileroVad` (`D9`: from the
+installed package, never `torch.hub`) · **`services/transcription/`**: `endpointer.py`, a
+third no-I/O machine carrying `D9`'s inherited constants where they can be asserted against
+a list of floats; `stream.py`, which never blocks ingestion on the model and keeps turns in
+order with one consumer; `service.py`, which finally feeds `IntakeService.on_turn` and
+drives both recording timeouts **from the sweep** (`B7`) · `adapters/stt/`: `faster_whisper`
+(CTranslate2, `int8_float16`, with the Windows cuDNN discovery handled in the adapter) and
+`thonburian_hf` · `scripts/bake_off.py` · **`torch` comes from the CUDA index** (`D95`) —
+the PyPI wheel is CPU-only and installing it fails silently.
+
 ## Designed but NOT built (read before touching these areas)
 
 - **`D63` — call transfer.** One filtered roster menu covering all three needs (named agent /
@@ -206,34 +216,35 @@ reversing `D20`'s display gating).
 
 ## Next steps (in order)
 
-1. **P3 step 4b** — media, VAD and the STT worker. The only part with hardware risk, and the
-   only part of P3 left. **Step zero is `uv add --optional ml …`, which has NOT been done** —
-   it is a multi-gigabyte download and was deliberately left for the user to green-light.
-   Full briefing below.
-2. **P4** — analysis and brief v2+ with Claude and Typhoon compared on the golden set.
-3. **`D85` is implemented and parked.** `services/agents/acw_stats.py` predicts how close
-   an agent in wrap-up is to being free, conditioned on how long it has already run — which
-   makes the preference curve rise, peak past the median, then fall, **from the data rather
-   than a tuned constant**. Its own suite asserts the curve shape itself. **Nothing calls it**:
-   `D73` keeps deferral off until P6 brings real ACW data, and switching it on against
-   invented numbers would repeat the mistake in a new place. Wire it into
-   `expected_free_in()` when P6 lands, as a **score, never a filter**.
-4. **Wire the matcher inputs that are fed by nothing** (found with `B12`, deliberately not
-   fixed with it). `WaitingCall.is_vulnerable` is set on the `Customer` and on the brief DTO
-   but **never on the `WaitingCall`**, so `customer_priority` scores 0 on every real call.
-   `last_agent_id` / `last_contact_at` are set on the **context snapshot**, never on the
-   `WaitingCall`, so `fit_continuity` scores 0 too. `scripts/run_matching.py` generates all
-   three synthetically, which is exactly why the simulator looks like it exercises them —
-   the same illusion as `B4`. It is a wiring job with one real decision in it: *where should
-   continuity data reach the pool from*, given `D78` forbids a database read on the matcher's
-   hot path. The snapshot is already in `container.snapshots`; the honest options are to pass
-   it at `admit()` or to keep a small projection.
-5. **Small and worth doing when convenient:**
-   - `call_intents` and `app_context_events` are still in memory. Neither loses anything a
-     restart cares about — an intent expires in 15 minutes and screen events are TTL-pruned
-     — which is why they were left, but the tables are trivial if the demo ever needs them.
-   - **`D64`, the live matching board.** All the data is now durable *and* queryable, which
-     is most of the work; it would have caught `B4` on sight.
+1. **Finish `D30` honestly — the bake-off needs real audio and the real weights.** Two
+   things are missing and neither can be manufactured:
+   - **Thai telephone speech with a reference transcript.** Put `foo.wav` and `foo.txt`
+     side by side and the WER column fills itself. A phone recording beats a clean one:
+     `media/audio.py`'s docstring explains why (everything above 3.4 kHz is already gone,
+     and Whisper was trained on wideband).
+   - **the Thai checkpoints**, which are a further multi-gigabyte download and were left
+     for the user to green-light exactly like the `ml` extra was:
+     `uv run python scripts/bake_off.py --engines thonburian faster_whisper --audio real/*.wav`
+   Then record the table in `PROJECT_STATE` §8 and pick the engine on it (`D30`).
+2. **The encrypted recording to object storage.** `ARCHITECTURE` §6 asks the gateway for it;
+   it needs MinIO wired and per-recording key refs, which is P7's key management. The
+   gateway has the frames and the hook; nothing else is in the way.
+3. **The live transcript on the workstation.** Turns exist and are published to the bus;
+   nothing renders them yet.
+4. **P4** — analysis and brief v2+ with Claude and Typhoon compared on the golden set.
+5. **`D85` is implemented and parked.** `services/agents/acw_stats.py` predicts how close an
+   agent in wrap-up is to being free. **Nothing calls it**: `D73` keeps deferral off until
+   P6 brings real ACW data. Wire it into `expected_free_in()` then, as a **score, never a
+   filter**.
+6. **Wire the matcher inputs that are fed by nothing** (found with `B12`). `is_vulnerable`,
+   `last_agent_id` and `last_contact_at` are set on the `Customer`, the brief and the
+   context snapshot — but never on the `WaitingCall` — so `customer_priority` and
+   `continuity` score 0 on every real call. `run_matching.py` generates them synthetically,
+   which is why the simulator looks like it exercises them. One real decision in it: where
+   continuity data reaches the pool from, given `D78` forbids a DB read on the hot path.
+7. **Small and worth doing when convenient:** `call_intents` and `app_context_events` are
+   still in memory · `D64`, the live matching board · `Q26`, the env var that changes
+   nothing.
 
 `grep -rn "# P2b:" src/` lists the steps a real IVR will drive that the demo endpoint fakes.
 
@@ -377,6 +388,35 @@ Facts about *this laptop* rather than the repo, so a fresh session does not redi
 
 ## Things to be careful about (live landmines)
 
+- **NEVER hand Whisper near-silence** (`B14`). One second of digital silence costs **8.6
+  seconds** on this GPU — 55x a real utterance — and comes back with invented Thai. Three
+  guards exist and none is optional: a level gate before dispatch, `echoes_the_prompt()`,
+  and the punctuation-stripping repetition check. The warmup tone is part of this too; both
+  adapters warmed on `[0.0] * 16000` and were paying the worst input the model has.
+- **`config/stt_vocabulary.yaml` can come back out of the model's mouth** (`B14`). Fed a
+  non-speech segment, faster-whisper returned three of its terms, in that file's order, as
+  if the caller had said them. Adding a common word there would make `echoes_the_prompt()`
+  start eating real sentences; keep it to genuinely rare domain terms.
+- **`torch` must come from the CUDA index, never PyPI** (`D95`). The PyPI wheel is CPU-only
+  and installing it fails **silently**: everything imports, everything runs, Whisper is ten
+  times too slow and `cuda.is_available()` is quietly `False`. Check the version string
+  carries `+cu128`.
+- **The real GPU figure is 4.00 GiB total and ~3.2 GiB free**, not the "4-6 GB" the older
+  docs assumed — the compositor holds the rest.
+- **A broad `except Exception` around a thing that is supposed to work turns a failure into
+  a skip.** The VAD contract suite did exactly that: `filterwarnings=error` made a
+  third-party `DeprecationWarning` raise during model load, and five tests reported a green
+  skip while the production detector was tested by nothing. The warning is now ignored by
+  name, and the suite only skips on `ImportError`.
+- **The media layer must work with NO `ml` extra.** CI runs `uv sync --frozen`. That is why
+  `media/audio.py` is pure Python and why `EnergyVad` exists — a path only exercised on the
+  one laptop with a GPU is a path nobody runs (`B7`).
+- **If you add an optional extra that a test imports, the CI install line is part of the
+  change** (`B15`). CI ran `uv sync --frozen` with no extras while `test_api.py` imports
+  fastapi at module level, so it could not COLLECT the suite - `B9`'s gap, moved from
+  working-tree-vs-repo to working-tree-vs-CI. Fixed to `--extra web`; `--extra ml` stays
+  out on purpose (3 GB, no GPU on the runner, and the audio path is dependency-free by
+  design so CI still exercises it).
 - **Never edit the reference folders** (`scamprojectthing/ProjectCode`, `music-backlog-adder`).
 - **Assurance gates what the agent may SAY and DO, never what they may SEE** (`D74`).
   The agent sees the whole record from L1 — they need it to verify the caller at all, and

@@ -1,0 +1,51 @@
+%% HANDWRITTEN. Checked against ARCHITECTURE.md S6 + S7 + D9 + D21 + D26 + D88 + D96 + B7 + B14
+flowchart TB
+    subgraph OUT["outside — does not exist yet (P5)"]
+        TEL["Asterisk / Twilio<br/>forks EACH LEG separately (D26)"]
+    end
+
+    subgraph MEDIA["readycall/media — knows a phone is not 16kHz mono"]
+        NORM["audio.py: normalise()<br/>G.711 mu-law AND A-law, 8/16kHz, mono/stereo<br/>-> 16 kHz mono float32, ALWAYS"]
+        GW["gateway.py: MediaGateway<br/>one leg per speaker, counts its own time IN SAMPLES<br/>(a wall clock drifts against the audio - B3/B8)"]
+        WAV["sources.py: WavFileSource<br/>replays a file AS IF it were a phone,<br/>so endpointing is tunable with no telephony"]
+    end
+
+    subgraph TRANS["services/transcription"]
+        VAD{{"ports/vad.py — the 9th port (D96)<br/>returns a PROBABILITY, not a decision"}}
+        EP["endpointer.py — NO model, NO I/O, NO clock<br/>D9's constants live here and are assertable:<br/>0.65 threshold · 500ms speech · 100ms silence<br/>120ms pad BEFORE — the first syllable carries the tone"]
+        GATE{{"level gate (B14)<br/>is there any energy in this segment?"}}
+        STREAM["stream.py: one consumer, one seq counter<br/>ingestion NEVER waits for the model"]
+    end
+
+    subgraph ENG["adapters"]
+        E1["EnergyVad — no dependencies.<br/>The CI path AND the degradation rung"]
+        E2["SileroVad — from the PACKAGE,<br/>never torch.hub during a call (D9)"]
+        S1["ScriptedSttEngine — every test, the stage-safe path"]
+        S2["FasterWhisper CT2 int8_float16<br/>ThonburianHf fp16"]
+    end
+
+    GUARDS{{"B14 guards — none optional<br/>repetition loop? · mostly OUR OWN vocabulary?"}}
+    INTAKE["IntakeService.on_turn<br/>waiting for this since D88"]
+
+    TEL -. "P5" .-> NORM
+    WAV --> NORM
+    NORM --> GW
+    GW -->|"16 kHz frames"| STREAM
+    STREAM --> VAD
+    VAD --> EP
+    E1 -.-> VAD
+    E2 -.-> VAD
+    EP -->|"one endpointed utterance"| GATE
+    GATE -->|"has energy"| STREAM
+    GATE -->|"silent — DROP"| DROP["8.6s and invented Thai if we<br/>had sent it. 55x a real utterance (B14)"]
+    STREAM --> S1
+    STREAM --> S2
+    S1 --> GUARDS
+    S2 --> GUARDS
+    GUARDS -->|"survived"| INTAKE
+    GUARDS -->|"refused"| BIN["never reaches the agent's screen.<br/>Invented jargon looks MORE credible,<br/>not less — D16's hazard, one layer down"]
+
+    SWEEP["sweep_once() every second"] -->|"check_timeouts()"| TRANS
+    NOTE["silence 6s / max 180s happen because TIME PASSED,<br/>so they need a driver and a test where only the clock moves (B7)"] -.-> SWEEP
+
+    ACCEPT["agent presses Accept"] -->|"finish() — partial, nothing lost (D21)"| STREAM

@@ -14,6 +14,7 @@ while the customer is still lifting the phone to their ear.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import timedelta
 from typing import Annotated, Any
 
@@ -24,7 +25,9 @@ from readycall.adapters.core_data.caching import CachingCoreDataProvider
 from readycall.adapters.core_data.fixtures import FixtureFileProvider
 from readycall.adapters.core_data.null import NullCoreDataProvider
 from readycall.adapters.event_bus.memory import InMemoryEventBus
+from readycall.adapters.stt.scripted import ScriptedSttEngine
 from readycall.adapters.telephony.simulated import SimulatedTelephonyProvider
+from readycall.adapters.vad.energy import EnergyVad
 from readycall.api.realtime import AgentHub
 from readycall.api.schemas import (
     BriefCoverageOut,
@@ -41,7 +44,12 @@ from readycall.api.security import (
     SessionResolver,
 )
 from readycall.clock import Clock, SystemClock
-from readycall.config import CoreDataProviderName, Settings
+from readycall.config import (
+    CoreDataProviderName,
+    Settings,
+    SttEngineName,
+    VadEngineName,
+)
 from readycall.db.storage import Storage, build_storage
 from readycall.domain import events as ev
 from readycall.domain.enums import CallState, ProductLine, Urgency
@@ -49,6 +57,8 @@ from readycall.domain.models import CallSession, CallWrapup, CaseBrief, Identity
 from readycall.domainpack import DomainPack
 from readycall.logging import get_logger
 from readycall.ports.core_data import CoreDataProvider
+from readycall.ports.stt import SttEngine, SttHint
+from readycall.ports.vad import VoiceActivityDetector
 from readycall.services.agents.assignment import AssignmentService, OfferPolicy
 from readycall.services.agents.dispatch import DispatchService
 from readycall.services.agents.presence import PresenceService
@@ -73,6 +83,7 @@ from readycall.services.matching.engine import MatchingEngine
 from readycall.services.matching.scoring import WaitingCall
 from readycall.services.matching.weights import MatchingWeights
 from readycall.services.queues.hours import QueueHours
+from readycall.services.transcription.service import TranscriptionService
 from readycall.voiceprompts import load_prompt_pack
 
 log = get_logger(__name__)
@@ -110,6 +121,63 @@ def _date_tier_th(hit: DateMatch) -> str:
 
 def _no_digit_match_th(noun_th: str) -> str:
     return f"ไม่ตรงกับ{noun_th}ใดของลูกค้ารายนี้ (ตรวจทั้งเลขเต็ม ตัวท้าย และตัวแรกแล้ว)"
+
+
+def build_vad(settings: Settings) -> Callable[[], VoiceActivityDetector]:
+    """A FACTORY, not an instance (`D96`).
+
+    Detectors are stateful across frames, so two concurrent calls sharing one would
+    interleave their hidden states and each would be endpointed against the other's
+    audio. The symptom is a clipped or missing first word, which looks like an STT fault
+    and is not.
+    """
+    if settings.vad_engine is VadEngineName.SILERO:
+        from readycall.adapters.vad.silero import SileroVad
+
+        return SileroVad
+    return EnergyVad
+
+
+def build_stt(settings: Settings) -> SttEngine:
+    """Pick the STT engine by config (`D3`) - one env var from scripted to a real GPU.
+
+    `scripted` is the default and stays the default: every test, all three scenarios and
+    the stage-safe demo path run on it, and nothing in the system above this line can tell
+    which one it got (`D9`).
+    """
+    name = settings.stt_engine
+    device = settings.stt_device
+    if device == "auto":
+        # Resolved here rather than in `Settings`, so importing config does not import
+        # torch. A box with the `ml` extra and no usable GPU falls back to CPU instead of
+        # dying at model load, which is the right direction to fail on a demo morning.
+        try:
+            import torch
+
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+        except ImportError:
+            device = "cpu"
+    if name is SttEngineName.THONBURIAN_CT2:
+        from readycall.adapters.stt.faster_whisper import DEFAULT_MODEL, FasterWhisperEngine
+
+        return FasterWhisperEngine(
+            model=settings.stt_model or DEFAULT_MODEL,
+            device=device,
+            compute_type=settings.stt_compute_type,
+        )
+    if name is SttEngineName.THONBURIAN_HF:
+        from readycall.adapters.stt.thonburian_hf import DEFAULT_MODEL, ThonburianHfEngine
+
+        return ThonburianHfEngine(model=settings.stt_model or DEFAULT_MODEL, device=device)
+    if name is not SttEngineName.SCRIPTED:
+        # `distill`, `typhoon` and `cloud` are named in the enum and not built (`D30`).
+        # Saying so beats a silent fallback that makes a demo look like it is running a
+        # model it is not.
+        log.warning(
+            "stt engine not implemented yet, falling back to scripted",
+            requested=str(name),
+        )
+    return ScriptedSttEngine([])
 
 
 def build_core_data(settings: Settings, clock: Clock) -> CoreDataProvider:
@@ -201,6 +269,20 @@ class Container:
             clock=self.clock,
             bus=self.bus,
             settings=settings,
+        )
+        #: The audio path (`D96`). `IntakeService.on_turn` has existed since `D88` with
+        #: nothing feeding it; this is what feeds it. On the default config the engine is
+        #: scripted and the detector is the energy one, so this costs nothing and runs
+        #: everywhere - which is the point (`B7`: a path only exercised on one laptop is a
+        #: path nobody runs).
+        self.stt = build_stt(settings)
+        self.transcription = TranscriptionService(
+            intake=self.intake,
+            vad_factory=build_vad(settings),
+            stt=self.stt,
+            clock=self.clock,
+            settings=settings,
+            hint=SttHint(language="th", vocabulary=self.pack.stt_vocabulary),
         )
         self.hub = AgentHub(clock=self.clock)
         self.presence = PresenceService(

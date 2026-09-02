@@ -1,0 +1,37 @@
+# Domain words the Thai ASR mis-hears without a nudge (`D9`, `D28`).
+#
+# Fed to the engine as an `SttHint`. Whisper takes it as an `initial_prompt`, which biases
+# decoding toward these spellings - it measurably helps on insurance jargon, which is
+# nothing like the conversational Thai the model was trained on.
+#
+# ⚠️ THIS LIST CAN COME BACK OUT OF THE MODEL'S MOUTH (`B14`). Measured on the GPU: fed a
+# segment with no speech in it, faster-whisper returned three of these terms, in this
+# file's own order, as if the caller had said them. That is worse than an ordinary
+# hallucination, because these are exactly the words that make a brief look credible.
+# `echoes_the_prompt()` in services/transcription/stream.py refuses a transcription that
+# is mostly this list - so adding a very common word here (a pronoun, a politeness
+# particle) would start eating real sentences. Keep it to terms that are genuinely
+# domain-specific and genuinely rare in ordinary speech.
+#
+# It lives in config rather than in code because it is insurance-specific, and `services/`
+# may not hold a policy concept. Retargeting this system to a hospital line means editing
+# this file, not the transcriber.
+
+version: 1
+
+terms:
+  - กรมธรรม์          # policy document
+  - สินไหม            # claim / indemnity
+  - ค่าห้อง            # room-and-board charge
+  - ผู้เอาประกัน       # the insured
+  - ผู้รับผลประโยชน์    # beneficiary
+  - เคลม              # claim (loanword)
+  - ผู้ป่วยใน          # inpatient (IPD)
+  - ผู้ป่วยนอก         # outpatient (OPD)
+  - ความคุ้มครอง       # coverage
+  - เบี้ยประกัน        # premium
+  - วงเงินคุ้มครอง      # sum insured
+  - พ.ร.บ.            # compulsory motor insurance
+  - ประกันชั้นหนึ่ง      # first-class motor cover
+  - อู่ซ่อม            # repair garage
+  - โรงพยาบาลคู่สัญญา   # network hospital
