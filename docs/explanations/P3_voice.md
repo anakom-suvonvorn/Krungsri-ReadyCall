@@ -371,5 +371,40 @@ system rather than the code, which is the pattern worth noticing.
 - **numbers now:** 27 prompts, 15 roles, **54 clips**, 61 diagrams. (Test count moved again
   the same day with `D93`/`B13`, which are matching, not voice — see `P2a_matching.md`.)
 
+
+**2026-09-02 — step 4b: the audio, and the phase is done bar two named things.** §9 said
+what was missing: *"the media gateway, per-leg forking, resampling, encrypted recording,
+Silero VAD endpointing, the STT worker, the bake-off, `TranscriptTurn` persistence, live
+transcript"*. Most of that now exists (`D96`).
+
+- **normalisation is one module at the edge**, and it is pure Python. `ports/stt.py` has
+  always promised 16 kHz mono float32; `media/audio.py` is the only place allowed to know a
+  phone call is not that. It handles **both G.711 laws** — Thailand is A-law, and decoding
+  one as the other does not raise, it produces loud plausible garbage that gets blamed on
+  the microphone. No numpy, because CI installs no extras and an audio path exercised only
+  on the GPU laptop is `B7`'s shape.
+- **VAD became the ninth port**, returning a probability rather than a decision, so `D9`'s
+  inherited constants sit in one no-I/O machine and are assertable against a list of
+  floats. `EnergyVad` is not a toy: it is the CI path *and* the degradation rung.
+- **ingestion never waits for the model.** One queue, one consumer, one sequence counter.
+  A task per segment would deliver a short phrase before the sentence that preceded it.
+- **`B14` changed the design, and it was found by disbelieving the harness's own numbers.**
+  Two broken instruments (a latency lookup that never matched, printing a clean 0 ms; a
+  VRAM counter blind to CTranslate2's allocator) and an unpaced feed reporting a backlog as
+  a latency. With honest ones: **155 ms** for real speech energy, **8578 ms** for one second
+  of digital silence — which also comes back with invented Thai, including our own
+  `stt_vocabulary.yaml` terms handed back as if the caller had said them. Three guards, and
+  a warmup that had itself been feeding the model the worst input it has.
+- **the two recording timeouts are driven from the sweep** (`B7`), with a test in which only
+  the clock moves — written before the driver existed rather than after somebody noticed.
+- **numbers now:** 27 prompts, 15 roles, 54 clips, **62 diagrams**, 632 tests
+  (590 pass + 42 skipped without the container). 9 ports. The first three real vendor
+  adapters in the project.
+- **what is honestly not done:** the encrypted recording (P7's key management), the live
+  transcript on the workstation, and **`D30`'s bake-off table** — the harness is built and
+  correct and needs real Thai telephone speech plus the Thai weights. Synthetic tones
+  measure the model's failure modes, not its performance, and that table must not be filled
+  from a signal generator.
+
 _Earlier body text stays as written — it is a record of what was true on 2026-08-25._ Append dated entries here rather than editing the body — this file is a record
 of what was true on 2026-08-25, and the "why" above stays useful even when a number moves._
