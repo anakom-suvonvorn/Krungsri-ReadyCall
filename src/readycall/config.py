@@ -152,6 +152,10 @@ class Settings(BaseSettings):
     matcher_tick_ms: float = 1000.0
     matcher_solver: MatcherSolverName = MatcherSolverName.HUNGARIAN
     target_wait_s: float = 45.0
+    #: ⚠️ The matcher does NOT read this — it reads `config/matching_weights.yaml`, where
+    #: the ceiling is now a per-urgency table (`D94`). This field survives only as the
+    #: bound for the coherence check below. See `Q26`: an env var that changes nothing is
+    #: worse than no env var, and the honest fix is to delete it or wire it up.
     max_wait_before_any_agent_s: float = 180.0
     defer_enabled: bool = True
     defer_max_wait_s: float = 60.0

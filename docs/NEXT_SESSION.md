@@ -1,7 +1,7 @@
 # NEXT_SESSION
 
 _The live working state. READ THIS FIRST every session. Keep it short and current._
-_Last updated: 2026-09-01._
+_Last updated: 2026-09-02._
 
 ---
 
@@ -38,7 +38,7 @@ right queue through a real menu hearing real (pre-rendered) Thai — and now, **
 is settled, they are offered the pre-call recording, and take it or
 refuse it or ignore it, all three reaching the same agent**.
 
-Verified **2026-08-31**: **564 tests** — 522 pass + 42 skipped without the Postgres
+Verified **2026-09-02**: **571 tests** — 529 pass + 42 skipped without the Postgres
 container (the 42 are the database cases). `ruff check` + `ruff format --check` clean over 151 files,
 `mypy --strict` clean over 112, all scenarios replay, 61/61 diagrams current, prompt pack fresh.
 
@@ -334,11 +334,11 @@ Whoever has the strongest GPU should own the demo machine.
 | **Q21** | **Which storage backend does the DEMO run on?** `memory` is the default and needs nothing; `postgres` is what survives a restart, and it is what makes the persistence work visible on stage at all. Running it on the day adds a container to the list of things that can fail, against `PLAN.md`'s risk register — *never depend on the venue*. Leaning: **rehearse on `postgres`, keep `memory` as the one-keystroke fallback**, since both pass the same suite. | Not decided |
 
 | **Q22** | **Does the committed prompt pack carry actual audio once a real voice is chosen?** `D24` calls the checked-in pack the offline fallback, which is the whole reason the IVR works with no internet — but `CLAUDE.md` says never commit audio. That rule means *call recordings*, not TTS output of our own sentences, so the two are probably compatible; 63 short Thai clips is a few MB. Undecided because there is no audio yet. | Manifest only, for now |
-| **Q25** | **A fresh CRITICAL caller can now wait behind a starved routine one.** `D93` rescues anyone past 180 s before the solver runs, so when both contest the only qualified agent, the starved caller wins — even against someone at a crash scene. Measured: health caller at 600 s takes the shared agent from a fresh CRITICAL motor caller. Options: leave it (a 3-minute floor is a floor); let CRITICAL callers into the rescue pass too, ordered urgency-then-wait; or skip a rescue that would strand a CRITICAL caller with no other qualified agent. The existing `defer_never_above_urgency: high` shows the codebase already treats CRITICAL as special elsewhere. | Starved caller wins |
+| **Q26** | **`Settings.max_wait_before_any_agent_s` is an env var that changes nothing.** The matcher reads `config/matching_weights.yaml`, never `Settings`, so `MAX_WAIT_BEFORE_ANY_AGENT_S=30` in `.env` silently does nothing — and since `D94` it also describes a shape (one number) the system no longer has. It survives only as the bound for a startup coherence check against `target_wait_s`. Delete it, or wire the weights loader to it. Found while writing `D94`. | Left in place, documented |
 | **Q24** | **A health-line caller speaks health data into a recording nobody consented to hold as such.** `D14` makes `health_data` a separate scope; the offer grants only `recording` and `ai_processing` (`D88`). Three options: a third keypress (honest, and it lengthens the longest prompt in the system on the line where callers are most distressed); name the scope in the offer's wording on health lines (one keypress, three scopes); or gate the *extraction* at P4 so health entities are never pulled without it. **Leaning: the second plus the third.** Decide before P4 writes an entity extractor — that is the first code that can breach it. | Not asked for |
 | **Q23** | **Personalised menus renumber, and a human on a real keypad has no `ScriptedChoices`.** Every automated caller presses canonical keys and is translated (`D81`), so nothing in the suite or the demo endpoint can get this wrong. But at P5 a person reading a rehearsal script off paper will press what the script says, and for a recognised persona the numbers may have moved. Either rehearse with the persona that will actually be used, or set `personalisation.enabled: false` for the demo. | Enabled; decide before the day |
 
-Resolved: rating is an event (`D46`) · single project (`D34`) · Asterisk · RTX 3050 · Claude
+Resolved: **`Q25` — the wait ceiling is now per urgency tier (`D94`)**, so an emergency reaches its guarantee at 60 s while a routine caller is still 120 s from theirs; when both are past their own, the more urgent goes first · rating is an event (`D46`) · single project (`D34`) · Asterisk · RTX 3050 · Claude
 + Typhoon compared · React workstation with the softphone in it · web customer simulator ·
 menu-first flow (`D37`).
 
@@ -568,8 +568,15 @@ Facts about *this laptop* rather than the repo, so a fresh session does not redi
   (set on the context snapshot, never on the `WaitingCall`), and `waiting_credit_s` outside
   the demo path. So `customer_priority` and `continuity` currently score 0 on every real
   call, and `run_matching.py` hides it by generating them synthetically.
-- **The wait ceiling is a PRE-PASS, not a guard rail** (`D93`, fixing `B13`). It runs before
-  the solver, in `MatchingEngine._rescue()`. Do not move it back into `_guard`: `_guard` only
+- **The wait ceiling is a PRE-PASS, not a guard rail** (`D93`, fixing `B13`), and it is
+  **one ceiling PER URGENCY TIER** (`D94`): critical 60 s, high 120 s, normal 180 s, low
+  270 s, in `guards.max_wait_before_any_agent_by_urgency`. Never compare a wait against
+  `max_wait_before_any_agent_s` directly — that is only the default for an unnamed tier.
+  Use `weights.ceiling_for(call.intent_urgency)`. A table whose ceilings RISE with urgency
+  fails the boot, because getting it backwards is otherwise silent: every call still
+  routes and the crash-scene caller simply waits. When two callers are both past their own
+  ceiling the **more urgent** is rescued first, wait breaking ties inside a tier. It runs
+  before the solver, in `MatchingEngine._rescue()`. Do not move it back into `_guard`: `_guard` only
   runs for a call the solver **already chose an agent for**, so a ceiling checked there can
   never fire for the caller who lost the matrix — which is the only caller it is for. The
   rescue takes the **lowest**-fit qualified agent on purpose, so specialists stay free.

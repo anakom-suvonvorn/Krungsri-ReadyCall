@@ -1,7 +1,7 @@
 # DECISIONS
 
 _Significant engineering decisions and their rationale. Append new ones at the bottom; never silently reverse one without a new entry explaining why._
-_Last updated: 2026-09-01._
+_Last updated: 2026-09-02._
 
 Format per entry: **Problem → Decision → Reasoning → Alternatives → Tradeoffs → Future.**
 
@@ -2512,3 +2512,95 @@ honest answer was: not at all._
 - **The tradeoff, stated plainly.** A fresh **CRITICAL** caller can now wait behind a starved
   routine one when they are contesting the only qualified agent. See `Q25`: that is a real
   cost and it is the one thing about this change worth arguing over.
+
+## D94. The wait ceiling is per urgency tier, and the most urgent starved caller goes first
+_Proposed by the user, closing `Q25` — the cost `D93` introduced and deliberately left open._
+
+- **Problem.** `D93` made the ceiling reachable but it was still **one number for
+  everybody**. That says a caller at a crash scene and a caller asking about a renewal are
+  owed the same guarantee at the same moment, which is plainly false — and it produced the
+  case `Q25` recorded: a routine caller 181 s in could take the last qualified agent from a
+  fresh emergency, because the routine caller was past the single ceiling and the emergency
+  was not. Measured before this change: a health caller at 600 s took the shared agent from
+  a fresh CRITICAL motor caller.
+- **Decision, two parts:**
+  1. **`guards.max_wait_before_any_agent_by_urgency` — a ceiling per tier.** Shipped as
+     `critical: 60`, `high: 120`, `normal: 180` (unchanged from the old single value),
+     `low: 270`. `max_wait_before_any_agent_s` survives as the default for any tier the
+     table does not name, so the table is fully populated at load and `ceiling_for()` is a
+     plain lookup rather than a lookup with a fallback branch only one tier ever takes.
+  2. **When two callers are both past their own ceiling, the more urgent is rescued
+     first**, with wait breaking ties inside a tier. Both are owed the guarantee and only
+     one agent exists; urgency is the axis that says whose delay costs more.
+- **Why separate numbers rather than one number scaled per tier.** This was the user's own
+  question and they reached the right answer. A real contact centre states these as flat
+  commitments — *"emergencies are answered within a minute"* — and a supervisor aligning
+  the config to a company SLA wants to type that minute in, not derive it from a base and a
+  multiplier. A multiplier also couples every tier to every other one: retuning `normal`
+  would silently move `critical`, which is the tier you least want moving by accident.
+- **Why this dissolves `Q25` rather than trading it away.** Under one ceiling the emergency
+  and the routine caller were compared on a number written for neither of them. Now the
+  emergency reaches *its* ceiling at 60 s while the routine caller is still 120 s from
+  theirs, so in the ordinary case the contest never happens — the emergency is rescued
+  before the routine caller is even eligible.
+- **The table cuts both ways, and the second half is easy to miss.** A `low`-urgency caller
+  at 200 s is past the *old* 180 s ceiling but not past their own 270 s one, so they are no
+  longer yanked out of the matrix and handed the worst qualified agent. They stay where fit
+  still counts, which is the right answer for somebody who is not in a hurry. `D93`'s
+  lowest-fit rule was always a deliberate sacrifice; this stops us making it for people who
+  were not actually starving.
+- **A ceiling may never rise with urgency, and that is enforced at startup.** Getting the
+  table backwards is silent — every call still routes, and the caller at the crash scene
+  simply waits — so `MatchingWeights.validate()` walks the tiers in patience order and
+  refuses to boot. An unknown key (`urgent:` for `high:`) is refused too, rather than
+  leaving that tier quietly on the default.
+- **The alternative ordering, recorded because it may be the better answer later.** Instead
+  of strict urgency order, rank the starved by **overshoot ratio** — `wait / own_ceiling` —
+  so a routine caller at 3.3× their ceiling outranks an emergency at 2× theirs. It is
+  self-balancing and needs no second knob. It was **not** chosen because `defer_never_above_
+  urgency: high` already establishes that this codebase treats CRITICAL as categorically
+  special rather than as a large number, and because the ratio is much harder to explain to
+  a supervisor than "emergencies first".
+- **The cost, stated plainly.** Under **sustained** CRITICAL load a patient caller past
+  their ceiling can be overtaken indefinitely, where the ratio ordering would eventually
+  rescue them. The rescue pass only ranks callers who are *all* already past their ceilings,
+  so this needs a genuine flood of emergencies to bite. **If it is ever observed, the fix is
+  the ratio ordering above, not a new knob.** `Q25` is closed on that understanding.
+- **What did not change.** The rescued caller still gets the **lowest**-fit qualified agent
+  (`D93`), a rescued call still never reaches `_guard`, and the hard filters still run
+  first — *"any qualified agent"* has never meant *"anyone"*.
+
+## D95. `torch` comes from the CUDA index, because the PyPI wheel is the CPU build
+_P3 step 4b, step zero. Recorded because the failure mode is invisible._
+
+- **Problem.** `uv add torch` resolves from PyPI, and the PyPI `torch` wheel for Windows is
+  **CPU-only**. Nothing about installing it fails: `import torch` works, every model loads,
+  every test passes, and Whisper runs — roughly an order of magnitude too slowly, with
+  `torch.cuda.is_available()` quietly returning `False`. It is precisely the shape this
+  project keeps meeting (`B3`'s zero timings, `B12`'s frozen wait): a confident, plausible,
+  wrong result that nothing raises about.
+- **Decision:** pin `torch` to the PyTorch CUDA 12.8 index in `pyproject.toml`, with
+  `explicit = true` so only the packages named in `[tool.uv.sources]` are looked up there
+  and everything else still resolves from PyPI.
+- **Verified rather than assumed**, which is the point of the entry. The `+cu128` local
+  version tag only proves *which file installed*; it says nothing about whether the driver
+  cooperates. So the check ran a real matmul on the device:
+
+  ```
+  torch          2.11.0+cu128
+  cuda available True          cuda built  12.8
+  device         NVIDIA GeForce RTX 3050 Laptop GPU   (sm_86)
+  vram total     4.00 GiB      vram free   3.22 GiB
+  matmul on gpu  OK
+  ```
+
+- **The VRAM number is worse than the docs assumed, and it drives the engine choice.**
+  `PROJECT_STATE` §7 says "4–6 GB"; the real figure is **4.00 GiB total with ~3.2 GiB free**,
+  because the desktop compositor is already holding 0.8 GiB. Whisper-medium in fp16 is
+  ~1.5 GB of weights before activations, and Whisper pads every chunk to 30 s. That is the
+  measurement behind `D30`'s bake-off mattering rather than being a formality.
+- **`onnxruntime` stays the CPU build on purpose.** Silero VAD is a ~1 MB model and runs in
+  well under a millisecond per frame on a CPU core. Putting it on the GPU would contest the
+  scarcest resource on this machine with the one model that actually needs it, and
+  `onnxruntime-gpu` would additionally drag in its own CUDA/cuDNN copies to disagree with
+  torch's.

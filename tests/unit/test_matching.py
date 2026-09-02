@@ -521,6 +521,144 @@ async def test_a_rescued_caller_is_never_held_back_by_a_guard(
     assert decision.chosen_agent_id is not None
 
 
+# --- D94 / Q25: the ceiling is per urgency tier ------------------------------------------
+#
+# `D93` made the ceiling reachable; it was still ONE number, which meant a routine caller
+# 181s in outranked a fresh emergency for the last qualified agent. Every test here needs
+# contention to mean anything, same lesson as `B13`.
+
+
+def test_the_ceiling_falls_as_urgency_rises(weights: MatchingWeights) -> None:
+    """The shipped table, read back as the promise it encodes."""
+    assert weights.ceiling_for(Urgency.CRITICAL) == 60.0
+    assert weights.ceiling_for(Urgency.HIGH) == 120.0
+    assert weights.ceiling_for(Urgency.NORMAL) == 180.0
+    assert weights.ceiling_for(Urgency.LOW) == 270.0
+    # The default is what an unnamed tier would fall back to, and it must still be the
+    # old single value so `D93`'s behaviour for `normal` is unchanged.
+    assert weights.max_wait_before_any_agent_s == 180.0
+
+
+async def test_an_emergency_reaches_the_ceiling_before_a_routine_caller_does(
+    weights: MatchingWeights, clock: ManualClock
+) -> None:
+    """`Q25`, the case that prompted this. One shared agent, both callers qualified.
+
+    At 90 s the emergency is past its own 60 s ceiling and the routine caller is not yet
+    past their 180 s one — so the emergency is rescued and the routine caller waits. Under
+    a single 180 s ceiling NEITHER was rescued, and the routine caller won on raw score
+    whenever their fit was better.
+    """
+    only_one = _dual_skill_agent("A_dual", health=1.0, motor=0.10)
+    engine = MatchingEngine(directory=ListDirectory([only_one]), weights=weights, clock=clock)
+    presence = {"A_dual": make_presence("A_dual", clock=clock)}
+
+    # The routine caller is the BETTER fit (1.0 vs 0.10) and has waited longer, so they
+    # win the matrix outright. Only the per-tier ceiling can save the emergency.
+    routine = _health_call("call_routine", waiting_s=150.0)
+    emergency = make_call(
+        call_session_id="call_emergency",
+        waiting_s=90.0,
+        intent_urgency=Urgency.CRITICAL,
+    )
+
+    by_call = {d.call_session_id: d for d in await engine.match([routine, emergency], presence)}
+
+    assert by_call["call_emergency"].kind is MatchKind.FALLBACK
+    assert by_call["call_emergency"].chosen_agent_id == "A_dual"
+    assert by_call["call_routine"].chosen_agent_id is None
+    assert by_call["call_routine"].kind is MatchKind.ALL_QUALIFIED_BUSY
+
+
+async def test_when_both_are_past_their_ceiling_the_more_urgent_goes_first(
+    weights: MatchingWeights, clock: ManualClock
+) -> None:
+    """Both are owed the guarantee and only one agent exists. Urgency decides.
+
+    Note the routine caller has waited FOUR TIMES longer and still loses — that is the
+    deliberate cost of this ordering, recorded in `D94` and worth re-reading if a patient
+    caller ever appears to be stuck.
+    """
+    only_one = _dual_skill_agent("A_dual", health=1.0, motor=1.0)
+    engine = MatchingEngine(directory=ListDirectory([only_one]), weights=weights, clock=clock)
+    presence = {"A_dual": make_presence("A_dual", clock=clock)}
+
+    routine = _health_call("call_routine", waiting_s=400.0)
+    emergency = make_call(
+        call_session_id="call_emergency", waiting_s=100.0, intent_urgency=Urgency.CRITICAL
+    )
+
+    by_call = {d.call_session_id: d for d in await engine.match([routine, emergency], presence)}
+
+    assert by_call["call_emergency"].chosen_agent_id == "A_dual"
+    assert by_call["call_routine"].chosen_agent_id is None
+
+
+async def test_within_one_tier_the_longest_wait_still_wins(
+    weights: MatchingWeights, clock: ManualClock
+) -> None:
+    """`D93`'s ordering survives inside a tier — urgency only breaks ties BETWEEN tiers."""
+    only_one = make_agent("A_only", skill="health.policy", prof=0.8)
+    engine = MatchingEngine(directory=ListDirectory([only_one]), weights=weights, clock=clock)
+    presence = {"A_only": make_presence("A_only", clock=clock)}
+
+    newer = _health_call("call_newer", waiting_s=200.0)
+    older = _health_call("call_older", waiting_s=900.0)
+
+    by_call = {d.call_session_id: d for d in await engine.match([newer, older], presence)}
+
+    assert by_call["call_older"].chosen_agent_id == "A_only"
+    assert by_call["call_newer"].chosen_agent_id is None
+
+
+async def test_a_patient_caller_gets_longer_before_fit_is_abandoned(
+    weights: MatchingWeights, clock: ManualClock
+) -> None:
+    """The table cuts both ways, and this is the half that is easy to forget.
+
+    A `low` caller at 200 s is past the OLD single ceiling of 180 s but not past their own
+    270 s one, so they are not rescued — they stay in the matrix where fit still counts,
+    which is the right answer for somebody who is not in any hurry.
+    """
+    weak = make_agent("A_weak", skill="health.policy", prof=0.30)
+    strong = make_agent("A_strong", skill="health.policy", prof=0.99)
+    engine = MatchingEngine(directory=ListDirectory([strong, weak]), weights=weights, clock=clock)
+    presence = {
+        "A_weak": make_presence("A_weak", clock=clock),
+        "A_strong": make_presence("A_strong", clock=clock),
+    }
+
+    patient = _health_call("call_patient", waiting_s=200.0, intent_urgency=Urgency.LOW)
+    decision = (await engine.match([patient], presence))[0]
+
+    # Not a rescue, so the optimiser chose — and it takes the BEST agent, where a rescue
+    # would deliberately have taken the worst.
+    assert decision.chosen_agent_id == "A_strong"
+    assert decision.kind is not MatchKind.FALLBACK
+
+
+def test_a_ceiling_that_rises_with_urgency_is_refused_at_startup(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """Getting the table backwards is silent: every call still routes, and the caller at
+    the crash scene simply waits. So it fails the boot instead."""
+    source = (REPO_ROOT / "config" / "matching_weights.yaml").read_text(encoding="utf-8")
+    broken = source.replace("critical: 60", "critical: 600")
+    path = tmp_path / "backwards.yaml"
+    path.write_text(broken, encoding="utf-8")
+
+    with pytest.raises(ConfigError, match="must not rise with urgency"):
+        MatchingWeights.load(path)
+
+
+def test_an_unknown_urgency_in_the_table_is_refused(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """A typo would otherwise leave that tier silently on the default."""
+    source = (REPO_ROOT / "config" / "matching_weights.yaml").read_text(encoding="utf-8")
+    path = tmp_path / "typo.yaml"
+    path.write_text(source.replace("critical: 60", "urgent: 60"), encoding="utf-8")
+
+    with pytest.raises(ConfigError, match="unknown urgency"):
+        MatchingWeights.load(path)
+
+
 async def test_a_critical_caller_is_never_deferred(
     directory: FixtureAgentDirectory, weights: MatchingWeights, clock: ManualClock
 ) -> None:

@@ -1,4 +1,4 @@
-%% HANDWRITTEN. Checked against ARCHITECTURE.md S8 + D22 + D23 + D38 + D92 + B12
+%% HANDWRITTEN. Checked against ARCHITECTURE.md S8 + D22 + D23 + D38 + D92 + D93 + D94 + B12 + B13
 sequenceDiagram
     autonumber
     participant Q as Waiting pool
@@ -14,6 +14,11 @@ sequenceDiagram
         Note right of Q: B12 lived exactly here. WaitingCall is frozen and<br/>the tick rebuilds it with replace() - but it named<br/>only excluded_agent_ids, so waiting_s kept its<br/>admit-time value and every threshold below was<br/>unreachable. Fields you do not name are a decision.
         M->>PR: all offerable agents
         Note right of PR: two axes: what the PLATFORM knows,<br/>and what the PERSON chose (D33)
+
+        M->>M: RESCUE PASS, before the optimiser (D93)
+        Note right of M: anyone past THEIR OWN tier's wait ceiling (D94)<br/>is handed a qualified free agent right here:<br/>critical 60s, high 120s, normal 180s, low 270s.<br/>Most urgent first, longest wait breaking ties.
+        Note right of M: they get the LOWEST-fit qualified agent on<br/>purpose, so the specialists stay free for<br/>whoever actually needs them.
+        Note right of M: this CANNOT be a guard after the solve (B13):<br/>a guard only sees the call the solver already<br/>chose, so it could never rescue the one who lost.
 
         M->>M: hard filters FIRST
         Note right of M: required skill - LANGUAGE (D38)<br/>a failed hard filter is not a low score,<br/>it is exclusion
@@ -31,7 +36,7 @@ sequenceDiagram
 
         alt a much better agent frees up in seconds
             M->>M: DEFER, but only inside the guard rails
-            Note right of M: never past the wait ceiling,<br/>never for a critical call
+            Note right of M: a rescued caller never reaches this branch at all -<br/>being past the ceiling is exactly what removes them<br/>from the optimiser (D93). Never for a critical call.
         else
             M->>WS: OFFER
             Note right of WS: every candidate and its score is persisted -<br/>the decision is explainable (D18)

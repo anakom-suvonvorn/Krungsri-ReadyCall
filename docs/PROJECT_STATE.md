@@ -1,7 +1,7 @@
 # PROJECT_STATE
 
 _What this project is, what exists, what doesn't, and where everything lives._
-_Last updated: 2026-09-01._
+_Last updated: 2026-09-02._
 
 ---
 
@@ -45,7 +45,7 @@ caller keys their way through the real menu to the right queue, is offered
 the recording and either takes it or does not, the desk rings, the brief is already there, and
 the disclosure gate moves when the agent attests.
 
-Verified on 2026-08-31: **564 tests** — 522 pass + 42 skipped without the Postgres container
+Verified on 2026-09-02: **571 tests** — 529 pass + 42 skipped without the Postgres container
 (the 42 are the database cases).
 `ruff check` and `ruff format --check` clean over 144 files, `mypy --strict`
 clean over **106** source files, and all three scenarios replay byte-identically. The database
@@ -374,7 +374,7 @@ performing by hand, i.e. what the next services take over (`D36`).
 | | |
 |---|---|
 | Source files | 149 Python files (`src/` 110 + `tests/` + `scripts/` + `mock/`) |
-| Tests | 564, all passing, ~115 s (137 store contract + restart across 3 backends; 56 on the prompt pack and the IVR; 40 on the hold and the intake seam; 34 on matching, 5 of them on the wait ceiling under contention) |
+| Tests | 571, all passing, ~115 s (137 store contract + restart across 3 backends; 56 on the prompt pack and the IVR; 40 on the hold and the intake seam; 41 on matching, 12 of them on the wait ceiling under contention) |
 | Ports defined | 8 (telephony, stt, llm, tts, core_data, event_bus, blob_storage, agent_directory) |
 | Persisted tables | **9** + Alembic, verified on a live Postgres. Presence, the waiting pool and the live identity are deliberately **not** among them (`D78`) |
 | Adapters | 9 fakes/nulls + a caching/circuit-breaking decorator; no real vendor adapter yet |

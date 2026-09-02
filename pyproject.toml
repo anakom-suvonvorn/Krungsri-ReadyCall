@@ -22,8 +22,19 @@ dependencies = [
 # Heavier stacks are opt-in so `uv sync` stays fast and the STT worker does not
 # have to install the web stack (D2). Added phase by phase.
 web = ["fastapi>=0.115", "uvicorn[standard]>=0.32", "websockets>=13"]
-# db   = ["sqlalchemy>=2.0", "alembic", "asyncpg", "psycopg[binary]"]
-# ml   = ["torch", "transformers", "faster-whisper", "onnxruntime", "silero-vad"]
+# db was folded into the base dependencies when P2c landed.
+#
+# `ml` is the STT box's stack and lands on nothing else (`D2`). torch comes from the CUDA
+# index configured below, NOT from PyPI: the PyPI wheel is CPU-only and would silently
+# give us a Whisper that runs at a tenth of the speed with no error anywhere (`D95`).
+ml = [
+    "torch>=2.6",
+    "transformers>=4.44",
+    "faster-whisper>=1.1",
+    "onnxruntime>=1.20",
+    "silero-vad>=5.1",
+    "soundfile>=0.12",
+]
 
 [dependency-groups]
 dev = [
@@ -43,6 +54,24 @@ build-backend = "uv_build"
 [tool.uv.build-backend]
 module-name = "readycall"
 module-root = "src"
+
+# --- where torch comes from (`D95`) ---------------------------------------------------
+#
+# PyPI's `torch` is the CPU build. Installing it would produce a working system that is
+# quietly ten times too slow, with `torch.cuda.is_available()` returning False and nothing
+# raising - the exact "confident, plausible, wrong" shape this project keeps meeting
+# (`B3`, `B12`). So torch is pinned to the CUDA 12.8 index instead.
+#
+# `explicit = true` means ONLY the packages named in [tool.uv.sources] are looked up here;
+# everything else still resolves from PyPI. Without it, uv would search this index for
+# every dependency and find stale mirrors of some of them.
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cu128" }]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

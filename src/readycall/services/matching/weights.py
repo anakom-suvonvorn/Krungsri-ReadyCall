@@ -12,6 +12,7 @@ weights were in force at the time.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
@@ -45,7 +46,12 @@ class MatchingWeights:
     respect_max_concurrent: bool
     respect_schedule: bool
 
+    #: The default ceiling, used for any urgency tier the config does not name.
     max_wait_before_any_agent_s: float
+    #: Per-tier ceilings (`D94`). Always fully populated — every `Urgency` member has an
+    #: entry, filled from the default above when the YAML omits it — so `ceiling_for` is a
+    #: lookup rather than a lookup-with-a-fallback-branch that only one tier ever takes.
+    max_wait_by_urgency: dict[Urgency, float]
     defer_enabled: bool
     defer_max_wait_s: float
     defer_max_hold_s: float
@@ -99,6 +105,11 @@ class MatchingWeights:
             respect_max_concurrent=bool(hard.get("respect_max_concurrent", True)),
             respect_schedule=bool(hard.get("respect_schedule", True)),
             max_wait_before_any_agent_s=float(guards.get("max_wait_before_any_agent_s", 180)),
+            max_wait_by_urgency=cls._ceilings(
+                guards.get("max_wait_before_any_agent_by_urgency"),
+                default=float(guards.get("max_wait_before_any_agent_s", 180)),
+                where=str(p),
+            ),
             defer_enabled=bool(guards.get("defer_enabled", True)),
             defer_max_wait_s=float(guards.get("defer_max_wait_s", 60)),
             defer_max_hold_s=float(guards.get("defer_max_hold_s", 25)),
@@ -110,7 +121,54 @@ class MatchingWeights:
         weights.validate()
         return weights
 
+    @staticmethod
+    def _ceilings(raw: Any, *, default: float, where: str) -> dict[Urgency, float]:
+        """Resolve the per-tier wait ceilings, filling anything unnamed from the default.
+
+        An unknown key is refused rather than ignored: a typo like `urgent:` would
+        otherwise leave that tier silently on the default, which is exactly the class of
+        wrong-but-plausible config this file exists to catch.
+        """
+        table = dict.fromkeys(Urgency, default)
+        if raw is None:
+            return table
+        if not isinstance(raw, dict):
+            raise ConfigError(f"{where}: guards.max_wait_before_any_agent_by_urgency must be a map")
+        for key, value in raw.items():
+            try:
+                tier = Urgency(str(key))
+            except ValueError as exc:
+                known = ", ".join(u.value for u in Urgency)
+                raise ConfigError(
+                    f"{where}: unknown urgency '{key}' in "
+                    f"max_wait_before_any_agent_by_urgency (known: {known})"
+                ) from exc
+            try:
+                seconds = float(value)
+            except (TypeError, ValueError) as exc:
+                raise ConfigError(f"{where}: ceiling for '{key}' is not a number") from exc
+            if seconds <= 0:
+                raise ConfigError(f"{where}: ceiling for '{key}' must be positive")
+            table[tier] = seconds
+        return table
+
+    def ceiling_for(self, urgency: Urgency) -> float:
+        """How long THIS caller waits before fit stops mattering at all (`D94`)."""
+        return self.max_wait_by_urgency[urgency]
+
     def validate(self) -> None:
+        # A more urgent caller must never be made to wait LONGER for the absolute
+        # guarantee than a less urgent one. The table is free-form YAML, so this is
+        # trivially easy to get backwards while editing, and getting it backwards is
+        # silent: every call still routes, and the crash-scene caller simply waits.
+        by_patience = sorted(Urgency, key=lambda u: u.weight)
+        for lower, higher in pairwise(by_patience):
+            if self.ceiling_for(higher) > self.ceiling_for(lower):
+                raise ConfigError(
+                    f"guards.max_wait_before_any_agent_by_urgency: '{higher.value}' waits "
+                    f"{self.ceiling_for(higher)}s but the less urgent '{lower.value}' waits "
+                    f"only {self.ceiling_for(lower)}s - ceilings must not rise with urgency"
+                )
         if self.urgency_max < self.urgency_min:
             raise ConfigError("urgency max_multiplier is below min_multiplier")
         if self.urgency_min < 1.0:

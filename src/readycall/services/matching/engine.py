@@ -213,9 +213,20 @@ class MatchingEngine:
         *,
         now: datetime,
     ) -> tuple[dict[int, int], set[int]]:
-        """Past `MAX_WAIT_BEFORE_ANY_AGENT_S`, hand them anyone qualified. Longest wait first.
+        """Past their own tier's ceiling, hand them anyone qualified. Most urgent first.
 
         Returns `(call index -> agent index, agent indices now spoken for)`.
+
+        **The ceiling is per urgency tier** (`D94`, closing `Q25`). One number for everybody
+        meant a routine caller 181 s in could take the last qualified agent from a caller at
+        a crash scene who had been waiting ten seconds — the routine caller was past the
+        single ceiling and the emergency was not. Each tier now has its own promise
+        (`critical` 60 s, `low` 270 s), so an emergency reaches its guarantee first in the
+        ordinary case, instead of tying on a number written for somebody else.
+
+        **When two callers are BOTH past their own ceiling, the more urgent goes first**,
+        and wait breaks ties within a tier. Both are owed the guarantee and only one agent
+        exists; urgency is the axis that says whose delay costs more.
 
         **Why this runs before the solver and not inside `_guard`.** `_guard` is only reached
         for a call the solver has *already* picked an agent for, so the ceiling could never
@@ -231,11 +242,16 @@ class MatchingEngine:
         spending the scarcest agent on it buys this caller a little and costs the next one a
         lot.
         """
-        ceiling = self._weights.max_wait_before_any_agent_s
         starved = sorted(
-            (i for i, call in enumerate(calls) if call.total_wait_s >= ceiling),
-            key=lambda i: calls[i].total_wait_s,
-            reverse=True,
+            (
+                i
+                for i, call in enumerate(calls)
+                if call.total_wait_s >= self._weights.ceiling_for(call.intent_urgency)
+            ),
+            # Most urgent first, then longest wait. Negated rather than `reverse=True`
+            # because the two keys sort the same direction and a reversed tuple would
+            # also reverse ties into shortest-wait-first.
+            key=lambda i: (-calls[i].intent_urgency.weight, -calls[i].total_wait_s),
         )
 
         rescued: dict[int, int] = {}
@@ -270,7 +286,8 @@ class MatchingEngine:
                 call_session_id=call.call_session_id,
                 agent_id=agents[j].agent_id,
                 waited_s=round(call.total_wait_s, 1),
-                ceiling_s=ceiling,
+                urgency=str(call.intent_urgency),
+                ceiling_s=self._weights.ceiling_for(call.intent_urgency),
             )
         return rescued, reserved
 

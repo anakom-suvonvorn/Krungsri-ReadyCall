@@ -222,3 +222,23 @@ _Append here rather than editing above._
   precisely why the simulator looks like it exercises them — the same illusion as `B4`.
 - **Speech may move urgency and fit, never `queue_id` or `required_skill`** (`D92`). §2 lists
   "situational urgency" as an input; today it is the *keypad's* intent, from config.
+
+- **2026-09-02 — the ceiling is no longer one number (`D94`, closing `Q25`).** `D93` made it
+  reachable and left it flat, which meant a routine caller 181 s in outranked a fresh
+  emergency for the last qualified agent: the routine caller was past the single ceiling and
+  the emergency was not. Each urgency tier now has its own, in
+  `guards.max_wait_before_any_agent_by_urgency` — **critical 60 s, high 120 s, normal 180 s
+  (unchanged), low 270 s** — so the emergency reaches *its* guarantee while the routine
+  caller is still 120 s from theirs, and the contest usually never happens. When two callers
+  **are** both past their own ceilings, **the more urgent is rescued first** and wait breaks
+  ties within a tier.
+  The half that is easy to miss: a `low` caller at 200 s is past the *old* 180 s ceiling but
+  not their own 270 s one, so they are no longer pulled out of the matrix and handed the
+  worst qualified agent. `D93`'s lowest-fit rule was always a deliberate sacrifice, and this
+  stops us making it on behalf of people who were not starving.
+  A table whose ceilings *rise* with urgency now fails at startup, because getting it
+  backwards is silent — every call still routes and the crash-scene caller simply waits.
+  On `--calls 25` the rescues went from 1 to 3, and the single caller still past a ceiling
+  is a genuine roster gap (`life.other`, no life-skilled agent online).
+- **Numbers after `D94`:** 571 tests, 41 of them on matching — seven new, every contention
+  one confirmed to fail with the per-tier ceiling reverted to flat.

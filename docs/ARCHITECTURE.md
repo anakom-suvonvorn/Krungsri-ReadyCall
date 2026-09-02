@@ -4,7 +4,7 @@ _How the full ReadyCall system works, end to end. Read this to understand the ma
 _Status: **partly built**. P0–P2c are implemented, and P3 is built through the intake
 offer; the audio, the analysis passes and the telephony integration are still design.
 Each section says what is real where it matters. See `PLAN.md` for the build order._
-_Last updated: 2026-09-01._
+_Last updated: 2026-09-02._
 
 ---
 
@@ -485,11 +485,17 @@ fit signals — never `queue_id` or `required_skill`.
    *multiplies* fit, so a long waiter eventually dominates the matrix on their own merit. Within a
    single queue this is the whole story: every caller needs the same `required_skill`, so fit is
    identical across them and the longest waiter wins.
-2. **Absolutely** — past `MAX_WAIT_BEFORE_ANY_AGENT_S` (default 180 s) the caller is handed a
-   qualified free agent by a **pre-pass that runs before the solver** (`D93`), longest wait first,
-   taking the *lowest*-fit qualified agent so the specialists stay free for whoever needs them. A
-   rescued call is removed from the matrix the solver sees and never reaches the guard rails, so
-   nothing can defer it or bounce it.
+2. **Absolutely** — past the caller's **own tier's** ceiling (`D94`: `critical` 60 s, `high`
+   120 s, `normal` 180 s, `low` 270 s) they are handed a qualified free agent by a **pre-pass that
+   runs before the solver** (`D93`), taking the *lowest*-fit qualified agent so the specialists stay
+   free for whoever needs them. A rescued call is removed from the matrix the solver sees and never
+   reaches the guard rails, so nothing can defer it or bounce it.
+
+   One number for everybody meant a routine caller 181 s in outranked a fresh emergency for the
+   last qualified agent — the routine caller was past the single ceiling and the emergency was not.
+   Per-tier ceilings mean the emergency reaches *its* guarantee while the routine caller is still
+   120 s from theirs, so the contest usually never happens. When two callers **are** both past
+   their own ceilings, **the more urgent is rescued first** and wait breaks ties within a tier.
 
 > Two bugs are buried under those two sentences, both found on 2026-09-01 and both invisible
 > within a single queue. `B12`: the pool fed the matcher a `waiting_s` frozen at admit time, so

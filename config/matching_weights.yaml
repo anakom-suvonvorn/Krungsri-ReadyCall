@@ -57,7 +57,30 @@ hard_filters:
 guards:
   # Past this wait, drop to ANY qualified agent regardless of fit. A perfect match nobody
   # is available for is worth less than a good one who is.
+  #
+  # This is now only the DEFAULT, used for any tier the table below does not name (`D94`).
   max_wait_before_any_agent_s: 180
+
+  # THE CEILING IS PER URGENCY TIER (`D94`, closing `Q25`).
+  #
+  # One number for everybody said a caller at a crash scene and a caller asking about a
+  # renewal are owed the same guarantee at the same moment, which is plainly false - and
+  # it produced the ugly case `Q25` recorded: a routine caller 181s in could take the only
+  # qualified agent from a fresh emergency, because the routine caller was past the single
+  # ceiling and the emergency was not.
+  #
+  # Read each line as a service promise: "a caller in this state is connected to somebody
+  # competent within N seconds, whatever else is happening". They are separate numbers
+  # rather than one number times a per-tier multiplier on purpose: a real contact centre
+  # states these as flat commitments ("emergencies answered within a minute"), and a
+  # multiplier makes every one of them move when you tune any one of them.
+  #
+  # Enforced at startup: a ceiling may never RISE with urgency (see `weights.py`).
+  max_wait_before_any_agent_by_urgency:
+    critical: 60     # at an accident scene, a medical emergency
+    high: 120
+    normal: 180      # unchanged - this was the old single value
+    low: 270
 
   # Deferral: hold a call briefly for a much better agent who is about to free up.
   # Guarded hard, because "wait for someone better" is how a caller gets forgotten.

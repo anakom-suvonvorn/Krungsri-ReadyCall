@@ -166,7 +166,9 @@ async def main() -> int:
     if unassigned:
         worst = max(unassigned, key=lambda c: c.total_wait_s)
         print(f"  longest unassigned wait: {worst.total_wait_s:.0f}s ({worst.intent_code})")
-        starved = [c for c in unassigned if c.total_wait_s >= weights.max_wait_before_any_agent_s]
+        # Each caller against THEIR OWN tier's ceiling (`D94`) — a flat comparison here
+        # would under-report a starved emergency and over-report a patient caller.
+        starved = [c for c in unassigned if c.total_wait_s >= weights.ceiling_for(c.intent_urgency)]
         print(f"  past the wait ceiling and STILL unassigned: {len(starved)}")
         # Split by WHY, and read it off the decisions rather than asserting it (`D50`).
         # The old text claimed every starved caller had failed a hard filter, which was a
