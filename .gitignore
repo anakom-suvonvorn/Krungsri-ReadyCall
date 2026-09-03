@@ -55,3 +55,9 @@ apps/**/.vite/
 Thumbs.db
 .idea/
 *.swp
+
+# Real customer speech from the Thai call-centre dataset (`D97`). Names, phone numbers
+# and account details are in the transcripts, so neither the audio nor the references may
+# be committed - this is a PDPA position, not tidiness (`D14`).
+/tests/audio/thai_calls/
+/models/

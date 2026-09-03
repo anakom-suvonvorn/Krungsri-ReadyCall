@@ -47,48 +47,85 @@ from readycall.services.transcription.stream import TranscriptionStream  # noqa:
 #: Read from `config/`, never spelled here (`D28`) - and see `B14` for why the contents
 #: of this list are load-bearing in a way a word list normally is not.
 THAI_INSURANCE_TERMS = DomainPack.load(ROOT / "config").stt_vocabulary
+HINT = SttHint(language="th", vocabulary=THAI_INSURANCE_TERMS)
 
 
 def build_engine(name: str) -> SttEngine:
-    """Engines by short name, so the table's rows are reproducible from the command line."""
-    if name == "scripted":
+    """Engines by short name, so the table's rows are reproducible from a command line.
+
+    `name` may carry an explicit checkpoint after a colon:
+
+        thonburian                          the Thai medium checkpoint, HF pipeline
+        thonburian:biodatlab/whisper-th-large-v3-combined
+        faster_whisper:models/whisper-th-medium-combined-ct2
+        faster_whisper:tiny                 a generic size - no conversion needed
+        typhoon                             NeMo FastConformer (needs the `asr` extra)
+    """
+    engine_name, _, model = name.partition(":")
+
+    if engine_name == "scripted":
         return ScriptedSttEngine(
-            [ScriptedTurn(text="(scripted)", t_start_ms=0, t_end_ms=1000)] * 200
+            [ScriptedTurn(text="(scripted)", t_start_ms=0, t_end_ms=1000)] * 500
         )
-    if name.startswith("faster_whisper"):
+    if engine_name == "faster_whisper":
         from readycall.adapters.stt.faster_whisper import DEFAULT_MODEL, FasterWhisperEngine
 
-        # faster_whisper_tiny / faster_whisper_small / faster_whisper (the Thai medium)
-        suffix = name[len("faster_whisper") :].lstrip("_")
-        model = suffix if suffix else DEFAULT_MODEL
-        return FasterWhisperEngine(model=model)
-    if name.startswith("thonburian"):
+        return FasterWhisperEngine(model=model or DEFAULT_MODEL)
+    if engine_name == "thonburian":
         from readycall.adapters.stt.thonburian_hf import DEFAULT_MODEL, ThonburianHfEngine
 
-        suffix = name[len("thonburian") :].lstrip("_")
-        return ThonburianHfEngine(model=suffix or DEFAULT_MODEL)
-    raise SystemExit(f"unknown engine: {name}")
+        return ThonburianHfEngine(model=model or DEFAULT_MODEL)
+    if engine_name == "typhoon":
+        from readycall.adapters.stt.typhoon_asr import DEFAULT_MODEL, TyphoonAsrEngine
+
+        return TyphoonAsrEngine(model=model or DEFAULT_MODEL)
+    raise SystemExit(
+        f"unknown engine: {name!r}. Known: scripted, thonburian, faster_whisper, typhoon "
+        "(each optionally followed by ':<checkpoint>')"
+    )
 
 
-def word_error_rate(reference: str, hypothesis: str) -> float:
-    """Standard Levenshtein WER over whitespace tokens.
-
-    ⚠️ **Thai does not put spaces between words**, so on unsegmented Thai this is really a
-    *phrase* error rate and will read pessimistically high. It is still perfectly usable
-    for RANKING engines against each other on identical text, which is what `D30` asks
-    for. Do not quote it as an absolute WER without segmenting first (pythainlp), and
-    label it as CER if that is what is wanted.
-    """
-    ref, hyp = reference.split(), hypothesis.split()
+def _levenshtein(ref: list[str], hyp: list[str]) -> int:
     if not ref:
-        return 0.0 if not hyp else 1.0
+        return len(hyp)
     prev = list(range(len(hyp) + 1))
     for i, r in enumerate(ref, start=1):
         cur = [i] + [0] * len(hyp)
         for j, h in enumerate(hyp, start=1):
             cur[j] = min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (r != h))
         prev = cur
-    return prev[-1] / len(ref)
+    return prev[-1]
+
+
+def character_error_rate(reference: str, hypothesis: str) -> float:
+    """CER — **the metric for Thai**, and the one this table ranks on (`B18`).
+
+    Whitespace is stripped from both sides before comparing, because **Thai does not use
+    it**: our transcriptions come back as one continuous string, and the reference is
+    segment-joined with spaces we inserted ourselves. Comparing those as *word* tokens is
+    comparing one arbitrary segmentation against another.
+
+    That is not a theoretical objection. The first run against real Thai audio reported a
+    word error rate of **1.000, 1.118, 1.071, 0.941** — over 100% on two of four files,
+    which is only possible when essentially nothing lines up. The model was fine; the
+    ruler was wrong, and it was wrong in exactly the way this file's own docstring had
+    warned about two days earlier.
+    """
+    ref = [c for c in reference if not c.isspace()]
+    hyp = [c for c in hypothesis if not c.isspace()]
+    if not ref:
+        return 0.0 if not hyp else 1.0
+    return _levenshtein(ref, hyp) / len(ref)
+
+
+def word_error_rate(reference: str, hypothesis: str) -> float:
+    """WER over whitespace tokens. Kept, reported second, and **not** what to judge Thai on.
+
+    It is meaningful for a language that delimits its words, and it is meaningful against a
+    *segmented* Thai reference (pythainlp). Against raw Thai it measures the segmentation,
+    not the transcription — see `character_error_rate`.
+    """
+    return _levenshtein(reference.split(), hypothesis.split()) / max(1, len(reference.split()))
 
 
 def vram_in_use_mb() -> float | None:
@@ -122,6 +159,7 @@ class Run:
     audio_s: float = 0.0
     wall_s: float = 0.0
     vram_mb: float | None = None
+    cer: float | None = None
     wer: float | None = None
 
     @property
@@ -149,6 +187,7 @@ async def transcribe_file(
     engine_name: str,
     baseline_vram: float | None = None,
     realtime: bool = True,
+    hint: SttHint | None = None,
 ) -> Run:
     source = WavFileSource(path)
     run = Run(engine=engine_name, audio=path.name, audio_s=source.duration_s)
@@ -181,7 +220,7 @@ async def transcribe_file(
         stt=engine,
         clock=SystemClock(),
         on_turn=sink,
-        hint=SttHint(language="th", vocabulary=THAI_INSURANCE_TERMS),
+        hint=hint,
     )
     await stream.start()
 
@@ -209,7 +248,9 @@ async def transcribe_file(
 
     reference = path.with_suffix(".txt")
     if reference.exists():
-        run.wer = word_error_rate(reference.read_text(encoding="utf-8").strip(), run.text)
+        truth = reference.read_text(encoding="utf-8").strip()
+        run.cer = character_error_rate(truth, run.text)
+        run.wer = word_error_rate(truth, run.text)
     return run
 
 
@@ -218,6 +259,21 @@ async def main() -> int:
     parser.add_argument("--engines", nargs="+", default=["scripted"])
     parser.add_argument("--audio", nargs="+", default=[])
     parser.add_argument("--list", action="store_true", help="show the known engine names")
+    parser.add_argument(
+        "--no-hint",
+        action="store_true",
+        help="do not send config/stt_vocabulary.yaml to the engine. Worth measuring rather "
+        "than assuming: the hint helps in-domain and `B14` showed it can be handed straight "
+        "back as invented text, so its cost off-domain is a real question (`Q27`)",
+    )
+    parser.add_argument(
+        "--vad",
+        default="energy",
+        choices=["energy", "silero"],
+        help="which detector finds the sentences. `energy` needs nothing; `silero` is the "
+        "real one (`D9`) and is what a real measurement should use - the detector decides "
+        "what the model is even asked to transcribe, so it is half of any CER number",
+    )
     parser.add_argument("--out", default="", help="write the table to a UTF-8 file")
     parser.add_argument(
         "--fast",
@@ -230,11 +286,13 @@ async def main() -> int:
     enable_utf8()
     if args.list:
         print("engines:")
-        print("  scripted                  no model, no GPU - proves the harness itself")
-        print("  faster_whisper_tiny       ~75 MB, CTranslate2. The cheap real check")
-        print("  faster_whisper_small      ~460 MB")
-        print("  faster_whisper            biodatlab Thai medium, CT2 - the candidate")
-        print("  thonburian                biodatlab Thai medium, HF fp16 - the baseline")
+        print("  scripted                     no model, no GPU - proves the harness itself")
+        print("  thonburian                   biodatlab Thai medium, fp16. THE BASELINE (`D9`)")
+        print("  thonburian:<hf-id>           e.g. biodatlab/whisper-th-large-v3-combined")
+        print("  faster_whisper:<dir>         a converted CT2 build (scripts/convert_ct2.py)")
+        print("  faster_whisper:tiny          ~75 MB generic Whisper - a cheap plumbing check,")
+        print("                               NOT a Thai result and not a bake-off row")
+        print("  typhoon                      scb10x/typhoon-asr-realtime, NeMo (`D30`)")
         print()
         print("Put a .txt beside each .wav with the true transcript to get a WER column.")
         return 0
@@ -250,8 +308,12 @@ async def main() -> int:
     runs: list[Run] = []
     for name in args.engines:
         engine = build_engine(name)
-        vad = EnergyVad()
-        print(f"\n=== {name} ===")
+        vad: VoiceActivityDetector = EnergyVad()
+        if args.vad == "silero":
+            from readycall.adapters.vad.silero import SileroVad
+
+            vad = SileroVad()
+        print(f"\n=== {name}  (vad: {vad.info.name}) ===")
         # Sampled before the weights land, so the column is this engine's cost and not
         # the desktop compositor's 0.8 GiB (`D95`).
         baseline = vram_in_use_mb()
@@ -264,6 +326,7 @@ async def main() -> int:
                 engine_name=name,
                 baseline_vram=baseline,
                 realtime=not args.fast,
+                hint=None if args.no_hint else HINT,
             )
             runs.append(run)
             print(
@@ -273,7 +336,7 @@ async def main() -> int:
                     if run.paced
                     else f"p95     n/a  rtf {run.realtime_factor:5.2f}"
                 )
-                + (f"  wer {run.wer:.3f}" if run.wer is not None else "  wer   n/a")
+                + (f"  cer {run.cer:.3f}" if run.cer is not None else "  cer   n/a")
             )
         await engine.close()
 
@@ -282,15 +345,17 @@ async def main() -> int:
         "=" * 92,
         "BAKE-OFF  (`D30`) - p95 is utterance-end to turn; rtf < 1.0 means faster than real time",
         "=" * 92,
-        f"{'engine':<26}{'audio':<24}{'turns':>6}{'p95 ms':>9}{'rtf':>7}{'vram MB':>10}{'WER':>8}",
+        f"{'engine':<26}{'audio':<22}{'turns':>6}{'p95 ms':>9}{'rtf':>7}"
+        f"{'vram MB':>9}{'CER':>8}{'WER':>8}",
         "-" * 92,
     ]
     for r in runs:
         lines.append(
-            f"{r.engine:<26}{r.audio:<24}{r.turns:>6}"
+            f"{r.engine:<26}{r.audio[:20]:<22}{r.turns:>6}"
             f"{(f'{r.p95_ms:.0f}' if r.paced else 'n/a'):>9}"
             f"{('n/a' if r.paced else f'{r.realtime_factor:.2f}'):>7}"
-            f"{(f'{r.vram_mb:.0f}' if r.vram_mb is not None else '-'):>10}"
+            f"{(f'{r.vram_mb:.0f}' if r.vram_mb is not None else '-'):>9}"
+            f"{(f'{r.cer:.3f}' if r.cer is not None else '-'):>8}"
             f"{(f'{r.wer:.3f}' if r.wer is not None else '-'):>8}"
         )
     lines += [
@@ -300,8 +365,9 @@ async def main() -> int:
         "Audio is PACED at wall-clock speed by default, because an unpaced feed queues every",
         "utterance at once and reports a backlog instead of a latency. --fast measures",
         "throughput instead, and blanks the latency column rather than printing a wrong one.",
-        "WER over whitespace tokens is a PHRASE error rate on unsegmented Thai - fine for",
-        "ranking engines against each other, not quotable as an absolute number.",
+        "RANK ON CER. Thai does not put spaces between words, so WER compares one arbitrary",
+        "segmentation against another - it read 0.94-1.12 on a model that was working fine",
+        "(`B18`). WER is kept only because it is meaningful against a SEGMENTED reference.",
         "Record the winner and the table in PROJECT_STATE (`D30`).",
     ]
     report = "\n".join(lines)

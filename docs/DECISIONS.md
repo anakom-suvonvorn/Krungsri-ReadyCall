@@ -2663,3 +2663,111 @@ is the encouraging number. The discouraging one is `B14`, below, and it changed 
 literal and `services/` may not hold one (`D28`) — retargeting this to a hospital line
 means editing a YAML file, not the transcriber. `B14` gives that file a second, sharper
 reason to be reviewed carefully: its contents can come back out of the model's mouth.
+
+## D97. The Thai call-centre dataset lives OUTSIDE the repo, and nothing it produces is committed
+_The user downloaded *Thai H2M call-center audio with script* (AI x Block, Kaggle) so the
+audio path could finally be measured on real speech rather than on tones._
+
+- **What it is:** 6378 wav files / **22 GB**, in `krungsri/data/` beside `FullProject/`.
+  3189 calls, each with a `_human` side and an `_ai` side, **16 kHz mono 16-bit** — already
+  exactly the format `ports/stt.py` demands, so no conversion. Scripts are per-segment with
+  timestamps and, valuably, explicit `noise` markers.
+- **Decision — it stays outside the repository, and the prepared subset is gitignored.**
+  Three reasons, in order of weight:
+  1. **It is real customer speech.** The transcripts contain names, service details and
+     account numbers — the first file read had a customer reciting a nine-digit number
+     aloud. Committing that would be a PDPA breach in our own git history (`D14`), and git
+     history is the one place you cannot delete something from.
+  2. 22 GB does not belong in a git repository under any circumstances.
+  3. `.gitignore` already excludes `*.wav`; `/tests/audio/thai_calls/` and `/models/` are
+     now excluded explicitly, because the *references* are `.txt` and would otherwise have
+     been committed while the audio was not — the worst of both.
+- **The human side only.** `_ai` is a recorded bot prompt: clean, studio-level, and nothing
+  like what this system will hear. Measuring on it would produce a flattering number that
+  predicts nothing about a real call.
+- **`scripts/prepare_dataset.py`** selects N calls reproducibly (seeded), writes
+  `<stem>.wav` + `<stem>.txt` pairs the bake-off already understands, and emits
+  `segments.tsv` carrying **every segment including the `noise` ones**. That second file is
+  the part worth having: their `noise` spans are ground truth for *where nobody is
+  speaking*, which is the one thing a CER number cannot tell us and exactly what our own
+  endpointer decides (`D9`).
+- **Known limitation, recorded rather than discovered later:** every one of the 3189 calls
+  is domain **`Government`**, not insurance. So it measures Thai telephone ASR honestly and
+  says nothing about insurance jargon — and our `stt_vocabulary.yaml` hint is *wrong* for
+  this data, which makes it a fair test of whether the hint hurts when it does not apply.
+  A genuinely insurance-domain set would still be worth having (`Q27`).
+- **Also on disk:** `Copy of audiofiles.zip`, another 22 GB, which is the archive the
+  extraction came from and can be deleted once the extraction is trusted.
+
+## D98. A third guard asks whether that much speech was PHYSICALLY POSSIBLE
+_The user's idea, in a form the measurements suggested. Closes the gap `B16` exposed._
+
+- **The proposal, in the user's words:** watch how long the model takes relative to the
+  audio length, build up a mean and standard deviation, and flag a transcription that takes
+  wildly longer than it should — or, simply, *"for 1s of sound it should take no more than
+  X ms"*.
+- **The instinct is right and it is the important part:** the two existing guards both read
+  the *shape of the text* (`looks_like_a_loop`, `echoes_the_prompt`), so a failure that
+  happens to dodge both patterns sails through. A signal from a different axis entirely is
+  worth more than a third pattern.
+- **Decision: use output length per second of speech, not decode time.** Same instinct,
+  strictly better instrument:
+  - **it needs no calibration.** Decode time depends on the model, the GPU, the compute
+    type and whatever else is on the card. On demo day we would have almost no samples to
+    build a distribution from — `D85`'s shrinkage problem in a new place, and there it took
+    a log-normal model to handle honestly.
+  - **it is closer to the cause.** Whisper's decode time is long *because it emitted more
+    tokens*; the token count is the thing, and timing is a proxy for it one step removed.
+  - **it survives a hardware change.** A faster GPU moves every timing threshold and moves
+    no speech rate.
+- **The number is measured, from the user's own dataset**, over 61 hand-annotated segments
+  of real Thai call-centre speech:
+
+  | | characters per second |
+  |---|---|
+  | real speech, median | **7.6** |
+  | real speech, p90 | 11.4 |
+  | real speech, **fastest observed** | **15.0** |
+  | the three real Whisper loops (`B16`) | **39 – 53** |
+
+  `MAX_CHARS_PER_SECOND = 25.0` sits in that gap: 1.7x above anything a human actually
+  said, and well under the slowest loop. A test pins it between the two populations, so a
+  future retune has to respect both.
+- **What this does NOT do, stated plainly.** It is a *detector*, not a preventer. By the
+  time the rate is known the eight seconds (`B14`) have already been spent. **The
+  preventer is a decode timeout, and it cannot be built yet:** `asyncio.wait_for` around
+  `to_thread` does not kill the thread, so a runaway decode has to be killed with the
+  process. `D2` already plans `entrypoints/stt.py` as a separate worker; the timeout
+  belongs there, and half-implementing it now would be a guard that looks like one and is
+  not — which is `B7`'s entire family.
+- **Rejected: the statistical version.** Per-model, per-hardware mean and standard
+  deviation over transcription time, scaled by audio length. It is the more general idea
+  and it is what to build if the flat ceiling ever proves too blunt — but it needs a corpus
+  we do not have, on hardware that will change, to measure something a simpler quantity
+  measures directly.
+
+## D99. NeMo is its own extra, and Typhoon ASR is not a Whisper model
+- **Problem.** `D30` says Thonburian and Typhoon ASR are benchmarked against each other.
+  Checking the actual model card rather than assuming: `scb10x/typhoon-asr-realtime` is an
+  **NVIDIA NeMo FastConformer transducer** fine-tuned from
+  `nvidia/stt_en_fastconformer_transducer_large`, shipped as a single `.nemo` file. It is
+  not a Whisper checkpoint, it does not load through `transformers`, and it needs
+  `nemo_toolkit[asr]`.
+- **Decision:** `TyphoonAsrEngine` is written against the same `SttEngine` port, and NeMo is
+  **not** added to the `ml` extra. It gets its own `asr` extra when somebody actually runs
+  it — same standing rule as the `ml` extra itself: an unused multi-gigabyte dependency in
+  the lockfile is a cost with no payer.
+- **Why it is worth the trouble anyway**, and this is more interesting than "a second
+  option". A transducer differs from Whisper in three ways that bear directly on failures
+  this project has already hit:
+  - **no 30-second padding.** Whisper transcribes a fixed window whatever you hand it,
+    which is why a 2-second utterance costs what a 20-second one costs. If the latency
+    budget turns out to be the problem on this GPU, this is the structural reason Typhoon
+    might not have it.
+  - **genuinely streaming.** `SttEngine.stream()` is implementable here and is a costume on
+    Whisper.
+  - **it should not hallucinate on silence** (`B14`) — a transducer has no free-running
+    language-model decoder to invent with. *Should* is a hypothesis; the bake-off is how it
+    stops being one, and it is one of the more useful things that table can settle.
+- **`Q8` is now half-answered.** The model id is confirmed and the licence is `cc-by-4.0`.
+  Pricing does not apply — this is open weights, run locally.

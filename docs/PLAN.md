@@ -223,7 +223,16 @@ started. `explanations/P3_voice.md` covers the built half; `diagrams/12_the_menu
 
 **Exit criteria**
 - 🔶 Utterance end → turn visible **p95 < 1.5 s** on the RTX 3050, with the chosen engine named and
-  the bake-off table recorded. **Half met.** The harness is built and the pipeline runs on the GPU;
+  the bake-off table recorded. **Measured on real Thai for the first time (2026-09-02):**
+  Thonburian medium fp16 with Silero over four real call-centre calls gives **CER 0.47-0.76**,
+  throughput **rtf 0.12** (about 8x faster than real time), **2.8 GiB VRAM** of the 3.2 available.
+  Speed and memory are comfortable; **accuracy is not, and is not yet explained.** Four candidate
+  reasons, none eliminated: the reference counts only annotated speech spans while we transcribe
+  everything the detector finds; Silero returned 3-4 turns against 4-6 annotated segments; the
+  audio is 8 kHz-grade telephone speech and Thonburian's published figures are read speech; and
+  `B19` means the vocabulary hint was never applied. **Do not quote 0.6 CER as a verdict on the
+  model** — it is a verdict on this pipeline against this reference, and the next step is to find
+  out which. **Earlier half met.** The harness is built and the pipeline runs on the GPU;
   faster-whisper `tiny` at `int8_float16` measures **155 ms** per utterance containing speech, which
   is comfortably inside the budget. The table is **not** filled, and deliberately: a real WER or
   latency figure needs real Thai telephone audio and the Thai weights, and synthetic tones measure

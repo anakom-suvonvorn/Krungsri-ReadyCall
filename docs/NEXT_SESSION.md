@@ -21,11 +21,18 @@ takes **8.6 seconds** and invents Thai text — including handing back the words
 `config/stt_vocabulary.yaml` as if the caller had said them. Three guards exist because of
 it and none of them is optional. Read `B14` before "simplifying" any of them.
 
-**What is NOT done, and is the honest next step:** `D30`'s bake-off table has no real
-numbers in it. The harness is built and correct; it needs **real Thai telephone speech**
-and the Thai model weights, neither of which exists on this machine. Synthetic tones
-measure the model's pathology, not its performance. Do not fill that table from a signal
-generator.
+**The dataset arrived and the first real measurements have been made.** The user
+downloaded 22 GB of real Thai call-centre audio to `krungsri/data/` (`D97`), Thonburian
+medium runs on the GPU, and `scripts/prepare_dataset.py` turns the dataset into the
+audio/reference pairs the bake-off wants. **`D30`'s table is still not finished** — see
+the next-steps list — but it is now blocked on running things rather than on missing
+things.
+
+**Three bugs came out of that first contact with real data, and all three are the same
+shape:** something I had written down myself and then walked past. `B16` (the loop guard
+used `.split()` on a language with no spaces), `B17` (a model id invented from a naming
+convention), `B18` (an accuracy metric that cannot work on Thai, reporting 100% error on
+a model that was fine). Read those three before touching the audio path.
 
 ## Where things stand right now
 
@@ -38,7 +45,7 @@ right queue through a real menu hearing real (pre-rendered) Thai — and now, **
 is settled, they are offered the pre-call recording, and take it or
 refuse it or ignore it, all three reaching the same agent**.
 
-Verified **2026-09-02**: **632 tests** — 590 pass + 42 skipped without the Postgres
+Verified **2026-09-02**: **647 tests** — 605 pass + 42 skipped without the Postgres
 container (the 42 are the database cases). `ruff check` + `ruff format --check` clean over 151 files,
 `mypy --strict` clean over 112, all scenarios replay, 61/62 diagrams current, prompt pack fresh.
 
@@ -222,37 +229,60 @@ the PyPI wheel is CPU-only and installing it fails silently.
 
 ## Next steps (in order)
 
-1. **Finish `D30` honestly — the bake-off needs real audio and the real weights.** Two
-   things are missing and neither can be manufactured:
-   - **Thai telephone speech with a reference transcript.** Put `foo.wav` and `foo.txt`
-     side by side and the WER column fills itself. A phone recording beats a clean one:
-     `media/audio.py`'s docstring explains why (everything above 3.4 kHz is already gone,
-     and Whisper was trained on wideband).
-   - **the Thai checkpoints**, which are a further multi-gigabyte download and were left
-     for the user to green-light exactly like the `ml` extra was:
-     `uv run python scripts/bake_off.py --engines thonburian faster_whisper --audio real/*.wav`
-   Then record the table in `PROJECT_STATE` §8 and pick the engine on it (`D30`).
-2. **The encrypted recording to object storage.** `ARCHITECTURE` §6 asks the gateway for it;
-   it needs MinIO wired and per-recording key refs, which is P7's key management. The
-   gateway has the frames and the hook; nothing else is in the way.
-3. **The live transcript on the workstation.** Turns exist and are published to the bus;
-   nothing renders them yet.
-4. **P4** — analysis and brief v2+ with Claude and Typhoon compared on the golden set.
-5. **`D85` is implemented and parked.** `services/agents/acw_stats.py` predicts how close an
-   agent in wrap-up is to being free. **Nothing calls it**: `D73` keeps deferral off until
-   P6 brings real ACW data. Wire it into `expected_free_in()` then, as a **score, never a
-   filter**.
-6. **Wire the matcher inputs that are fed by nothing** (found with `B12`). `is_vulnerable`,
-   `last_agent_id` and `last_contact_at` are set on the `Customer`, the brief and the
-   context snapshot — but never on the `WaitingCall` — so `customer_priority` and
-   `continuity` score 0 on every real call. `run_matching.py` generates them synthetically,
-   which is why the simulator looks like it exercises them. One real decision in it: where
-   continuity data reaches the pool from, given `D78` forbids a DB read on the hot path.
-7. **Small and worth doing when convenient:** `call_intents` and `app_context_events` are
-   still in memory · `D64`, the live matching board · `Q26`, the env var that changes
-   nothing.
-
-`grep -rn "# P2b:" src/` lists the steps a real IVR will drive that the demo endpoint fakes.
+1. **Finish `D30`'s table — everything it needs is now on this machine.**
+   ```bash
+   uv run python scripts/prepare_dataset.py --n 20        # real Thai, gitignored (`D97`)
+   uv run python scripts/bake_off.py --engines thonburian --vad silero \
+       --audio tests/audio/thai_calls/*.wav --out bakeoff.txt
+   ```
+   **Rank on CER, never WER** (`B18`). Then, in order of what is missing:
+   - **the CT2 row.** `uv run python scripts/convert_ct2.py` converts Thonburian once
+     (Thonburian publishes no CT2 build — that was `B17`), then
+     `--engines faster_whisper:models/whisper-th-medium-combined-ct2`. This is the row that
+     decides whether the quantised build is worth its accuracy cost on a 4 GiB card.
+   - **the large-v3 row**: `--engines thonburian:biodatlab/whisper-th-large-v3-combined`.
+     Probably will not fit alongside anything; finding that out is the point.
+   - **the Typhoon row** needs NeMo, which is deliberately not installed (`D99`). Adding
+     `asr = ["nemo_toolkit[asr]>=2.0"]` and syncing is another large download — **ask
+     first**, same as the `ml` extra.
+   - record the table in `PROJECT_STATE` §8 and pick the engine on it.
+2. **Explain the CER, before trusting any engine comparison.** First real numbers:
+   Thonburian medium + Silero over 4 real calls = **CER 0.47-0.76**, which is poor for a
+   Thai model on Thai audio and is **not yet explained**. Four hypotheses, cheapest first,
+   none eliminated:
+   - **`B19`: the vocabulary hint was never applied** by this adapter. Implement
+     `processor.get_prompt_ids()` -> `prompt_ids` and re-measure. (It logs a warning now,
+     so a run can no longer be quietly unhinted.)
+   - **reference mismatch.** Their `.txt` contains only spans annotated as speech; we
+     transcribe everything the detector finds, including audio they marked `noise`. Every
+     extra word we produce is an insertion error. Try scoring **per annotated span** —
+     cut the wav at their timestamps and compare segment to segment.
+   - **the detector is dropping speech.** Silero found 3-4 turns where the annotation has
+     4-6 segments. Step 3 below measures exactly this.
+   - **the audio is simply harder.** Thonburian's published WER is read speech; this is
+     real telephone audio with noise, and some gap is real. This is the *last* hypothesis
+     to fall back on, not the first, because it is the one that cannot be acted on.
+3. **Score the ENDPOINTER against the dataset's `noise` spans.** `segments.tsv` carries
+   every annotated span including the silences, which is ground truth for *where nobody is
+   speaking* — the one thing CER cannot tell us and exactly what `D9`'s constants decide.
+   Nothing consumes it yet. This is the cheapest remaining measurement and it is the only
+   way to know whether the inherited VAD numbers are right for this audio.
+3. **The decode timeout** (`D98`'s missing half). The rate guard *detects* a runaway; only
+   a killable worker process can *stop* one, and `D2` already plans `entrypoints/stt.py`.
+   Do not fake it with `asyncio.wait_for` — that does not kill the thread, and a guard that
+   looks like one and is not is `B7`'s whole family.
+4. **The encrypted recording to object storage.** `ARCHITECTURE` §6 asks the gateway for it;
+   it needs MinIO wired and per-recording key refs, which is P7's key management.
+5. **The live transcript on the workstation.** Turns exist and are published; nothing draws
+   them.
+6. **P4** — analysis and brief v2+ with Claude and Typhoon compared on the golden set.
+7. **`D85` is implemented and parked.** Wire `acw_stats.py` into `expected_free_in()` when
+   P6 brings real ACW data, as a **score, never a filter** (`D73`).
+8. **Wire the matcher inputs that are fed by nothing** (`B12`): `is_vulnerable`,
+   `last_agent_id`, `last_contact_at` are set on the Customer / brief / snapshot but never
+   on the `WaitingCall`, so `customer_priority` and `continuity` score 0 on every real call.
+9. **Small:** `call_intents` / `app_context_events` still in memory · `D64` the live
+   matching board · `Q26` the env var that changes nothing.
 
 ## Starting P3 step 4b — read this before opening anything else
 
@@ -351,6 +381,7 @@ Whoever has the strongest GPU should own the demo machine.
 | **Q21** | **Which storage backend does the DEMO run on?** `memory` is the default and needs nothing; `postgres` is what survives a restart, and it is what makes the persistence work visible on stage at all. Running it on the day adds a container to the list of things that can fail, against `PLAN.md`'s risk register — *never depend on the venue*. Leaning: **rehearse on `postgres`, keep `memory` as the one-keystroke fallback**, since both pass the same suite. | Not decided |
 
 | **Q22** | **Does the committed prompt pack carry actual audio once a real voice is chosen?** `D24` calls the checked-in pack the offline fallback, which is the whole reason the IVR works with no internet — but `CLAUDE.md` says never commit audio. That rule means *call recordings*, not TTS output of our own sentences, so the two are probably compatible; 63 short Thai clips is a few MB. Undecided because there is no audio yet. | Manifest only, for now |
+| **Q27** | **The dataset is all `Government` domain, not insurance.** All 3189 calls (`D97`). It measures Thai telephone ASR honestly and says nothing about insurance jargon — and our `stt_vocabulary.yaml` hint is *wrong* for it, which makes it a fair test of whether the hint hurts when it does not apply. An insurance-domain set would still be worth having, and the hackathon may supply one. | Use it, and label the numbers as general Thai |
 | **Q26** | **`Settings.max_wait_before_any_agent_s` is an env var that changes nothing.** The matcher reads `config/matching_weights.yaml`, never `Settings`, so `MAX_WAIT_BEFORE_ANY_AGENT_S=30` in `.env` silently does nothing — and since `D94` it also describes a shape (one number) the system no longer has. It survives only as the bound for a startup coherence check against `target_wait_s`. Delete it, or wire the weights loader to it. Found while writing `D94`. | Left in place, documented |
 | **Q24** | **A health-line caller speaks health data into a recording nobody consented to hold as such.** `D14` makes `health_data` a separate scope; the offer grants only `recording` and `ai_processing` (`D88`). Three options: a third keypress (honest, and it lengthens the longest prompt in the system on the line where callers are most distressed); name the scope in the offer's wording on health lines (one keypress, three scopes); or gate the *extraction* at P4 so health entities are never pulled without it. **Leaning: the second plus the third.** Decide before P4 writes an entity extractor — that is the first code that can breach it. | Not asked for |
 | **Q23** | **Personalised menus renumber, and a human on a real keypad has no `ScriptedChoices`.** Every automated caller presses canonical keys and is translated (`D81`), so nothing in the suite or the demo endpoint can get this wrong. But at P5 a person reading a rehearsal script off paper will press what the script says, and for a recognised persona the numbers may have moved. Either rehearse with the persona that will actually be used, or set `personalisation.enabled: false` for the demo. | Enabled; decide before the day |
@@ -394,11 +425,31 @@ Facts about *this laptop* rather than the repo, so a fresh session does not redi
 
 ## Things to be careful about (live landmines)
 
+- **WHEN AN EXPERIMENT RETURNS EXACTLY NO DIFFERENCE, SUSPECT THE EXPERIMENT** (`B19`).
+  Hint vs no-hint gave CER identical to three decimals on four files. That is not a
+  finding about domains, it is an argument that was never used - `ThonburianHfEngine`
+  reads `hint.language` and drops `hint.vocabulary`. It warns now; it is still not
+  implemented. **An engine comparison where the engines disagree about whether they read
+  a parameter is not a comparison.**
+- **RANK THAI ACCURACY ON CER, NEVER WER** (`B18`). Whitespace WER on unsegmented Thai
+  compares one arbitrary segmentation against another and read **0.94-1.12** on a model
+  that was working perfectly. `bake_off.py` reports both and ranks on CER.
+- **A MODEL ID IS A FACT, NOT A NAMING CONVENTION** (`B17`). `...-combined-ct2` was
+  invented from the pattern and does not exist. `D30` already said to re-verify model
+  names at implementation time. One HTTP request to the HF API settles it.
+- **The DETECTOR is half of any accuracy number.** It decides what the model is even
+  asked to transcribe, so a CER measured with `energy` says as much about the VAD as
+  about the engine. Real measurements use `--vad silero`.
 - **THAI HAS NO SPACES, so any text rule that calls `.split()` is broken by default**
   (`B16`). The repetition guard shipped doing exactly that and caught **0 of 3** real
   Thonburian loops the user had actually seen. It is character-level now. Before writing
   any rule about transcript text, ask what it does on one 200-character token — because
   that is what real Thai output looks like.
+- **There are THREE guards between the model and the agent, of three different kinds**
+  (`B14`, `B16`, `D98`): the text's shape, its overlap with our own vocabulary hint, and
+  whether that much speech was physically possible in the time. They are different kinds
+  on purpose — a failure that dodges one rarely dodges all three. `MAX_CHARS_PER_SECOND`
+  is **measured** (real Thai: median 7.6, max 15.0; real loops: 39-53), not chosen.
 - **NEVER hand Whisper near-silence** (`B14`). One second of digital silence costs **8.6
   seconds** on this GPU — 55x a real utterance — and comes back with invented Thai. Three
   guards exist and none is optional: a level gate before dispatch, `echoes_the_prompt()`,
@@ -428,6 +479,13 @@ Facts about *this laptop* rather than the repo, so a fresh session does not redi
   working-tree-vs-repo to working-tree-vs-CI. Fixed to `--extra web`; `--extra ml` stays
   out on purpose (3 GB, no GPU on the runner, and the audio path is dependency-free by
   design so CI still exercises it).
+- **The dataset is 22 GB at `krungsri/data/`, outside the repo, and must stay there**
+  (`D97`). `Copy of audiofiles.zip` is a second 22 GB and is deletable once the
+  extraction is trusted. The prepared subset and `/models/` are gitignored — the
+  transcripts are real customer speech with account numbers in them (`D14`).
+- **The HF cache is ~9.5 GB** after Thonburian medium, at `~/.cache/huggingface/hub`.
+- **Thonburian medium fp16 uses ~2.75 GiB and peaks near 3.8 of 4.0 GiB** with Silero
+  alongside. It fits, with very little room. large-v3 probably will not.
 - **Never edit the reference folders** (`scamprojectthing/ProjectCode`, `music-backlog-adder`).
 - **Assurance gates what the agent may SAY and DO, never what they may SEE** (`D74`).
   The agent sees the whole record from L1 — they need it to verify the caller at all, and

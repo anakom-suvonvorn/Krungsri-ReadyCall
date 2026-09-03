@@ -52,6 +52,7 @@ class ThonburianHfEngine:
         self._language = language
         self._pipe: Any = None
         self._np: Any = None
+        self._warned_vocabulary = False
 
     @property
     def info(self) -> EngineInfo:
@@ -112,6 +113,23 @@ class ThonburianHfEngine:
         t_end = t_start + int(len(samples) / 16000 * 1000)
         audio = self._np.asarray(samples, dtype=self._np.float32)
         language = hint.language if hint else self._language
+        if hint is not None and hint.vocabulary and not self._warned_vocabulary:
+            # SAY SO rather than dropping it silently (`B19`). The port advertises the
+            # vocabulary as a "domain nudge that measurably helps on insurance jargon",
+            # `FasterWhisperEngine` honours it through `initial_prompt`, and this adapter
+            # does not - it needs `processor.get_prompt_ids()` fed as `prompt_ids`, which
+            # the pipeline API does not take directly.
+            #
+            # It was found by measuring: hint and no-hint produced CER identical to three
+            # decimals on four files, which is not what "off-domain vocabulary does not
+            # help" looks like. It is what "the argument is discarded" looks like.
+            self._warned_vocabulary = True
+            log.warning(
+                "vocabulary hint IGNORED by this adapter - the number you are about to "
+                "read is unhinted (`B19`)",
+                terms=len(hint.vocabulary),
+                engine="thonburian_hf",
+            )
 
         def run() -> str:
             out = self._pipe(

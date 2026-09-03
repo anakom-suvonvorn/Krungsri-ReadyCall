@@ -33,9 +33,14 @@ from readycall.ports.stt import AudioFrame, EngineInfo, SttHint, SttResult
 
 log = get_logger(__name__)
 
-#: `D9`'s model family. A CTranslate2 build of the same checkpoint, or any Whisper size
-#: name that faster-whisper can fetch (`tiny`, `small`, `medium`, `large-v3`).
-DEFAULT_MODEL = "biodatlab/whisper-th-medium-combined-ct2"
+#: A LOCAL CTranslate2 directory, produced by `scripts/convert_ct2.py`.
+#:
+#: ⚠️ This was `"biodatlab/whisper-th-medium-combined-ct2"` and **that model does not
+#: exist** (`B17`) - the name was assumed rather than checked, and one HTTP request would
+#: have caught it. Thonburian publishes a transformers checkpoint only, and faster-whisper
+#: cannot read one, so it has to be converted locally once. The generic Whisper size names
+#: (`tiny`, `small`, `medium`, `large-v3`) still work, because those DO publish CT2 builds.
+DEFAULT_MODEL = "models/whisper-th-medium-combined-ct2"
 
 
 def _warmup_tone(seconds: float = 1.0) -> list[float]:
@@ -118,6 +123,20 @@ class FasterWhisperEngine:
             return WhisperModel(
                 self._model_name, device=self._device, compute_type=self._compute_type
             )
+
+        if "/" in self._model_name or "\\" in self._model_name:
+            # A path, not a size name. Say so plainly rather than letting the library
+            # emit a download error about a repository that was never going to exist.
+            from pathlib import Path as _Path
+
+            if not _Path(self._model_name).exists():
+                raise ConfigError(
+                    f"no CTranslate2 model at {self._model_name!r}. Thonburian publishes a "
+                    "transformers checkpoint only, so it must be converted once:\n"
+                    "  uv run python scripts/convert_ct2.py\n"
+                    "(`B17`. The generic sizes - tiny, small, medium, large-v3 - need no "
+                    "conversion and can be passed by name.)"
+                )
 
         # Off the event loop: this is seconds of blocking work, and on the API process it
         # would stall every other call in flight.

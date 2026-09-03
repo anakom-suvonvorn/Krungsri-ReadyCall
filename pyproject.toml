@@ -112,5 +112,5 @@ disallow_untyped_decorators = false
 # fails - and both adapters keep every value they take out of these libraries behind an
 # explicit `Any`, so nothing untyped leaks past the adapter boundary.
 [[tool.mypy.overrides]]
-module = ["silero_vad.*", "faster_whisper.*", "transformers.*"]
+module = ["silero_vad.*", "faster_whisper.*", "transformers.*", "nemo.*"]
 ignore_missing_imports = true

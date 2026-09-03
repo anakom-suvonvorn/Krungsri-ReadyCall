@@ -45,7 +45,7 @@ caller keys their way through the real menu to the right queue, is offered
 the recording and either takes it or does not, the desk rings, the brief is already there, and
 the disclosure gate moves when the agent attests.
 
-Verified on 2026-09-02: **632 tests** — 590 pass + 42 skipped without the Postgres container
+Verified on 2026-09-02: **647 tests** — 605 pass + 42 skipped without the Postgres container
 (the 42 are the database cases).
 `ruff check` and `ruff format --check` clean over 144 files, `mypy --strict`
 clean over **106** source files, and all three scenarios replay byte-identically. The database
@@ -153,6 +153,7 @@ FullProject/
 │  │  ├─ telephony/  asterisk_ari.py  twilio.py  livekit.py  simulated.py
 │  │  ├─ stt/*       thonburian_hf.py*  faster_whisper.py*  scripted.py*  cloud.py
 │  │  ├─ vad/*       energy.py*  silero.py*   # the 9th port (D96)
+│  │  │               # stt/: + typhoon_asr.py* - NeMo, not Whisper (D99)
 │  │  ├─ llm/        anthropic.py  openai_compatible.py  gemini.py  rulebased.py
 │  │  ├─ tts/        prerendered.py  azure.py  null.py   # build-time render, not live
 │  │  ├─ core_data/  mock_postgres.py  fixtures.py  http_api.py  sql_passthrough.py
@@ -221,7 +222,8 @@ FullProject/
 ├─ infra/*
 │  ├─ docker-compose.yml  asterisk/  grafana/  k8s/
 ├─ scripts/*                 # audit_docs, gen_diagrams, render_diagrams, run_matching, run_scenario,
-│                            #   bake_off (D30), show_audio_path (the walkthrough), make_test_audio
+│                            #   bake_off (D30), show_audio_path, make_test_audio,
+│                            #   prepare_dataset (D97), convert_ct2 (B17)
 └─ tests/*
    ├─ unit/*  integration/*  contracts/*  # contracts/ = the suites every impl must pass
    ├─ scenarios/*                       # end-to-end scripted calls, no telephony
@@ -388,7 +390,7 @@ performing by hand, i.e. what the next services take over (`D36`).
 | | |
 |---|---|
 | Source files | 168 Python files (`src/` 126 + `tests/` + `scripts/` + `mock/`) |
-| Tests | 632, all passing, ~115 s (137 store contract + restart across 3 backends; 56 on the prompt pack and the IVR; 40 on the hold and the intake seam; 41 on matching, 12 of them on the wait ceiling under contention; **61 on the audio path** - 10 on normalisation, 13 on endpointing, 11 on the VAD contract across both detectors, 19 on the transcription stream and 8 on the wiring) |
+| Tests | 647, all passing, ~115 s (137 store contract + restart across 3 backends; 56 on the prompt pack and the IVR; 40 on the hold and the intake seam; 41 on matching, 12 of them on the wait ceiling under contention; **61 on the audio path** - 10 on normalisation, 13 on endpointing, 11 on the VAD contract across both detectors, 19 on the transcription stream and 8 on the wiring) |
 | Ports defined | **9** (telephony, stt, **vad**, llm, tts, core_data, event_bus, blob_storage, agent_directory) - `vad` added by `D96` |
 | Persisted tables | **9** + Alembic, verified on a live Postgres. Presence, the waiting pool and the live identity are deliberately **not** among them (`D78`) |
 | Adapters | 9 fakes/nulls + a caching/circuit-breaking decorator, **plus the first three real ones**: `SileroVad`, `FasterWhisperEngine`, `ThonburianHfEngine` |
@@ -400,7 +402,8 @@ performing by hand, i.e. what the next services take over (`D36`).
 | Intent taxonomy | 28 intents across 5 lines, each with a catch-all (revisit during the hackathon) |
 | Generated mock data | 2,000 customers / 2,292 policies / 5,880 interactions (seeded, gitignored) |
 | GPU, measured (`D95`) | RTX 3050 Laptop, sm_86, **4.00 GiB total / ~3.2 GiB free**, torch 2.11+cu128 |
-| STT latency, measured (`B14`) | faster-whisper `tiny` int8_float16: **155 ms** per utterance with speech in it. **No Thai-model figure yet** - that needs real audio (`D30`) |
+| STT latency, measured (`B14`) | faster-whisper `tiny` int8_float16: **155 ms** per utterance with speech in it |
+| **First real Thai numbers** (`D97`) | Thonburian medium fp16 + Silero, 4 real call-centre calls: **CER 0.47-0.76**, rtf 0.12, **2.8 GiB VRAM**. Poor, and **not yet explained** - see `PLAN.md` P3 and `NEXT_SESSION`. WER is pinned at ~1.000 and is the wrong metric for Thai (`B18`) |
 | Diagrams | 62 (14 generated from source, 48 hand-drawn), across 12 explanation pages |
 
 ---

@@ -21,9 +21,11 @@ from readycall.ports.stt import AudioFrame, SttHint
 from readycall.ports.vad import VadInfo
 from readycall.services.transcription.endpointer import EndpointSettings
 from readycall.services.transcription.stream import (
+    MAX_CHARS_PER_SECOND,
     TranscriptionStream,
     _longest_repeated_run,
     echoes_the_prompt,
+    implausible_speech_rate,
     looks_like_a_loop,
 )
 
@@ -388,3 +390,74 @@ def test_the_detector_reports_what_it_found() -> None:
     assert period == len("ความ")
     assert repeats == 40
     assert covered == len("ความ") * 40
+
+
+# --- D98: the third guard, which asks whether that much speech was POSSIBLE -------------
+#
+# The thresholds below are measured, not chosen. 61 hand-annotated segments of real Thai
+# call-centre audio give a median of 7.6 characters per second and a maximum of 15.0; the
+# three real Whisper loops sit at 39-53. The ceiling is 25, in the gap.
+
+
+def test_real_thai_speech_rates_are_never_flagged() -> None:
+    """The measured distribution, asserted at its edges. p90 was 11.4 and the fastest
+    segment anybody actually spoke was 15.0 chars/s."""
+    assert implausible_speech_rate("ก" * 38, 5000.0) is False, "median rate flagged"
+    assert implausible_speech_rate("ก" * 57, 5000.0) is False, "p90 rate flagged"
+    assert implausible_speech_rate("ก" * 75, 5000.0) is False, "fastest real rate flagged"
+    # Comfortably above anything observed, and still under the ceiling: the margin is
+    # deliberate, because a false positive deletes a sentence the caller really said.
+    assert implausible_speech_rate("ก" * 110, 5000.0) is False
+
+
+def test_a_loop_is_flagged_by_volume_even_if_the_pattern_guard_misses_it() -> None:
+    """`D98`'s whole reason for existing: a different KIND of signal.
+
+    `looks_like_a_loop` reads the shape of the text and `echoes_the_prompt` compares it to
+    our vocabulary; this asks whether a human could have produced that much in that long.
+    A failure that dodges the first two still cannot beat physics.
+    """
+    assert implausible_speech_rate("การ" * 65, 5000.0) is True
+    assert implausible_speech_rate("ก" * 200, 4000.0) is True
+
+
+def test_a_short_fragment_is_left_alone() -> None:
+    """A 300 ms segment with one word in it has a high rate honestly, and the endpointer's
+    padding either side would dominate the arithmetic."""
+    assert implausible_speech_rate("ก" * 20, 300.0) is False
+
+
+def test_empty_text_is_not_an_implausible_rate() -> None:
+    assert implausible_speech_rate("", 5000.0) is False
+    assert implausible_speech_rate("   ", 5000.0) is False
+
+
+def test_the_ceiling_sits_between_the_two_measured_populations() -> None:
+    """If somebody retunes this, the test says what the number has to respect."""
+    assert 15.0 < MAX_CHARS_PER_SECOND < 39.0, (
+        "the ceiling must sit above the fastest REAL speech measured (15.0 chars/s) and "
+        "below the slowest real loop measured (39 chars/s)"
+    )
+
+
+async def test_an_impossible_rate_never_reaches_the_agent() -> None:
+    """End to end through the real stream, not just the predicate."""
+    got: list[TranscriptTurn] = []
+
+    async def sink(turn: TranscriptTurn) -> None:
+        got.append(turn)
+
+    # One utterance of about 1.2 s, and an engine that returns far more text than could
+    # have been said in it - while dodging the repetition and vocabulary guards.
+    stream = TranscriptionStream(
+        call_session_id="call_fast",
+        vad=ScriptedVad(pattern((0.9, 900), (0.0, 500))),
+        stt=ScriptedSttEngine([ScriptedTurn(text="ก" * 400, t_start_ms=0, t_end_ms=900)]),
+        clock=ManualClock(),
+        on_turn=sink,
+    )
+    await stream.start()
+    for _ in range(200):
+        await stream.feed(audio(20))
+    await stream.finish()
+    assert got == [], "a physically impossible amount of speech reached the agent"

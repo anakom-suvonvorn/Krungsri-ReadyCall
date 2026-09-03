@@ -14,6 +14,11 @@ consumer task transcribes them. Two things fall out of that, both of which matte
   obvious alternative — a task per segment — transcribes a two-word phrase faster than the
   sentence before it and delivers the caller's words shuffled.
 
+**Three guards sit between the model and the agent** (`B14`, `B16`, `D98`), and they are
+deliberately of different kinds: one reads the shape of the text, one compares it to our
+own vocabulary hint, and one asks whether that much speech was physically possible in
+the time available. A failure that dodges one rarely dodges all three.
+
 **Per-leg, not per-call** (`D26`). Each leg is forked separately, so the speaker label is
 structural rather than inferred, and there is no diarisation model to be wrong.
 """
@@ -76,6 +81,51 @@ def echoes_the_prompt(text: str, hint: SttHint | None) -> bool:
     vocabulary = {v.strip(_STRIP) for v in hint.vocabulary}
     from_hint = sum(1 for w in words if w in vocabulary)
     return from_hint / len(words) >= 0.5
+
+
+#: Characters of Thai per second of speech, above which nobody is actually talking.
+#:
+#: **Measured, not guessed** (`D98`), against 61 hand-annotated segments of real Thai
+#: call-centre audio from the dataset:
+#:
+#:     real speech   median 7.6   p90 11.4   max observed 15.0
+#:     the three real Whisper loops              39 - 53
+#:
+#: 25 sits in the gap: 1.7x above the fastest real speech anyone recorded, and well below
+#: the slowest loop. It is generous on purpose — a false positive here deletes a sentence
+#: the caller actually said, which is worse than passing a loop to the pattern guards.
+MAX_CHARS_PER_SECOND = 25.0
+
+
+def implausible_speech_rate(
+    text: str,
+    duration_ms: float,
+    *,
+    max_chars_per_second: float = MAX_CHARS_PER_SECOND,
+    min_duration_ms: float = 700.0,
+) -> bool:
+    """Did the model return more text than a human could physically have said (`D98`)?
+
+    The third kind of guard, and deliberately unlike the other two. `looks_like_a_loop`
+    and `echoes_the_prompt` both inspect the *shape of the text*; this one asks whether the
+    **amount** of it is possible at all, given how long the caller was speaking. A loop that
+    happens to avoid both patterns still cannot beat physics.
+
+    **Why this rather than timing the model**, which was the original proposal. Watching how
+    long a transcription took would work — a looping decode is slow because it emits more
+    tokens — but it needs a per-model, per-GPU baseline this project would have almost no
+    samples for on demo day (`D85`'s shrinkage problem in a new place), and it measures the
+    symptom one step further from the cause. Output length per second of speech needs no
+    calibration, no history, and no clock, and it is the quantity the timing was standing in
+    for.
+
+    `min_duration_ms` keeps very short segments out of it: a 200 ms fragment with one word
+    in it produces a high rate honestly, and the padding either side would dominate.
+    """
+    stripped = "".join(ch for ch in text if not ch.isspace())
+    if not stripped or duration_ms < min_duration_ms:
+        return False
+    return len(stripped) / (duration_ms / 1000.0) > max_chars_per_second
 
 
 def _longest_repeated_run(text: str, *, max_period: int = 12) -> tuple[int, int, int]:
@@ -325,6 +375,17 @@ class TranscriptionStream:
                 sample=text[:40],
             )
             return
+        rate_ms = float(segment.t_end_ms - segment.t_start_ms)
+        if implausible_speech_rate(text, rate_ms):
+            log.info(
+                "dropped a transcription nobody could have said that fast",
+                call_session_id=self._call_session_id,
+                t_start_ms=segment.t_start_ms,
+                chars=len("".join(text.split())),
+                seconds=round(rate_ms / 1000.0, 2),
+                sample=text[:40],
+            )
+            return
         if echoes_the_prompt(text, self._hint):
             log.info(
                 "dropped a transcription that is mostly our own vocabulary hint",
@@ -352,8 +413,10 @@ class TranscriptionStream:
 
 
 __all__ = [
+    "MAX_CHARS_PER_SECOND",
     "TranscriptionStream",
     "TurnSink",
     "echoes_the_prompt",
+    "implausible_speech_rate",
     "looks_like_a_loop",
 ]

@@ -291,6 +291,32 @@ volume the two often agree exactly, and it opens up as the queue gets contested.
 - **Needs set up:** §1. **Needs running:** nothing.
 - Options: `--calls N`, `--seed N`, `--solver hungarian|greedy`, `--quiet`.
 
+### Prepare real Thai audio to measure against
+
+```bash
+uv run python scripts/prepare_dataset.py --n 20
+```
+
+- **Needs set up:** §1, and the dataset at `../data/` (22 GB, outside this repo — `D97`).
+- **Needs running alongside:** nothing.
+
+Selects calls reproducibly, writes `<call>.wav` + `<call>.txt` pairs the bake-off reads,
+and emits `segments.tsv` with the dataset's own speech/noise spans — ground truth our
+endpointer can be scored against.
+
+⚠️ **The output is gitignored and must stay that way.** It is real customer speech; the
+transcripts contain names and account numbers (`D14`).
+
+### Convert a Whisper checkpoint for faster-whisper
+
+```bash
+uv run python scripts/convert_ct2.py
+```
+
+Thonburian publishes a transformers checkpoint only, and faster-whisper needs a CTranslate2
+build, so it has to be converted once locally. Downloads ~3 GB the first time and writes a
+quantised copy to `models/` (gitignored). Only needed for `STT_ENGINE=thonburian_ct2`.
+
 ### Measure the speech engines against each other
 
 ```bash
@@ -317,8 +343,17 @@ A real one downloads its weights on first use (`tiny` is ~75 MB and is the cheap
 CUDA is actually working end to end):
 
 ```bash
-uv run python scripts/bake_off.py --engines faster_whisper_tiny --audio tests/audio/*.wav
+uv run python scripts/bake_off.py --engines thonburian --vad silero \
+    --audio tests/audio/thai_calls/*.wav
 ```
+
+**Rank on the CER column, not WER** (`B18`). Thai does not put spaces between words, so a
+whitespace word error rate compares one arbitrary segmentation against another — it read
+**0.94-1.12 on a model that was working fine**. Both are printed; CER is the real one.
+
+`--vad silero` matters as much as the engine: the detector decides what the model is even
+asked to transcribe, so a number measured with the dependency-free `energy` detector is
+partly a measurement of that detector.
 
 **To get a WER column, put a `.txt` next to each `.wav`** containing the true transcript.
 Without one the harness reports latency and VRAM only, and prints `-` for WER rather than a

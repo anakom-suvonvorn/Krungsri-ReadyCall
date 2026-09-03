@@ -715,3 +715,104 @@ Thonburian project and asking whether we needed to watch out for this._
   with test data drawn from real Thai output rather than from synthesis. Everything else in
   `B14`'s guards is still validated against tones and against one observed hallucination.
   The dataset the user supplied (`Q27`) is what changes that.
+
+## B17. The default STT model id was invented, and would have failed at load
+- **Symptoms:** none yet — nothing had asked for that engine. `FasterWhisperEngine`'s
+  `DEFAULT_MODEL` was `"biodatlab/whisper-th-medium-combined-ct2"`.
+- **Root cause:** I wrote it from the pattern *"the CT2 build of a model is the model name
+  plus `-ct2`"*, which is a real convention and is not a fact. **That repository does not
+  exist.** One HTTP request to the Hugging Face API — the request I eventually made when
+  the user asked why I was talking about `faster_whisper_tiny` instead of the planned Thai
+  models — returned 401/not-found for it while confirming
+  `biodatlab/whisper-th-medium-combined`, `biodatlab/whisper-th-large-v3-combined` and
+  `scb10x/typhoon-asr-realtime` all exist.
+- **What it would have looked like:** a download error naming a repository nobody could
+  find, on demo day, in an adapter that had "worked" in every test — because every test
+  used the scripted engine, and the one real run I did used `tiny`, which exists.
+- **Fix:** the default is now a **local directory** (`models/whisper-th-medium-combined-ct2`)
+  produced by `scripts/convert_ct2.py`, because Thonburian publishes a transformers
+  checkpoint only and faster-whisper cannot read one. A path that does not exist now raises
+  a `ConfigError` naming the conversion command, rather than a library error about a
+  repository.
+- **Lesson.** `D30` already said *"model names, licences and API pricing must be
+  re-verified at implementation time rather than trusted from memory"* — written in August,
+  ignored in September by the person who had read it that morning. A model id is a fact
+  about the world, not a naming convention, and checking one costs a single request.
+
+## B18. The bake-off's accuracy metric could not work on Thai, and read 100% error on a working model
+_Found immediately by running the first real measurement and disbelieving it. Again._
+
+- **Symptoms:** the first bake-off against real Thai call-centre audio, with Thonburian
+  loaded on the GPU and visibly producing sensible Thai:
+
+  ```
+  thonburian   ...1669023294_human.wav   1 turn    WER 1.000
+  thonburian   ...1670989598_human.wav   2 turns   WER 1.118
+  thonburian   ...1670150269_human.wav   5 turns   WER 1.071
+  thonburian   ...1670931464_human.wav   2 turns   WER 0.941
+  ```
+
+  **Over 100% error on two of four files**, which is only arithmetically possible when
+  almost nothing aligns.
+- **Root cause:** `word_error_rate` tokenises on whitespace. **Thai does not use
+  whitespace.** Our transcriptions come back as one continuous string; the reference is
+  the dataset's segments joined with spaces *we inserted ourselves*. So the comparison was
+  one arbitrary segmentation against another, and the edit distance was roughly "replace
+  everything".
+- **This was written down in the file's own docstring, by me, two days earlier:** *"Thai
+  does not put spaces between words, so on unsegmented Thai this is really a phrase error
+  rate and will read pessimistically high."* I documented the trap, shipped the trap, and
+  then read its output as a result about the model.
+- **Fix:** `character_error_rate` — Levenshtein over characters with whitespace stripped
+  from both sides — is now the primary metric and what the table ranks on. WER is retained,
+  reported second, and labelled as meaningful only against a *segmented* reference
+  (pythainlp, if it is ever wanted).
+- **Lesson, and it is `B14`'s inverted.** `B14` was *be suspicious of a number that agrees
+  with you*. This is: **be equally suspicious of one that disagrees.** A 100% error rate is
+  not a bad result, it is an impossible one, and the impossible reading is almost always
+  the ruler. Both times the tell was the same — a number at a suspiciously round limit
+  (0.0 ms, 1.000 error) rather than a plausible messy one.
+- **Also visible in that run, not yet explained:** only 1-5 turns were detected on calls
+  whose ground truth has 4-6 speech segments, using the **energy** detector on real noisy
+  phone audio. That is what the energy detector is for (`D96`: it is the no-dependency
+  fallback), and the real measurement wants Silero. `--vad silero` is now a flag, because
+  **the detector decides what the model is even asked to transcribe and is therefore half
+  of any accuracy number.**
+
+## B19. One STT adapter silently threw away the vocabulary hint, and a measurement found it
+- **Symptoms:** none that looked like a bug. Running Thonburian over four real Thai calls
+  **with** the vocabulary hint and **without** it produced CER identical to three decimals
+  on every file:
+
+  ```
+                      with hint    without hint
+  call 1                0.616         0.616
+  call 2                0.759         0.759
+  call 3                0.709         0.709
+  call 4                0.468         0.468
+  ```
+
+- **Why that is a bug and not a result.** The measurement was set up to answer `Q27` — does
+  an insurance vocabulary hurt on government-domain audio? A *result* would have been "a
+  little better" or "a little worse". **Byte-identical output is not a finding about
+  domains, it is the signature of an argument that was never used.**
+- **Root cause:** `ThonburianHfEngine.transcribe_utterance` reads `hint.language` and
+  ignores `hint.vocabulary` entirely. `FasterWhisperEngine` honours it via `initial_prompt`;
+  the HF `pipeline` API does not accept one, and needs `processor.get_prompt_ids()` passed
+  as `prompt_ids` instead. I wrote both adapters, wired one, and did not notice the other
+  took the parameter and dropped it.
+- **Why it matters beyond one number.** `ports/stt.py` advertises `SttHint.vocabulary` as
+  *"domain nudges that measurably help on insurance jargon"*. A port whose adapters disagree
+  about whether a parameter does anything is worse than one without the parameter: every
+  comparison between those two engines is then partly a comparison of *which of them read
+  the argument*, and `D30`'s whole purpose is a fair table.
+- **Fix, and its limit.** The adapter now **logs a warning the first time** a vocabulary it
+  will not use is handed to it, so a bake-off row can never again be quietly unhinted. The
+  actual `prompt_ids` implementation is **not** done — it changes generation behaviour on a
+  path that currently works, and doing it under time pressure at the end of a session is how
+  a working engine becomes a broken one. It is written into the next steps.
+- **Lesson.** This is the third time in two sessions that **a measurement found a bug that
+  no test could** (`B14`'s instruments, `B18`'s metric, this). The pattern is worth naming:
+  *when an experiment returns exactly no difference, suspect the experiment before
+  concluding "no effect".* Identical to three decimals is a plumbing result, not a
+  scientific one.
