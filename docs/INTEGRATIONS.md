@@ -1,7 +1,7 @@
 # INTEGRATIONS
 
 _Every external thing the system touches: the port that hides it, the adapters behind it, and the config that selects one._
-_Status: **mostly design; the persistence stack and the whole audio path are real.** Last updated: 2026-09-02._
+_Status: **mostly design; the persistence stack and the whole audio path are real.** Last updated: 2026-09-03._
 
 > **Real as of P2c (complete):** SQLAlchemy 2.0 (async) + Alembic + `asyncpg`, against
 > Postgres 16 in `infra/docker-compose.yml`, verified on a live container — **nine tables**,
@@ -189,7 +189,7 @@ The streaming latency budget is tight:
   work. The default split is **STT local on the GPU, LLM via API**. If a fully local stack is wanted,
   it needs a bigger card or a second machine.
 - **Benchmark, don't guess** — and `scripts/bake_off.py` now does it. **First real numbers**
-  (Thonburian medium fp16 + Silero, four real Thai call-centre calls, `D97`): **CER 0.47–0.76**,
+  (Thonburian medium fp16 + Silero, 12 real Thai call-centre calls, `D97`): **CER 0.09–0.50, median 0.29** (the earlier 0.47–0.76 was measured through `B20`),
   throughput **rtf 0.12**, **2.8 GiB**. Speed and memory are comfortable; **accuracy is not, and
   is not yet explained** — four candidate reasons are listed in `NEXT_SESSION`, none eliminated.
   Do not read 0.6 CER as a verdict on the model; it is a verdict on this pipeline against this

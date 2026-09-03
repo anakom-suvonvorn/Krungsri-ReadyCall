@@ -1,7 +1,7 @@
 # NEXT_SESSION
 
 _The live working state. READ THIS FIRST every session. Keep it short and current._
-_Last updated: 2026-09-02._
+_Last updated: 2026-09-03._
 
 ---
 
@@ -34,6 +34,24 @@ used `.split()` on a language with no spaces), `B17` (a model id invented from a
 convention), `B18` (an accuracy metric that cannot work on Thai, reporting 100% error on
 a model that was fine). Read those three before touching the audio path.
 
+**Then read `B20`, which is the biggest of them and was found on 2026-09-03.** The
+"unexplained" CER of 0.47-0.76 was not a property of the model at all: `TranscriptionStream`
+**released a segment's audio out of its buffer before the model was ever shown it**, so a
+third to a half of every call went missing — and the slice that replaced it was clamped
+rather than refused, so a segment could be handed *the wrong moment's audio at the right
+length* and transcribe into a fluent Thai sentence that belongs to a different instant of
+the call. Every CER this project has recorded was measured through it. The corrected figure
+over 12 real calls is **CER 0.09-0.50, median 0.29**.
+
+**None of the four hypotheses in the old step 2 was the answer**, and the way they were
+eliminated is the reusable part: measure the cheapest one first, and when a measurement
+comes back clean, believe it and move down the list rather than arguing with it. The
+un-annotated 75% of each file turned out to be digital silence (so no insertions were
+available); the detector turned out to lose 3% of real speech, not 20%, once the *energy*
+of the missed seconds was measured rather than their duration. What actually found the bug
+was **looking at the text next to the reference** — `bake_off.py --dump`, which did not
+exist until it was needed.
+
 ## Where things stand right now
 
 **P0 · P1 · P1b · P2a · P2b · P2c complete. P3 complete except the recording-to-storage
@@ -45,9 +63,9 @@ right queue through a real menu hearing real (pre-rendered) Thai — and now, **
 is settled, they are offered the pre-call recording, and take it or
 refuse it or ignore it, all three reaching the same agent**.
 
-Verified **2026-09-02**: **647 tests** — 605 pass + 42 skipped without the Postgres
-container (the 42 are the database cases). `ruff check` + `ruff format --check` clean over 151 files,
-`mypy --strict` clean over 112, all scenarios replay, 61/62 diagrams current, prompt pack fresh.
+Verified **2026-09-03**: **651 tests** — 609 pass + 42 skipped without the Postgres
+container (the 42 are the database cases). `ruff check` + `ruff format --check` clean over 177 files,
+`mypy --strict` clean, all scenarios replay, diagrams current, prompt pack fresh.
 
 ### The four sessions of review since P2b, in one place
 
@@ -229,60 +247,73 @@ the PyPI wheel is CPU-only and installing it fails silently.
 
 ## Next steps (in order)
 
-1. **Finish `D30`'s table — everything it needs is now on this machine.**
+**Read `B20` first if you have not.** It rewrote what the rest of this list is about: the
+accuracy problem was ours and is fixed, and the problem that was underneath it is latency.
+
+1. **THE LATENCY — the real open problem** (`Q29`). Paced, on real Thai: **p95 4.4-7.7 s
+   against `ARCHITECTURE` §15's 1.5 s budget.** It was invisible because every measurement
+   used `--fast`, which blanks the latency column — the flag added in `B14` *to stop the
+   harness lying about latency* became the reason nobody measured it. Thonburian medium
+   takes ~3 s per utterance on this card and one consumer serialises them (`D100` says why
+   a second consumer is not the answer), so three short phrases in four seconds queue.
+   **Measure paced. It takes as long as the audio does, and that is the point.**
+2. **Finish `D30`'s table, which is now the thing that decides `Q29`** rather than a
+   formality. Everything it needs is on this machine.
    ```bash
-   uv run python scripts/prepare_dataset.py --n 20        # real Thai, gitignored (`D97`)
    uv run python scripts/bake_off.py --engines thonburian --vad silero \
-       --audio tests/audio/thai_calls/*.wav --out bakeoff.txt
+       --audio "tests/audio/thai_calls/*.wav" --out bakeoff.txt --dump transcripts.txt
    ```
-   **Rank on CER, never WER** (`B18`). Then, in order of what is missing:
+   **Rank on CER, never WER** (`B18`), and **read the dump** — three bugs have now been
+   found by looking at the text behind a number and none by a test. Missing rows, in order
+   of what they settle:
    - **the CT2 row.** `uv run python scripts/convert_ct2.py` converts Thonburian once
-     (Thonburian publishes no CT2 build — that was `B17`), then
-     `--engines faster_whisper:models/whisper-th-medium-combined-ct2`. This is the row that
-     decides whether the quantised build is worth its accuracy cost on a 4 GiB card.
+     (it publishes no CT2 build — that was `B17`), then
+     `--engines faster_whisper:models/whisper-th-medium-combined-ct2`. `int8_float16` on a
+     4 GiB card is the most likely fix for the latency, and this row prices its accuracy
+     cost.
+   - **the Typhoon row** (`D99`): a **transducer**, so no 30 s padding — the structural
+     reason it might not have this problem at all rather than merely less of it. Needs
+     `nemo_toolkit[asr]` as its own `asr` extra — **ask first**, it is another large
+     download.
    - **the large-v3 row**: `--engines thonburian:biodatlab/whisper-th-large-v3-combined`.
-     Probably will not fit alongside anything; finding that out is the point.
-   - **the Typhoon row** needs NeMo, which is deliberately not installed (`D99`). Adding
-     `asr = ["nemo_toolkit[asr]>=2.0"]` and syncing is another large download — **ask
-     first**, same as the `ml` extra.
+     Probably will not fit in 3.2 GiB alongside anything; finding that out is the point.
    - record the table in `PROJECT_STATE` §8 and pick the engine on it.
-2. **Explain the CER, before trusting any engine comparison.** First real numbers:
-   Thonburian medium + Silero over 4 real calls = **CER 0.47-0.76**, which is poor for a
-   Thai model on Thai audio and is **not yet explained**. Four hypotheses, cheapest first,
-   none eliminated:
-   - **`B19`: the vocabulary hint was never applied** by this adapter. Implement
-     `processor.get_prompt_ids()` -> `prompt_ids` and re-measure. (It logs a warning now,
-     so a run can no longer be quietly unhinted.)
-   - **reference mismatch.** Their `.txt` contains only spans annotated as speech; we
-     transcribe everything the detector finds, including audio they marked `noise`. Every
-     extra word we produce is an insertion error. Try scoring **per annotated span** —
-     cut the wav at their timestamps and compare segment to segment.
-   - **the detector is dropping speech.** Silero found 3-4 turns where the annotation has
-     4-6 segments. Step 3 below measures exactly this.
-   - **the audio is simply harder.** Thonburian's published WER is read speech; this is
-     real telephone audio with noise, and some gap is real. This is the *last* hypothesis
-     to fall back on, not the first, because it is the one that cannot be acted on.
-3. **Score the ENDPOINTER against the dataset's `noise` spans.** `segments.tsv` carries
-   every annotated span including the silences, which is ground truth for *where nobody is
-   speaking* — the one thing CER cannot tell us and exactly what `D9`'s constants decide.
-   Nothing consumes it yet. This is the cheapest remaining measurement and it is the only
-   way to know whether the inherited VAD numbers are right for this audio.
-3. **The decode timeout** (`D98`'s missing half). The rate guard *detects* a runaway; only
+3. **Decide `Q28` before quoting a CER to anyone.** The reference writes brand and place
+   names in **Latin** while the model correctly transliterates them into **Thai**, and CER
+   charges every character of a right answer. On the two worst files that is most of the
+   residual. Either normalise both sides, or report the number with those spans excluded
+   and say so — but **do not edit the ground truth to match the model.**
+4. **`B19`: implement the vocabulary hint in `ThonburianHfEngine`**
+   (`processor.get_prompt_ids()` -> `prompt_ids`) and re-measure. It warns loudly now, so a
+   run can no longer be quietly unhinted, but an engine comparison where the engines
+   disagree about whether they read a parameter is not a comparison.
+5. **The decode timeout** (`D98`'s missing half). The rate guard *detects* a runaway; only
    a killable worker process can *stop* one, and `D2` already plans `entrypoints/stt.py`.
    Do not fake it with `asyncio.wait_for` — that does not kill the thread, and a guard that
    looks like one and is not is `B7`'s whole family.
-4. **The encrypted recording to object storage.** `ARCHITECTURE` §6 asks the gateway for it;
+6. **The encrypted recording to object storage.** `ARCHITECTURE` §6 asks the gateway for it;
    it needs MinIO wired and per-recording key refs, which is P7's key management.
-5. **The live transcript on the workstation.** Turns exist and are published; nothing draws
+7. **The live transcript on the workstation.** Turns exist and are published; nothing draws
    them.
-6. **P4** — analysis and brief v2+ with Claude and Typhoon compared on the golden set.
-7. **`D85` is implemented and parked.** Wire `acw_stats.py` into `expected_free_in()` when
+8. **P4** — analysis and brief v2+ with Claude and Typhoon compared on the golden set.
+9. **`D85` is implemented and parked.** Wire `acw_stats.py` into `expected_free_in()` when
    P6 brings real ACW data, as a **score, never a filter** (`D73`).
-8. **Wire the matcher inputs that are fed by nothing** (`B12`): `is_vulnerable`,
-   `last_agent_id`, `last_contact_at` are set on the Customer / brief / snapshot but never
-   on the `WaitingCall`, so `customer_priority` and `continuity` score 0 on every real call.
-9. **Small:** `call_intents` / `app_context_events` still in memory · `D64` the live
-   matching board · `Q26` the env var that changes nothing.
+10. **Wire the matcher inputs that are fed by nothing** (`B12`): `is_vulnerable`,
+    `last_agent_id`, `last_contact_at` are set on the Customer / brief / snapshot but never
+    on the `WaitingCall`, so `customer_priority` and `continuity` score 0 on every real call.
+11. **Small:** `call_intents` / `app_context_events` still in memory · `D64` the live
+    matching board · `Q26` the env var that changes nothing.
+
+### Settled this session, so nobody re-opens them
+
+- **The CER is explained** — it was `B20`, not the model, not the reference, not the
+  detector, not the audio. Corrected: **CER 0.09-0.50, median 0.29** over 12 real calls.
+- **The endpointer is scored and it is fine.** `scripts/score_endpointer.py` (the first
+  thing to read `segments.tsv`): coverage **0.797**, span recall **0.902**, 4.7 s of false
+  alarm over 940 s. Dropping `D9`'s threshold from 0.65 to 0.15 buys only 0.86 coverage,
+  and the seconds it "misses" are **86% near-silent and 72% within half a second of an
+  annotated boundary** — an annotator rounding outward. Real speech lost: **3%**.
+  **Leave `D9`'s inherited constants alone; they are right for this audio.**
 
 ## Starting P3 step 4b — read this before opening anything else
 
@@ -381,6 +412,8 @@ Whoever has the strongest GPU should own the demo machine.
 | **Q21** | **Which storage backend does the DEMO run on?** `memory` is the default and needs nothing; `postgres` is what survives a restart, and it is what makes the persistence work visible on stage at all. Running it on the day adds a container to the list of things that can fail, against `PLAN.md`'s risk register — *never depend on the venue*. Leaning: **rehearse on `postgres`, keep `memory` as the one-keystroke fallback**, since both pass the same suite. | Not decided |
 
 | **Q22** | **Does the committed prompt pack carry actual audio once a real voice is chosen?** `D24` calls the checked-in pack the offline fallback, which is the whole reason the IVR works with no internet — but `CLAUDE.md` says never commit audio. That rule means *call recordings*, not TTS output of our own sentences, so the two are probably compatible; 63 short Thai clips is a few MB. Undecided because there is no audio yet. | Manifest only, for now |
+| **Q28** | **The reference mixes scripts, and CER charges us for being right.** The dataset's transcripts write brand and place names in **Latin** (`True move`, `Mezzox Drip Cafe`, `Frosen Khaoyai`, `Router`, `L O S`) while Thonburian correctly transliterates them into Thai (`ทูมู`, `เมโซเอ็กซ์ดิสกาแฟ`, `โฟร์เซนต์ เขา ใหญ่`). Every character of those differs, so a *correct* transcription is scored as a total miss, and on the two worst files that is most of the residual CER. Options: normalise both sides through a transliteration map before scoring (real work, and it can flatter); report CER with those spans excluded and say so; or accept it and treat the number as a floor. **Do not quietly "fix" the reference** — editing ground truth to match the model is how a metric stops meaning anything. | Accepted, and the number is read as a ceiling on error |
+| **Q29** | **The p95 latency budget is missed by 3-5x** and `D30`'s table is the thing that decides what to do. Thonburian medium fp16 takes ~3 s per utterance on this card and one consumer serialises them, so three short phrases in four seconds queue up. Candidates, and they are not exclusive: the **CT2 int8_float16 build** (`scripts/convert_ct2.py`, this is the row that was always meant to decide it), **Typhoon** (a transducer, so no 30 s padding — `D99` says exactly why this might be structural rather than incremental), a **smaller Thonburian**, or accepting a slower transcript because `D12` means the call is never waiting on it. | Not decided; measure before choosing |
 | **Q27** | **The dataset is all `Government` domain, not insurance.** All 3189 calls (`D97`). It measures Thai telephone ASR honestly and says nothing about insurance jargon — and our `stt_vocabulary.yaml` hint is *wrong* for it, which makes it a fair test of whether the hint hurts when it does not apply. An insurance-domain set would still be worth having, and the hackathon may supply one. | Use it, and label the numbers as general Thai |
 | **Q26** | **`Settings.max_wait_before_any_agent_s` is an env var that changes nothing.** The matcher reads `config/matching_weights.yaml`, never `Settings`, so `MAX_WAIT_BEFORE_ANY_AGENT_S=30` in `.env` silently does nothing — and since `D94` it also describes a shape (one number) the system no longer has. It survives only as the bound for a startup coherence check against `target_wait_s`. Delete it, or wire the weights loader to it. Found while writing `D94`. | Left in place, documented |
 | **Q24** | **A health-line caller speaks health data into a recording nobody consented to hold as such.** `D14` makes `health_data` a separate scope; the offer grants only `recording` and `ai_processing` (`D88`). Three options: a third keypress (honest, and it lengthens the longest prompt in the system on the line where callers are most distressed); name the scope in the offer's wording on health lines (one keypress, three scopes); or gate the *extraction* at P4 so health entities are never pulled without it. **Leaning: the second plus the third.** Decide before P4 writes an entity extractor — that is the first code that can breach it. | Not asked for |
@@ -425,6 +458,36 @@ Facts about *this laptop* rather than the repo, so a fresh session does not redi
 
 ## Things to be careful about (live landmines)
 
+- **THE BUFFER OWES AUDIO TO EVERY QUEUED SEGMENT, NOT JUST TO THE OPEN ONE** (`B20`).
+  `_trim` released history 30 s behind the NEWEST segment the moment it was queued, which
+  is correct only while the consumer keeps up — and `feed()` never yields, so an unpaced
+  feed ingests the whole call before one segment is transcribed. `_awaiting` now holds
+  every outstanding claim. If you touch `stream.py`, the invariant is: **nothing below the
+  oldest queued segment's start may be released**, and past `_MAX_BACKLOG_SAMPLES` it is
+  abandoned with a WARNING rather than silently.
+- **`_trim` RUNS ON A SEGMENT CLOSE, SO THE QUIET PATH NEEDED ITS OWN TRIM** (`B20`). A
+  leg where nobody speaks closes no segment, so nothing trimmed and the buffer grew about
+  30 MB a minute — 16,000,000 samples after 1000 s, measured. Bounded today only by
+  `hold.py`'s silence timeout, which belongs to a different object and will not be there
+  for `D26`'s agent leg. `_TRIM_WHEN_IDLE_SAMPLES` covers it. **Found by re-reading the
+  diff of another fix before committing it.**
+- **A SLICE THAT CANNOT BE SATISFIED MUST REFUSE, NEVER APPROXIMATE** (`B20`). `_slice`
+  clamped with `max(0, start - base)`, so when the audio was gone it returned the right
+  LENGTH from the wrong MOMENT — which in Thai is a fluent sentence attributed to an
+  instant the caller was not speaking. `D16`'s hazard exactly: invented text that looks
+  credible is the dangerous kind. A gap is recoverable; a confident wrong sentence is not.
+- **`--fast` IS NOT A DISPLAY OPTION, IT CHANGES HOW THE SYSTEM IS DRIVEN** (`B20`). It
+  was added in `B14` to stop the harness reporting a backlog as a latency, and then every
+  subsequent measurement used it — so it hid `B20` *and* hid the fact that the p95 budget
+  is missed by 3-5x. Both halves of a measurement flag are load-bearing.
+- **A `# pragma: no cover` IS A CLAIM THAT A BRANCH CANNOT HAPPEN** (`B20`). The one on
+  `if not samples: return` read "only if trimming raced a very long segment" — a correct
+  description of the bug, written before it happened, and then not believed. Treat one as
+  a hypothesis to test, not a note to yourself.
+- **"THREE TURNS ARRIVED" IS A MUCH WEAKER ASSERTION THAN "TURN THREE CARRIED SEGMENT
+  THREE'S AUDIO"** (`B20`). Every test in `test_transcription_stream.py` made the first
+  kind, which is why a fake engine returning canned text could not see this. `MarkerStt`
+  returns the amplitude of what it was handed, so the audio itself is assertable.
 - **WHEN AN EXPERIMENT RETURNS EXACTLY NO DIFFERENCE, SUSPECT THE EXPERIMENT** (`B19`).
   Hint vs no-hint gave CER identical to three decimals on four files. That is not a
   finding about domains, it is an argument that was never used - `ThonburianHfEngine`

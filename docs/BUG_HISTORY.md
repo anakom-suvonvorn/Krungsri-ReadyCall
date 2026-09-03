@@ -1,7 +1,7 @@
 # BUG_HISTORY
 
 _Solved bugs and the lessons they bought. **Search this file FIRST when debugging** — the answer may already be here._
-_Last updated: 2026-09-02._
+_Last updated: 2026-09-03._
 
 Format per entry:
 
@@ -816,3 +816,98 @@ _Found immediately by running the first real measurement and disbelieving it. Ag
   *when an experiment returns exactly no difference, suspect the experiment before
   concluding "no effect".* Identical to three decimals is a plumbing result, not a
   scientific one.
+
+## B20. The audio buffer was released out from under segments still queued, and the CER investigation was chasing it
+_Found 2026-09-03 while working the four CER hypotheses in `NEXT_SESSION` step 2. None of
+the four was the answer._
+
+- **Symptoms.** The recorded first real Thai numbers were **CER 0.47-0.76**, called "poor,
+  and not yet explained" in five documents. Behind them, one detail nobody had looked at:
+  the bake-off reported **3 turns** for a call the endpointer had cut into **6 segments**,
+  and **4 turns** for one cut into 7. No drop was logged by any of the three guards.
+- **How it was found — by elimination, cheapest first, exactly as the plan said.**
+  1. **The reference-mismatch hypothesis died first.** The `.txt` covers only annotated
+     speech, which is 15-29% of each file, so the obvious theory was that we transcribe
+     ~75% more audio than the reference covers and every word of it is an insertion.
+     Measured the un-annotated remainder in 1-second buckets: **median RMS 0.0000, and 1%
+     of it reaches a third of that call's speech level.** It is digital silence — the
+     human leg while the other side talks. No insertions available.
+  2. **The detector was next, and `scripts/score_endpointer.py` was written to ask.** It
+     reported **coverage 0.797** — 20% of annotated speech never reaching the model, which
+     looked like the answer. It was not: measuring the *energy* of those missed seconds
+     showed **86% of them below a third of speech level and 72% within 0.5 s of an
+     annotated boundary.** That is an annotator rounding a span outward, not a lost
+     sentence. Real speech lost: **5.9 s of 198 s, about 3%.**
+  3. **Then the thing nobody had done: look at the text.** `bake_off.py --dump` prints
+     reference against hypothesis. The hypothesis was **fluent, correct Thai matching the
+     TAIL of the reference**, with the first half absent — 112 reference characters
+     against 48, and the 48 all correct.
+  4. **Transcribing each segment on its own, synchronously, produced all six**, every one
+     correct. So the model, the detector, the endpointer and the guards were all fine, and
+     the loss was in `TranscriptionStream` itself.
+- **Root cause.** `_trim()` ran the moment a segment was **queued**, keeping 30 s of
+  history behind that segment's end. That is correct only while the consumer keeps up.
+  `feed()` never yields to the event loop — an unbounded `asyncio.Queue.put` has no await
+  point in it — so under an unpaced feed the **entire call is ingested before the consumer
+  transcribes anything**, and by then `_base` had advanced past the early segments. Their
+  audio was gone before the model was ever shown it.
+- **The second half is worse than the first, and is the reason this is a `warning` and not
+  a footnote.** `_slice()` clamped with `max(0, start - base)`. When the audio had been
+  trimmed that did **not** return empty — it returned `_buffer[0:n]`, a slice of roughly
+  the right length **taken from the wrong moment in the call**. In Thai that transcribes
+  into a fluent, plausible sentence attributed to an instant the caller was not speaking,
+  and it reaches the agent's screen with nothing to mark it. `D16` bans the model from
+  producing coverage figures because invented text that looks credible is the dangerous
+  kind; this was that hazard again, one layer down, and this time in shipping code.
+- **Why every instrument missed it.** Three separate `return`s left no trace: `if not
+  samples: return` (marked `# pragma: no cover - only if trimming raced a very long
+  segment`, which is exactly what happened), `if not text: return`, and the clamp itself,
+  which produced no error because it produced *plausible output*. The three guards logged
+  nothing because nothing reached them. The suite passed because every existing test feeds
+  a few seconds of audio, which never crosses the 30 s window.
+- **Fix, in four parts.**
+  1. `_awaiting` holds the start sample of every queued-but-unconsumed segment, and
+     `_trim` keeps everything from the oldest of them. One consumer draining FIFO makes
+     the head of that deque the oldest sample anything can still reach.
+  2. The backlog is **bounded and loud**: past `_MAX_BACKLOG_SAMPLES` (120 s) the oldest
+     claim is abandoned with a `warning`. `D12` forbids backpressure on ingestion — the
+     caller keeps talking whatever the GPU is doing — so the choice is between losing the
+     oldest sentence and growing until the process dies, and it is made explicitly.
+  3. `_slice` **refuses** a segment whose audio has been trimmed instead of clamping. A
+     gap is recoverable; a confident wrong sentence is not.
+  4. Both silent returns now log.
+- **Verification.** Three tests, and they were checked against the *old* code before being
+  trusted — on it, three utterances go in and the assertion reads `300 != 100`, one turn
+  out. `MarkerStt` returns the **amplitude of the audio it was handed** rather than canned
+  text, because an engine that says the same thing whatever it is given cannot see the half
+  of this bug that matters. On the real GPU, the two calls that motivated it went from
+  3 and 4 turns to **6 and 7**, and:
+
+  | | before | after |
+  |---|---|---|
+  | call 1 | 3 turns, CER 0.616 | **6 turns, CER 0.188** |
+  | call 2 | 4 turns, CER 0.709 | **7 turns, CER 0.139** |
+
+  and `--fast` and paced now agree exactly, which they never did.
+- **Every recorded CER in this project was measured through this bug** and is wrong. The
+  numbers in `PLAN`, `PROJECT_STATE`, `NEXT_SESSION`, `ARCHITECTURE`, `D97` and
+  `reading/the_audio_path.html` are corrected in the same commit.
+- **A second leak, found by reading the fix's own diff.** `_trim` runs only when a segment
+  **closes**, so a leg on which nobody ever speaks never trims at all and the buffer grows
+  for the length of the call — about **30 MB a minute**, measured at 16,000,000 samples held
+  after 1000 s of silence. It is bounded today only by `hold.py`'s
+  `INTAKE_SILENCE_TIMEOUT_S`, which is a bound belonging to a different object and will not
+  be there when `D26`'s agent leg is transcribed for a whole call. `_TRIM_WHEN_IDLE_SAMPLES`
+  now trims on the quiet path too, with its own test. Worth noting *how* it was found:
+  re-reading a change before committing it, which is the cheapest review this project has.
+- **Lessons, and there are three.**
+  - **`--fast` was added in `B14` to stop the harness lying about latency, and then every
+    measurement was taken with it.** It fixed one instrument and quietly became the
+    condition under which a different one broke. A flag that changes how the system is
+    *driven* is not a display option.
+  - **A `# pragma: no cover` on a branch is a claim that it cannot happen.** This one said
+    "only if trimming raced a very long segment" — a correct description of the bug,
+    written before it, by me, and then not believed.
+  - **"Three turns arrived" is a much weaker assertion than "turn three carried the audio
+    of segment three".** Every test in this file asserted the first kind. That is why the
+    new ones make the audio itself legible.

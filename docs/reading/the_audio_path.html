@@ -802,10 +802,11 @@ matmul on gpu  </span><span class="hit">OK</span></pre>
   <ol class="check">
     <li>
       <h3>Everything still passes</h3>
-      <p>The whole test suite, including 61 new tests from this session.</p>
+      <p>The whole test suite, including three that specifically catch the bug described in
+         the last section.</p>
       <div class="term">
 <pre><span class="cmd">uv run pytest -q</span>
-<span class="out">590 passed, </span><span class="hit">42 skipped</span><span class="out"> in ~120s</span></pre>
+<span class="out">608 passed, </span><span class="hit">42 skipped</span><span class="out"> in ~120s</span></pre>
       </div>
       <p class="note">
         The 42 skips are the database tests — they need a Postgres container that is
@@ -941,6 +942,57 @@ a genuine caller sentence            False   False   </span><span class="hit">re
         </table>
       </div>
     </li>
+    <li>
+      <h3>The bug is real, and the tests catch it</h3>
+      <p>
+        These three fail on the old code and pass on the new one. The second is the important
+        one: it checks that each result carried <em>its own</em> audio, not merely that some
+        result arrived.
+      </p>
+      <div class="term">
+<pre><span class="cmd">uv run pytest tests/unit/test_transcription_stream.py -q -k "lagging or own_audio or ordinary_case"</span>
+<span class="out">3 passed</span></pre>
+      </div>
+    </li>
+
+    <li>
+      <h3>The detector is not the problem</h3>
+      <p>
+        Scores the "someone is speaking" step against the dataset's own human annotations. No
+        GPU, no speech model. The sweep shows that lowering the sensitivity threshold barely
+        helps, which is how we know the inherited settings are right for this audio.
+      </p>
+      <div class="term">
+<pre><span class="cmd">uv run python scripts/score_endpointer.py --vad silero</span>
+<span class="out">TOTAL   61 spans   84 found   coverage </span><span class="hit">0.797</span><span class="out">   recall </span><span class="hit">0.902</span><span class="out">   false 4.7s</span></pre>
+      </div>
+      <p class="note">
+        Needs <code>tests/audio/thai_calls/</code>, which is produced by
+        <code>scripts/prepare_dataset.py</code> from the dataset you downloaded. That folder is
+        deliberately not in the repository — the transcripts contain real customers' names and
+        account numbers.
+      </p>
+    </li>
+
+    <li>
+      <h3>See the actual words behind any score</h3>
+      <p>
+        This is what found the bug, and it did not exist before. It writes the human answer key
+        and the machine's output side by side to a file. <strong>Needs the GPU</strong> and
+        takes a few minutes.
+      </p>
+      <div class="term">
+<pre><span class="cmd">uv run python scripts/bake_off.py --engines thonburian --vad silero \
+    --audio tests/audio/thai_calls/*.wav --dump transcripts.txt</span>
+<span class="out">CER </span><span class="hit">0.091 - 0.495</span><span class="out">, median 0.29 across 12 calls</span></pre>
+      </div>
+      <p class="note">
+        It writes to a file rather than the screen on purpose: Thai text printed to a Windows
+        console kills the program outright. Drop <code>--fast</code> — as shown here — if you
+        want the timing numbers to mean anything.
+      </p>
+    </li>
+
   </ol>
 </section>
 
@@ -1067,6 +1119,154 @@ thonburian       3  0.86      2796   </span><span class="bad">0.468</span><span 
     <strong>The pattern across all three:</strong> a measurement found each one, and no test
     could have. Be suspicious of a number that agrees with you, of one that is impossible,
     and of an experiment that returns exactly no difference.
+  </p>
+</section>
+
+<section class="wide">
+  <span class="part">Added 3 September — the answer to the open question above</span>
+  <h2>The bad score was our bug, not the model's</h2>
+
+  <p>
+    The last time I wrote this page it ended with an honest admission: the speech model was
+    scoring <strong>0.47 to 0.76</strong> on real Thai calls, where 0 is perfect and 1 is
+    completely wrong. That is bad. I listed four possible reasons and said none of them had
+    been ruled out.
+  </p>
+  <p>
+    <strong>None of the four was the answer.</strong> The real one was a bug in our own code,
+    and the score is now <strong>0.09 to 0.50, typically 0.29</strong> — the same model, the
+    same audio, the same day.
+  </p>
+
+  <h3>How the four were eliminated, cheapest first</h3>
+  <p>
+    This ordering is the part worth keeping. Each check was chosen to be the fastest way to
+    <em>disprove</em> something, not to confirm it.
+  </p>
+  <div class="tablewrap wrap">
+    <table>
+      <thead><tr><th>The theory</th><th>The check</th><th>Verdict</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>We transcribe far more audio than the human-written answer key covers, so every
+              extra word counts against us.</td>
+          <td>The key covers only 15–29% of each recording. So: how loud is the other 75%?
+              Measured second by second.</td>
+          <td><strong>Dead.</strong> It is <em>digital silence</em> — this is one side of a
+              phone call, quiet while the other person talks. There were no extra words
+              available to be wrong.</td>
+        </tr>
+        <tr>
+          <td>The part that decides "someone is speaking now" is throwing sentences away.</td>
+          <td>Wrote a scorer for it — the first thing ever to read the dataset's own
+              annotations. It said <strong>20% of speech never reached the model</strong>.</td>
+          <td><strong>Looked guilty, and was not.</strong> Measuring the <em>loudness</em> of
+              those seconds rather than counting them: 86% are near-silent and 72% sit within
+              half a second of where a human drew the boundary. That is a person rounding a
+              mark outward, not a lost sentence. Real speech lost: <strong>3%</strong>.</td>
+        </tr>
+        <tr>
+          <td>A vocabulary hint is not being passed to the model.</td>
+          <td>Already known and already written down.</td>
+          <td><strong>Real, but small.</strong> Not capable of explaining a score that bad.</td>
+        </tr>
+        <tr>
+          <td>Real phone audio is just harder than what the model was advertised on.</td>
+          <td>Deliberately last — it is the one theory that cannot be acted on, which makes
+              it the most comfortable and the least useful.</td>
+          <td><strong>Never needed.</strong></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>What found it was looking at the words</h3>
+  <p>
+    There was no way to see the actual text behind the score. So I added one — and the answer
+    was immediate. The model's output was <strong>fluent, correct Thai that matched the end of
+    the answer key</strong>, with the beginning simply missing. 48 characters where there
+    should have been 112, and all 48 right.
+  </p>
+  <p>
+    Transcribing each piece of the call one at a time produced <em>all six</em>, every one
+    correct. So the model was fine. The detector was fine. The safety guards were fine. The
+    losses were happening in the plumbing between them.
+  </p>
+
+  <div class="note trap">
+    <strong>What the plumbing was doing.</strong> Audio is held in a buffer while the model
+    works through a queue. The buffer was throwing away anything older than 30 seconds
+    <em>behind the newest piece of audio that came in</em> — which is correct only when the
+    model keeps up. When it fell behind, the buffer discarded the caller's opening sentences
+    <strong>before the model was ever shown them</strong>.
+  </div>
+
+  <div class="note trap">
+    <strong>And the half that is genuinely dangerous.</strong> When the audio for a piece was
+    gone, the code did not report that. It quietly handed back <em>a different stretch of the
+    call of about the right length</em>. In Thai, that transcribes into a perfectly fluent
+    sentence — attributed to a moment when the caller was saying something else entirely. It
+    would have reached an agent's screen looking exactly as trustworthy as a real one. A
+    missing sentence is a gap you can see; a confident wrong one is not.
+  </div>
+
+  <h3>What changed</h3>
+  <ul>
+    <li>Every piece of audio waiting in the queue now <strong>holds a claim</strong> on the
+      buffer, and nothing older than the oldest claim can be released.</li>
+    <li>If the model falls more than two minutes behind, the oldest piece is given up
+      <strong>with a warning in the log</strong>. It cannot be given up silently, and the
+      queue cannot grow until the program runs out of memory.</li>
+    <li>If a piece's audio is gone anyway, it is <strong>refused</strong>. It is never
+      approximated from whatever happens to be left.</li>
+    <li>Both places that used to discard something without a word now say so.</li>
+  </ul>
+
+  <div class="note good">
+    <strong>The tests were checked against the broken version first.</strong> A test that
+    passes on code you already fixed proves nothing. On the old code these fail exactly as
+    they should — three sentences go in, one comes out. And they assert something stronger
+    than "three results arrived": the fake model reports <em>the loudness of the audio it was
+    handed</em>, so the test can insist that result three carried <em>segment three's</em>
+    audio. That stronger assertion is the only kind that could have caught the dangerous half.
+  </div>
+
+  <h3>The real problem was underneath it all along</h3>
+  <p>
+    There is a flag on the measuring tool called <code>--fast</code>. It feeds the audio in as
+    quickly as possible instead of at the speed a real person talks. I added it earlier
+    <em>because the tool had been lying about speed</em> — and then used it for every
+    measurement afterwards, which is what let the bug above survive.
+  </p>
+  <p>
+    Running it properly, at real speaking speed, shows the thing that actually matters:
+  </p>
+  <div class="tablewrap wrap">
+    <table>
+      <thead><tr><th></th><th>Target</th><th>Measured</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Time from a caller finishing a sentence to it appearing on screen</td>
+          <td class="num">under 1.5 s</td>
+          <td class="num bad">4.4 – 7.7 s</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p>
+    <strong>This is now the open problem</strong>, and it is a much better one to have than a
+    mysterious accuracy score. The model takes about three seconds per sentence on this
+    laptop's graphics card, and sentences are handled one at a time, so three short phrases in
+    quick succession queue up behind each other. There are known things to try — a compressed
+    build of the same model, and a different model that does not pad every clip to 30 seconds
+    the way this family does. Both were always planned; now there is a number saying which
+    question they answer.
+  </p>
+  <p class="note">
+    Worth being clear about the stakes: nothing here delays the actual phone call. The caller
+    is connected to a human on a path that never waits for any of this. What a slow transcript
+    costs is how much of the caller's own words the agent has in front of them at the moment
+    they pick up.
   </p>
 </section>
 

@@ -1,7 +1,7 @@
 # PLAN
 
 _The master build plan for the full system: what gets built, in what order, and what "done" means for each phase._
-_Last updated: 2026-09-02._
+_Last updated: 2026-09-03._
 
 ---
 
@@ -224,7 +224,7 @@ started. `explanations/P3_voice.md` covers the built half; `diagrams/12_the_menu
 **Exit criteria**
 - 🔶 Utterance end → turn visible **p95 < 1.5 s** on the RTX 3050, with the chosen engine named and
   the bake-off table recorded. **Measured on real Thai for the first time (2026-09-02):**
-  Thonburian medium fp16 with Silero over four real call-centre calls gives **CER 0.47-0.76**,
+  Thonburian medium fp16 with Silero over **12** real call-centre calls gives **CER 0.09-0.50, median 0.29**,
   throughput **rtf 0.12** (about 8x faster than real time), **2.8 GiB VRAM** of the 3.2 available.
   Speed and memory are comfortable; **accuracy is not, and is not yet explained.** Four candidate
   reasons, none eliminated: the reference counts only annotated speech spans while we transcribe

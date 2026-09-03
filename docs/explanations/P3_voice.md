@@ -447,6 +447,10 @@ transcriptions they had personally seen come out of Thonburian. Both found thing
   detects and cannot prevent; the preventer needs `D2`'s killable worker and is not faked.
 - **First real numbers, recorded as unexplained rather than as a verdict.** Thonburian
   medium fp16 + Silero over four real calls: **CER 0.47-0.76**, rtf 0.12, 2.8 GiB of 3.2.
+  **(Withdrawn 2026-09-03: that number was measured through `B20` and was wrong. The
+  real figure over 12 calls is CER 0.09-0.50, median 0.29. Left in place because this
+  file is a dated snapshot, and the four hypotheses below are worth reading precisely
+  because none of them was the answer.)**
   Four candidate reasons are listed in `NEXT_SESSION`, cheapest first, none eliminated.
 - **The pattern across all four bugs is worth more than any of them.** Every one was found
   by **a measurement or by the user**, and not one by a test. `B14` was *be suspicious of a
@@ -455,6 +459,61 @@ transcriptions they had personally seen come out of Thonburian. Both found thing
   is *be most suspicious of a fixture derived from the one example you happened to see*.
 - **numbers now:** 647 tests (605 pass + 42 skipped), 62 diagrams, 9 ports, and the first
   three real vendor adapters in the project.
+
+
+**2026-09-03 — the CER was our bug, and the real problem is latency.**
+The previous entry left four hypotheses for an unexplained CER of 0.47-0.76. **None of them
+was the answer**, and the process of eliminating them is worth more than the conclusion.
+
+- **Cheapest first, and believe a clean result.** The reference covers only 15-29% of each
+  file, so the obvious theory was that we transcribe far more audio than it accounts for
+  and every extra word is an insertion. Measuring the un-annotated remainder in 1-second
+  buckets killed it: **median RMS 0.0000**, and 1% of it reaches a third of that call's
+  speech level. It is the human leg while the other side talks — digital silence. There
+  were no insertions to be had.
+- **The detector looked guilty and was not.** `scripts/score_endpointer.py` (written for
+  this, and the first thing ever to read `segments.tsv`) reported **coverage 0.797** —
+  20% of annotated speech never reaching the model. That is a plausible CER floor and it
+  was tempting to stop there. Measuring the *energy* of the missed seconds instead of their
+  duration showed **86% of them below a third of speech level and 72% within half a second
+  of an annotated boundary**: an annotator rounding a span outward, not a lost sentence.
+  Real speech lost is **3%**. Sweeping `D9`'s threshold from 0.65 to 0.15 recovers a third
+  of the rest and buys 1.8 s more false alarm — so the inherited constants are **right for
+  this audio**, which is a genuinely useful thing to have established.
+- **What actually found it was looking at the text.** `bake_off.py --dump` did not exist;
+  it does now. The hypothesis was **fluent, correct Thai matching the tail of the
+  reference**, with the first half simply absent — 48 characters against 112, and all 48
+  right. Transcribing each segment on its own produced all six, every one correct. So the
+  model, the detector, the endpointer and the three guards were all fine.
+- **`B20`: the buffer released audio out from under segments that were still queued.**
+  `_trim` ran when a segment was *queued*, keeping 30 s behind it — correct only while the
+  consumer keeps up, and `feed()` never yields, so an unpaced feed ingests an entire call
+  before one segment is transcribed. Worse, `_slice` **clamped** rather than refused: with
+  the audio gone it returned the right length from the **wrong moment**, which transcribes
+  into a plausible Thai sentence belonging to a different instant of the call. That is
+  `D16`'s hazard in shipping code — invented text that looks credible is the dangerous kind.
+- **Corrected numbers, over 12 real calls:** **CER 0.09-0.50, median 0.29**, and `--fast`
+  and paced now agree exactly, which they never did. The two calls that started the
+  investigation went from 3 and 4 turns to 6 and 7, CER 0.616 -> **0.188** and
+  0.709 -> **0.139**.
+- **And the finding that matters more.** Running paced — which nothing had done since
+  `--fast` was added — the latency is **p95 4.4-7.7 s against a 1.5 s budget**. `--fast`
+  was introduced in `B14` *to stop the harness lying about latency*, and then became the
+  reason nobody measured it. That is `Q29`, and it is what `D30`'s bake-off table is
+  actually for: the CT2 build and Typhoon's lack of 30 s padding (`D99`) are now decisions
+  with a number behind them rather than options.
+- **What is left of the residual CER is largely scoring** (`Q28`). The reference writes
+  brand and place names in Latin (`True move`, `Mezzox Drip Cafe`) and Thonburian correctly
+  transliterates them into Thai. Every character differs, so a right answer is scored as a
+  total miss. The fix is not to edit the ground truth.
+- **The pattern, again, and it is the same one.** Every bug this phase has produced was
+  found by **a measurement or by the user, never by a test** — and `B20` adds a sharper
+  version: the suite passed because every test fed a few seconds of audio, and the branch
+  that swallowed the call carried a `# pragma: no cover` reading *"only if trimming raced a
+  very long segment"*. I wrote that description before the bug happened and then did not
+  believe it. The new tests assert **which audio a turn carried**, not merely that turns
+  arrived.
+- **numbers now:** 650 tests (608 pass + 42 skipped), 100 decisions, 20 bug entries.
 
 _Earlier body text stays as written — it is a record of what was true on 2026-08-25._ Append dated entries here rather than editing the body — this file is a record
 of what was true on 2026-08-25, and the "why" above stays useful even when a number moves._

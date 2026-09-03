@@ -359,6 +359,53 @@ partly a measurement of that detector.
 Without one the harness reports latency and VRAM only, and prints `-` for WER rather than a
 number computed against nothing.
 
+**Always look at the text behind a CER before believing it** (`B18`, `B19`, `B20` — three
+bugs found this way and none found by a test):
+
+```bash
+uv run python scripts/bake_off.py --engines thonburian --vad silero \
+    --audio tests/audio/thai_calls/*.wav --dump transcripts.txt
+```
+
+`--dump` writes reference against hypothesis to a UTF-8 file. It never prints to the
+console, because Thai on the Windows cp1252 console kills the process (`B1`).
+
+**`--fast` is not a display option.** It stops pacing the feed, which measures throughput
+(`rtf`) instead of latency and blanks the latency column. Every real measurement of the
+**budget** — utterance end to turn, p95 < 1.5 s — has to run paced, which takes as long as
+the audio does. `B20` hid inside that distinction for a session.
+
+It has a second edge worth knowing: an unpaced feed ingests the whole file before the model
+finishes the first utterance, so the stream holds the entire call in memory. Past **120 s**
+of audio that hits the backlog cap (`D100`) and the oldest segments are abandoned — with a
+warning in the log, but abandoned. **`--fast` is only safe for accuracy on files shorter
+than two minutes.** The dataset's calls are 65–90 s, which is why it is safe here.
+
+### Score the detector, which a CER cannot see
+
+```bash
+uv run python scripts/score_endpointer.py --vad silero
+```
+
+- **Needs set up:** §1, plus §6 (the `ml` extra) for `--vad silero`. `--vad energy` needs
+  nothing at all.
+- **Needs running alongside:** nothing. **No GPU is used** — the detector runs on CPU and no
+  speech model is loaded.
+- **Needs:** `tests/audio/thai_calls/segments.tsv`, written by `prepare_dataset.py`.
+
+The endpointer decides what the model is ever *asked* to transcribe, so a sentence it never
+emitted looks, in CER, exactly like a sentence the model got wrong — and the fixes are
+opposite. This scores that half against the dataset's hand-annotated spans: **coverage**
+(what fraction of annotated speech seconds reached the model), **span recall**, and
+**false-alarm seconds** (audio detected where nobody spoke, which is the `B14` input).
+
+```bash
+uv run python scripts/score_endpointer.py --vad silero --sweep 0.15 0.35 0.5 0.65 0.8
+```
+
+sweeps `D9`'s speech threshold against **one** pass of the detector, so every row reads
+identical probabilities and a difference between rows is the endpointer's alone.
+
 Two things about this table that are easy to misread, and both are in the output:
 
 - **audio is paced at wall-clock speed by default.** An unpaced feed queues every utterance

@@ -4,7 +4,7 @@ _How the full ReadyCall system works, end to end. Read this to understand the ma
 _Status: **partly built**. P0–P2c are implemented, and P3 is built through the intake
 offer; the audio, the analysis passes and the telephony integration are still design.
 Each section says what is real where it matters. See `PLAN.md` for the build order._
-_Last updated: 2026-09-02._
+_Last updated: 2026-09-03._
 
 ---
 
@@ -233,10 +233,12 @@ customer (if any), product, snapshot and queue.
 > characters a second, measured (`D98`). They are three *different kinds* of check on
 > purpose — a failure that dodges one rarely dodges all three.
 >
-> **The first measurement on real Thai speech** (`D97`, four calls from the 22 GB
-> call-centre dataset): Thonburian medium fp16 + Silero, **CER 0.47-0.76**, rtf 0.12,
-> 2.8 GiB. Speed and memory are comfortable; **accuracy is not, and is not yet
-> explained.** And rank on **CER, never WER** — whitespace word error on unsegmented Thai
+> **The measurement on real Thai speech** (`D97`, 12 calls from the 22 GB call-centre
+> dataset): Thonburian medium fp16 + Silero, **CER 0.09-0.50, median 0.29**, rtf 0.12,
+> 2.8 GiB. The first version of this number was **0.47-0.76 and wrong** — it was
+> measured through `B20`, which released a segment's audio before the model was shown
+> it, so between a third and a half of every call was silently missing. Accuracy is
+> acceptable; **latency is the open problem** — see §15. And rank on **CER, never WER** — whitespace word error on unsegmented Thai
 > read 0.94-1.12 on a model that was working fine (`B18`).
 >
 > **Built as of P3 step 4a, down to and including the offer.** `services/ivr/` walks the
@@ -933,6 +935,7 @@ budget degrades (§16) rather than delaying.
 | **VAD unavailable** (Silero fails to load) | `EnergyVad` needs no dependencies and endpoints slightly worse. There is no rung below this, which is the point of it existing (`D96`) |
 | **The model returns nonsense** (a loop, our own vocabulary hint, or more speech than was physically possible) | The turn is **refused before the agent sees it** and logged. A thinner brief beats one with invented words in it — those are exactly the words that make a brief look credible (`B14`, `B16`, `D98`) |
 | **One utterance fails to transcribe** | Logged and skipped; the call is untouched. One sentence of the brief is the whole cost (`D12`) |
+| **The transcriber falls behind the caller** | Ingestion never blocks (`D12`), so the backlog grows and its audio is **held**, not released (`B20`). Past 120 s the oldest segment's audio is abandoned with a `warning` rather than growing until the process dies — and a segment whose audio is gone is **refused**, never approximated from whatever is left in the buffer |
 | LLM down / times out | Rule-based brief: intent from the **menu** (reliable, not a guess), entities by regex, template summary |
 | Core RO unavailable | Last cached snapshot with a staleness badge; else intent-only brief |
 | Matching unavailable | Default queue, FIFO — i.e. exactly today's behaviour |

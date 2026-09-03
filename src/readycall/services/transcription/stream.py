@@ -26,6 +26,7 @@ structural rather than inferred, and there is no diarisation model to be wrong.
 from __future__ import annotations
 
 import asyncio
+from collections import deque
 from collections.abc import Awaitable, Callable, Sequence
 
 from readycall import ids
@@ -45,6 +46,20 @@ from readycall.services.transcription.endpointer import (
 log = get_logger(__name__)
 
 TurnSink = Callable[[TranscriptTurn], Awaitable[None]]
+
+#: How far the transcriber may fall behind the live audio before the oldest queued
+#: segment's audio is released anyway (`B20`). Two minutes is far past any recoverable
+#: state — the intake recording itself caps at `INTAKE_MAX_DURATION_S` — so reaching this
+#: means the model has effectively stopped, and the choice is between losing the oldest
+#: sentence and growing the buffer until the process dies. It is not a latency budget
+#: (`ARCHITECTURE` §15 owns that at 1.5 s); it is the point past which we stop pretending.
+_MAX_BACKLOG_SAMPLES = TARGET_SAMPLE_RATE * 120
+
+#: When nothing has closed a segment for this long, trim anyway. `_trim` otherwise runs
+#: only on a segment close, so a leg where nobody speaks never trims at all. Comfortably
+#: above the 30 s history window and the backlog cap, so this only ever fires on a path
+#: that would otherwise grow without limit.
+_TRIM_WHEN_IDLE_SAMPLES = TARGET_SAMPLE_RATE * 150
 
 
 #: Punctuation Whisper sprinkles into hallucinated Thai. Stripped before the repetition
@@ -237,8 +252,17 @@ class TranscriptionStream:
         #: Samples not yet released, and the absolute index of `_buffer[0]`. A ring buffer
         #: in the sense that matters: it never grows without bound, because everything
         #: before the oldest sample any future segment could need is dropped.
+        #:
+        #: **"Any future segment" includes the ones already queued** (`B20`). The first
+        #: version trimmed to 30 s behind the newest segment the moment it was queued,
+        #: which is correct only while the consumer keeps up. When it lagged, the audio
+        #: was released out from under segments still waiting to be transcribed.
         self._buffer: list[float] = []
         self._base = 0
+        #: The start sample of every queued-but-not-yet-transcribed segment, oldest first.
+        #: One consumer draining in FIFO order (see `_consume`) means the head of this is
+        #: the oldest sample anything still needs, and nothing below it can be reached.
+        self._awaiting: deque[int] = deque()
         #: Leftovers when an incoming frame is not a whole multiple of the VAD's frame
         #: size. Silero is exact about its input length, and telephony framing has no
         #: reason to agree with it.
@@ -282,8 +306,18 @@ class TranscriptionStream:
             self._buffer.extend(chunk)
             segment = self._endpointer.push(self._vad.speech_probability(chunk))
             if segment is not None:
+                self._awaiting.append(segment.start_sample)
                 await self._queue.put(segment)
                 self._trim(segment.end_sample)
+            elif len(self._buffer) > _TRIM_WHEN_IDLE_SAMPLES:
+                # Trimming only on a segment CLOSE leaves one path that never trims at
+                # all: a leg where nobody speaks. No segment closes, so `_trim` is never
+                # called, and the buffer grows for the length of the call — about 30 MB a
+                # minute. Bounded in the intake path only because `hold.py` ends a
+                # recording after `INTAKE_SILENCE_TIMEOUT_S`, which is a bound belonging to
+                # a different object and will not be there when `D26`'s agent leg is
+                # transcribed for a whole call. Found reading the `B20` diff.
+                self._trim(self._base + len(self._buffer))
 
     async def finish(self) -> None:
         """The leg ended. Emit whatever was open and drain the queue.
@@ -296,6 +330,7 @@ class TranscriptionStream:
         self._closed = True
         segment = self._endpointer.flush()
         if segment is not None:
+            self._awaiting.append(segment.start_sample)
             await self._queue.put(segment)
         await self._queue.put(None)
         if self._worker is not None:
@@ -303,18 +338,50 @@ class TranscriptionStream:
             self._worker = None
 
     def _trim(self, consumed_to: int) -> None:
-        """Drop what no future segment can reach back to.
+        """Drop what nothing can reach back to any more.
 
-        Keeping one `max_segment_ms` of history is enough: the furthest any close can look
-        back is the start of the currently-open utterance plus its leading pad.
+        Two claims on the history, and the floor is the older of them (`B20`):
+
+        * the **open utterance**, which can look back one `max_segment_ms` plus its
+          leading pad — the 30 s window this always kept;
+        * every **queued segment the consumer has not reached yet**, whose audio is still
+          owed to the model. That claim is the one the first version did not have, and
+          under an unpaced feed it released a caller's first four sentences before Whisper
+          was ever shown them.
+
+        The backlog is bounded rather than trusted: if the consumer falls further behind
+        than `_MAX_BACKLOG_SAMPLES`, the oldest claims are abandoned **loudly** and their
+        segments will report missing audio in `_slice`. Growing without limit is the other
+        way to lose a call, and `D12` forbids applying backpressure to ingestion — the
+        caller keeps talking whatever the GPU is doing.
         """
-        keep_from = max(self._base, consumed_to - int(TARGET_SAMPLE_RATE * 30))
+        history_floor = consumed_to - int(TARGET_SAMPLE_RATE * 30)
+        while self._awaiting and consumed_to - self._awaiting[0] > _MAX_BACKLOG_SAMPLES:
+            abandoned = self._awaiting.popleft()
+            log.warning(
+                "transcription backlog exceeded - abandoning the audio of a queued segment",
+                call_session_id=self._call_session_id,
+                segment_start_ms=int(abandoned / TARGET_SAMPLE_RATE * 1000),
+                backlog_s=round((consumed_to - abandoned) / TARGET_SAMPLE_RATE, 1),
+            )
+        floor = min(self._awaiting[0], history_floor) if self._awaiting else history_floor
+        keep_from = max(self._base, floor)
         if keep_from > self._base:
             del self._buffer[: keep_from - self._base]
             self._base = keep_from
 
     def _slice(self, segment: SpeechSegment) -> list[float]:
-        start = max(0, segment.start_sample - self._base)
+        """The segment's own audio, or nothing at all — never somebody else's.
+
+        The first version clamped with `max(0, start - base)`. When the audio had been
+        trimmed away that did not return empty, it returned **`_buffer[0:n]`** — a slice of
+        roughly the right length taken from the wrong moment in the call, which transcribes
+        into perfectly plausible Thai attributed to the wrong instant (`B20`). A missing
+        sentence is a gap; a confidently wrong one is on the agent's screen.
+        """
+        if segment.start_sample < self._base:
+            return []
+        start = segment.start_sample - self._base
         end = max(start, segment.end_sample - self._base)
         return self._buffer[start:end]
 
@@ -333,10 +400,25 @@ class TranscriptionStream:
                     call_session_id=self._call_session_id,
                     t_start_ms=segment.t_start_ms,
                 )
+            finally:
+                # Release this segment's claim on the buffer whatever happened to it,
+                # including a failure — a claim that outlives its segment pins the audio
+                # of the whole call and turns one bad utterance into a memory leak.
+                if self._awaiting:
+                    self._awaiting.popleft()
 
     async def _transcribe(self, segment: SpeechSegment) -> None:
         samples = self._slice(segment)
-        if not samples:  # pragma: no cover - only if trimming raced a very long segment
+        if not samples:
+            # Loud on purpose (`B20`). This returned silently for a week, and it is the
+            # path that swallowed four of a caller's six sentences with no drop recorded
+            # by any of the three guards and nothing in the log to look at.
+            log.warning(
+                "no audio left for a segment - it was trimmed before the model reached it",
+                call_session_id=self._call_session_id,
+                t_start_ms=segment.t_start_ms,
+                t_end_ms=segment.t_end_ms,
+            )
             return
 
         # **Never hand Whisper near-silence** (`B14`). Measured on this GPU with
@@ -366,6 +448,17 @@ class TranscriptionStream:
         result = await self._stt.transcribe_utterance(frames, hint=self._hint)
         text = result.text.strip()
         if not text:
+            # Also loud (`B20`). An empty result is a legitimate outcome — the detector
+            # fired on a door slam — but it is indistinguishable from a swallowed sentence
+            # unless it says so, and telling those two apart is most of what a bad CER
+            # investigation consists of.
+            log.info(
+                "the model returned nothing for a segment",
+                call_session_id=self._call_session_id,
+                t_start_ms=segment.t_start_ms,
+                duration_ms=int(segment.duration_ms),
+                rms=round(level, 5),
+            )
             return
         if looks_like_a_loop(text):
             log.info(

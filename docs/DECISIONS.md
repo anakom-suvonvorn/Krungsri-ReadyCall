@@ -1,7 +1,7 @@
 # DECISIONS
 
 _Significant engineering decisions and their rationale. Append new ones at the bottom; never silently reverse one without a new entry explaining why._
-_Last updated: 2026-09-02._
+_Last updated: 2026-09-03._
 
 Format per entry: **Problem → Decision → Reasoning → Alternatives → Tradeoffs → Future.**
 
@@ -2771,3 +2771,38 @@ _The user's idea, in a form the measurements suggested. Closes the gap `B16` exp
     stops being one, and it is one of the more useful things that table can settle.
 - **`Q8` is now half-answered.** The model id is confirmed and the licence is `cc-by-4.0`.
   Pricing does not apply — this is open weights, run locally.
+
+## D100. A transcriber that falls behind loses the OLDEST sentence, loudly, and never guesses
+_The policy half of `B20`. The bug was that the buffer had no owner; this is the rule that
+now decides who it belongs to and what happens when it cannot serve everyone._
+
+- **The constraint that rules out the obvious answer.** `D12` says the call is never
+  blocked on AI, so **backpressure is not available**: we cannot slow ingestion when the
+  model falls behind, because the caller keeps talking whatever the GPU is doing. Frames
+  arrive at wall-clock speed forever. That leaves exactly two ways to fail — grow the
+  buffer until the process dies, or release audio somebody still needs — and `B20` shipped
+  the second one by accident, silently.
+- **Decision, in three parts.**
+  1. **Every queued-but-untranscribed segment holds a claim on the buffer.** The floor is
+     the oldest outstanding claim, not a fixed window behind the newest segment. One
+     consumer draining FIFO makes this a `deque` and a `min`, not a bookkeeping problem.
+  2. **The backlog is bounded at `_MAX_BACKLOG_SAMPLES` (120 s), and reaching it is a
+     `warning`.** Past two minutes behind live audio the model has effectively stopped —
+     the intake recording itself is capped well below that — so the honest choice is to
+     abandon the oldest claim and say so. Silence here would recreate `B20`.
+  3. **The oldest is what goes.** The newest utterance is the one the agent is about to
+     need, and a caller's opening sentence is the one most likely already reflected in the
+     menu path they keyed (`D37`). Dropping the newest to save the oldest would trade a
+     useful sentence for a stale one.
+- **Rejected: `asyncio.Queue(maxsize=...)`.** It is the idiomatic bound and it is exactly
+  wrong here — a bounded queue makes `put` block, which makes `feed` block, which is
+  backpressure on the media path by another name. `D12` again.
+- **Rejected: transcribing in parallel to catch up.** It is the tempting fix for a latency
+  problem and it breaks the ordering guarantee `stream.py` exists to provide: a two-word
+  phrase finishes before the sentence in front of it and the caller's words reach the agent
+  shuffled. If throughput is the problem the answer is a faster engine (`Q29`), not a
+  second consumer.
+- **What this does NOT fix**, stated plainly: the p95 latency is missed by 3-5x with
+  Thonburian medium on this card (`Q29`), and holding the audio correctly does not make the
+  transcript arrive sooner — it only stops it arriving **wrong**. Those are separate
+  problems and this decision is about the second one.

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import math
+from collections.abc import AsyncIterator, Sequence
 
 import pytest
 
@@ -17,7 +18,7 @@ from readycall.clock import ManualClock
 from readycall.domain.enums import SpeakerRole
 from readycall.domain.models import TranscriptTurn
 from readycall.media.audio import TARGET_SAMPLE_RATE
-from readycall.ports.stt import AudioFrame, SttHint
+from readycall.ports.stt import AudioFrame, EngineInfo, SttHint, SttResult
 from readycall.ports.vad import VadInfo
 from readycall.services.transcription.endpointer import EndpointSettings
 from readycall.services.transcription.stream import (
@@ -461,3 +462,170 @@ async def test_an_impossible_rate_never_reaches_the_agent() -> None:
         await stream.feed(audio(20))
     await stream.finish()
     assert got == [], "a physically impossible amount of speech reached the agent"
+
+
+# ---------------------------------------------------------------------------------------
+# `B20`: the buffer released audio out from under segments still waiting for the model.
+# ---------------------------------------------------------------------------------------
+
+
+class MarkerStt:
+    """Reports the AMPLITUDE of the audio it was handed, as text.
+
+    The whole point of `B20` is that the stream fed the model *somebody else's* audio and
+    the result was fluent, plausible and wrong. An engine returning canned text cannot see
+    that — it says the same thing whatever it is given. This one makes the audio itself
+    legible, so the assertion can be "turn 3 carried the audio of segment 3" rather than
+    the much weaker "three turns arrived".
+    """
+
+    def __init__(self) -> None:
+        self.seen: list[int] = []
+
+    @property
+    def info(self) -> EngineInfo:
+        return EngineInfo(name="marker", version="1", device="cpu", model="marker")
+
+    async def transcribe_utterance(
+        self,
+        frames: Sequence[AudioFrame],
+        *,
+        hint: SttHint | None = None,
+    ) -> SttResult:
+        samples = [s for frame in frames for s in frame.samples]
+        marker = round(max(abs(s) for s in samples) * 1000) if samples else 0
+        self.seen.append(marker)
+        return SttResult(text=f"utterance {marker}", engine="marker", engine_version="1")
+
+    def stream(self, frames: AsyncIterator[AudioFrame]) -> AsyncIterator[SttResult]:
+        raise NotImplementedError
+
+    async def warmup(self) -> None:
+        return None
+
+    async def close(self) -> None:
+        return None
+
+
+def flat(ms: float, amplitude: float) -> AudioFrame:
+    """A constant-amplitude block, so a slice can be traced back to the moment it came
+    from. Non-zero everywhere, so it clears the `B14` level gate."""
+    n = int(TARGET_SAMPLE_RATE * ms / 1000.0)
+    return AudioFrame(samples=[amplitude] * n, t_start_ms=0, sample_rate=TARGET_SAMPLE_RATE)
+
+
+async def _run_spaced_call(gap_ms: float) -> tuple[list[TranscriptTurn], MarkerStt]:
+    """Three one-second utterances separated by `gap_ms` of silence, fed as fast as the
+    producer can go — which is what a real call does whenever the GPU falls behind, and
+    exactly what `bake_off.py --fast` does on every run.
+
+    `feed()` never yields to the event loop while the queue is unbounded, so the entire
+    call is ingested before the consumer transcribes a single segment. That is the race,
+    reproduced without a sleep and without a GPU.
+    """
+    got: list[TranscriptTurn] = []
+
+    async def sink(turn: TranscriptTurn) -> None:
+        got.append(turn)
+
+    engine = MarkerStt()
+    stream = TranscriptionStream(
+        call_session_id="call_b20",
+        vad=ScriptedVad(
+            pattern(
+                (0.9, 1000),
+                (0.0, gap_ms),
+                (0.9, 1000),
+                (0.0, gap_ms),
+                (0.9, 1000),
+                (0.0, 500),
+            )
+        ),
+        stt=engine,
+        clock=ManualClock(),
+        on_turn=sink,
+    )
+    await stream.start()
+    # Amplitudes 0.1 / 0.2 / 0.3 mark the three utterances; the gaps are quiet but not
+    # digitally silent, so nothing here depends on the level gate.
+    plan: list[tuple[float, float]] = [
+        (1000, 0.1),
+        (gap_ms, 0.001),
+        (1000, 0.2),
+        (gap_ms, 0.001),
+        (1000, 0.3),
+        (500, 0.001),
+    ]
+    for ms, amplitude in plan:
+        remaining = ms
+        while remaining > 0:
+            step = min(20.0, remaining)
+            await stream.feed(flat(step, amplitude))
+            remaining -= step
+    await stream.finish()
+    return got, engine
+
+
+def test_a_lagging_transcriber_does_not_lose_the_start_of_the_call() -> None:
+    """`B20`. With 40 s between utterances the first segment sits more than the 30 s
+    history window behind the last, so the old `_trim` released its audio while it was
+    still queued. Three utterances went in and one came out, with nothing logged by any
+    of the three guards — which is how it survived a full session of measurement."""
+    got, _ = asyncio.run(_run_spaced_call(gap_ms=40_000))
+    assert [t.text for t in got] == [
+        "utterance 100",
+        "utterance 200",
+        "utterance 300",
+    ], "a segment lost its audio between being queued and being transcribed"
+
+
+def test_each_turn_carries_its_own_audio_and_not_a_neighbour_s() -> None:
+    """The sharper half of `B20`, and the reason it was dangerous rather than merely
+    lossy. `_slice` clamped a trimmed start to zero with `max(0, ...)`, so instead of
+    returning nothing it returned a slice of the right LENGTH from the wrong MOMENT. In
+    Thai that transcribes into a fluent sentence attributed to the wrong instant of the
+    call, and lands on the agent's screen with no way to tell (`D16`'s hazard, one layer
+    down)."""
+    got, engine = asyncio.run(_run_spaced_call(gap_ms=40_000))
+    assert engine.seen == [100, 200, 300], "the model was handed the wrong segment's audio"
+    assert [t.t_start_ms for t in got] == sorted(t.t_start_ms for t in got)
+
+
+def test_the_ordinary_case_still_trims() -> None:
+    """The fix must not turn the ring buffer into an unbounded one. With the consumer
+    keeping up there is nothing outstanding, so the 30 s history rule still applies and a
+    long call does not accumulate its whole audio in memory."""
+    got, _ = asyncio.run(_run_spaced_call(gap_ms=1_000))
+    assert len(got) == 3
+
+
+def test_a_silent_leg_does_not_grow_the_buffer_forever() -> None:
+    """Found reading the `B20` diff, not by the bug itself. `_trim` runs only when a
+    segment CLOSES, so a leg where nobody ever speaks never trims — the buffer grows for
+    the length of the call, roughly 30 MB a minute. Bounded today only by `hold.py`'s
+    silence timeout, which belongs to a different object and will not be there when `D26`'s
+    agent leg is transcribed for a whole call."""
+
+    async def sink(turn: TranscriptTurn) -> None:  # pragma: no cover - nothing is said
+        raise AssertionError("silence produced a turn")
+
+    stream = TranscriptionStream(
+        call_session_id="call_quiet",
+        vad=ScriptedVad([0.0]),
+        stt=MarkerStt(),
+        clock=ManualClock(),
+        on_turn=sink,
+    )
+
+    async def run() -> int:
+        await stream.start()
+        for _ in range(200 * 5):  # 200 s of silence, in 1 s frames
+            await stream.feed(flat(1000, 0.0))
+        held = len(stream._buffer)
+        await stream.finish()
+        return held
+
+    held = asyncio.run(run())
+    assert held < TARGET_SAMPLE_RATE * 200, (
+        f"the buffer kept all {held / TARGET_SAMPLE_RATE:.0f}s of a silent leg"
+    )

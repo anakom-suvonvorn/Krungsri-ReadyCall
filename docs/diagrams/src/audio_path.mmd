@@ -1,5 +1,5 @@
 %% HANDWRITTEN. Checked against ARCHITECTURE.md S6 + S7 + D9 + D21 + D26 + D88 + D96 + D97 + D98
-%% + B7 + B14 + B16 + B18 + B19
+%% + B7 + B14 + B16 + B18 + B19 + B20
 flowchart TB
     subgraph OUT["outside — does not exist yet (P5)"]
         TEL["Asterisk / Twilio<br/>forks EACH LEG separately (D26)"]
@@ -17,6 +17,7 @@ flowchart TB
         EP["endpointer.py — NO model, NO I/O, NO clock<br/>D9's constants live here and are assertable:<br/>0.65 threshold · 500ms speech · 100ms silence<br/>120ms pad BEFORE — the first syllable carries the tone"]
         GATE{{"level gate (B14)<br/>is there any energy in this segment?"}}
         STREAM["stream.py: one consumer, one seq counter<br/>ingestion NEVER waits for the model"]
+        BUF[("the ring buffer OWES audio to every queued segment (B20).<br/>It used to release it 30s behind the NEWEST segment, so when<br/>the model fell behind, the early sentences were gone before<br/>it saw them - and _slice CLAMPED, handing back the wrong<br/>moment at the right length rather than nothing at all.")]
     end
 
     subgraph ENG["adapters"]
@@ -34,6 +35,7 @@ flowchart TB
     WAV --> NORM
     NORM --> GW
     GW -->|"16 kHz frames"| STREAM
+    STREAM --- BUF
     STREAM --> VAD
     VAD --> EP
     E1 -.-> VAD

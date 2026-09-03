@@ -154,7 +154,7 @@ what the endpointer decides and the one thing an accuracy score cannot tell us. 
 consumes `segments.tsv` yet; it is the cheapest remaining measurement in this phase.
 
 **First real numbers**, and they are recorded as unexplained rather than as a verdict:
-Thonburian medium fp16 + Silero over four real calls gives **CER 0.47-0.76**, throughput
+Thonburian medium fp16 + Silero over 12 real calls gives **CER 0.09-0.50, median 0.29** (the earlier 0.47-0.76 was measured through `B20`), throughput
 rtf 0.12, 2.8 GiB of the 3.2 available. Speed and memory are comfortable; accuracy is not.
 ⚠️ **Rank on CER, never WER** (`B18`) — whitespace word error on unsegmented Thai read
 **0.94-1.12** on a model that was working perfectly.
