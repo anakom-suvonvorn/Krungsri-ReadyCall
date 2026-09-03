@@ -276,10 +276,23 @@ async def main() -> int:
     )
     parser.add_argument("--out", default="", help="write the table to a UTF-8 file")
     parser.add_argument(
+        "--dump",
+        default="",
+        help="write REFERENCE vs HYPOTHESIS for every run to a UTF-8 file. A CER is a "
+        "summary of a difference, and twice now this project has ranked models on a "
+        "number nobody had looked behind (`B18`, `B19`). Thai on the Windows console "
+        "kills the process (`B1`), so this goes to a file - never to stdout",
+    )
+    parser.add_argument(
         "--fast",
         action="store_true",
         help="do not pace the audio. Measures THROUGHPUT (rtf); the latency column is "
-        "then meaningless and is printed as n/a",
+        "then meaningless and is printed as n/a. NOTE (`B20`, `D100`): an unpaced feed "
+        "ingests the whole file before the model has finished the first utterance, so the "
+        "stream holds the entire call in its buffer. Past 120 s of audio that reaches "
+        "`_MAX_BACKLOG_SAMPLES` and the oldest segments are abandoned with a warning - so "
+        "--fast is only safe for ACCURACY on files shorter than that. Every latency number "
+        "needs a paced run regardless",
     )
     args = parser.parse_args()
 
@@ -375,6 +388,35 @@ async def main() -> int:
     if args.out:
         Path(args.out).write_text(report + "\n", encoding="utf-8")
         print(f"\nwritten to {args.out}")
+    if args.dump:
+        dump: list[str] = [
+            "REFERENCE vs HYPOTHESIS, per run.",
+            "",
+            "The reference joins only the spans a human annotated as speech; the pipeline",
+            "transcribes everything the detector finds. Read the pair before believing the",
+            "CER above it - the number cannot tell a wrong word from a missing one, and the",
+            "fixes are opposite.",
+            "",
+        ]
+        for r in runs:
+            ref_path = next((f for f in files if f.name == r.audio), None)
+            truth = ""
+            if ref_path is not None and ref_path.with_suffix(".txt").exists():
+                truth = ref_path.with_suffix(".txt").read_text(encoding="utf-8").strip()
+            dump += [
+                "=" * 92,
+                f"{r.engine}   {r.audio}   {r.turns} turns   "
+                + (f"CER {r.cer:.3f}" if r.cer is not None else "CER n/a"),
+                "-" * 92,
+                f"REF  ({len([c for c in truth if not c.isspace()])} chars)",
+                truth or "(no reference)",
+                "",
+                f"HYP  ({len([c for c in r.text if not c.isspace()])} chars)",
+                r.text or "(nothing transcribed)",
+                "",
+            ]
+        Path(args.dump).write_text("\n".join(dump) + "\n", encoding="utf-8")
+        print(f"transcripts written to {args.dump}")
     return 0
 
 
