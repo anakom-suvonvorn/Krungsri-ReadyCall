@@ -225,8 +225,19 @@ customer (if any), product, snapshot and queue.
 > had been waiting for it since `D88` (`D96`). **Still not built**: the encrypted recording
 > to object storage (P7's keys), the live transcript on the workstation, and `D30`'s
 > measured bake-off, which needs real Thai telephone audio rather than a signal generator.
-> **Read `B14` before changing anything in that path** — Whisper fed near-silence costs 8.6
-> seconds and invents domain vocabulary, and three guards exist because of it.
+> **Read `B14`, `B16` and `B18` before changing anything in that path.** Three guards sit
+> between the model and the agent and each exists because of something measured: Whisper
+> fed near-silence costs **8.6 s** and invents domain vocabulary (`B14`); the repetition
+> guard shipped splitting on whitespace and caught **0 of 3** real Thai loops, because
+> **Thai has no spaces** (`B16`); and a caller cannot physically say more than ~15
+> characters a second, measured (`D98`). They are three *different kinds* of check on
+> purpose — a failure that dodges one rarely dodges all three.
+>
+> **The first measurement on real Thai speech** (`D97`, four calls from the 22 GB
+> call-centre dataset): Thonburian medium fp16 + Silero, **CER 0.47-0.76**, rtf 0.12,
+> 2.8 GiB. Speed and memory are comfortable; **accuracy is not, and is not yet
+> explained.** And rank on **CER, never WER** — whitespace word error on unsegmented Thai
+> read 0.94-1.12 on a model that was working fine (`B18`).
 >
 > **Built as of P3 step 4a, down to and including the offer.** `services/ivr/` walks the
 > real menu and hands back a queue; `services/intake/` then acknowledges the wait, makes the
@@ -919,6 +930,9 @@ budget degrades (§16) rather than delaying.
 | Caller presses 2 (no recording) | Menu-derived brief (line + reason are still known); agent screen says intake was declined |
 | No consent | Same as above; nothing is analysed |
 | STT down / low confidence | Recording kept + context brief; transcript marked unavailable; agent gets audio playback |
+| **VAD unavailable** (Silero fails to load) | `EnergyVad` needs no dependencies and endpoints slightly worse. There is no rung below this, which is the point of it existing (`D96`) |
+| **The model returns nonsense** (a loop, our own vocabulary hint, or more speech than was physically possible) | The turn is **refused before the agent sees it** and logged. A thinner brief beats one with invented words in it — those are exactly the words that make a brief look credible (`B14`, `B16`, `D98`) |
+| **One utterance fails to transcribe** | Logged and skipped; the call is untouched. One sentence of the brief is the whole cost (`D12`) |
 | LLM down / times out | Rule-based brief: intent from the **menu** (reliable, not a guess), entities by regex, template summary |
 | Core RO unavailable | Last cached snapshot with a staleness badge; else intent-only brief |
 | Matching unavailable | Default queue, FIFO — i.e. exactly today's behaviour |

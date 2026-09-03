@@ -406,5 +406,55 @@ transcript"*. Most of that now exists (`D96`).
   measure the model's failure modes, not its performance, and that table must not be filled
   from a signal generator.
 
+
+**2026-09-02 (evening) — first contact with real Thai audio, and three of my own bugs.**
+The user supplied a 22 GB dataset of real Thai call-centre calls (`D97`) and three
+transcriptions they had personally seen come out of Thonburian. Both found things.
+
+- **`B16`: the repetition guard did not work on Thai.** It called `.split()`, and **Thai
+  does not put spaces between words** — so all three of the user's real examples are a
+  single 200-character token, the length check failed immediately, and the guard returned
+  `False` before examining anything. **Caught 0 of 3.** The eight tests behind it all passed
+  and all used *spaced* text, because the one hallucination I had personally seen came back
+  punctuated. The suite was internally consistent and validated a Thai guard against text
+  shaped like English. It is character-level now, with the user's three strings as its test
+  data and four "must survive" cases guarding the other direction — Thai reduplicates as a
+  real grammatical feature, and a guard tuned for recall alone deletes sentences nobody ever
+  learns the content of.
+- **`B17`: the default model id was invented.** `biodatlab/whisper-th-medium-combined-ct2`
+  was built from the convention *"the CT2 build is the name plus `-ct2`"*. **It does not
+  exist.** `D30` had already said to re-verify model names at implementation time rather
+  than trust memory; one HTTP request settles it, and I made that request only when the user
+  asked why I was talking about `faster_whisper_tiny` instead of the planned Thai models.
+  Thonburian publishes a transformers checkpoint only, so `scripts/convert_ct2.py` converts
+  it once locally.
+- **`B18`: the accuracy metric could not work on Thai.** The first real run reported WER of
+  **1.000, 1.118, 1.071, 0.941** — over 100% on two of four files, which is only possible
+  when nothing aligns. Whitespace tokens on unsegmented Thai compare one arbitrary
+  segmentation against another. **This file's sibling docstring had described that exact
+  trap two days earlier.** CER is the ranking metric now; WER is retained and labelled.
+- **`B19`: an adapter silently dropped the vocabulary hint.** Testing whether an insurance
+  word list hurts on government-domain audio returned CER *identical to three decimals* with
+  and without it. That is not a finding about domains — it is what an unused argument looks
+  like. `ThonburianHfEngine` reads `hint.language` and ignores `hint.vocabulary`; it warns
+  now, and `prompt_ids` is written down rather than rushed.
+- **`D98`: a third guard, from the user's idea.** They proposed watching how long the model
+  takes relative to the audio. The instinct — a signal from a different axis than the text
+  patterns — is the valuable part. Output length per second of speech is the same idea
+  without needing a per-GPU baseline we would not have on demo day, and the threshold is
+  **measured from the user's own dataset**: 61 annotated segments give a median of 7.6
+  chars/s and a maximum of 15.0, against 39-53 for the three real loops. Ceiling 25. It
+  detects and cannot prevent; the preventer needs `D2`'s killable worker and is not faked.
+- **First real numbers, recorded as unexplained rather than as a verdict.** Thonburian
+  medium fp16 + Silero over four real calls: **CER 0.47-0.76**, rtf 0.12, 2.8 GiB of 3.2.
+  Four candidate reasons are listed in `NEXT_SESSION`, cheapest first, none eliminated.
+- **The pattern across all four bugs is worth more than any of them.** Every one was found
+  by **a measurement or by the user**, and not one by a test. `B14` was *be suspicious of a
+  number that agrees with you*; `B18` is *be equally suspicious of an impossible one*; `B19`
+  is *when an experiment returns exactly no difference, suspect the experiment*; and `B16`
+  is *be most suspicious of a fixture derived from the one example you happened to see*.
+- **numbers now:** 647 tests (605 pass + 42 skipped), 62 diagrams, 9 ports, and the first
+  three real vendor adapters in the project.
+
 _Earlier body text stays as written — it is a record of what was true on 2026-08-25._ Append dated entries here rather than editing the body — this file is a record
 of what was true on 2026-08-25, and the "why" above stays useful even when a number moves._

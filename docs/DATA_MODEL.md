@@ -1,7 +1,7 @@
 # DATA_MODEL
 
 _The two databases, every table, and — most importantly — how the bank's half gets swapped out for the real thing on hackathon day._
-_Status: **partly built as of P2c**. Last updated: 2026-09-01._
+_Status: **partly built as of P2c**. Last updated: 2026-09-02._
 
 > **What is real today (`P2c`, complete):** **nine tables** with an Alembic migration,
 > verified against a live Postgres — `call_sessions`, `call_state_transitions`,
@@ -117,6 +117,18 @@ and a demo must be reproducible even if the upstream source changes.
 | `intake_sessions` | `intake_id`, `call_session_id`, `strategy` (passive/guided/conversational), `started_at`, `ended_at`, `finalize_reason` (customer_done / queue_pop / timeout / error), `is_partial`, `slots_json` |
 | `audio_recordings` | `recording_id`, `call_session_id`, `phase` (intake/live_call), `storage_ref`, `format`, `sample_rate`, `duration_s`, `checksum`, `encryption_key_ref`, `delete_after` |
 | `transcript_turns` | `turn_id`, `call_session_id`, `intake_id?`, `seq`, `speaker_role` (customer/ai/agent), `text`, `t_start_ms`, `t_end_ms`, `asr_confidence`, `engine`, `engine_version`, `is_final`, `created_at` |
+
+> ⚠️ **`transcript_turns` has no table and no ORM model yet.** As of P3 step 4b the audio
+> path *produces* `TranscriptTurn` objects and publishes them on the bus (`D96`), and
+> `IntakeService` holds them for the life of the call — but **nothing persists them**, so a
+> restart loses a transcript in flight. `ARCHITECTURE` §6 asks for incremental writes
+> precisely so a dropped call still leaves usable text; that write is not built. It is a
+> small job (the shape above is exactly the domain model) and it belongs with the encrypted
+> recording, since both are about audio outliving the process.
+>
+> Note `is_final` carries real meaning already: `False` means the endpointer cut the
+> utterance at `max_segment_ms` rather than at a pause, so the caller was still talking and
+> a brief built from it must not read as a finished thought.
 
 Turns are written **incrementally**, so an abandoned call still leaves everything captured so far.
 

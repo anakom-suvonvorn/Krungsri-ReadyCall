@@ -127,7 +127,18 @@ frames keep arriving while Whisper works, and turns stay in order without a sort
 task per segment would transcribe a two-word phrase faster than the sentence before it and
 deliver the caller's words shuffled.
 
-**The two guards after the model are not tidiness, they are `B14`.** Measured on this GPU:
+**The three guards after the model are not tidiness, and each one exists because of
+something measured.** They are three *different kinds* of check on purpose — a failure that
+dodges one rarely dodges all three.
+
+| Guard | Asks | Came from |
+|---|---|---|
+| level gate | is there any energy here at all? | `B14`: 1 s of digital silence cost **8578 ms** against **155 ms** for real speech |
+| repetition | is one chunk repeated until it buries the sentence? | `B16`: the first version split on whitespace and caught **0 of 3** real Thonburian loops, because **Thai has no spaces** |
+| vocabulary echo | is this mostly our own hint handed back? | `B14`: fed silence with the hint, the model returned three of our own terms in our file's order |
+| speech rate | could a human have said this much in that long? | `D98`: **measured** on 61 annotated real Thai segments — median 7.6 chars/s, max 15.0; the real loops are 39-53 |
+
+**The original two, and why they were not enough — `B14`.** Measured on this GPU:
 one second of digital silence costs **8.6 seconds** and comes back with invented Thai — so a
 VAD false positive is a latency bomb, not just a junk turn. And fed a non-speech segment
 with our own vocabulary hint, the model returned three of `config/stt_vocabulary.yaml`'s
@@ -136,7 +147,20 @@ hallucination: the invented words are exactly the domain terms that make a brief
 credible, and the agent cannot tell. It is `D16`'s hazard one layer below where `D16` guards
 it.
 
-**What is not in this picture, and why:** the encrypted recording to object storage (P7's
-key management), the live transcript on the workstation, and any real bake-off number —
-which needs real Thai telephone speech, not a signal generator (`D30`, still open).
+**The dataset changed what can be measured.** 22 GB of real Thai call-centre audio now
+sits outside the repo (`D97`), and its scripts carry per-segment timestamps *including
+explicit `noise` spans* — ground truth for **where nobody is speaking**, which is exactly
+what the endpointer decides and the one thing an accuracy score cannot tell us. Nothing
+consumes `segments.tsv` yet; it is the cheapest remaining measurement in this phase.
+
+**First real numbers**, and they are recorded as unexplained rather than as a verdict:
+Thonburian medium fp16 + Silero over four real calls gives **CER 0.47-0.76**, throughput
+rtf 0.12, 2.8 GiB of the 3.2 available. Speed and memory are comfortable; accuracy is not.
+⚠️ **Rank on CER, never WER** (`B18`) — whitespace word error on unsegmented Thai read
+**0.94-1.12** on a model that was working perfectly.
+
+**What is still not in this picture, and why:** the encrypted recording to object storage
+(P7's key management), the live transcript on the workstation, and a *finished* bake-off
+table — the harness is built and the remaining rows need a CT2 conversion, a `large-v3` run,
+and NeMo for Typhoon (`D30`, still open).
 

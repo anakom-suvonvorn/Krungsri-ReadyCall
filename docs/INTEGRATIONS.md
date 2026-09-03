@@ -1,7 +1,7 @@
 # INTEGRATIONS
 
 _Every external thing the system touches: the port that hides it, the adapters behind it, and the config that selects one._
-_Status: **mostly design; the persistence stack is real.** Last updated: 2026-09-01._
+_Status: **mostly design; the persistence stack and the whole audio path are real.** Last updated: 2026-09-02._
 
 > **Real as of P2c (complete):** SQLAlchemy 2.0 (async) + Alembic + `asyncpg`, against
 > Postgres 16 in `infra/docker-compose.yml`, verified on a live container — **nine tables**,
@@ -114,19 +114,73 @@ class SttEngine(Protocol):
     def info(self) -> EngineInfo: ...  # name, version, device, expected latency
 ```
 
-| Adapter | Model / stack | Notes |
+> **Built as of P3 step 4b (2026-09-02).** The table below now says what exists rather than
+> what was planned, and the names differ from the original sketch — the port method is
+> `transcribe_utterance(frames, hint=...)` taking `AudioFrame`s rather than a raw array, and
+> the classes are `…Engine` not `…Adapter`. Three are real, one is a fake, and the rest are
+> still only names.
+
+| Adapter | Model / stack | Status |
 |---|---|---|
-| **`ThonburianHfAdapter`** ⭐ default | `biodatlab/whisper-th-medium-combined` via `transformers` + `torch` | WER 7.42 on Common Voice 13; the balanced size. Same family the team already ran successfully in the scam project. |
-| **`ThonburianFasterWhisperAdapter`** | the same checkpoint converted to CTranslate2 (`faster-whisper`) | The latency play — several× faster, much lower VRAM. **Likely required on the target hardware** (§2.1). Conversion must be verified. |
-| `ThonburianDistillAdapter` | `biodatlab/distill-whisper-th-medium` / `-large-v3` | Lighter fallback |
-| **`TyphoonAsrAdapter`** | Typhoon's Thai ASR, `mode = api \| local` | First-class alternative to benchmark head-to-head against Thonburian in P3 (`D30`). Model names, licence and pricing to be **re-verified at implementation time**, not trusted from memory. |
-| `CloudSttAdapter` | Google STT / Azure Speech / Gemini | Backup when there's no GPU; a data-residency question in production |
-| `ScriptedSttAdapter` | Replays known transcript turns with realistic timings | Tests, scenario runner, and a stage-safe demo |
+| **`ThonburianHfEngine`** ⭐ the baseline | `biodatlab/whisper-th-medium-combined` via `transformers` + `torch` | **BUILT.** WER 7.42 on Common Voice 13 *(their number, on read speech — ours on real phone audio is much worse, see below)*. ⚠️ **`B19`: it accepts an `SttHint` and silently ignores `hint.vocabulary`.** It warns now; `prompt_ids` is not implemented. |
+| **`FasterWhisperEngine`** | CTranslate2, `int8_float16` | **BUILT.** The latency and VRAM play. ⚠️ **Thonburian publishes no CT2 build** — `biodatlab/whisper-th-medium-combined-ct2` was assumed and **does not exist** (`B17`). `scripts/convert_ct2.py` converts it once, locally. Generic sizes (`tiny`…`large-v3`) need no conversion. |
+| **`TyphoonAsrEngine`** | `scb10x/typhoon-asr-realtime` — **NVIDIA NeMo FastConformer transducer**, `cc-by-4.0` | **BUILT, not installable yet.** Not a Whisper model (`D99`): no 30 s padding, genuinely streaming, and no free-running decoder to hallucinate with — which is exactly why it is worth measuring against `B14`. Needs `nemo_toolkit[asr]`, deliberately **not** in the `ml` extra. |
+| **`ScriptedSttEngine`** | Replays known turns with realistic timings | **BUILT.** Every test, all three scenarios, and the stage-safe demo path. The default (`STT_ENGINE=scripted`). |
+| `ThonburianDistillEngine` | `biodatlab/distill-whisper-th-*` | Named only. A row in the bake-off when somebody runs it. |
+| `CloudSttEngine` | Google / Azure / Gemini | Named only. Backup with no GPU; a data-residency question in production. |
+
+### 2.0 Voice activity — the ninth port (`D96`)
+
+Endpointing was originally folded into "the STT stack". It is its own port, because it is a
+separate vendor model with its own swap and its own bake-off:
+
+```python
+class VoiceActivityDetector(Protocol):
+    @property
+    def frame_samples(self) -> int: ...          # Silero v5 wants EXACTLY 512
+    def speech_probability(self, samples) -> float: ...   # a probability, not a verdict
+    def reset(self) -> None: ...                 # per call — state leaks the first word
+```
+
+| Adapter | Stack | Status |
+|---|---|---|
+| **`SileroVad`** | `silero-vad` package, CPU | **BUILT.** The production detector (`D9`). Loaded from the **installed package**, never `torch.hub` — a network fetch during a live call is unacceptable. CPU on purpose (`D95`): ~1 MB model, and the GPU has 3.2 GiB for Whisper. |
+| **`EnergyVad`** | RMS against an adaptive noise floor. No dependencies. | **BUILT, and load-bearing.** CI installs no extras, so without it the whole audio path would only ever run on one laptop (`B7`'s shape). Doubles as the degradation rung if Silero fails to load. |
+
+**Where the utterance boundary is decided** is `services/transcription/endpointer.py` — a
+machine with **no model, no I/O and no clock**, so `D9`'s inherited constants are assertable
+against a list of floats. The adapters supply probabilities and nothing else.
+
+### 2.0.1 Three guards between the model and the agent
+
+Deliberately three *different kinds*, because a failure that dodges one rarely dodges all
+three. Every one exists because of something measured, not anticipated:
+
+| Guard | Asks | Came from |
+|---|---|---|
+| level gate (before dispatch) | is there any energy in this segment at all? | `B14` — 1 s of digital silence cost **8578 ms** and came back with invented Thai, against **155 ms** for real speech |
+| `looks_like_a_loop` | is one chunk repeated until it buries the sentence? | `B16` — the first version split on whitespace and caught **0 of 3** real Thonburian loops, because **Thai has no spaces** |
+| `echoes_the_prompt` | is this mostly our own vocabulary hint handed back? | `B14` — fed silence with the hint, the model returned three of `stt_vocabulary.yaml`'s terms in that file's own order |
+| `implausible_speech_rate` | could a human have said this much in that long? | `D98`, the user's idea. **Measured** on 61 annotated segments of real Thai: median **7.6** chars/s, max **15.0**; the real loops sit at **39–53**. Ceiling: 25. |
+
+The rate guard **detects but cannot prevent** — the seconds are already spent. The preventer
+is a decode timeout, and it needs the killable worker process `D2` already plans;
+`asyncio.wait_for` around `to_thread` does not kill a thread, so it is **not** faked.
 
 ### 2.1 The hardware reality (RTX 3050 laptop)
 
-The known dev/demo machine is an **RTX 3050 laptop (4–6 GB VRAM)** — the same one that ran Thonburian
-medium for the scam project, so it works, but the streaming latency budget is tight:
+**Measured 2026-09-02, replacing the estimate.** The dev/demo machine is an **RTX 3050 Laptop
+(sm_86)**, driver 581.08, torch `2.11.0+cu128`. The real figure is **4.00 GiB total and about
+3.2 GiB free** — Windows holds the rest — which is tighter than the "4–6 GB" this section used
+to say. Thonburian medium fp16 sits at **~2.8 GiB** and peaks near **3.8** with Silero alongside:
+it fits, with very little room, and `large-v3` probably will not.
+
+⚠️ **`torch` must come from the CUDA index, not PyPI** (`D95`). The PyPI wheel is CPU-only and
+installing it fails **silently** — everything imports, everything runs, Whisper is ten times too
+slow and `cuda.is_available()` is quietly `False`. `pyproject.toml` pins the index; check the
+version string carries `+cu128`.
+
+The streaming latency budget is tight:
 
 - **Whisper pads every chunk to 30 s.** A 3-second utterance costs roughly what a 30-second one does
   under the plain HF pipeline. This is the single biggest reason `faster-whisper`/CTranslate2 matters
@@ -134,12 +188,20 @@ medium for the scam project, so it works, but the streaming latency budget is ti
 - **Do not run a local LLM and Whisper on the same 4–6 GB card.** They will not both fit with room to
   work. The default split is **STT local on the GPU, LLM via API**. If a fully local stack is wanted,
   it needs a bigger card or a second machine.
-- **Benchmark, don't guess.** P3 records real numbers (WER, p95 utterance latency, VRAM) for
-  Thonburian-HF vs Thonburian-CT2 vs distilled vs Typhoon ASR on this exact laptop, and writes them
-  into `PROJECT_STATE.md`. The engine choice follows the table, not the reputation.
+- **Benchmark, don't guess** — and `scripts/bake_off.py` now does it. **First real numbers**
+  (Thonburian medium fp16 + Silero, four real Thai call-centre calls, `D97`): **CER 0.47–0.76**,
+  throughput **rtf 0.12**, **2.8 GiB**. Speed and memory are comfortable; **accuracy is not, and
+  is not yet explained** — four candidate reasons are listed in `NEXT_SESSION`, none eliminated.
+  Do not read 0.6 CER as a verdict on the model; it is a verdict on this pipeline against this
+  reference.
+- ⚠️ **Rank on CER, never WER** (`B18`). Whitespace WER on unsegmented Thai compares one arbitrary
+  segmentation against another and read **0.94–1.12** on a model that was working fine.
+- ⚠️ **The detector is half of any accuracy number** — it decides what the model is even asked to
+  transcribe. Real measurements pass `--vad silero`.
 - Whoever on the team has the strongest GPU should own the demo machine.
 
-Model menu (from the upstream repo, WER on Common Voice 13):
+Model menu (**the upstream repo's own numbers, on read speech — not comparable with ours on
+telephone audio**), WER on Common Voice 13:
 `whisper-th-small-combined` 11.0 · **`whisper-th-medium-combined` 7.42** · `whisper-th-large-combined` 7.69 ·
 `whisper-th-large-v3-combined` 6.59 · `distill-whisper-th-small` 11.2 · `distill-whisper-th-medium` 7.6 ·
 `distill-whisper-th-large-v3` 6.82.
@@ -157,14 +219,26 @@ needs the opposite shape — **streaming, in-memory, incremental** — so:
 | Syllable re-segmentation for subtitles | Turn-level segments with confidence | We need conversational turns, not subtitle lines |
 | CSV/SRT output | `TranscriptTurn` events on the bus + DB rows | Everything downstream is event-driven |
 
-Worth keeping from the reference: the VAD parameters (threshold `0.65`, `min_speech_duration_ms=500`,
-`min_silence_duration_ms=100`) and the **padding trick** (~120 ms before / 60 ms after each segment) —
-that padding measurably helps Whisper not clip the first syllable. Also keep a repetition guard
-(their `postprocess_text` capped runaway repeated tokens — Whisper does that on silence/noise).
+Worth keeping from the reference, and **all of it was kept**: the VAD parameters (threshold
+`0.65`, `min_speech_duration_ms=500`, `min_silence_duration_ms=100`) and the **padding trick**
+(~120 ms before / 60 ms after) now live in `EndpointSettings`, with a test each saying why. The
+repetition guard was kept too — and **shipped broken** (`B16`): it split on whitespace, which is
+useless for Thai. The reference project's own three loop outputs, supplied by the user, are now
+its test data.
 
-Supporting libs: `silero-vad` (ONNX via `onnxruntime`) or `webrtcvad` as a light fallback,
-`numpy`, `soundfile`, `librosa`, `pydub` + system `ffmpeg`, `torchaudio`.
-Optional later: `pyannote.audio` for diarisation once the *live call* (two speakers) is transcribed.
+**What is actually installed** (`uv sync --extra ml`, ~3 GB): `torch` **from the CUDA 12.8
+index**, `transformers`, `faster-whisper` (brings `ctranslate2` and the
+`ct2-transformers-converter` CLI), `onnxruntime` (**CPU build on purpose** — Silero is 1 MB and
+the GPU is scarce), `silero-vad`, `soundfile`. Nothing else in the system needs any of it.
+
+**Deliberately NOT installed:** `nemo_toolkit[asr]` for Typhoon (`D99` — its own `asr` extra when
+somebody runs it), `librosa`/`pydub`/`ffmpeg` (the media layer is **pure Python** so it works in
+CI with no extras — see `media/audio.py`), and `pyannote.audio` (`D26`: legs are forked
+separately, so speaker identity is structural and there is nothing to diarise).
+
+⚠️ **Windows landmine:** CTranslate2 loads cuDNN by name and torch's copy in `torch/lib` is not on
+the DLL search path, so faster-whisper fails with `Could not locate cudnn_ops64_9.dll` — which
+reads like a broken CUDA install and is not. The adapter fixes the search path itself.
 
 ---
 
@@ -421,6 +495,17 @@ of the real system.
 ---
 
 ## 7. Configuration surface (`.env` / `pydantic-settings`)
+
+**The audio path, added at P3 step 4b.** Every one defaults to needing nothing installed:
+
+| Variable | Default | Notes |
+|---|---|---|
+| `STT_ENGINE` | `scripted` | `scripted` · `thonburian_hf` · `thonburian_ct2` (faster-whisper) · `typhoon`/`distill`/`cloud` are named and not built, and **say so in the log** rather than falling back silently |
+| `VAD_ENGINE` | `energy` | `energy` needs nothing and is also the degradation rung; `silero` is the real one (`D9`) and needs the `ml` extra |
+| `STT_MODEL` | `biodatlab/whisper-th-medium-combined` | For `thonburian_ct2` this must be a **local converted directory** (`scripts/convert_ct2.py`), not an HF id (`B17`) |
+| `STT_DEVICE` | `auto` | Resolves to `cuda` when a GPU is genuinely usable, `cpu` otherwise — resolved in `build_stt`, so importing config never imports torch |
+| `STT_COMPUTE_TYPE` | `int8_float16` | int8 weights, fp16 compute. The default because of the measured 4.00 GiB / ~3.2 GiB free (`D95`) |
+
 
 Everything selectable, nothing hardcoded:
 
