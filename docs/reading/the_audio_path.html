@@ -905,8 +905,9 @@ a genuine caller sentence            False   False   </span><span class="hit">re
         <code>n/a</code> until there is a real recording with a real transcript beside it.
       </p>
       <p>
-        To try a real model (downloads about 75 MB the first time):
-        <code>--engines faster_whisper_tiny</code>
+        For a real Thai measurement (see the added section at the end of this page):
+        <code>--engines thonburian --vad silero</code>, and <strong>read the CER column,
+        not WER</strong>.
       </p>
     </li>
 
@@ -941,6 +942,132 @@ a genuine caller sentence            False   False   </span><span class="hit">re
       </div>
     </li>
   </ol>
+</section>
+
+
+<hr class="sep">
+
+<section class="wide">
+  <span class="part">Added 2 September, evening — after your comments</span>
+  <h2>Four things you raised, and what each one turned up</h2>
+
+  <div class="note trap">
+    <strong>Read this before the sections above.</strong> Three of your four comments found
+    a real bug, and two of them are in code described earlier on this page as working.
+  </div>
+
+  <h3>1. Your loop examples broke the guard completely</h3>
+  <p>
+    You pasted three transcriptions you had actually seen from Thonburian —
+    <span class="th">"คนเชื่อถือในการการการการ…"</span> and two like it. I tested the guard
+    described in part four against them.
+  </p>
+  <div class="term wrap">
+<pre><span class="out">users real #1   </span><span class="bad">caught = False</span><span class="out">
+users real #2   </span><span class="bad">caught = False</span><span class="out">
+users real #3   </span><span class="bad">caught = False</span></pre>
+  </div>
+  <p>
+    <strong>It caught none of them.</strong> The guard split the text on spaces — and
+    <strong>Thai does not put spaces between words</strong>, so all three are a single
+    200-character token and it gave up before looking at anything. It only ever worked on
+    the one hallucination I happened to see, which came back with commas in it.
+  </p>
+  <p>
+    It is character-level now: it finds the longest repeating chunk and calls it a loop when
+    that chunk buries most of the sentence. Catches 3 of 3. Four "must survive" cases guard
+    the other direction, because Thai genuinely repeats syllables
+    (<span class="th">เร็วๆ</span>, <span class="th">ค่อยๆ</span>) and a guard that ate real
+    sentences would be worse than no guard.
+  </p>
+
+  <h3>2. Your timing idea — adopted, in a stronger form</h3>
+  <p>
+    Your instinct was to use a signal from a <em>different axis</em> than the text patterns.
+    That is the valuable part and it is right. But decode time needs a baseline per model and
+    per graphics card, which we would barely have on demo day — and time is really just a
+    proxy for <em>how much text came out</em>.
+  </p>
+  <p>
+    So: <strong>characters per second of speech</strong>. Same idea, no calibration, no
+    clock. And your dataset let me measure the threshold instead of guessing it:
+  </p>
+  <div class="tablewrap wrap">
+    <table>
+      <thead><tr><th>Measured over 61 annotated segments</th><th class="num">chars/sec</th></tr></thead>
+      <tbody>
+        <tr><td>real Thai speech, median</td><td class="num">7.6</td></tr>
+        <tr><td>real Thai speech, fastest anyone actually spoke</td><td class="num">15.0</td></tr>
+        <tr><td><em>the ceiling now in the code</em></td><td class="num"><strong>25.0</strong></td></tr>
+        <tr class="emph"><td>your three loop examples</td><td class="num">39 – 53</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note">
+    <strong>What it does not do:</strong> it detects, it cannot prevent. By the time you know
+    the output was impossible, the eight seconds are spent. Actually stopping a runaway needs
+    the model in a separate process that can be killed — which the architecture already plans
+    — so I wrote that down rather than faking it with a timeout that does not work.
+  </p>
+
+  <h3>3. You were right about the models</h3>
+  <p>
+    <code>faster_whisper_tiny</code> was a 75 MB check that the graphics card worked at all,
+    not a candidate. Checking the actual model pages — which I should have done before
+    writing any name down — found that <strong>the model ID I had set as the default does not
+    exist.</strong> I built it from the pattern "the converted version is the name plus
+    <code>-ct2</code>", which is a real convention and not a fact.
+  </p>
+  <p>
+    Also: <strong>Typhoon ASR is not a Whisper model at all.</strong> It is a different
+    architecture entirely (NVIDIA NeMo), which is exactly why it is worth measuring — it does
+    not pad everything to 30 seconds, it genuinely streams, and it has no free-running text
+    generator to hallucinate with. It needs its own large install, so I have written the
+    adapter and left the install for you to approve, same as last time.
+  </p>
+
+  <h3>4. Your dataset — first real numbers, and they are not good yet</h3>
+  <p>
+    22 GB, 3189 real calls, already in exactly the format the pipeline wants. It stays outside
+    the repo and everything derived from it is gitignored: those transcripts have names and
+    account numbers in them.
+  </p>
+  <p>Thonburian on four real calls, with the real detector:</p>
+  <div class="term wrap">
+    <p class="term-label">first measurement on real Thai speech</p>
+<pre><span class="out">engine       turns   rtf   vram MB     CER     WER
+thonburian       3  0.12      2802   </span><span class="bad">0.616</span><span class="out">   1.000
+thonburian       3  0.12      2810   </span><span class="bad">0.759</span><span class="out">   1.000
+thonburian       4  0.12      2825   </span><span class="bad">0.709</span><span class="out">   1.000
+thonburian       3  0.86      2796   </span><span class="bad">0.468</span><span class="out">   0.941</span></pre>
+  </div>
+  <p>
+    <strong>Speed and memory are fine</strong> — about 8× faster than real time, and 2.8 GB
+    of the 3.2 available. <strong>Accuracy is not, and I do not yet know why.</strong> That is
+    the honest state: four candidate explanations are written into the next-steps list,
+    cheapest first, and none is eliminated.
+  </p>
+
+  <div class="note trap">
+    <strong>Two more of my own bugs came out of that one table.</strong>
+    <br><br>
+    <strong>The WER column read 1.000, 1.118, 1.071.</strong> Over 100% error is not a bad
+    result, it is an impossible one — and it was the ruler. Word error rate splits on spaces,
+    which Thai does not have, so it compared one arbitrary chopping-up against another. The
+    ranking metric is character error rate now. My own comment in that file had warned about
+    this exact trap two days earlier.
+    <br><br>
+    <strong>Then I tested whether the insurance word-list hurt on government calls</strong>
+    (your dataset is all government-domain). It gave <em>identical</em> error rates to three
+    decimals, with and without. That is not a finding about domains — it is what an argument
+    that was never used looks like. One of the two engines silently ignores that parameter.
+  </div>
+
+  <p class="note good">
+    <strong>The pattern across all three:</strong> a measurement found each one, and no test
+    could have. Be suspicious of a number that agrees with you, of one that is impossible,
+    and of an experiment that returns exactly no difference.
+  </p>
 </section>
 
 <footer class="end">
