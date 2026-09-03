@@ -34,6 +34,12 @@ used `.split()` on a language with no spaces), `B17` (a model id invented from a
 convention), `B18` (an accuracy metric that cannot work on Thai, reporting 100% error on
 a model that was fine). Read those three before touching the audio path.
 
+**If you are the USER rather than a fresh session, read
+`docs/reading/2026-09-03_what_happened.md` instead of this file.** It explains the whole
+of 3 September from zero — no decision ids, no jargon without a glossary — and ends with
+the two decisions that need your answer. It was written because three terminal summaries
+in a row failed to land, which is a documentation bug, not a user problem.
+
 **Then read `B20`, which is the biggest of them and was found on 2026-09-03.** The
 "unexplained" CER of 0.47-0.76 was not a property of the model at all: `TranscriptionStream`
 **released a segment's audio out of its buffer before the model was ever shown it**, so a
@@ -910,6 +916,7 @@ URL from another conversation creates a duplicate instead.
 | Page | URL |
 |---|---|
 | `reading/the_line.html` — the keypad | https://claude.ai/code/artifact/5953f7a7-d0c4-4829-8cc7-fec2b6f5b856 |
+| `reading/2026-09-03_what_happened.md` — **markdown, not a page.** The 3 September session from zero, with a glossary and the two open decisions. Written for the user after three summaries failed to land | _(a file, no URL)_ |
 | `reading/the_audio_path.html` — the wait ceiling, the GPU, and the audio path, in plain language, **ending in commands that verify each claim** | https://claude.ai/code/artifact/722ddf9f-77bc-410b-8057-7f90a693ec4c |
 | `reading/the_offer.html` — what the intake offer is, in plain language | https://claude.ai/code/artifact/2c6fa04d-089f-4f4c-bfa6-fb4abc95a0af |
 | `reading/persistence.html` — the restart simulator | https://claude.ai/code/artifact/b2a03f9c-01f2-42bc-ae55-3860d901374d |
