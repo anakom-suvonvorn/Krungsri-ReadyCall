@@ -2802,7 +2802,12 @@ now decides who it belongs to and what happens when it cannot serve everyone._
   phrase finishes before the sentence in front of it and the caller's words reach the agent
   shuffled. If throughput is the problem the answer is a faster engine (`Q29`), not a
   second consumer.
-- **What this does NOT fix**, stated plainly: the p95 latency is missed by 3-5x with
-  Thonburian medium on this card (`Q29`), and holding the audio correctly does not make the
-  transcript arrive sooner — it only stops it arriving **wrong**. Those are separate
-  problems and this decision is about the second one.
+- **What this does NOT fix**, stated plainly: paced over 12 real calls the p95 latency runs
+  **4.5 s to 58.7 s** against a 1.5 s budget (`Q29`), and holding the audio correctly does
+  not make the transcript arrive sooner — it only stops it arriving **wrong**. Those are
+  separate problems and this decision is about the second one.
+- **It does, however, make the failure legible**, which is the point of the `warning`. The
+  120 s cap never fired across those 12 calls, so the 58.7 s is an honest end-to-end
+  latency rather than a truncated one. Had this decision gone the other way — bound the
+  buffer silently — the same run would have reported a comfortable latency and a quietly
+  shorter transcript, which is `B20` again wearing a bound.

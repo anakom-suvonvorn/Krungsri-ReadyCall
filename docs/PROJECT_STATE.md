@@ -406,7 +406,7 @@ performing by hand, i.e. what the next services take over (`D36`).
 | GPU, measured (`D95`) | RTX 3050 Laptop, sm_86, **4.00 GiB total / ~3.2 GiB free**, torch 2.11+cu128 |
 | STT latency, measured (`B14`) | faster-whisper `tiny` int8_float16: **155 ms** per utterance with speech in it |
 | **Real Thai accuracy** (`D97`) | Thonburian medium fp16 + Silero, **12** real call-centre calls: **CER 0.09-0.50, median 0.29**, rtf 0.12, **2.8 GiB VRAM**. The earlier **0.47-0.76** was measured through `B20` and is withdrawn. Much of the residual is scoring, not error: the reference writes brand names in Latin script (`True move`) and the model transliterates them into Thai, which CER charges in full (`Q28`). WER is the wrong metric for Thai (`B18`) |
-| **Real Thai latency** (`D30`) | **p95 4.4-7.7 s against a 1.5 s budget** on two calls, paced. This is the open problem, and it was invisible while every run used `--fast` (`B20`). Thonburian medium takes ~3 s per utterance on this card and one consumer serialises them, so a burst of short phrases queues |
+| **Real Thai latency** (`D30`) | Paced over 12 calls: p95 **4.5 s - 58.7 s** against a **1.5 s** budget, and the spread tracks throughput — rtf <= 0.31 gives 4.5-8 s, rtf >= 0.65 gives 31-59 s. Once decode is slower than speech the backlog compounds and the last utterance lands a minute late; **half these calls are in that regime.** Invisible until now because every run used `--fast` (`B20`). No segment was abandoned, so these are honest end-to-end numbers. This is `Q29` and it is what `D30`'s table now decides |
 | Diagrams | 62 (14 generated from source, 48 hand-drawn), across 12 explanation pages |
 
 ---

@@ -238,7 +238,10 @@ customer (if any), product, snapshot and queue.
 > 2.8 GiB. The first version of this number was **0.47-0.76 and wrong** — it was
 > measured through `B20`, which released a segment's audio before the model was shown
 > it, so between a third and a half of every call was silently missing. Accuracy is
-> acceptable; **latency is the open problem** — see §15. And rank on **CER, never WER** — whitespace word error on unsegmented Thai
+> acceptable; **latency is the open problem** — paced over 12 calls, p95 runs **4.5 s to
+> 58.7 s** against §15's 1.5 s, and it tracks throughput: once the engine is slower than
+> real time the backlog compounds for the rest of the call. Half these calls are in that
+> regime on this GPU. See §15 and `Q29`. And rank on **CER, never WER** — whitespace word error on unsegmented Thai
 > read 0.94-1.12 on a model that was working fine (`B18`).
 >
 > **Built as of P3 step 4a, down to and including the offer.** `services/ivr/` walks the

@@ -250,13 +250,32 @@ the PyPI wheel is CPU-only and installing it fails silently.
 **Read `B20` first if you have not.** It rewrote what the rest of this list is about: the
 accuracy problem was ours and is fixed, and the problem that was underneath it is latency.
 
-1. **THE LATENCY — the real open problem** (`Q29`). Paced, on real Thai: **p95 4.4-7.7 s
-   against `ARCHITECTURE` §15's 1.5 s budget.** It was invisible because every measurement
-   used `--fast`, which blanks the latency column — the flag added in `B14` *to stop the
-   harness lying about latency* became the reason nobody measured it. Thonburian medium
-   takes ~3 s per utterance on this card and one consumer serialises them (`D100` says why
-   a second consumer is not the answer), so three short phrases in four seconds queue.
-   **Measure paced. It takes as long as the audio does, and that is the point.**
+1. **THE LATENCY — the real open problem, and it is worse than a missed budget**
+   (`Q29`). Paced over all 12 real calls, p95 utterance-end to turn ranges
+   **4.5 s to 58.7 s** against `ARCHITECTURE` §15's **1.5 s**. It was invisible because
+   every measurement used `--fast`, which blanks the latency column — the flag added in
+   `B14` *to stop the harness lying about latency* became the reason nobody measured it.
+
+   **The distribution is bimodal and it tracks throughput exactly**, which is the
+   actionable part:
+
+  | throughput (rtf) | files | p95 utterance-end -> turn |
+  |---|---|---|
+  | 0.19 - 0.31 | 6 | **4.5 - 8.0 s** |
+  | 0.65 - 0.90 | 5 | **31 - 49 s** |
+  | 1.50 | 1 | **59 s** |
+
+   **This is not "a bit over budget", it is a stability threshold.** Thonburian medium
+   fp16 on this card is at or beyond real time for half these calls, and once decode is
+   slower than speech the transcriber can never catch up — the backlog compounds for the
+   rest of the call and the last utterance arrives a minute late. One consumer serialises
+   by design (`D100` says why a second one is not the fix). **The engine has to get
+   faster**; nothing else in this design can absorb rtf > 1.
+   - `D100`'s 120 s backlog cap **never fired** and no segment was abandoned, so these are
+     honest end-to-end latencies, not truncated ones.
+   - **Do not read the low-rtf rows as the answer.** The same engine produced both halves;
+     what varies is the call.
+   - **Measure paced.** It takes as long as the audio does, and that is the point.
 2. **Finish `D30`'s table, which is now the thing that decides `Q29`** rather than a
    formality. Everything it needs is on this machine.
    ```bash
@@ -413,7 +432,7 @@ Whoever has the strongest GPU should own the demo machine.
 
 | **Q22** | **Does the committed prompt pack carry actual audio once a real voice is chosen?** `D24` calls the checked-in pack the offline fallback, which is the whole reason the IVR works with no internet — but `CLAUDE.md` says never commit audio. That rule means *call recordings*, not TTS output of our own sentences, so the two are probably compatible; 63 short Thai clips is a few MB. Undecided because there is no audio yet. | Manifest only, for now |
 | **Q28** | **The reference mixes scripts, and CER charges us for being right.** The dataset's transcripts write brand and place names in **Latin** (`True move`, `Mezzox Drip Cafe`, `Frosen Khaoyai`, `Router`, `L O S`) while Thonburian correctly transliterates them into Thai (`ทูมู`, `เมโซเอ็กซ์ดิสกาแฟ`, `โฟร์เซนต์ เขา ใหญ่`). Every character of those differs, so a *correct* transcription is scored as a total miss, and on the two worst files that is most of the residual CER. Options: normalise both sides through a transliteration map before scoring (real work, and it can flatter); report CER with those spans excluded and say so; or accept it and treat the number as a floor. **Do not quietly "fix" the reference** — editing ground truth to match the model is how a metric stops meaning anything. | Accepted, and the number is read as a ceiling on error |
-| **Q29** | **The p95 latency budget is missed by 3-5x** and `D30`'s table is the thing that decides what to do. Thonburian medium fp16 takes ~3 s per utterance on this card and one consumer serialises them, so three short phrases in four seconds queue up. Candidates, and they are not exclusive: the **CT2 int8_float16 build** (`scripts/convert_ct2.py`, this is the row that was always meant to decide it), **Typhoon** (a transducer, so no 30 s padding — `D99` says exactly why this might be structural rather than incremental), a **smaller Thonburian**, or accepting a slower transcript because `D12` means the call is never waiting on it. | Not decided; measure before choosing |
+| **Q29** | **The p95 latency runs from 4.5 s to 58.7 s against a 1.5 s budget**, and the spread tracks throughput: at rtf <= 0.31 it is 4.5-8 s, at rtf >= 0.65 it is 31-59 s, because once decode is slower than speech the backlog compounds for the rest of the call. `D30`'s table is the thing that decides what to do. Thonburian medium fp16 takes ~3 s per utterance on this card and one consumer serialises them, so three short phrases in four seconds queue up. Candidates, and they are not exclusive: the **CT2 int8_float16 build** (`scripts/convert_ct2.py`, this is the row that was always meant to decide it), **Typhoon** (a transducer, so no 30 s padding — `D99` says exactly why this might be structural rather than incremental), a **smaller Thonburian**, or accepting a slower transcript because `D12` means the call is never waiting on it. | Not decided; measure before choosing |
 | **Q27** | **The dataset is all `Government` domain, not insurance.** All 3189 calls (`D97`). It measures Thai telephone ASR honestly and says nothing about insurance jargon — and our `stt_vocabulary.yaml` hint is *wrong* for it, which makes it a fair test of whether the hint hurts when it does not apply. An insurance-domain set would still be worth having, and the hackathon may supply one. | Use it, and label the numbers as general Thai |
 | **Q26** | **`Settings.max_wait_before_any_agent_s` is an env var that changes nothing.** The matcher reads `config/matching_weights.yaml`, never `Settings`, so `MAX_WAIT_BEFORE_ANY_AGENT_S=30` in `.env` silently does nothing — and since `D94` it also describes a shape (one number) the system no longer has. It survives only as the bound for a startup coherence check against `target_wait_s`. Delete it, or wire the weights loader to it. Found while writing `D94`. | Left in place, documented |
 | **Q24** | **A health-line caller speaks health data into a recording nobody consented to hold as such.** `D14` makes `health_data` a separate scope; the offer grants only `recording` and `ai_processing` (`D88`). Three options: a third keypress (honest, and it lengthens the longest prompt in the system on the line where callers are most distressed); name the scope in the offer's wording on health lines (one keypress, three scopes); or gate the *extraction* at P4 so health entities are never pulled without it. **Leaning: the second plus the third.** Decide before P4 writes an entity extractor — that is the first code that can breach it. | Not asked for |
@@ -479,7 +498,8 @@ Facts about *this laptop* rather than the repo, so a fresh session does not redi
 - **`--fast` IS NOT A DISPLAY OPTION, IT CHANGES HOW THE SYSTEM IS DRIVEN** (`B20`). It
   was added in `B14` to stop the harness reporting a backlog as a latency, and then every
   subsequent measurement used it — so it hid `B20` *and* hid the fact that the p95 budget
-  is missed by 3-5x. Both halves of a measurement flag are load-bearing.
+  is missed by up to **40x** (4.5-58.7 s against 1.5 s). Both halves of a measurement flag
+  are load-bearing.
 - **A `# pragma: no cover` IS A CLAIM THAT A BRANCH CANNOT HAPPEN** (`B20`). The one on
   `if not samples: return` read "only if trimming raced a very long segment" — a correct
   description of the bug, written before it happened, and then not believed. Treat one as

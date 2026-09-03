@@ -233,6 +233,8 @@
   td.num { text-align: right; font-family: var(--f-mono); font-size: .82rem; }
   tr.emph td { background: var(--trap-bg); }
   tr.emph td.num { color: var(--trap); font-weight: 700; }
+  /* A single cell that is the bad news, without tinting the whole row. */
+  td.bad { color: var(--trap); font-weight: 600; }
 
   .pill {
     display: inline-block;
@@ -1243,25 +1245,51 @@ thonburian       3  0.86      2796   </span><span class="bad">0.468</span><span 
   </p>
   <div class="tablewrap wrap">
     <table>
-      <thead><tr><th></th><th>Target</th><th>Measured</th></tr></thead>
+      <thead><tr><th>How fast the model got through the audio</th><th>Calls</th><th>Delay before the words appear</th></tr></thead>
       <tbody>
         <tr>
-          <td>Time from a caller finishing a sentence to it appearing on screen</td>
-          <td class="num">under 1.5 s</td>
-          <td class="num bad">4.4 – 7.7 s</td>
+          <td>comfortably faster than real time</td>
+          <td class="num">6</td>
+          <td class="num">4.5 – 8 s</td>
+        </tr>
+        <tr>
+          <td>close to real time</td>
+          <td class="num">5</td>
+          <td class="num bad">31 – 49 s</td>
+        </tr>
+        <tr>
+          <td>slower than real time</td>
+          <td class="num">1</td>
+          <td class="num bad">59 s</td>
         </tr>
       </tbody>
     </table>
   </div>
-  <p>
-    <strong>This is now the open problem</strong>, and it is a much better one to have than a
-    mysterious accuracy score. The model takes about three seconds per sentence on this
-    laptop's graphics card, and sentences are handled one at a time, so three short phrases in
-    quick succession queue up behind each other. There are known things to try — a compressed
-    build of the same model, and a different model that does not pad every clip to 30 seconds
-    the way this family does. Both were always planned; now there is a number saying which
-    question they answer.
+  <p class="note">
+    The target is <strong>1.5 seconds</strong>. Every row misses it, and half of the calls miss
+    it by a factor of thirty.
   </p>
+  <p>
+    <strong>The shape of that table matters more than any single number in it.</strong> This is
+    not "a bit slow" — it is a tipping point. As long as the model gets through a sentence
+    faster than the caller can say the next one, it keeps up and the delay stays small. The
+    moment it does not, it can never catch up: it falls further behind with every sentence for
+    the rest of the call, and the last thing the caller said arrives a minute later. On this
+    laptop's graphics card, <strong>half of these real calls are on the wrong side of that
+    line.</strong>
+  </p>
+  <p>
+    So the answer is not to tune anything — it is that <strong>the model has to be faster</strong>.
+    Two things were always planned and now have a number saying what they are for: a compressed
+    build of the same model, and a different model that does not pad every clip out to 30
+    seconds the way this family does.
+  </p>
+  <div class="note good">
+    <strong>These are honest end-to-end numbers.</strong> The safeguard added above — the one
+    that gives up on audio when the model falls more than two minutes behind — never triggered
+    once, and no piece of audio was lost in any of the twelve calls. Both ways of running the
+    measurement now produce identical results, which they never did before.
+  </div>
   <p class="note">
     Worth being clear about the stakes: nothing here delays the actual phone call. The caller
     is connected to a human on a path that never waits for any of this. What a slow transcript

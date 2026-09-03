@@ -888,7 +888,11 @@ the four was the answer._
   | call 1 | 3 turns, CER 0.616 | **6 turns, CER 0.188** |
   | call 2 | 4 turns, CER 0.709 | **7 turns, CER 0.139** |
 
-  and `--fast` and paced now agree exactly, which they never did.
+  and `--fast` and paced now agree exactly, which they never did — **all 12 files agree
+  on turn count** between the two modes, and no segment was abandoned or lost in either.
+
+  The paced run that confirmed it also produced the finding the CER had been hiding: p95
+  latency of **4.5 s to 58.7 s**, tracking throughput, against a 1.5 s budget (`Q29`).
 - **Every recorded CER in this project was measured through this bug** and is wrong. The
   numbers in `PLAN`, `PROJECT_STATE`, `NEXT_SESSION`, `ARCHITECTURE`, `D97` and
   `reading/the_audio_path.html` are corrected in the same commit.

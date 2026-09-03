@@ -497,7 +497,10 @@ was the answer**, and the process of eliminating them is worth more than the con
   investigation went from 3 and 4 turns to 6 and 7, CER 0.616 -> **0.188** and
   0.709 -> **0.139**.
 - **And the finding that matters more.** Running paced — which nothing had done since
-  `--fast` was added — the latency is **p95 4.4-7.7 s against a 1.5 s budget**. `--fast`
+  `--fast` was added — the latency is **p95 4.4-7.7 s against a 1.5 s budget**. *(Corrected
+  the same evening once all 12 calls had been run paced: **4.5 s to 58.7 s**, and it tracks
+  throughput — the two-file sample above happened to be the fast half. Fixed here rather
+  than left as a snapshot because it was wrong when written, not overtaken.)* `--fast`
   was introduced in `B14` *to stop the harness lying about latency*, and then became the
   reason nobody measured it. That is `Q29`, and it is what `D30`'s bake-off table is
   actually for: the CT2 build and Typhoon's lack of 30 s padding (`D99`) are now decisions
