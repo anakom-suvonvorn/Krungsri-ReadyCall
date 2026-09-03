@@ -22,6 +22,7 @@ from readycall.ports.vad import VadInfo
 from readycall.services.transcription.endpointer import EndpointSettings
 from readycall.services.transcription.stream import (
     TranscriptionStream,
+    _longest_repeated_run,
     echoes_the_prompt,
     looks_like_a_loop,
 )
@@ -329,3 +330,61 @@ async def test_a_silent_segment_never_reaches_the_model() -> None:
         await stream.feed(silent)
     await stream.finish()
     assert seen == [], "a silent segment was sent to the model"
+
+
+# --- B16: the loop guard did not work on Thai, which is the language it is for ---------
+#
+# The three strings below are REAL output from the team's earlier Thonburian project on
+# real audio - supplied by the user, not invented here. Every one of them went straight
+# through the first version of the guard, because Thai does not put spaces between words
+# and the guard split on whitespace.
+
+
+REAL_LOOPS = [
+    ("no spaces at all, one 195-char token", "คนเชื่อถือใน" + "การ" * 60),
+    ("a syllable repeated 50 times", "เพื่อ" + "ช่วย" * 50),
+    ("a real sentence that degenerates", "ความต้องการของลูกค้า" + "ความ" * 60),
+]
+
+REAL_SENTENCES = [
+    ("an ordinary spaced sentence", "สวัสดีครับ ผมขอสอบถามเรื่องเคลมรถยนต์ครับ"),
+    ("the same with no spaces, which is how Thai is written", "สวัสดีครับผมขอสอบถามเรื่องเคลมรถยนต์ครับ"),
+    ("Thai reduplication - a real feature of the language", "เดินเร็วๆหน่อยครับ ค่อยๆพูดได้ไหมครับ"),
+    ("politeness particles repeating legitimately", "ครับ ผม เข้าใจ ครับ"),
+]
+
+
+@pytest.mark.parametrize(("label", "text"), REAL_LOOPS, ids=[r[0] for r in REAL_LOOPS])
+def test_a_real_thonburian_loop_is_caught(label: str, text: str) -> None:
+    """`B16`. These are measured failures from real Thai audio, and the guard that shipped
+    caught NONE of them: `text.split()` on unspaced Thai returns one token, the length
+    check fails immediately, and the function returns False before looking at anything.
+
+    A guard that only works on the one language the product is not in is not a guard.
+    """
+    assert looks_like_a_loop(text) is True, f"missed: {label}"
+
+
+@pytest.mark.parametrize(("label", "text"), REAL_SENTENCES, ids=[r[0] for r in REAL_SENTENCES])
+def test_ordinary_thai_survives_the_loop_guard(label: str, text: str) -> None:
+    """The half that matters more. A character-level repetition check is easy to make
+    trigger-happy, and Thai genuinely reduplicates (เร็วๆ, ค่อยๆ) - so a guard tuned for
+    recall alone would delete real sentences and nobody would ever know what was said.
+    """
+    assert looks_like_a_loop(text) is False, f"false positive on: {label}"
+
+
+def test_the_loop_has_to_BURY_the_sentence_not_merely_appear_in_it() -> None:
+    """Coverage, not presence, is what separates a loop from ordinary repetition."""
+    lead = "ความต้องการของลูกค้า"
+    assert looks_like_a_loop(lead + "ความ" * 2) is False, "two repeats is not a loop"
+    assert looks_like_a_loop(lead + "ความ" * 60) is True, "sixty repeats is"
+
+
+def test_the_detector_reports_what_it_found() -> None:
+    """The period and repeat count are useful in a log line: 'a 3-character unit 60 times'
+    says far more about what went wrong than 'looked like a loop'."""
+    covered, period, repeats = _longest_repeated_run("ความ" * 40)
+    assert period == len("ความ")
+    assert repeats == 40
+    assert covered == len("ความ") * 40

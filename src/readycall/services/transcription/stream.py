@@ -78,26 +78,79 @@ def echoes_the_prompt(text: str, hint: SttHint | None) -> bool:
     return from_hint / len(words) >= 0.5
 
 
-def looks_like_a_loop(text: str, *, min_repeats: int = 3) -> bool:
-    """Whisper's silence-loop failure mode, caught before it reaches the agent (`D9`).
+def _longest_repeated_run(text: str, *, max_period: int = 12) -> tuple[int, int, int]:
+    """Find the longest immediately-repeating substring run.
 
-    Fed near-silence or noise, Whisper does not return empty — it returns the same short
-    phrase over and over ("ครับ ครับ ครับ ครับ …"), with a perfectly ordinary confidence
-    score. It is the single most recognisable way this model fails, the reference project
-    hit it, and an agent's screen showing a wall of one repeated word is worse than a
-    screen showing nothing: it looks like the *caller* said that.
+    Returns `(characters covered, period, repeat count)`. A period of 3 repeating 60 times
+    over 180 characters is the signature of a Whisper loop; two repeats of a two-character
+    particle is ordinary Thai.
 
-    Deliberately here rather than in the adapter. Any engine that produces this belongs
-    behind the same guard, and the transcript is what we are protecting, not one vendor.
+    O(n^2) in the worst case and that is fine: these strings are one utterance long, and
+    the alternative (a suffix automaton) is a lot of machinery to save microseconds on a
+    path that already spent 150 ms in a neural network.
     """
+    n = len(text)
+    best = (0, 0, 0)
+    for period in range(1, min(max_period, n // 2) + 1):
+        i = 0
+        while i + period <= n:
+            unit = text[i : i + period]
+            repeats = 1
+            j = i + period
+            while j + period <= n and text[j : j + period] == unit:
+                repeats += 1
+                j += period
+            if repeats >= 2 and repeats * period > best[0]:
+                best = (repeats * period, period, repeats)
+            i = j if repeats >= 2 else i + 1
+    return best
+
+
+def looks_like_a_loop(
+    text: str,
+    *,
+    min_repeats: int = 3,
+    min_coverage: float = 0.45,
+) -> bool:
+    """Whisper's repetition failure, caught before it reaches the agent (`D9`, `B14`, `B16`).
+
+    Fed noise, near-silence, or simply a hard patch of audio, Whisper stops transcribing and
+    starts looping — with a perfectly ordinary confidence score. An agent's screen showing a
+    wall of one repeated word is worse than a blank one: it reads as though the *caller*
+    said that.
+
+    **Two detectors, because Thai broke the first one** (`B16`). The original split on
+    whitespace, which works only when the model happens to punctuate its own nonsense.
+    Real Thonburian output on real audio does not:
+
+        "คนเชื่อถือในการการการการการการ…"      one token, 195 characters, no spaces
+        "เพื่อช่วยช่วยช่วยช่วยช่วย…"              one token
+        "ความต้องการของลูกค้าความความความ…"     one token
+
+    **Thai does not put spaces between words.** A whitespace-token guard is therefore close
+    to useless on the language this system exists for, and the three examples above — real
+    output from the team's earlier project, not hypotheses — all sailed straight through it.
+    So the character-level check is the primary one and the token check is the fallback for
+    output that does happen to be spaced.
+
+    `min_coverage` is what keeps ordinary Thai safe. Reduplication is a real feature of the
+    language (เร็วๆ, ค่อยๆ) and short repeats are normal; a *loop* buries the sentence,
+    covering nearly all of it.
+    """
+    stripped = "".join(ch for ch in text if not ch.isspace())
+    if len(stripped) >= 12:
+        covered, _period, repeats = _longest_repeated_run(stripped)
+        if repeats >= min_repeats and covered / len(stripped) >= min_coverage:
+            return True
+
+    # The spaced case: the model punctuated its own loop, which is what it did on the
+    # silence test that produced `B14`.
     words = [w.strip(_STRIP) for w in text.split()]
     words = [w for w in words if w]
     if len(words) < min_repeats:
         return False
-    # A single token repeated for the whole segment.
     if len(set(words)) == 1:
         return True
-    # Or a short phrase tiled over and over — the more common shape in practice.
     for size in (2, 3):
         if len(words) >= size * min_repeats and len(words) % size == 0:
             chunks = {tuple(words[i : i + size]) for i in range(0, len(words), size)}

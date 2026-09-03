@@ -670,3 +670,48 @@ _Noticed 2026-09-02 while checking what constraints the audio layer had to work 
 - **Still unverified, and stated rather than assumed:** whether CI has actually been failing
   or has simply never run on this repository. The remote exists; the workflow's history was
   not checked from here. Either way the line was wrong.
+
+## B16. The repetition guard did not work on Thai, which is the only language it is for
+_Found 2026-09-02 by the user pasting three real transcriptions from their earlier
+Thonburian project and asking whether we needed to watch out for this._
+
+- **Symptoms:** none, and that is the whole problem. `looks_like_a_loop()` shipped in `B14`
+  with eight passing tests. Every one of those tests used **spaced** text, because the
+  hallucination I had personally observed came back punctuated — the model had put commas
+  in its own nonsense.
+- **What the user supplied**, unprompted, as things they had actually seen:
+
+  ```
+  "คนเชื่อถือในการการการการการการการการ…"        195 chars, ONE token, no spaces
+  "เพื่อช่วยช่วยช่วยช่วยช่วยช่วยช่วย…"              209 chars, ONE token
+  "ความต้องการของลูกค้าความความความความ…"        264 chars, ONE token
+  ```
+
+- **Root cause:** `text.split()`. **Thai does not put spaces between words.** On real
+  Thonburian output the whole utterance is a single token, so `len(words) < min_repeats`
+  was true immediately and the function returned `False` before examining anything.
+  Measured against all three strings before the fix: **caught 0 of 3.**
+- **Why the tests did not catch it:** every fixture was written from the one sample I had
+  seen, and that sample was spaced. The suite was internally consistent and tested the
+  wrong language — a guard for Thai, validated only on text shaped like English.
+- **Fix:** a character-level detector (`_longest_repeated_run`) that finds the longest
+  immediately-repeating substring for periods of 1-12 characters, and calls it a loop when
+  the run covers **≥45% of the utterance** with **≥3 repeats**. The whitespace check is
+  kept as a fallback for the spaced case. Catches 3 of 3.
+- **The half that took the care:** *coverage*, not presence. Thai reduplicates as a genuine
+  grammatical feature (เร็วๆ, ค่อยๆ), and politeness particles repeat legitimately
+  ("ครับ ผม เข้าใจ ครับ"). A guard tuned for recall alone would silently delete real
+  sentences, which is strictly worse than passing a loop through: nobody ever finds out
+  what the caller said. Four "must survive" cases are asserted alongside the three "must
+  catch" ones, including an ordinary sentence written **without spaces**, which is how Thai
+  is actually written.
+- **Lesson.** `B14`'s lesson was *be most suspicious of a number that agrees with you*.
+  This is its sibling: **be most suspicious of a test fixture that was derived from the one
+  example you happened to see.** The eight tests were real, they passed, and they described
+  a failure mode shaped like the wrong language. The fix came from someone who had run this
+  model on real audio for months — which is worth more than any amount of reasoning about
+  what a model "would" do.
+- **Standing consequence:** the repetition guard is now the only part of the audio path
+  with test data drawn from real Thai output rather than from synthesis. Everything else in
+  `B14`'s guards is still validated against tones and against one observed hallucination.
+  The dataset the user supplied (`Q27`) is what changes that.

@@ -394,6 +394,11 @@ Facts about *this laptop* rather than the repo, so a fresh session does not redi
 
 ## Things to be careful about (live landmines)
 
+- **THAI HAS NO SPACES, so any text rule that calls `.split()` is broken by default**
+  (`B16`). The repetition guard shipped doing exactly that and caught **0 of 3** real
+  Thonburian loops the user had actually seen. It is character-level now. Before writing
+  any rule about transcript text, ask what it does on one 200-character token — because
+  that is what real Thai output looks like.
 - **NEVER hand Whisper near-silence** (`B14`). One second of digital silence costs **8.6
   seconds** on this GPU — 55x a real utterance — and comes back with invented Thai. Three
   guards exist and none is optional: a level gate before dispatch, `echoes_the_prompt()`,
