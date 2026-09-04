@@ -3273,6 +3273,74 @@ engine where the transcript is reliably *there*.
 - **`D101`'s packing is now definitively unnecessary.** It existed to reduce the number of
   30-second windows. The chosen engine has none.
 
+### Both of the open questions above are now answered
+
+**1. `D99`'s silence prediction is CONFIRMED, and it is a bigger deal than the accuracy gap.**
+
+| 1 second of... | Typhoon | Whisper, from `B14` |
+|---|---|---|
+| digital silence | **149 ms, empty** | **8578 ms, invented Thai** |
+| quiet line hiss | 131 ms, empty | — |
+| 220 Hz tone | 146 ms, empty | — |
+
+`B14` is the measurement that created all three guards: Whisper fed near-silence spent 55x
+a real utterance's time and returned invented Thai, **including three terms from our own
+vocabulary hint, in the hint's own order**. Typhoon returns nothing, quickly, on every
+non-speech input tried. That removes the failure mode `D16` calls the dangerous kind —
+invented text that looks credible — rather than catching it downstream.
+
+**The three guards stay anyway.** They cost microseconds, they are the degradation path if
+the engine is ever swapped back (`D103` keeps CT2 as the fallback), and "the new engine did
+not do it in four tries" is not the same claim as "it cannot".
+
+**2. The 3 missing turns are real, small, and not what they first looked like.**
+
+All three are `the model returned nothing for a segment` — logging that exists only because
+of `B20`, and would have been invisible two days ago. They are concentrated in **2 calls**;
+the other 18 match CT2 exactly.
+
+The obvious hypothesis was that a transducer needs more than a second of audio before it
+will emit anything. **Tested directly against real annotated spans, and it is false:**
+
+| span duration | spans tried | Typhoon returned empty | CT2 returned empty |
+|---|---|---|---|
+| under 1.0 s | 1 | 0 | 0 |
+| 1.0-1.5 s | 2 | 0 | 0 |
+| 1.5-2.5 s | 12 | 0 | 0 |
+| 2.5-4 s | 12 | 0 | 0 |
+| over 4 s | 12 | 0 | 0 |
+
+(The two shortest buckets are thin — this corpus has few short annotated spans — so the
+sub-1.5 s row is weak evidence, not strong.)
+
+So Typhoon transcribes every span a human marked as speech. The 3 it declined were
+**endpointer-cut fragments** whose boundaries are ours, not a human's. On those, Typhoon
+declines and Whisper guesses. **Which behaviour is better is genuinely not obvious**:
+declining loses content, guessing risks invention, and this project has a bug entry about
+each.
+
+### The weakness that IS real: digits
+
+Splitting the 20 calls by how much of the reference is spoken digits, joined on row order:
+
+| | calls | Typhoon | CT2 | gap |
+|---|---|---|---|---|
+| speech-heavy (<15% digits) | 8 | **0.137** | 0.171 | **-0.034**, Typhoon better |
+| digit-heavy (>=15% digits) | 12 | 0.132 | **0.099** | **+0.033**, Typhoon worse |
+
+A clean crossover, and a 0.067 swing between the two halves. **Typhoon is the better engine
+on conversation and the worse one on numbers** — and on the call where it lost 2 turns, the
+content it lost was part of a spoken phone number (`ห้า สี่ เจ็ด` absent from an otherwise
+near-perfect 235-of-244-character transcript).
+
+**Why this is a caveat and not a reversal.** `B21` established that a phone number is the
+one item on an agent's screen that has to be exact — but the architecture already knows
+that, and does not depend on speech for it. `D44`'s keypad capture is how a policy or
+account number actually arrives, as typed digits with provenance, and `D20`'s ANI gives the
+calling number without anyone saying it. Spoken digits in an intake recording are
+corroboration, not the record. **If that ever stops being true, this decision should be
+re-opened**, and the number to re-check is the digit-heavy row above.
+
 ### The deployment cost, stated plainly
 
 Typhoon needs `nemo_toolkit[asr]`, which is a large install kept in its own `asr` extra

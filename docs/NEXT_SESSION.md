@@ -277,9 +277,22 @@ accuracy problem was ours and is fixed, and the problem that was underneath it i
    `STT_ENGINE=typhoon` (needs the `asr` extra). **CT2 is the documented fallback** for a
    box where NeMo will not install.
 
-   Still open on it: it produces **3 fewer turns** than the Whisper engines (143 vs 146),
-   unexplained; and `D99`'s other prediction — that a transducer should not hallucinate on
-   silence (`B14`) — is untested. The guards stay regardless.
+   **Both of the things left open on it are now answered** (`D104`):
+   - **`D99`'s silence prediction is CONFIRMED.** 1 s of digital silence: Typhoon **149 ms,
+     empty**; Whisper (`B14`) **8578 ms and invented Thai**, including our own hint terms.
+     Same for hiss and a tone. That removes `D16`'s dangerous failure mode rather than
+     catching it downstream. **The three guards stay anyway** — microseconds, and they are
+     the degradation path if the engine is swapped back to the CT2 fallback.
+   - **The 3 missing turns are endpointer-cut fragments, not a short-utterance weakness.**
+     Tested against real annotated spans at every duration: Typhoon returned empty on
+     **0 of 39**. It declines fragments whose boundaries are *ours*; Whisper guesses at
+     them. Which is better is genuinely open.
+   - **The real weakness is digits.** Split by digit share: speech-heavy calls Typhoon
+     **0.137** vs CT2 0.171 (better); digit-heavy calls Typhoon 0.132 vs CT2 **0.099**
+     (worse). A 0.067 swing. Mitigated by architecture rather than by the model — `D44`'s
+     keypad is how a policy number actually arrives and `D20`'s ANI gives the calling
+     number, so spoken digits are corroboration, not the record. **If that stops being
+     true, re-open `D104` and re-check the digit-heavy row.**
 
 2. **~~The CT2 build~~ — now the fallback** (`D103`, superseded as first choice).
    `D30` has its answer, measured paced on the **balanced** 20-call set with both engines

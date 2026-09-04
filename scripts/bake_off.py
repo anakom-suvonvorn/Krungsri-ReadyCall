@@ -463,13 +463,17 @@ async def main() -> int:
         "=" * 110,
         "BAKE-OFF  (`D30`) - p95 is utterance-end to turn; rtf < 1.0 means faster than real time",
         "=" * 92,
-        f"{'engine':<24}{'audio':<20}{'turns':>6}{'p95 ms':>9}{'rtf':>6}"
+        f"{'engine':<24}{'audio':<24}{'turns':>6}{'p95 ms':>9}{'rtf':>6}"
         f"{'busy':>6}{'pad':>6}{'vram':>6}{'CER':>7}{'CERth':>7}{'WER':>7}",
         "-" * 110,
     ]
     for r in runs:
         lines.append(
-            f"{r.engine:<24}{r.audio[:18]:<20}{r.turns:>6}"
+            # The TAIL of the filename, not the head: several calls in this dataset share
+            # their first 18 characters (same customer id, different call), so truncating
+            # from the left produced rows that could not be told apart - and a join on
+            # that label silently collapsed 9 of 20 rows during an analysis.
+            f"{r.engine:<24}{r.audio[-22:]:<24}{r.turns:>6}"
             f"{(f'{r.p95_ms:.0f}' if r.paced else 'n/a'):>9}"
             f"{('n/a' if r.paced else f'{r.realtime_factor:.2f}'):>6}"
             f"{r.busy_fraction:>6.2f}{r.pad_multiple:>6.1f}"
