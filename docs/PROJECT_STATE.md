@@ -45,7 +45,7 @@ caller keys their way through the real menu to the right queue, is offered
 the recording and either takes it or does not, the desk rings, the brief is already there, and
 the disclosure gate moves when the agent attests.
 
-Verified on 2026-09-02: **651 tests** — 605 pass + 42 skipped without the Postgres container
+Verified on 2026-09-02: **662 tests** — 605 pass + 42 skipped without the Postgres container
 (the 42 are the database cases).
 `ruff check` and `ruff format --check` clean over 144 files, `mypy --strict`
 clean over **106** source files, and all three scenarios replay byte-identically. The database
@@ -392,7 +392,7 @@ performing by hand, i.e. what the next services take over (`D36`).
 | | |
 |---|---|
 | Source files | 168 Python files (`src/` 126 + `tests/` + `scripts/` + `mock/`) |
-| Tests | 651, all passing, ~115 s (137 store contract + restart across 3 backends; 56 on the prompt pack and the IVR; 40 on the hold and the intake seam; 41 on matching, 12 of them on the wait ceiling under contention; **61 on the audio path** - 10 on normalisation, 13 on endpointing, 11 on the VAD contract across both detectors, 19 on the transcription stream and 8 on the wiring) |
+| Tests | 662, all passing, ~115 s (137 store contract + restart across 3 backends; 56 on the prompt pack and the IVR; 40 on the hold and the intake seam; 41 on matching, 12 of them on the wait ceiling under contention; **61 on the audio path** - 10 on normalisation, 13 on endpointing, 11 on the VAD contract across both detectors, 19 on the transcription stream and 8 on the wiring) |
 | Ports defined | **9** (telephony, stt, **vad**, llm, tts, core_data, event_bus, blob_storage, agent_directory) - `vad` added by `D96` |
 | Persisted tables | **9** + Alembic, verified on a live Postgres. Presence, the waiting pool and the live identity are deliberately **not** among them (`D78`) |
 | Adapters | 9 fakes/nulls + a caching/circuit-breaking decorator, **plus the first three real ones**: `SileroVad`, `FasterWhisperEngine`, `ThonburianHfEngine` |
@@ -405,7 +405,8 @@ performing by hand, i.e. what the next services take over (`D36`).
 | Generated mock data | 2,000 customers / 2,292 policies / 5,880 interactions (seeded, gitignored) |
 | GPU, measured (`D95`) | RTX 3050 Laptop, sm_86, **4.00 GiB total / ~3.2 GiB free**, torch 2.11+cu128 |
 | STT latency, measured (`B14`) | faster-whisper `tiny` int8_float16: **155 ms** per utterance with speech in it |
-| **Real Thai accuracy** (`D97`) | Thonburian medium fp16 + Silero, **12** real call-centre calls: **CER 0.09-0.50, median 0.29**, rtf 0.12, **2.8 GiB VRAM**. The earlier **0.47-0.76** was measured through `B20` and is withdrawn. Much of the residual is scoring, not error: the reference writes brand names in Latin script (`True move`) and the model transliterates them into Thai, which CER charges in full (`Q28`). WER is the wrong metric for Thai (`B18`) |
+| **Real Thai accuracy** (`D97`, `B21`) | Thonburian medium fp16 + Silero over 12 real call-centre calls: **median CER 0.161, mean 0.171, best 0.009**. Was 0.292/0.302 until `B21` stopped the repetition guard deleting phone numbers (8 of 12 calls improved, none worse, +8 lines). The earlier **0.47-0.76** was measured through `B20` and is withdrawn. Residual is partly scoring, not error - the reference writes brand names in Latin and the model transliterates them into Thai, which the `CERth` column now quantifies (`Q28`). WER is the wrong metric for Thai (`B18`) |
+| **Throughput** (`B21`'s columns) | `busy` = model seconds per second of audio: **0.16-1.48, median 0.45**, one call over 1.00 - and above 1.00 the transcriber never catches up. `pad` = seconds Whisper actually encoded per second of call: **2.2-3.0, median 2.7**, because it pads every clip to a fixed 30 s window. That multiple is the size of the prize for batching |
 | **Real Thai latency** (`D30`) | Paced over 12 calls: p95 **4.5 s - 58.7 s** against a **1.5 s** budget, and the spread tracks throughput — rtf <= 0.31 gives 4.5-8 s, rtf >= 0.65 gives 31-59 s. Once decode is slower than speech the backlog compounds and the last utterance lands a minute late; **half these calls are in that regime.** Invisible until now because every run used `--fast` (`B20`). No segment was abandoned, so these are honest end-to-end numbers. This is `Q29` and it is what `D30`'s table now decides |
 | Diagrams | 62 (14 generated from source, 48 hand-drawn), across 12 explanation pages |
 

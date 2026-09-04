@@ -1,7 +1,7 @@
 # NEXT_SESSION
 
 _The live working state. READ THIS FIRST every session. Keep it short and current._
-_Last updated: 2026-09-03._
+_Last updated: 2026-09-04._
 
 ---
 
@@ -35,7 +35,8 @@ convention), `B18` (an accuracy metric that cannot work on Thai, reporting 100% 
 a model that was fine). Read those three before touching the audio path.
 
 **If you are the USER rather than a fresh session, read
-`docs/reading/2026-09-03_what_happened.md` instead of this file.** It explains the whole
+`docs/reading/2026-09-03_what_happened.md` and then
+`docs/reading/2026-09-04_answers_to_your_notes.md` instead of this file.** It explains the whole
 of 3 September from zero — no decision ids, no jargon without a glossary — and ends with
 the two decisions that need your answer. It was written because three terminal summaries
 in a row failed to land, which is a documentation bug, not a user problem.
@@ -69,7 +70,7 @@ right queue through a real menu hearing real (pre-rendered) Thai — and now, **
 is settled, they are offered the pre-call recording, and take it or
 refuse it or ignore it, all three reaching the same agent**.
 
-Verified **2026-09-03**: **651 tests** — 609 pass + 42 skipped without the Postgres
+Verified **2026-09-03**: **662 tests** — 620 pass + 42 skipped without the Postgres
 container (the 42 are the database cases). `ruff check` + `ruff format --check` clean over 177 files,
 `mypy --strict` clean, all scenarios replay, diagrams current, prompt pack fresh.
 
@@ -437,7 +438,8 @@ Whoever has the strongest GPU should own the demo machine.
 | **Q21** | **Which storage backend does the DEMO run on?** `memory` is the default and needs nothing; `postgres` is what survives a restart, and it is what makes the persistence work visible on stage at all. Running it on the day adds a container to the list of things that can fail, against `PLAN.md`'s risk register — *never depend on the venue*. Leaning: **rehearse on `postgres`, keep `memory` as the one-keystroke fallback**, since both pass the same suite. | Not decided |
 
 | **Q22** | **Does the committed prompt pack carry actual audio once a real voice is chosen?** `D24` calls the checked-in pack the offline fallback, which is the whole reason the IVR works with no internet — but `CLAUDE.md` says never commit audio. That rule means *call recordings*, not TTS output of our own sentences, so the two are probably compatible; 63 short Thai clips is a few MB. Undecided because there is no audio yet. | Manifest only, for now |
-| **Q28** | **The reference mixes scripts, and CER charges us for being right.** The dataset's transcripts write brand and place names in **Latin** (`True move`, `Mezzox Drip Cafe`, `Frosen Khaoyai`, `Router`, `L O S`) while Thonburian correctly transliterates them into Thai (`ทูมู`, `เมโซเอ็กซ์ดิสกาแฟ`, `โฟร์เซนต์ เขา ใหญ่`). Every character of those differs, so a *correct* transcription is scored as a total miss, and on the two worst files that is most of the residual CER. Options: normalise both sides through a transliteration map before scoring (real work, and it can flatter); report CER with those spans excluded and say so; or accept it and treat the number as a floor. **Do not quietly "fix" the reference** — editing ground truth to match the model is how a metric stops meaning anything. | Accepted, and the number is read as a ceiling on error |
+| **Q30** | **The prepared test set is number-heavy.** Almost every call in this corpus ends with a phone number read aloud, so the 12 prepared calls over-represent digits and under-represent ordinary conversation. That was harmless until `B21` **loosened** the repetition guard for digits — the set that would catch a regression from that loosening is exactly the speech-heavy set we do not have. Re-prepare with a deliberate mix (the user raised this; they are right). | Known, not yet fixed |
+| **Q28** | **The reference mixes scripts, and CER charges us for being right.** The dataset's transcripts write brand and place names in **Latin** (`True move`, `Mezzox Drip Cafe`, `Frosen Khaoyai`, `Router`, `L O S`) while Thonburian correctly transliterates them into Thai (`ทูมู`, `เมโซเอ็กซ์ดิสกาแฟ`, `โฟร์เซนต์ เขา ใหญ่`). Every character of those differs, so a *correct* transcription is scored as a total miss, and on the two worst files that is most of the residual CER. Options: normalise both sides through a transliteration map before scoring (real work, and it can flatter); report CER with those spans excluded and say so; or accept it and treat the number as a floor. **Do not quietly "fix" the reference** — editing ground truth to match the model is how a metric stops meaning anything. | **Decided 2026-09-04: one headline + one diagnostic.** `bake_off.py` reports `CER` (the only ranking metric) and `CERth` (Latin spans stripped from both sides). The GAP between them is the answer; three competing scores would just move the argument. Not ranked on `CERth` because that excuses every engine from the words it is most likely to get wrong. **And it does not block the engine choice** — the mismatch hits every engine equally, so it distorts the absolute number, not the ranking |
 | **Q29** | **The p95 latency runs from 4.5 s to 58.7 s against a 1.5 s budget**, and the spread tracks throughput: at rtf <= 0.31 it is 4.5-8 s, at rtf >= 0.65 it is 31-59 s, because once decode is slower than speech the backlog compounds for the rest of the call. `D30`'s table is the thing that decides what to do. Thonburian medium fp16 takes ~3 s per utterance on this card and one consumer serialises them, so three short phrases in four seconds queue up. Candidates, and they are not exclusive: the **CT2 int8_float16 build** (`scripts/convert_ct2.py`, this is the row that was always meant to decide it), **Typhoon** (a transducer, so no 30 s padding — `D99` says exactly why this might be structural rather than incremental), a **smaller Thonburian**, or accepting a slower transcript because `D12` means the call is never waiting on it. | Not decided; measure before choosing |
 | **Q27** | **The dataset is all `Government` domain, not insurance.** All 3189 calls (`D97`). It measures Thai telephone ASR honestly and says nothing about insurance jargon — and our `stt_vocabulary.yaml` hint is *wrong* for it, which makes it a fair test of whether the hint hurts when it does not apply. An insurance-domain set would still be worth having, and the hackathon may supply one. | Use it, and label the numbers as general Thai |
 | **Q26** | **`Settings.max_wait_before_any_agent_s` is an env var that changes nothing.** The matcher reads `config/matching_weights.yaml`, never `Settings`, so `MAX_WAIT_BEFORE_ANY_AGENT_S=30` in `.env` silently does nothing — and since `D94` it also describes a shape (one number) the system no longer has. It survives only as the bound for a startup coherence check against `target_wait_s`. Delete it, or wire the weights loader to it. Found while writing `D94`. | Left in place, documented |
@@ -483,6 +485,36 @@ Facts about *this laptop* rather than the repo, so a fresh session does not redi
 
 ## Things to be careful about (live landmines)
 
+- **THAI DIGIT WORDS LEGITIMATELY REPEAT, AND THE GUARD USED TO EAT THEM** (`B21`).
+  `เก้า` is nine; `0989999934` is five of them in a row and it is a real phone number.
+  Nine of the twelve prepared calls contain a run of 3+ identical digit words, so the old
+  `min_repeats=3` was deleting phone numbers in most calls. `DIGIT_MIN_REPEATS = 10` now
+  applies to digits only. **This is a LOOSENING of a safety guard**, so any change near
+  `looks_like_a_loop` has to re-check both directions: `B16`'s three word-loops must still
+  be caught, and the answer-key phone numbers must still survive. Fixing it moved median
+  CER 0.292 -> 0.161 and recovered 8 lines.
+- **NEVER "COMPRESS" A REPEATED DIGIT RUN** (`B21`). Collapsing `เก้า เก้า เก้า เก้า` to one
+  turns 9999 into 9 — a different, plausible, wrong phone number. A dropped line is
+  visibly missing; a wrong number is not. If the de-duplication idea is built, digits are
+  fenced out of it and so is the case where the loop IS the whole utterance (`B14`: the
+  whole thing was invented, so there is no real prefix to recover).
+- **`rtf` IS MEANINGLESS IN A PACED RUN, AND `busy` IS WHAT IT WAS STANDING IN FOR.**
+  Pacing makes wall time equal the audio length by construction, so rtf would read ~1.00
+  whatever the engine did — the column blanks rather than lie. `busy` (seconds inside the
+  model per second of audio) is meaningful in both modes and **above 1.00 the transcriber
+  can never catch up**. Measured: 0.16-1.48, median 0.45, one call over 1.00.
+- **WHISPER ENCODES A FIXED 30 s WINDOW WHATEVER YOU GIVE IT**, so a 1.5 s clip costs what
+  a 25 s one does. The `pad` column measures it: **2.2-3.0, median 2.7** — we ask the GPU
+  to encode 2.7x more audio than the call contains. That is the size of the prize for
+  batching, and the reference project's speed came from exactly this (`batch_size=4` in
+  `…/STT_Thonburian_Whisper/main.py`). **Batching (several clips, one GPU pass) is safe
+  and changes no output. PACKING (several utterances glued into one clip) is the bigger
+  win and loses per-utterance boundaries — do batching first.**
+- **THE PREPARED TEST SET IS NUMBER-HEAVY AND THAT IS NOW A RISK** (`Q30`). Almost every
+  call in this corpus ends with a phone number read aloud, so the 12 prepared calls
+  over-represent digits. Since `B21` loosened a guard, the set that would catch a
+  regression is exactly the set we do not have: speech-heavy calls. Re-prepare with a
+  deliberate mix before trusting the loosened guard.
 - **THE BUFFER OWES AUDIO TO EVERY QUEUED SEGMENT, NOT JUST TO THE OPEN ONE** (`B20`).
   `_trim` released history 30 s behind the NEWEST segment the moment it was queued, which
   is correct only while the consumer keeps up — and `feed()` never yields, so an unpaced
