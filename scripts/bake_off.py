@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import statistics
 import sys
 import time
 from bisect import bisect_left
@@ -471,8 +472,48 @@ async def main() -> int:
             f"{(f'{r.cer_th:.3f}' if r.cer_th is not None else '-'):>7}"
             f"{(f'{r.wer:.3f}' if r.wer is not None else '-'):>7}"
         )
+    # ---- per-engine aggregate ------------------------------------------------------
+    #
+    # Reported because reading a column of 20 numbers by eye is how a wrong summary gets
+    # quoted, and because **the median is not stable at this sample size**. Two runs of an
+    # identical configuration moved the median CER from 0.087 to 0.124 while the mean went
+    # 0.128 to 0.130 — int8 inference is not bit-reproducible, and with 20 spread-out
+    # samples a couple of them crossing the middle drags the median a long way. Rank on the
+    # MEAN; the median is printed beside it so a large gap between them warns that one call
+    # is doing the talking.
+    by_engine: dict[str, list[Run]] = {}
+    for r in runs:
+        by_engine.setdefault(r.engine, []).append(r)
+
     lines += [
         "-" * 110,
+        "",
+        "PER-ENGINE AGGREGATE  (rank on CER mean - see the note below)",
+        f"{'engine':<40}{'n':>4}{'CER mean':>10}{'CER med':>9}{'CER worst':>11}"
+        f"{'busy med':>10}{'busy worst':>12}",
+        "-" * 110,
+    ]
+    for name, group in by_engine.items():
+        cers = [r.cer for r in group if r.cer is not None]
+        busies = [r.busy_fraction for r in group]
+        lines.append(
+            f"{name[:38]:<40}{len(group):>4}"
+            + (
+                f"{statistics.mean(cers):>10.3f}{statistics.median(cers):>9.3f}{max(cers):>11.3f}"
+                if cers
+                else f"{'-':>10}{'-':>9}{'-':>11}"
+            )
+            + f"{statistics.median(busies):>10.2f}{max(busies):>12.2f}"
+        )
+
+    lines += [
+        "-" * 110,
+        "",
+        "RANK ON THE CER MEAN, not the median. The median is unstable at 20 samples: two",
+        "runs of an IDENTICAL configuration moved it 0.087 -> 0.124 while the mean moved",
+        "0.128 -> 0.130. int8 inference is not bit-reproducible, and a couple of calls",
+        "crossing the middle drags a median a long way. A big mean-vs-median gap means one",
+        "call is dominating - go and read that call in --dump before quoting either number.",
         "",
         "CER is the headline and the ONLY thing engines are ranked on. CERth is the same",
         "score with Latin-script spans removed from both sides - a DIAGNOSTIC, not a second",

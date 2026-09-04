@@ -3098,35 +3098,68 @@ and it mattered more than either of us expected.
 
 ### The 2x2 that `B19` was hiding
 
-CER median, balanced set, same audio and detector throughout:
+Balanced set, same audio and detector throughout. **Mean and median both shown, and the
+mean is the one to read** — see the methodology note below, which cost this entry a
+correction:
 
-| | **unhinted** | **hinted** | hint effect |
+| CER | unhinted (mean / med) | hinted (mean / med) | hint effect, on the mean |
 |---|---|---|---|
-| Thonburian fp16 | **0.089** | 0.101 | +0.011 — slightly *worse* |
-| CT2 `int8_float16` | 0.147 | **0.087** | **-0.060 — much better** |
+| Thonburian fp16 | **0.109** / 0.089 | 0.119 / 0.101 | +0.010 — slightly *worse* |
+| CT2 `int8_float16` | 0.171 / 0.147 | **0.128** / 0.087 | **-0.043 — much better** |
 
 Read the rows and the columns and two separate things fall out:
 
 - **int8 quantisation genuinely costs accuracy.** Unhinted, CT2 is 0.147 against fp16's
   0.089 — 65% relatively worse. `D102` never saw this because its CT2 row had a hint and
   its fp16 row did not, so the penalty was masked by exactly the thing that repairs it.
-- **The prompt repairs it, and then some.** Hinted CT2 is **0.087**, the best cell in the
-  table. The likely mechanism is that a quantised decoder drifts more and the prompt acts
-  as an anchor — which is not a story worth believing on its own, except that the **speed**
-  moves the same way: CT2's worst `busy` goes **0.46 unhinted to 0.11 hinted**. A steadier
-  decoder emits fewer tokens, and fewer tokens is less time. Two independent measurements
-  agreeing is worth more than either.
+- **The prompt repairs most of it, but not all.** Hinted CT2 is 0.128 against fp16
+  unhinted's 0.109 — so int8 still costs about **17% relatively** once both are measured
+  fairly. The likely mechanism for the repair is that a quantised decoder drifts more and
+  the prompt anchors it, which is not a story worth believing on its own — except that the
+  **speed moves the same way**: CT2's worst `busy` goes **0.46 unhinted to 0.11 hinted**. A
+  steadier decoder emits fewer tokens, and fewer tokens is less time. Two independent
+  measurements agreeing is worth more than either alone.
+
+### A correction, and the methodology point behind it
+
+This entry first claimed hinted CT2 was **the best cell on every axis**, on a median of
+0.087 against fp16's 0.089. That was wrong, and the way it was wrong is worth more than the
+number.
+
+**The median is not stable at 20 samples.** Two runs of an *identical* configuration —
+same engine, same audio, same hint, same detector — produced:
+
+| CT2 hinted | CER median | CER mean | turns |
+|---|---|---|---|
+| run 1 (`--fast`) | **0.087** | 0.128 | 146 |
+| run 2 (paced) | **0.124** | 0.130 | 146 |
+
+Turn counts identical and most calls byte-identical: int8 inference is not
+bit-reproducible, and with 20 spread-out samples a couple of calls crossing the middle
+drags the median a long way while barely moving the mean. **On the mean the best accuracy
+cell is fp16 unhinted (0.109), not CT2 hinted (0.128)** — so the trade is real and CT2 is
+not free.
+
+`bake_off.py` now prints a per-engine aggregate with mean, median and worst together, so
+this is not recomputed by hand and a large mean-vs-median gap is visible as a warning that
+one call is doing the talking.
 
 ### Decision
 
-**Ship CT2 `int8_float16` with the vocabulary hint applied.** It is the best cell on every
-axis at once, which is not something a bake-off usually offers:
+**Ship CT2 `int8_float16` with the vocabulary hint applied** — as a deliberate trade, not
+because it wins everywhere:
 
 | | fp16 unhinted | **CT2 hinted** |
 |---|---|---|
-| CER median | 0.089 | **0.087** |
+| CER mean | **0.109** | 0.128 (17% worse) |
 | `busy` median / worst | 0.25 / **1.25** | **0.08 / 0.11** |
+| p95 latency, paced | 19.5 s / 58.7 s worst | **1.68 s / 2.53 s worst** |
 | VRAM | 2716 MB | **~1000 MB** |
+
+**The accuracy cost is real: about 17% relatively.** It is worth paying for the same reason
+`D102` gave, which survives all of today's corrections intact — a transcript slightly less
+accurate is read with more care; a transcript arriving 58 seconds after the caller stopped
+speaking is an empty screen, because `D12` means the agent has already answered.
 
 **The hint is now load-bearing rather than a nicety**, and that changes how
 `config/stt_vocabulary.yaml` must be treated. It was already true that its contents can
@@ -3148,9 +3181,10 @@ large; quantising a medium wins. Recorded so nobody spends the download again.
 
 ### What is still open
 
-- **The paced p95 on the balanced set has not been measured.** `busy` 0.11 says the
-  backlog can no longer compound, so the remaining latency is the fixed per-utterance cost
-  rather than a queue — but the budget is stated as p95 and should be measured as p95.
+- **The paced p95 on the balanced set: 1.68 s median, 2.53 s worst, 7 of 20 calls inside
+  the 1.5 s budget.** `busy` worst 0.13, so the backlog cannot compound and what remains is
+  the fixed per-utterance cost, not a queue. The budget is missed by **1.1-1.7x**, and
+  closing it needs fewer or cheaper windows rather than better scheduling.
 - **Typhoon** (`D99`) is installed and unmeasured. It is the only candidate with no 30 s
   window at all.
 - **Packing** (`D101`) looks unnecessary now: it existed to cut the number of windows, and

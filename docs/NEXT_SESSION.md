@@ -1,7 +1,7 @@
 # NEXT_SESSION
 
 _The live working state. READ THIS FIRST every session. Keep it short and current._
-_Last updated: 2026-09-04 (late)._
+_Last updated: 2026-09-04 (night)._
 
 ---
 
@@ -257,16 +257,21 @@ the PyPI wheel is CPU-only and installing it fails silently.
 **Read `B20` first if you have not.** It rewrote what the rest of this list is about: the
 accuracy problem was ours and is fixed, and the problem that was underneath it is latency.
 
-1. **~~THE LATENCY~~ — largely SOLVED by the CT2 build** (`D102`, closing most of `Q29`).
-   `D30` finally has its answer, measured paced over 12 real calls:
+1. **~~THE LATENCY~~ — largely SOLVED by the CT2 build** (`D103`, closing most of `Q29`).
+   `D30` has its answer, measured paced on the **balanced** 20-call set with both engines
+   treated the same:
 
-   | | Thonburian fp16 | **CT2 int8_float16** |
+   | | Thonburian fp16 | **CT2 int8 + hint** |
    |---|---|---|
-   | p95 median | 19.5 s | **1.65 s** |
-   | p95 worst | 58.7 s | **2.48 s** |
-   | `busy` worst | 1.48 (over 1.00!) | **0.13** |
-   | VRAM | 2731 MB | **1106 MB** |
-   | CER median | 0.161 | 0.182 |
+   | p95 median | 19.5 s | **1.68 s** |
+   | p95 worst | 58.7 s | **2.53 s** |
+   | inside the 1.5 s budget | 0 of 12 | **7 of 20** |
+   | `busy` worst | 1.25 (over 1.00!) | **0.11** |
+   | VRAM | 2716 MB | **~1000 MB** |
+   | CER **mean** | **0.109** | 0.128 (17% worse) |
+
+   **It is a trade, not a free win** — that is the correction `D103` had to make to itself.
+   Ship it anyway: `D12` means a transcript arriving 58 s late is an empty screen.
 
    **The stability problem is gone**: nothing is near `busy` 1.00, so the compounding
    backlog that produced the 23-59 s latencies has no case that triggers it. The 1.5 s
@@ -534,10 +539,30 @@ Facts about *this laptop* rather than the repo, so a fresh session does not redi
 
 ## Things to be careful about (live landmines)
 
-- **THE ENGINE IS THE CT2 BUILD NOW** (`D102`), and it is a **local directory** produced
+- **THE ENGINE IS THE CT2 BUILD NOW** (`D103`), and it is a **local directory** produced
   by `scripts/convert_ct2.py`, not a Hugging Face id — inventing one was `B17`. A fresh
   clone has no `models/` (gitignored), so the conversion is a setup step. It takes about a
   minute when the HF cache is warm and downloads ~1.6 GB when it is not.
+- **RANK ON THE CER *MEAN*, NOT THE MEDIAN** (`D103`). At n=20 the median is unstable:
+  two runs of an IDENTICAL configuration moved it **0.087 -> 0.124** while the mean went
+  0.128 -> 0.130, because int8 inference is not bit-reproducible and a couple of calls
+  crossing the middle drags a median a long way. `bake_off.py` prints both plus the worst;
+  a big mean-vs-median gap means one call is doing the talking, so go read it in `--dump`.
+  **This cost `D103` a self-correction hours after it was written.**
+- **THE TEST SET MOVED THE HEADLINE NUMBER BY 1.8x** (`Q30`, now fixed). Same engine, same
+  code: CER median 0.161 on the digit-heavy set, 0.089 on the balanced one. Phone numbers
+  are the hardest thing in this corpus. **Every accuracy figure recorded before 2026-09-04
+  was measured on the pessimistic set.** The set is now `--mix --seed 7`, 20 calls, digit
+  share 0-49%.
+- **THE VOCABULARY HINT IS LOAD-BEARING NOW** (`B19` fixed, `Q27` answered). It is mildly
+  negative on fp16 (+0.010 CER) and strongly positive on int8 (**-0.043**), and it steadies
+  the decoder enough to move CT2's worst `busy` from 0.46 to 0.11. So
+  `config/stt_vocabulary.yaml` is no longer a nicety: changing it costs accuracy AND still
+  risks `B14`'s echo. Re-measure after touching it.
+- **STT_MODEL IS DELIBERATELY BLANK** (`B23`). The two Thonburian engines want different
+  things from that one field - an HF id for `thonburian_hf`, a local CT2 directory for
+  `thonburian_ct2` - so the only correct default is empty, and a startup check refuses an
+  HF-looking id with the CT2 engine.
 - **`close()` MUST FREE THE DEVICE MEMORY, NOT JUST THE OBJECT** (`B22`). Dropping the
   reference leaves the weights in torch's caching allocator, so the driver still counts
   them: a second engine in the same process is measured against a polluted baseline and,
