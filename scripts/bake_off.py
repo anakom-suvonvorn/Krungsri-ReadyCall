@@ -118,6 +118,37 @@ def character_error_rate(reference: str, hypothesis: str) -> float:
     return _levenshtein(ref, hyp) / len(ref)
 
 
+def _strip_latin_runs(text: str) -> str:
+    """Remove Latin-script runs (and the digits/punctuation inside them).
+
+    `Q28`: the dataset's human transcripts write brand and place names in Latin —
+    `True move`, `Mezzox Drip Cafe`, `Frosen Khaoyai`, `Router`, `L O S` — while the model
+    correctly writes them in Thai (`ทูมู`, `เมโซเอ็กซ์ดิสกาแฟ`). Every character differs, so a
+    RIGHT answer is charged as a total miss.
+    """
+    out: list[str] = []
+    for ch in text:
+        if "a" <= ch.lower() <= "z":
+            continue
+        out.append(ch)
+    return "".join(out)
+
+
+def thai_only_cer(reference: str, hypothesis: str) -> float:
+    """CER with Latin-script spans removed from BOTH sides (`Q28`).
+
+    **This is a diagnostic, not a second ranking metric, and the distinction matters.**
+    Reported beside the headline CER so the gap between them says how much of the error is
+    the script mismatch rather than the model. A large gap means the headline is pessimistic
+    and by roughly how much; a small gap means the headline is what it looks like.
+
+    It is deliberately NOT what engines are ranked on. Ranking on it would mean quietly
+    excluding the words the model is most likely to get wrong, which flatters every engine
+    equally and hides a real weakness — an insurance line will hear brand names too.
+    """
+    return character_error_rate(_strip_latin_runs(reference), _strip_latin_runs(hypothesis))
+
+
 def word_error_rate(reference: str, hypothesis: str) -> float:
     """WER over whitespace tokens. Kept, reported second, and **not** what to judge Thai on.
 
@@ -149,6 +180,47 @@ def vram_in_use_mb() -> float | None:
         return None
 
 
+#: Whisper encodes a fixed 30 s window whatever you hand it (`D99`). One second of
+#: speech and twenty-nine seconds of zero padding cost the same as a full window, so the
+#: number of CALLS matters far more than their length.
+WHISPER_WINDOW_S = 30.0
+
+
+class TimedEngine:
+    """Wraps an engine to measure how long it is actually busy, and how often it is asked.
+
+    Both numbers are invisible from outside. Wall-clock time in a paced run tells you only
+    that pacing worked; what decides whether this design keeps up is the fraction of the
+    call the GPU spends inside the model, and that has to be timed at the call site.
+    """
+
+    def __init__(self, inner: SttEngine) -> None:
+        self._inner = inner
+        self.busy_s = 0.0
+        self.calls = 0
+
+    @property
+    def info(self) -> object:
+        return self._inner.info
+
+    async def transcribe_utterance(self, frames, *, hint=None):  # type: ignore[no-untyped-def]
+        started = time.perf_counter()
+        try:
+            return await self._inner.transcribe_utterance(frames, hint=hint)
+        finally:
+            self.busy_s += time.perf_counter() - started
+            self.calls += 1
+
+    def stream(self, frames):  # type: ignore[no-untyped-def]
+        return self._inner.stream(frames)
+
+    async def warmup(self) -> None:
+        await self._inner.warmup()
+
+    async def close(self) -> None:
+        await self._inner.close()
+
+
 @dataclass
 class Run:
     engine: str
@@ -160,7 +232,11 @@ class Run:
     wall_s: float = 0.0
     vram_mb: float | None = None
     cer: float | None = None
+    cer_th: float | None = None
     wer: float | None = None
+    #: Seconds spent inside the model, and how many times it was called (`WHISPER_WINDOW_S`).
+    busy_s: float = 0.0
+    model_calls: int = 0
 
     @property
     def p95_ms(self) -> float:
@@ -178,9 +254,27 @@ class Run:
     def realtime_factor(self) -> float:
         return self.wall_s / self.audio_s if self.audio_s else 0.0
 
+    @property
+    def busy_fraction(self) -> float:
+        """Seconds in the model per second of audio. **The number that decides whether
+        this keeps up**, and the one `rtf` was a proxy for. Above 1.00 the transcriber
+        falls further behind with every sentence and never recovers, which is the shape
+        behind the 23-59 s latencies in the paced run. Unlike `rtf` it is meaningful
+        whether or not the feed was paced."""
+        return self.busy_s / self.audio_s if self.audio_s else 0.0
+
+    @property
+    def pad_multiple(self) -> float:
+        """How many seconds of audio Whisper actually encoded per second of real call.
+
+        Every call to the model encodes a full 30 s window even for a one-second
+        utterance, so this is `30 x calls / audio seconds`. It is the size of the prize
+        for batching several utterances into one window before dispatching."""
+        return WHISPER_WINDOW_S * self.model_calls / self.audio_s if self.audio_s else 0.0
+
 
 async def transcribe_file(
-    engine: SttEngine,
+    engine: TimedEngine,
     vad: VoiceActivityDetector,
     path: Path,
     *,
@@ -191,6 +285,7 @@ async def transcribe_file(
 ) -> Run:
     source = WavFileSource(path)
     run = Run(engine=engine_name, audio=path.name, audio_s=source.duration_s)
+    before_busy, before_calls = engine.busy_s, engine.calls
     parts: list[str] = []
     # (audio position in ms, wall clock when we had fed that far). A turn ending at
     # `t_end_ms` is dated back to the moment the caller had actually finished saying it,
@@ -217,7 +312,7 @@ async def transcribe_file(
     stream = TranscriptionStream(
         call_session_id=f"bake_{path.stem}",
         vad=vad,
-        stt=engine,
+        stt=engine,  # type: ignore[arg-type]
         clock=SystemClock(),
         on_turn=sink,
         hint=hint,
@@ -244,12 +339,15 @@ async def transcribe_file(
     await stream.finish()
     run.wall_s = time.perf_counter() - started
     run.paced = realtime
+    run.busy_s = engine.busy_s - before_busy
+    run.model_calls = engine.calls - before_calls
     run.text = " ".join(parts)
 
     reference = path.with_suffix(".txt")
     if reference.exists():
         truth = reference.read_text(encoding="utf-8").strip()
         run.cer = character_error_rate(truth, run.text)
+        run.cer_th = thai_only_cer(truth, run.text)
         run.wer = word_error_rate(truth, run.text)
     return run
 
@@ -320,7 +418,7 @@ async def main() -> int:
 
     runs: list[Run] = []
     for name in args.engines:
-        engine = build_engine(name)
+        engine = TimedEngine(build_engine(name))
         vad: VoiceActivityDetector = EnergyVad()
         if args.vad == "silero":
             from readycall.adapters.vad.silero import SileroVad
@@ -355,24 +453,43 @@ async def main() -> int:
 
     lines = [
         "",
-        "=" * 92,
+        "=" * 110,
         "BAKE-OFF  (`D30`) - p95 is utterance-end to turn; rtf < 1.0 means faster than real time",
         "=" * 92,
-        f"{'engine':<26}{'audio':<22}{'turns':>6}{'p95 ms':>9}{'rtf':>7}"
-        f"{'vram MB':>9}{'CER':>8}{'WER':>8}",
-        "-" * 92,
+        f"{'engine':<24}{'audio':<20}{'turns':>6}{'p95 ms':>9}{'rtf':>6}"
+        f"{'busy':>6}{'pad':>6}{'vram':>6}{'CER':>7}{'CERth':>7}{'WER':>7}",
+        "-" * 110,
     ]
     for r in runs:
         lines.append(
-            f"{r.engine:<26}{r.audio[:20]:<22}{r.turns:>6}"
+            f"{r.engine:<24}{r.audio[:18]:<20}{r.turns:>6}"
             f"{(f'{r.p95_ms:.0f}' if r.paced else 'n/a'):>9}"
-            f"{('n/a' if r.paced else f'{r.realtime_factor:.2f}'):>7}"
-            f"{(f'{r.vram_mb:.0f}' if r.vram_mb is not None else '-'):>9}"
-            f"{(f'{r.cer:.3f}' if r.cer is not None else '-'):>8}"
-            f"{(f'{r.wer:.3f}' if r.wer is not None else '-'):>8}"
+            f"{('n/a' if r.paced else f'{r.realtime_factor:.2f}'):>6}"
+            f"{r.busy_fraction:>6.2f}{r.pad_multiple:>6.1f}"
+            f"{(f'{r.vram_mb:.0f}' if r.vram_mb is not None else '-'):>6}"
+            f"{(f'{r.cer:.3f}' if r.cer is not None else '-'):>7}"
+            f"{(f'{r.cer_th:.3f}' if r.cer_th is not None else '-'):>7}"
+            f"{(f'{r.wer:.3f}' if r.wer is not None else '-'):>7}"
         )
     lines += [
-        "-" * 92,
+        "-" * 110,
+        "",
+        "CER is the headline and the ONLY thing engines are ranked on. CERth is the same",
+        "score with Latin-script spans removed from both sides - a DIAGNOSTIC, not a second",
+        "ranking (`Q28`). The reference writes brand names in Latin (True move, Router) and",
+        "the model correctly transliterates them into Thai, so a right answer is charged in",
+        "full. The GAP between the two columns is how much of the error is that mismatch.",
+        "Ranking on CERth would excuse every engine from the words it is most likely to get",
+        "wrong, equally, which hides a real weakness rather than measuring it.",
+        "",
+        "busy = seconds inside the model per second of audio. THE number that decides whether",
+        "this keeps up: above 1.00 the transcriber falls further behind every sentence and",
+        "never recovers. Meaningful in BOTH modes, unlike rtf, which is blank in a paced run",
+        "because pacing makes wall time equal the audio length by construction.",
+        "",
+        "pad = seconds Whisper actually ENCODED per second of call. It pads every clip to 30 s,",
+        "so twelve one-second utterances cost twelve full windows. This is the size of the",
+        "prize for batching utterances into one window before dispatch.",
         "",
         "The budget (`ARCHITECTURE` S15): utterance end -> turn, p95 < 1.5 s.",
         "Audio is PACED at wall-clock speed by default, because an unpaced feed queues every",

@@ -629,3 +629,65 @@ def test_a_silent_leg_does_not_grow_the_buffer_forever() -> None:
     assert held < TARGET_SAMPLE_RATE * 200, (
         f"the buffer kept all {held / TARGET_SAMPLE_RATE:.0f}s of a silent leg"
     )
+
+
+# ---------------------------------------------------------------------------------------
+# `B21`: the repetition guard was deleting real Thai phone numbers.
+#
+# Every string below is taken from the project's own data, not invented. The "must
+# survive" digit runs are read straight out of the answer keys in
+# tests/audio/thai_calls/*.txt; the drops are lines the guard actually refused on the
+# user's own run, pasted from their terminal.
+# ---------------------------------------------------------------------------------------
+
+#: Real phone numbers from the dataset's human transcripts, with the longest run of one
+#: repeated digit word in each. 0989999934 is `เก้า` FIVE times and it is a real number.
+REAL_PHONE_NUMBERS = [
+    ("0989999934", "ศูนย์ เก้า แปด เก้า เก้า เก้า เก้า สาม สี่"),
+    ("0817999998", "ศูนย์ แปด หนึ่ง เจ็ด เก้า เก้า เก้า เก้า เก้า แปด"),
+    ("0989999449", "ศูนย์ เก้า แปด เก้า เก้า เก้า เก้า สี่ สี่ เก้า"),
+    ("0659459935", "ศูนย์ หก ห้า เก้า สี่ ห้า เก้า เก้า สาม ห้า"),
+    ("unspaced 99999", "ศูนย์เก้าแปดเก้าเก้าเก้าเก้าสามห้า"),
+]
+
+
+@pytest.mark.parametrize(("label", "text"), REAL_PHONE_NUMBERS)
+def test_a_real_phone_number_is_not_a_loop(label: str, text: str) -> None:
+    """`B21`. Three separate calls in the dataset contain a run of FIVE identical digit
+    words, because that is what 0989999934 sounds like read aloud. The general threshold
+    of three repeats was deleting them, and a phone number is the one thing on an agent's
+    screen that has to be exact."""
+    assert not looks_like_a_loop(text), f"deleted a real phone number: {label}"
+
+
+#: Lines the guard refused during the user's own bake-off run. Each is the first 40
+#: characters, which is all the log records.
+DROPPED_ON_A_REAL_RUN = [
+    "เก้า เก้า เก้า",
+    "เก้า เก้า เก้า แปด",
+    "เก้า เก้า เก้า ก้",
+    "เก้า เก้า เก้า เก้า หก้ง เก้า เก้ด",
+]
+
+
+@pytest.mark.parametrize("text", DROPPED_ON_A_REAL_RUN)
+def test_the_digit_lines_the_guard_used_to_eat_now_survive(text: str) -> None:
+    """These are real refusals from a real run. Every one of them is a fragment of a phone
+    number the caller was reading out, and every one of them was thrown away."""
+    assert not looks_like_a_loop(text)
+
+
+def test_a_digit_loop_is_still_caught_when_it_is_actually_a_loop() -> None:
+    """The exemption is not a licence. Ten digits is the arithmetic ceiling on a real
+    Thai mobile number, so beyond that a repeated digit is the model looping like any
+    other token — and `B14`'s failure mode does not care which word it picks."""
+    assert looks_like_a_loop("เก้า " * 30)
+    assert looks_like_a_loop("เก้า" * 30)
+
+
+def test_the_exemption_is_only_for_digits() -> None:
+    """A non-digit word repeating three times is still a loop. `B16`'s three real
+    Thonburian failures must keep being caught, and they are the reason the general
+    threshold is where it is."""
+    assert looks_like_a_loop("ความ ความ ความ ความ")
+    assert looks_like_a_loop("การ" * 20)

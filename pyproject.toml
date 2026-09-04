@@ -35,6 +35,9 @@ ml = [
     "silero-vad>=5.1",
     "soundfile>=0.12",
 ]
+asr = [
+    "nemo-toolkit[asr]>=2.0",
+]
 
 [dependency-groups]
 dev = [

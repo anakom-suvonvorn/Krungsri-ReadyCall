@@ -71,6 +71,46 @@ _TRIM_WHEN_IDLE_SAMPLES = TARGET_SAMPLE_RATE * 150
 _STRIP = " \t\n.,!?;:'\"()[]{}<>-" + "".join(chr(c) for c in (0x2013, 0x2014, 0x2026))
 
 
+#: The Thai digit words, spoken one at a time — how anyone reads out a phone number.
+#:
+#: **This is a fact about the language, not about insurance**, so it belongs here rather
+#: than in `config/` — the same reasoning that puts `_STRIP` above and the "Thai has no
+#: spaces" rule in this file. `D28` bans *domain* literals in `services/`; a numeral is
+#: not one. `โท` is included because Thai speakers say it for 2 specifically when reading
+#: digits aloud, to avoid confusion with `สาม`.
+_THAI_DIGIT_WORDS = frozenset(
+    {
+        "ศูนย์",  # 0
+        "หนึ่ง",  # 1
+        "เอ็ด",  # 1, in compounds
+        "สอง",  # 2
+        "โท",  # 2, when read as a digit
+        "สาม",  # 3
+        "สี่",  # 4
+        "ห้า",  # 5
+        "หก",  # 6
+        "เจ็ด",  # 7
+        "แปด",  # 8
+        "เก้า",  # 9
+    }
+)
+
+#: How many times the SAME digit word may repeat before it stops being a phone number
+#: and starts being a loop (`B21`).
+#:
+#: **Measured against the dataset's own answer keys.** Real Thai phone numbers in the 12
+#: prepared calls contain runs of up to **five** identical digit words — `0989999934` is
+#: `เก้า` five times in a row, and there are three separate calls with a run of five. The
+#: general `min_repeats` of 3 was therefore deleting real customer phone numbers, which is
+#: close to the worst single thing this system could do to a transcript: the number is the
+#: one item on the agent's screen that has to be exact.
+#:
+#: 10 is deliberately generous. A Thai mobile number is 10 digits, so ten identical
+#: digits is the arithmetic ceiling on a legitimate run; a Whisper loop repeats dozens of
+#: times, so nothing that matters is given up by being lenient here.
+DIGIT_MIN_REPEATS = 10
+
+
 def echoes_the_prompt(text: str, hint: SttHint | None) -> bool:
     """Whisper handing our own vocabulary hint back as if the caller had said it (`B14`).
 
@@ -143,19 +183,19 @@ def implausible_speech_rate(
     return len(stripped) / (duration_ms / 1000.0) > max_chars_per_second
 
 
-def _longest_repeated_run(text: str, *, max_period: int = 12) -> tuple[int, int, int]:
-    """Find the longest immediately-repeating substring run.
+def _longest_run(text: str, *, max_period: int = 12) -> tuple[int, int, int, int]:
+    """`(characters covered, period, repeat count, start index)` for the longest run.
 
-    Returns `(characters covered, period, repeat count)`. A period of 3 repeating 60 times
-    over 180 characters is the signature of a Whisper loop; two repeats of a two-character
-    particle is ordinary Thai.
+    The start index is what lets a caller recover the repeating **unit** itself, which
+    `B21` needs: a run of `เก้า` is somebody reading a phone number and a run of `การ` is
+    the model having stopped transcribing, and they cannot be told apart by counting.
 
     O(n^2) in the worst case and that is fine: these strings are one utterance long, and
     the alternative (a suffix automaton) is a lot of machinery to save microseconds on a
     path that already spent 150 ms in a neural network.
     """
     n = len(text)
-    best = (0, 0, 0)
+    best = (0, 0, 0, 0)
     for period in range(1, min(max_period, n // 2) + 1):
         i = 0
         while i + period <= n:
@@ -166,9 +206,26 @@ def _longest_repeated_run(text: str, *, max_period: int = 12) -> tuple[int, int,
                 repeats += 1
                 j += period
             if repeats >= 2 and repeats * period > best[0]:
-                best = (repeats * period, period, repeats)
+                best = (repeats * period, period, repeats, i)
             i = j if repeats >= 2 else i + 1
     return best
+
+
+def _longest_repeated_run(text: str, *, max_period: int = 12) -> tuple[int, int, int]:
+    """`(characters covered, period, repeat count)`. See `_longest_run`."""
+    covered, period, repeats, _start = _longest_run(text, max_period=max_period)
+    return covered, period, repeats
+
+
+def _repeats_needed(unit: str, default: int) -> int:
+    """How many repeats of `unit` it takes before this is a loop rather than speech.
+
+    A digit gets a far higher bar (`B21`). Somebody reading `0989999934` aloud says
+    `เก้า` five times in a row and means it, and the transcript of a phone number is the
+    one thing on an agent's screen that has to be exact. Everything else keeps the general
+    threshold, which `B16` set against three real Thonburian loops.
+    """
+    return DIGIT_MIN_REPEATS if unit.strip(_STRIP) in _THAI_DIGIT_WORDS else default
 
 
 def looks_like_a_loop(
@@ -204,8 +261,11 @@ def looks_like_a_loop(
     """
     stripped = "".join(ch for ch in text if not ch.isspace())
     if len(stripped) >= 12:
-        covered, _period, repeats = _longest_repeated_run(stripped)
-        if repeats >= min_repeats and covered / len(stripped) >= min_coverage:
+        covered, period, repeats, start = _longest_run(stripped)
+        unit = stripped[start : start + period]
+        if repeats >= _repeats_needed(unit, min_repeats) and (
+            covered / len(stripped) >= min_coverage
+        ):
             return True
 
     # The spaced case: the model punctuated its own loop, which is what it did on the
@@ -215,12 +275,15 @@ def looks_like_a_loop(
     if len(words) < min_repeats:
         return False
     if len(set(words)) == 1:
-        return True
+        return len(words) >= _repeats_needed(words[0], min_repeats)
     for size in (2, 3):
         if len(words) >= size * min_repeats and len(words) % size == 0:
             chunks = {tuple(words[i : i + size]) for i in range(0, len(words), size)}
             if len(chunks) == 1:
-                return True
+                unit_words = words[:size]
+                needed = max(_repeats_needed(w, min_repeats) for w in unit_words)
+                if len(words) // size >= needed:
+                    return True
     return False
 
 

@@ -915,3 +915,68 @@ the four was the answer._
   - **"Three turns arrived" is a much weaker assertion than "turn three carried the audio
     of segment three".** Every test in this file asserted the first kind. That is why the
     new ones make the audio itself legible.
+
+## B21. The repetition guard was deleting real Thai phone numbers
+_Found 2026-09-03 by the user reading the log of their own bake-off run and asking whether
+those drops were really hallucinations._
+
+- **Symptoms.** Every call in the prepared set logged one or two lines like:
+
+  ```
+  dropped a repetition-loop transcription  sample='เก้า เก้า เก้า แปด'
+  dropped a repetition-loop transcription  sample='เก้า เก้า เก้า'
+  dropped a repetition-loop transcription  sample='เย์า เย์า เย์า เย์า เย์า สาม ย์'
+  ```
+
+  `เก้า` is **nine**. The user's question was exactly right: *"these are just flagging the
+  thing where the customer will say the number of something, like telephone number... so we
+  can't be sure if it's a hallucination from the model or not?"*
+- **Root cause, and it is measurable rather than arguable.** Reading the *answer keys* of
+  the 12 prepared calls and converting the spelled-out Thai numerals back to digits:
+
+  | call | phone number in the reference | longest run of one digit |
+  |---|---|---|
+  | `d9b_1670931464` | 0989999934 | **5 x 9** |
+  | `d9b_1670931950` | 0989999935 | **5 x 9** |
+  | `ecb_1670853026` | 0817999998 | **5 x 9** |
+  | `c3a_1670959100` | 0989999449 | **4 x 9** |
+  | `547_1670935733` | 0989999197 | **4 x 9** |
+
+  Nine of the twelve calls contain a run of **three or more identical digit words**, and
+  three contain a run of **five**. `looks_like_a_loop` refuses at `min_repeats = 3`. It was
+  therefore refusing real phone numbers, in the majority of calls, by construction.
+- **Why this is the worst false positive available to this system.** A phone number is the
+  one item on an agent's screen that has to be exact and cannot be inferred from context. A
+  dropped sentence costs nuance; a dropped number costs the callback. And it was dropped
+  **silently from the agent's point of view** — the log records it, the screen simply has
+  one fewer line.
+- **How it survived `B16`'s review.** `B16` rebuilt this guard around three real Thonburian
+  loops the user supplied, and every one of those loops repeated a *word* (`การ`, `ช่วย`,
+  `ความ`). The fixture was correct and the threshold derived from it was correct **for
+  words**. Nobody asked what else in Thai legitimately repeats, and the answer — digits —
+  is the single most important category of content in a call-centre transcript. `B16`'s own
+  lesson was *"be most suspicious of a fixture derived from the one example you happened to
+  see"*, and this is that lesson recurring one level up: the fixture was broadened from one
+  example to three, and all three were the same *kind* of example.
+- **Fix.** The repeating unit is now identified, not just counted. `_longest_run` returns
+  the start index so the unit can be recovered; `_repeats_needed()` gives a digit word a
+  threshold of **`DIGIT_MIN_REPEATS = 10`** instead of 3. Ten is the arithmetic ceiling on a
+  legitimate run — a Thai mobile number is ten digits — so it is generous on purpose, and a
+  Whisper loop repeats dozens of times, so nothing real is given up. Both the character-level
+  and the whitespace-token paths consult it, including the 2- and 3-word cycle check.
+- **`โท` is in the digit list** even though the word for 2 is `สอง`. Thai speakers say `โท`
+  for 2 specifically when reading digits aloud, to keep it distinct from `สาม`.
+- **The digit words live in `stream.py`, not in `config/`, and that is deliberate.** `D28`
+  bans *domain* literals in `services/`; a numeral is a fact about the **language**, in the
+  same category as the punctuation list and the "Thai has no spaces" rule that already live
+  in this file. Retargeting this system to a hospital line does not change how Thai counts.
+- **Verification.** Seven new tests, checked against the old threshold first: with the
+  exemption disabled they fail, exactly as they should. Their data is not invented — the
+  "must survive" strings are the phone numbers read out of the dataset's own answer keys,
+  and the "used to be eaten" strings are pasted from the user's terminal. Two tests hold the
+  other direction: `เก้า` thirty times is still a loop, and `B16`'s word loops are untouched.
+- **Lesson.** *A guard tuned on one category of false positive will have a different
+  category of false negative, and the categories are domain knowledge, not code.* The
+  question that would have found this on day one is not "does the guard work?" but **"what
+  in this language legitimately repeats?"** — and it was the user, who has heard these
+  calls, who asked it.
