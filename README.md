@@ -318,7 +318,15 @@ build, so it has to be converted once locally. It writes a quantised copy (~737 
 `models/`, which is gitignored — so **a fresh clone has to run this**. About a minute if the
 Hugging Face cache already holds the checkpoint, plus a ~1.6 GB download if it does not.
 
-**This is no longer optional: the CT2 build is the chosen engine** (`D102`). Measured paced
+**This is no longer optional: the CT2 build is the chosen engine** (`D103`). Turn it on with
+
+```bash
+STT_ENGINE=thonburian_ct2       # STT_MODEL is left UNSET on purpose (`B23`)
+```
+
+Leave `STT_MODEL` blank so the adapter's own default — the local `models/` directory —
+applies. Setting it to a Hugging Face id is refused at startup, because faster-whisper reads
+a CTranslate2 directory and an HF id fails at model load on the box with the GPU. Measured paced
 over 12 real Thai calls against the fp16 original:
 
 | | Thonburian fp16 | CT2 `int8_float16` |

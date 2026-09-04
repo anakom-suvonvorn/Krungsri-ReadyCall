@@ -211,3 +211,49 @@ class TestDids:
         general = dids["+6621234000"]
         assert general["product_line"] == "unknown"
         assert general["skip_product_menu"] is False
+
+
+# ---------------------------------------------------------------------------------------
+# `B23`: STT_ENGINE=thonburian_ct2 could never have worked on its own.
+# ---------------------------------------------------------------------------------------
+
+
+def test_the_ct2_engine_takes_the_adapters_local_default_when_unset() -> None:
+    """`B23`. `stt_model` used to default to the Hugging Face id, so selecting the CT2
+    engine handed faster-whisper a transformers checkpoint it cannot read. Blank is the
+    only default correct for BOTH Thonburian engines, because they want different things
+    from this one field."""
+    from readycall.config import Settings
+
+    assert Settings().stt_model == ""
+
+
+def test_an_hf_id_with_the_ct2_engine_is_refused_at_startup() -> None:
+    """It fails at model load otherwise — on the box with the GPU, which is the worst
+    place and the worst moment to discover it (`B17` is the same family)."""
+    import pytest
+
+    from readycall.config import Settings
+    from readycall.errors import ConfigError
+
+    with pytest.raises(ConfigError, match="CTranslate2 directory"):
+        Settings(stt_engine="thonburian_ct2", stt_model="biodatlab/whisper-th-medium-combined")
+
+
+def test_a_real_directory_with_the_ct2_engine_is_accepted(tmp_path: object) -> None:
+    """The check must not refuse a legitimate local path that happens to contain a slash."""
+    from pathlib import Path
+
+    from readycall.config import Settings
+
+    d = Path(str(tmp_path)) / "models" / "whisper-th-medium-combined-ct2"
+    d.mkdir(parents=True)
+    assert Settings(stt_engine="thonburian_ct2", stt_model=str(d)).stt_model == str(d)
+
+
+def test_the_hf_engine_is_not_affected() -> None:
+    """`thonburian_hf` genuinely wants a Hugging Face id, so the check is engine-specific."""
+    from readycall.config import Settings
+
+    s = Settings(stt_engine="thonburian_hf", stt_model="biodatlab/whisper-th-medium-combined")
+    assert s.stt_model == "biodatlab/whisper-th-medium-combined"

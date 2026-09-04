@@ -121,9 +121,15 @@ class Settings(BaseSettings):
     #: `silero` needs the `ml` extra (`D95`); `energy` needs nothing and is what CI
     #: and the stage-safe path run (`D96`).
     vad_engine: VadEngineName = VadEngineName.ENERGY
-    #: The checkpoint. `thonburian_ct2` wants the CTranslate2 build of the same model, so
-    #: leave this blank to take whichever default the chosen adapter declares.
-    stt_model: str = "biodatlab/whisper-th-medium-combined"
+    #: The checkpoint, or **blank to take whichever default the chosen adapter declares**
+    #: — which is the point, because the two Thonburian engines want different things from
+    #: this field. `thonburian_hf` wants the Hugging Face id; `thonburian_ct2` wants a
+    #: **local CTranslate2 directory**, because Thonburian publishes no CT2 build (`B17`).
+    #:
+    #: It used to default to the HF id, which meant `STT_ENGINE=thonburian_ct2` on its own
+    #: handed faster-whisper a transformers checkpoint it cannot read (`B23`). Blank is the
+    #: only default that is correct for both.
+    stt_model: str = ""
     #: `auto` resolves to cuda when a GPU is actually usable and cpu otherwise (`D96`).
     #: Resolved in `build_stt`, not here, because deciding it at import time would make
     #: Settings depend on torch.
@@ -273,6 +279,21 @@ class Settings(BaseSettings):
                 "MAX_WAIT_BEFORE_ANY_AGENT_S must exceed TARGET_WAIT_S — the hard "
                 "anti-starvation ceiling has to sit above the soft target (D22)"
             )
+        if self.stt_engine is SttEngineName.THONBURIAN_CT2 and self.stt_model:
+            # `thonburian_ct2` is faster-whisper, which reads a CTranslate2 DIRECTORY.
+            # An HF-style id here is the `B23` mistake and fails at model load, on the
+            # box with the GPU, which is the worst place and time to find out.
+            looks_like_an_hf_id = "/" in self.stt_model and not Path(self.stt_model).exists()
+            if looks_like_an_hf_id:
+                raise ConfigError(
+                    f"STT_ENGINE=thonburian_ct2 needs a local CTranslate2 directory, but "
+                    f"STT_MODEL={self.stt_model!r} looks like a Hugging Face id and does "
+                    f"not exist on disk. Thonburian publishes no CT2 build (`B17`) - "
+                    f"convert it once:\n"
+                    f"  uv run python scripts/convert_ct2.py\n"
+                    f"then either leave STT_MODEL unset or point it at models/"
+                    f"whisper-th-medium-combined-ct2"
+                )
         if self.acw_long_after_s > self.acw_supervisor_alert_after_s:
             raise ConfigError(
                 "ACW_LONG_AFTER_S must be <= ACW_SUPERVISOR_ALERT_AFTER_S — the agent "

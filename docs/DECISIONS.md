@@ -2968,6 +2968,12 @@ sentence in front of it and the caller's words reach the agent shuffled. If thro
 the problem the answer is a faster engine or fewer windows, not a second consumer.
 
 ## D102. The engine is the CT2 `int8_float16` build of Thonburian — this is `D30`'s answer
+> **SUPERSEDED IN PART by `D103` (same day).** The engine choice stands and the latency,
+> `busy` and VRAM numbers below stand. **The accuracy numbers do not**: this table was
+> measured on a digit-heavy test set (`Q30`) with only one of the two engines reading the
+> vocabulary hint (`B19`). On a balanced set with both engines hinted the figures are
+> CER 0.089 (fp16) against **0.087** (CT2), not 0.161 against 0.182. Read `D103`.
+
 _The measurement `D30` has been asking for since P0. Paced, on 12 real Thai call-centre
 calls, with the endpointer and guards that ship._
 
@@ -3061,3 +3067,92 @@ still resident (`B22`), so the per-engine baseline was polluted and the delta wa
 model's footprint. The clean number is **1106 MB**. Recorded because the wrong figure is
 more flattering than the right one, which is exactly when a withdrawn number needs saying
 out loud.
+
+## D103. The engine is CT2 int8 **with the vocabulary hint**, measured on a balanced set
+_Supersedes the accuracy half of `D102`. Same conclusion about which engine; almost none of
+the same reasoning, because both of `D102`'s inputs were wrong._
+
+`D102` chose the CT2 build on a table with two defects, and the user had already flagged
+the first one:
+
+1. **the test set was digit-heavy** (`Q30`) — every call in it ended with a phone number
+   read aloud, and phone numbers are the hardest thing in the corpus to transcribe exactly;
+2. **the two engines disagreed about whether they read the vocabulary hint** (`B19`), so
+   the CT2 row was hinted and the fp16 row was not.
+
+Both are fixed. The set is now 20 calls chosen with `--mix --seed 7`, digit share spanning
+0-49%, and `ThonburianHfEngine` applies the hint through `prompt_ids`.
+
+### What the test set alone was worth
+
+Same engine, same code, only the audio changed:
+
+| Thonburian fp16, unhinted | CER median | mean | worst |
+|---|---|---|---|
+| digit-heavy set (12 calls) | 0.161 | 0.171 | 0.414 |
+| **balanced set (20 calls)** | **0.089** | 0.109 | 0.295 |
+
+**The choice of test set moved the headline number by 1.8x.** Every accuracy figure this
+project recorded before today was measured on the pessimistic set. The user asked for this
+and it mattered more than either of us expected.
+
+### The 2x2 that `B19` was hiding
+
+CER median, balanced set, same audio and detector throughout:
+
+| | **unhinted** | **hinted** | hint effect |
+|---|---|---|---|
+| Thonburian fp16 | **0.089** | 0.101 | +0.011 — slightly *worse* |
+| CT2 `int8_float16` | 0.147 | **0.087** | **-0.060 — much better** |
+
+Read the rows and the columns and two separate things fall out:
+
+- **int8 quantisation genuinely costs accuracy.** Unhinted, CT2 is 0.147 against fp16's
+  0.089 — 65% relatively worse. `D102` never saw this because its CT2 row had a hint and
+  its fp16 row did not, so the penalty was masked by exactly the thing that repairs it.
+- **The prompt repairs it, and then some.** Hinted CT2 is **0.087**, the best cell in the
+  table. The likely mechanism is that a quantised decoder drifts more and the prompt acts
+  as an anchor — which is not a story worth believing on its own, except that the **speed**
+  moves the same way: CT2's worst `busy` goes **0.46 unhinted to 0.11 hinted**. A steadier
+  decoder emits fewer tokens, and fewer tokens is less time. Two independent measurements
+  agreeing is worth more than either.
+
+### Decision
+
+**Ship CT2 `int8_float16` with the vocabulary hint applied.** It is the best cell on every
+axis at once, which is not something a bake-off usually offers:
+
+| | fp16 unhinted | **CT2 hinted** |
+|---|---|---|
+| CER median | 0.089 | **0.087** |
+| `busy` median / worst | 0.25 / **1.25** | **0.08 / 0.11** |
+| VRAM | 2716 MB | **~1000 MB** |
+
+**The hint is now load-bearing rather than a nicety**, and that changes how
+`config/stt_vocabulary.yaml` must be treated. It was already true that its contents can
+come back out of the model (`B14`); it is now also true that removing it costs 6 CER
+points. Both facts point the same way: change that file deliberately, and re-measure.
+
+### `Q27` is answered
+
+*Does an insurance vocabulary hurt on government-domain audio?* **No.** It is mildly
+negative on fp16 (+0.011) and strongly positive on int8 (-0.060). The worry was reasonable
+and the measurement says keep the hint.
+
+### `distill-whisper-th-large-v3` is rejected
+
+It was in the HF cache and cost nothing to try, which was the whole argument for trying it.
+On the balanced set it is worse than CT2 on every axis: CER median 0.096 against 0.087,
+`busy` worst 0.23 against 0.11, VRAM 1942 MB against ~1000. A distilled *large* is still a
+large; quantising a medium wins. Recorded so nobody spends the download again.
+
+### What is still open
+
+- **The paced p95 on the balanced set has not been measured.** `busy` 0.11 says the
+  backlog can no longer compound, so the remaining latency is the fixed per-utterance cost
+  rather than a queue — but the budget is stated as p95 and should be measured as p95.
+- **Typhoon** (`D99`) is installed and unmeasured. It is the only candidate with no 30 s
+  window at all.
+- **Packing** (`D101`) looks unnecessary now: it existed to cut the number of windows, and
+  at `busy` 0.11 there is no throughput problem left to solve. It stays designed and
+  unbuilt, which is the right state for it.

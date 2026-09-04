@@ -1025,3 +1025,48 @@ rather than by anything failing._
 - **The measurement it invalidated has to be re-run**, which is the honest cost of finding
   it late: the first CT2-vs-Thonburian table was produced under this bug, so its VRAM
   column — and possibly its timings, since the card was contended — cannot be quoted.
+
+## B23. The engine we just chose to ship could not be selected by config
+_Found 2026-09-04 immediately after `D103` picked the CT2 build, by reading `build_stt`
+to write down the env vars that turn it on._
+
+- **Symptoms:** none, and none were possible yet — nothing had ever run the audio path
+  through `Settings`. Every measurement so far went through `bake_off.py`, which
+  constructs engines directly.
+- **Root cause.** `Settings.stt_model` defaulted to `"biodatlab/whisper-th-medium-combined"`,
+  a **Hugging Face id**, and `build_stt` reads `settings.stt_model or DEFAULT_MODEL`. The
+  `or` only falls through on an empty string, so the default always won:
+
+  ```python
+  stt_model: str = "biodatlab/whisper-th-medium-combined"   # never empty, so...
+  model=settings.stt_model or DEFAULT_MODEL                 # ...DEFAULT_MODEL is dead code
+  ```
+
+  `thonburian_ct2` is faster-whisper, which reads a **CTranslate2 directory**. Handing it a
+  transformers checkpoint id fails at model load. So `STT_ENGINE=thonburian_ct2` on its own
+  — the documented way to turn on the engine `D103` selects — could never have worked.
+- **The field's own comment described the correct behaviour**: *"leave this blank to take
+  whichever default the chosen adapter declares"*. The default was not blank. A comment
+  documenting an intention the value contradicts is worse than no comment, because it stops
+  the next reader from checking.
+- **Why the two engines need different values.** They are the same weights and not the same
+  artefact: `thonburian_hf` wants the HF id, `thonburian_ct2` wants a local directory that
+  only exists after `scripts/convert_ct2.py` runs, because **Thonburian publishes no CT2
+  build** (`B17`). One field cannot have one correct default for both — but it can have one
+  correct *empty* default, which is what it has now.
+- **Fix, two parts.**
+  1. `stt_model` defaults to `""`, so each adapter's own `DEFAULT_MODEL` applies and the
+     dead `or` branch becomes live.
+  2. A **startup coherence check**: selecting `thonburian_ct2` with a value that looks like
+     an HF id (contains `/`, does not exist on disk) refuses to boot, and the message names
+     the conversion command. It is engine-specific, so `thonburian_hf` is untouched, and it
+     accepts a real local path that happens to contain a slash.
+- **Verification.** Four tests: the blank default, the refusal, a real directory being
+  accepted, and the HF engine being unaffected.
+- **Lesson, and it is the same one as `B17` and `B22`.** All three are *the configuration
+  around a model rather than the model*, all three would have failed on the machine with the
+  GPU on demo morning, and none of them could be caught by a test suite that runs on the
+  scripted engine. The habit that finds them is **reading the wiring while writing the
+  instructions for it**: `B17` came from checking a model id before publishing it, `B22`
+  from watching a card during a run, this one from writing down two env vars and following
+  them into the code.

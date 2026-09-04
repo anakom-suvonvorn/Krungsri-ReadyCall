@@ -70,7 +70,7 @@ right queue through a real menu hearing real (pre-rendered) Thai — and now, **
 is settled, they are offered the pre-call recording, and take it or
 refuse it or ignore it, all three reaching the same agent**.
 
-Verified **2026-09-03**: **666 tests** — 624 pass + 42 skipped without the Postgres
+Verified **2026-09-03**: **675 tests** — 633 pass + 42 skipped without the Postgres
 container (the 42 are the database cases). `ruff check` + `ruff format --check` clean over 177 files,
 `mypy --strict` clean, all scenarios replay, diagrams current, prompt pack fresh.
 
