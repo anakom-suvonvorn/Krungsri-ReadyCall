@@ -2811,3 +2811,158 @@ now decides who it belongs to and what happens when it cannot serve everyone._
   latency rather than a truncated one. Had this decision gone the other way — bound the
   buffer silently — the same run would have reported a comfortable latency and a quietly
   shorter transcript, which is `B20` again wearing a bound.
+
+## D101. Dispatch policy: batch what is already waiting; pack to a MINIMUM, never to a maximum
+_Two ideas from the user, separated, because they are not the same idea and one is much
+safer than the other. Batching is built; packing is designed and deliberately not built._
+
+### The problem, measured
+
+Whisper encodes a **fixed 30-second window** whatever length of audio it is handed, so a
+1.5-second utterance costs exactly what a 25-second one does. Measured over the 12 real
+Thai calls (`bake_off.py`'s new `pad` column):
+
+| | |
+|---|---|
+| seconds Whisper actually encoded, per second of call | **2.2 - 3.0, median 2.7** |
+| model-seconds per second of audio (`busy`) | 0.16 - 1.48, median 0.45 |
+| calls where `busy` exceeded 1.00 | **1 of 12** |
+
+We ask the GPU to encode **2.7x more audio than the call contains**, because a call is cut
+into 6-9 short utterances and each one costs a full window. Above `busy` 1.00 the
+transcriber can never catch up, which is the mechanism behind the 23-59 s latencies in the
+paced run.
+
+### Where the number came from, and it is not our idea
+
+The team's earlier Thai project runs the same model on the same class of hardware and is
+noticeably faster. The reason is one argument:
+
+```python
+prediction_gen = pipe(KeyDataset(audio_dataset, "audio"), batch_size=4)
+```
+
+It puts **four clips through the GPU in one pass**. It also has the easy version of the
+problem — a file on disk, so every chunk exists up front and a batch is always available.
+
+### THE RESULT, FIRST: batching bought nothing on this GPU
+
+Measured over the same 12 calls, `MAX_BATCH = 4` against `MAX_BATCH = 1`, everything else
+identical:
+
+| | without batching | with batching |
+|---|---|---|
+| `busy` median | 0.45 | **0.45** |
+| `busy` worst | 1.48 | **1.46** |
+| calls over 1.00 | 1 of 12 | **1 of 12** |
+| CER median | 0.161 | 0.161 |
+| turns | 82 | 82 |
+| VRAM median | 2734 MB | 2735 MB |
+
+Per call the change ranges from **-7% to +13%** and averages approximately zero. **This is
+a null result and it is the useful kind**, because it says the bottleneck is not what I
+assumed it was.
+
+**Why it does nothing here.** Batching wins when a GPU is *underutilised* — when the cost
+is dominated by launch overhead and there is spare capacity to overlap. A 4 GiB laptop card
+running Whisper-medium at fp16 has no spare capacity: four 30-second windows is four times
+the arithmetic, and four times the arithmetic takes four times as long however it is
+scheduled. **Batching overlaps work; it does not remove any.**
+
+**So the inference about the earlier project was wrong, or at least incomplete.** Its
+`batch_size=4` was a plausible explanation for its speed and it is not the explanation —
+whatever made that pipeline fast, this is not it. Worth stating because that inference is
+in the previous session's write-up and somebody will otherwise repeat it.
+
+**What this promotes.** Packing (Decision 2) is no longer the fallback; it is the option
+that can actually work, because it reduces the **number** of 30-second windows rather than
+overlapping them. Seven windows per call becoming one or two is a real reduction in
+arithmetic, and it is the only lever in this design that is. The other real lever is a
+cheaper window — the CT2 `int8_float16` build.
+
+**Kept anyway**, at `MAX_BATCH = 4`: it is correct, tested, costs 1 MB of VRAM and changes
+no output, and the demo machine is explicitly "whoever has the strongest GPU" (`PLAN.md`),
+where the spare capacity that makes batching pay may actually exist. It is set to `1` to
+disable, and a test asserts that switch works.
+
+### Decision 1 (BUILT, and measured as a no-op here): batch what is already queued, never wait
+
+`TranscriptionStream._consume` takes the segment it was waiting for and then drains up to
+`MAX_BATCH - 1` more with `get_nowait()`. It **never waits** for a batch to fill.
+
+- **A stream that is keeping up has at most one segment queued**, so this changes nothing
+  in the common case. A batch can only form when the model is already behind — which is
+  exactly and only when the speed-up is needed. The optimisation is self-scheduling.
+- **It cannot make any output different.** Each clip is still transcribed as its own
+  utterance with its own boundaries; only the GPU scheduling changes. That is the entire
+  reason this is the version that ships first.
+- **`BatchSttEngine` is a capability protocol, not a change to `SttEngine`.** An engine
+  without a batch path is slower and identical in every other respect. Forcing every
+  adapter to grow a fake batch method would make the port lie about what they can do.
+- **The guards are unchanged and still run per segment** (`B14`, `B16`, `D98`, `B21`).
+  Batching splits dispatch from preparation and publication precisely so it cannot weaken
+  a check: a hallucination that arrives alongside three good utterances is exactly as
+  dangerous as one that arrives alone.
+- **`MAX_BATCH = 4`, capped rather than unbounded**, because every clip in a batch is
+  still padded to 30 s and a batch of twenty would ask a 4 GiB card for twenty windows of
+  activations at once.
+
+### Decision 2 (DESIGNED, NOT BUILT): pack to a MINIMUM speech duration
+
+The user's refinement, and it is the part that makes packing worth building at all.
+
+The obvious form of packing — glue utterances together until the clip approaches 30
+seconds — has two costs that are easy to understate: it **loses per-utterance boundaries**
+(you learn only when the first one started and the last one ended) and it **adds delay by
+construction**, up to the whole window.
+
+The refinement: **do not pack toward the 30-second maximum. Pack past a configurable
+minimum and stop.**
+
+> *"there needs to be at least 5s or etc. (but less than 30s of course) of the gathered
+> audio clip before it is sent into the model… while it's still makes the speech time
+> window bigger and loses the exact time per utterance… both will not be as bad as the
+> full 30s gathering one, and we will at least be able to say that the clip we send to the
+> model is not literally just one single word"*
+
+This is right, and it is right for a reason worth stating separately from throughput:
+**the single-word clip is a correctness problem, not just a waste.** A one-word utterance
+padded with 29 seconds of silence is close to the input that produced `B14` — 8.6 seconds
+of decode and invented Thai out of near-silence. Packing to a floor removes the worst
+inputs we hand the model, and the efficiency is a bonus rather than the point.
+
+The shape, when it is built:
+
+- **`pack_min_speech_ms`**, configurable, expected to land somewhere in **1500-5000 ms**,
+  with a hard ceiling well under 30 s so a packed clip never approaches the window.
+- **The cost scales with the setting**, which is what makes it tunable rather than a
+  gamble: at 2 s the added delay and the boundary loss are both small; at 10 s both are
+  larger and the padding waste is nearly gone. It can be set to 0 to disable packing
+  entirely, which must stay a supported configuration.
+- **A packed clip still yields one turn per utterance**, using the gap positions we
+  already know from the endpointer to attribute the returned text. If that attribution
+  cannot be made reliable, the honest fallback is one turn spanning the packed range with
+  its `t_start_ms`/`t_end_ms` covering it — and **not** several turns with guessed
+  boundaries, which is `B20`'s failure mode wearing a new hat.
+- **Never pack across the `max_segment_ms` forced-cut boundary**, because a forced cut
+  means the caller was still talking and the two halves are one thought.
+
+### Why packing is not built yet — and why it is now the front-runner
+
+Batching landed first because it cannot change any output. **It also changed nothing else**
+(see the result above), which settles the question it was meant to answer: the padding
+waste has to be *removed*, not overlapped.
+
+Packing is still not built in the same commit because it changes **what the model sees**,
+and every change to what the model sees on this project has produced a bug entry. It needs
+its own measurement and its own tests, and the ordering matters: the CT2 and Typhoon rows
+are cheaper to run and may make packing unnecessary. But if `busy` is still near or above
+1.00 after those, **this is the design, and the user's minimum-threshold form is the version
+to build** — not the naive pack-to-30-seconds one.
+
+### Rejected: a second consumer task
+
+The obvious way to go faster is to transcribe two segments concurrently. It breaks the
+ordering guarantee `stream.py` exists to provide — a two-word phrase finishes before the
+sentence in front of it and the caller's words reach the agent shuffled. If throughput is
+the problem the answer is a faster engine or fewer windows, not a second consumer.

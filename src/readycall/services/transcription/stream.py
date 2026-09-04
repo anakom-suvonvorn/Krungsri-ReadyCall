@@ -35,7 +35,7 @@ from readycall.domain.enums import SpeakerRole
 from readycall.domain.models import TranscriptTurn
 from readycall.logging import get_logger
 from readycall.media.audio import TARGET_SAMPLE_RATE, rms
-from readycall.ports.stt import AudioFrame, SttEngine, SttHint
+from readycall.ports.stt import AudioFrame, BatchSttEngine, SttEngine, SttHint, SttResult
 from readycall.ports.vad import VoiceActivityDetector
 from readycall.services.transcription.endpointer import (
     Endpointer,
@@ -60,6 +60,18 @@ _MAX_BACKLOG_SAMPLES = TARGET_SAMPLE_RATE * 120
 #: above the 30 s history window and the backlog cap, so this only ever fires on a path
 #: that would otherwise grow without limit.
 _TRIM_WHEN_IDLE_SAMPLES = TARGET_SAMPLE_RATE * 150
+
+#: How many queued utterances may be sent to the model in one GPU pass (`D101`).
+#:
+#: **This only ever fires when the model is already behind**, because a stream that is
+#: keeping up has at most one segment waiting. So it costs nothing in the common case and
+#: helps exactly in the case that produced the 23-59 s latencies.
+#:
+#: 4 matches the team's earlier Thai project, which reached its speed this way on this
+#: class of hardware. It is capped rather than unbounded because each clip in a batch is
+#: still padded to Whisper's 30 s window, so a batch of twenty would ask a 4 GiB card for
+#: twenty windows of activations at once and fail in the least helpful way possible.
+MAX_BATCH = 4
 
 
 #: Punctuation Whisper sprinkles into hallucinated Thai. Stripped before the repetition
@@ -300,6 +312,7 @@ class TranscriptionStream:
         settings: EndpointSettings | None = None,
         hint: SttHint | None = None,
         min_segment_rms: float = 0.002,
+        max_batch: int = MAX_BATCH,
     ) -> None:
         self._call_session_id = call_session_id
         self._vad = vad
@@ -309,6 +322,7 @@ class TranscriptionStream:
         self._speaker_role = speaker_role
         self._hint = hint
         self._min_rms = min_segment_rms
+        self._max_batch = max(1, max_batch)
         self._endpointer = Endpointer(
             settings=settings, frame_samples=vad.frame_samples, sample_rate=TARGET_SAMPLE_RATE
         )
@@ -453,24 +467,79 @@ class TranscriptionStream:
             segment = await self._queue.get()
             if segment is None:
                 return
+            batch = [segment]
+            # Take whatever else is ALREADY waiting — never wait for more to arrive
+            # (`D101`). Waiting would trade latency the stream does not own for
+            # throughput it does not always need; taking what is there is free.
+            while len(batch) < self._max_batch:
+                try:
+                    nxt = self._queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    break
+                if nxt is None:
+                    # The sentinel must stay last. Put it back and stop batching.
+                    self._queue.put_nowait(None)
+                    break
+                batch.append(nxt)
             try:
-                await self._transcribe(segment)
+                await self._transcribe_batch(batch)
             except Exception:  # pragma: no cover - one bad utterance must not end the call
                 # `D12`: nothing here may delay or drop a call. A segment that fails to
                 # transcribe costs one sentence of the brief, and the call is unaffected.
                 log.exception(
-                    "transcription failed for one segment",
+                    "transcription failed",
                     call_session_id=self._call_session_id,
-                    t_start_ms=segment.t_start_ms,
+                    t_start_ms=batch[0].t_start_ms,
+                    segments=len(batch),
                 )
             finally:
-                # Release this segment's claim on the buffer whatever happened to it,
+                # Release each segment's claim on the buffer whatever happened to it,
                 # including a failure — a claim that outlives its segment pins the audio
                 # of the whole call and turns one bad utterance into a memory leak.
-                if self._awaiting:
-                    self._awaiting.popleft()
+                for _ in batch:
+                    if self._awaiting:
+                        self._awaiting.popleft()
 
-    async def _transcribe(self, segment: SpeechSegment) -> None:
+    async def _transcribe_batch(self, batch: list[SpeechSegment]) -> None:
+        """Prepare, dispatch, publish — in that order, and in input order throughout.
+
+        The three stages are separated because only the middle one can be batched. The
+        level gate (`B14`) has to run per segment BEFORE the model, and the three guards
+        (`B14`, `B16`, `D98`, `B21`) have to run per segment AFTER it. Only the inference
+        in between is a single call.
+        """
+        prepared: list[tuple[SpeechSegment, Sequence[AudioFrame], float]] = []
+        for segment in batch:
+            ready = self._prepare(segment)
+            if ready is not None:
+                prepared.append((segment, *ready))
+        if not prepared:
+            return
+
+        results = await self._dispatch([frames for _seg, frames, _lvl in prepared])
+        for (segment, _frames, level), result in zip(prepared, results, strict=True):
+            await self._publish(segment, result, level)
+
+    async def _dispatch(self, utterances: list[Sequence[AudioFrame]]) -> list[SttResult]:
+        """One GPU pass when the engine can do it, a plain loop when it cannot.
+
+        `BatchSttEngine` is a capability rather than a requirement (`D101`), so an engine
+        without a batch path is slower here and identical in every other way — including,
+        importantly, in what it returns.
+        """
+        if len(utterances) > 1 and isinstance(self._stt, BatchSttEngine):
+            return await self._stt.transcribe_batch(utterances, hint=self._hint)
+        return [
+            await self._stt.transcribe_utterance(frames, hint=self._hint) for frames in utterances
+        ]
+
+    def _prepare(self, segment: SpeechSegment) -> tuple[Sequence[AudioFrame], float] | None:
+        """The audio for one segment, or `None` if it must not reach the model at all.
+
+        Everything here happens BEFORE any inference, which is the point: `B14`'s level
+        gate exists because one second of digital silence costs 8.6 s and comes back with
+        invented Thai, and a gate that ran after the model would save neither.
+        """
         samples = self._slice(segment)
         if not samples:
             # Loud on purpose (`B20`). This returned silently for a week, and it is the
@@ -482,7 +551,7 @@ class TranscriptionStream:
                 t_start_ms=segment.t_start_ms,
                 t_end_ms=segment.t_end_ms,
             )
-            return
+            return None
 
         # **Never hand Whisper near-silence** (`B14`). Measured on this GPU with
         # faster-whisper tiny: 155 ms for a segment with real energy in it, and
@@ -500,7 +569,7 @@ class TranscriptionStream:
                 t_start_ms=segment.t_start_ms,
                 rms=round(level, 5),
             )
-            return
+            return None
         frames: Sequence[AudioFrame] = [
             AudioFrame(
                 samples=samples,
@@ -508,7 +577,15 @@ class TranscriptionStream:
                 sample_rate=TARGET_SAMPLE_RATE,
             )
         ]
-        result = await self._stt.transcribe_utterance(frames, hint=self._hint)
+        return frames, level
+
+    async def _publish(self, segment: SpeechSegment, result: SttResult, level: float) -> None:
+        """The four guards, then the turn. All per segment, whether or not it was batched.
+
+        Batching must not weaken a single check — the guards are the reason a hallucination
+        does not reach an agent's screen, and a failure that arrived alongside three good
+        utterances is exactly as dangerous as one that arrived alone.
+        """
         text = result.text.strip()
         if not text:
             # Also loud (`B20`). An empty result is a legitimate outcome — the detector

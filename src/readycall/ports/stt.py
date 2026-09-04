@@ -90,3 +90,38 @@ class SttEngine(Protocol):
         ...
 
     async def close(self) -> None: ...
+
+
+@runtime_checkable
+class BatchSttEngine(Protocol):
+    """An engine that can transcribe several utterances in **one** GPU pass.
+
+    **A capability, not a requirement.** It is deliberately a second protocol rather than
+    another method on `SttEngine`: most engines have no batch path worth writing, and
+    forcing every adapter to grow a fake one would make the port lie about what they can
+    do. `TranscriptionStream` checks with `isinstance` and falls back to a plain loop, so
+    an engine that does not implement this is slower and identical in every other respect.
+
+    **Why it is worth having at all.** Whisper encodes a fixed 30-second window whatever
+    you hand it, so a 1.5-second utterance costs what a 25-second one does — measured on
+    real calls, this project asks the GPU to encode **2.7x more audio than the call
+    contains**. Batching does not remove that waste; it overlaps it, which is the half of
+    the problem that can be fixed without changing what the model sees.
+
+    The team's earlier Thai project reached its speed exactly this way (`batch_size=4`
+    through the HF pipeline). It had the easy version of the problem — a file on disk,
+    every chunk available up front. Streaming only has a batch to form when the model has
+    fallen behind, which is precisely when the speed-up is needed and never when it is not.
+
+    **Ordering is the caller's guarantee, not the engine's**: results come back in the same
+    order as the utterances went in, one for one.
+    """
+
+    async def transcribe_batch(
+        self,
+        utterances: Sequence[Sequence[AudioFrame]],
+        *,
+        hint: SttHint | None = None,
+    ) -> list[SttResult]:
+        """Transcribe several VAD-delimited utterances together, in input order."""
+        ...

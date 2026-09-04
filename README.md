@@ -414,10 +414,24 @@ Two things about this table that are easy to misread, and both are in the output
 - **WER over whitespace tokens is a phrase error rate on unsegmented Thai.** Fine for
   ranking engines against each other; not quotable as an absolute number.
 
-⚠️ **`D30` is not closed.** Getting real numbers needs real Thai telephone speech and the
-Thai checkpoints (a further multi-gigabyte download). Synthetic audio measures the model's
-failure modes rather than its performance — see `B14`, which is worth reading before you
-believe any number this prints.
+⚠️ **`D30` is not closed, but it is no longer blocked on missing things.** Real Thai
+telephone speech and the Thai checkpoint are both on this machine. What is missing is the
+CT2 and Typhoon rows — see `NEXT_SESSION`. Read `B14`, `B20` and `B21` before believing any
+number this prints: all three were measurement bugs that produced confident wrong figures.
+
+### Preparing the test audio, and why `--mix` matters
+
+```bash
+uv run python scripts/prepare_dataset.py --n 20 --mix
+```
+
+Almost every call in this corpus ends with the customer reading out a phone number, so a
+**random** sample is overwhelmingly digit-heavy. That was harmless until `B21` **loosened**
+the repetition guard for digits — and a set full of digits is exactly the wrong set to
+check that the loosening did not let real hallucinations back in (`Q30`). `--mix` caps the
+digit-heavy share (default half) and the printed table gains a `digit%` column so the
+balance is visible rather than assumed.
+
 
 ### Build the voice prompts
 

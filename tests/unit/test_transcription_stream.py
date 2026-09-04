@@ -691,3 +691,120 @@ def test_the_exemption_is_only_for_digits() -> None:
     threshold is where it is."""
     assert looks_like_a_loop("ความ ความ ความ ความ")
     assert looks_like_a_loop("การ" * 20)
+
+
+# ---------------------------------------------------------------------------------------
+# `D101`: several queued utterances go to the model in one pass.
+# ---------------------------------------------------------------------------------------
+
+
+class BatchingMarkerStt(MarkerStt):
+    """A `MarkerStt` that also implements the optional batch capability.
+
+    Records the SHAPE of every dispatch — `[3, 1]` means one call carrying three
+    utterances and then one carrying one — so a test can assert that batching actually
+    happened rather than that the results merely came out right.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.dispatches: list[int] = []
+
+    async def transcribe_utterance(
+        self,
+        frames: Sequence[AudioFrame],
+        *,
+        hint: SttHint | None = None,
+    ) -> SttResult:
+        self.dispatches.append(1)
+        return await super().transcribe_utterance(frames, hint=hint)
+
+    async def transcribe_batch(
+        self,
+        utterances: Sequence[Sequence[AudioFrame]],
+        *,
+        hint: SttHint | None = None,
+    ) -> list[SttResult]:
+        self.dispatches.append(len(utterances))
+        out: list[SttResult] = []
+        for frames in utterances:
+            samples = [s for frame in frames for s in frame.samples]
+            marker = round(max(abs(s) for s in samples) * 1000) if samples else 0
+            self.seen.append(marker)
+            out.append(SttResult(text=f"utterance {marker}", engine="marker"))
+        return out
+
+
+async def _run_with(engine: MarkerStt, *, max_batch: int) -> list[TranscriptTurn]:
+    """Three utterances fed as fast as the producer can go, so all three are queued
+    before the consumer starts — the same race `B20` used, which is also the only
+    condition under which a batch can form at all."""
+    got: list[TranscriptTurn] = []
+
+    async def sink(turn: TranscriptTurn) -> None:
+        got.append(turn)
+
+    stream = TranscriptionStream(
+        call_session_id="call_batch",
+        vad=ScriptedVad(
+            pattern((0.9, 1000), (0.0, 400), (0.9, 1000), (0.0, 400), (0.9, 1000), (0.0, 500))
+        ),
+        stt=engine,
+        clock=ManualClock(),
+        on_turn=sink,
+        max_batch=max_batch,
+    )
+    await stream.start()
+    for ms, amplitude in [
+        (1000, 0.1),
+        (400, 0.001),
+        (1000, 0.2),
+        (400, 0.001),
+        (1000, 0.3),
+        (500, 0.001),
+    ]:
+        remaining = ms
+        while remaining > 0:
+            step = min(20.0, remaining)
+            await stream.feed(flat(step, amplitude))
+            remaining -= step
+    await stream.finish()
+    return got
+
+
+def test_a_backlog_is_sent_to_the_model_in_one_pass() -> None:
+    """`D101`. The producer never yields while the queue is unbounded, so all three
+    utterances are waiting before the consumer wakes — and that is exactly the case
+    batching exists for."""
+    engine = BatchingMarkerStt()
+    got = asyncio.run(_run_with(engine, max_batch=4))
+    assert [t.text for t in got] == ["utterance 100", "utterance 200", "utterance 300"]
+    assert max(engine.dispatches) > 1, f"never batched: {engine.dispatches}"
+    assert sum(engine.dispatches) == 3
+
+
+def test_batching_preserves_order_and_the_audio_each_turn_carried() -> None:
+    """The `B20` assertion, repeated for the batch path. Batching is only safe if a
+    result still belongs to the utterance it was made from — an off-by-one inside a
+    batch would attribute a fluent sentence to the wrong moment, silently."""
+    engine = BatchingMarkerStt()
+    got = asyncio.run(_run_with(engine, max_batch=4))
+    assert engine.seen == [100, 200, 300]
+    assert [t.seq for t in got] == [1, 2, 3]
+
+
+def test_an_engine_without_a_batch_path_is_identical_just_slower() -> None:
+    """`BatchSttEngine` is a capability, not a requirement. `MarkerStt` does not
+    implement it, and the stream must fall back to a loop with the same output."""
+    engine = MarkerStt()
+    got = asyncio.run(_run_with(engine, max_batch=4))
+    assert [t.text for t in got] == ["utterance 100", "utterance 200", "utterance 300"]
+    assert engine.seen == [100, 200, 300]
+
+
+def test_max_batch_one_never_batches() -> None:
+    """The knob has to actually turn it off — that is what makes it safe to ship."""
+    engine = BatchingMarkerStt()
+    got = asyncio.run(_run_with(engine, max_batch=1))
+    assert [t.text for t in got] == ["utterance 100", "utterance 200", "utterance 300"]
+    assert engine.dispatches == [1, 1, 1]

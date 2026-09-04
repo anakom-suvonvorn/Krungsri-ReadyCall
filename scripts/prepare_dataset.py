@@ -71,6 +71,26 @@ class Segment:
         return self.text.strip().lower() not in NON_SPEECH
 
 
+#: The Thai digit words, for measuring how much of a call is somebody reading out a
+#: number. Kept here rather than imported from `services/` so this script stays runnable
+#: on its own; the two lists exist for different reasons and neither is the other's
+#: source of truth (`B21` owns the guard's copy).
+_DIGIT_WORDS = (
+    "ศูนย์",
+    "หนึ่ง",
+    "เอ็ด",
+    "สอง",
+    "โท",
+    "สาม",
+    "สี่",
+    "ห้า",
+    "หก",
+    "เจ็ด",
+    "แปด",
+    "เก้า",
+)
+
+
 @dataclass
 class Sample:
     stem: str
@@ -82,6 +102,31 @@ class Sample:
     @property
     def speech(self) -> list[Segment]:
         return [s for s in self.segments if s.is_speech]
+
+    @property
+    def digit_share(self) -> float:
+        """What fraction of the reference's characters are spelled-out digits (`Q30`).
+
+        Almost every call in this corpus ends with a phone number read aloud, so a random
+        sample over-represents digits badly — and since `B21` **loosened** the repetition
+        guard for digits, a set full of them is precisely the wrong set to check that the
+        loosening did not let real hallucinations back in. The user raised this; measuring
+        it is what turns "pick at random" into "pick a mix".
+        """
+        text = "".join(self.reference.split())
+        if not text:
+            return 0.0
+        hit = 0
+        i = 0
+        while i < len(text):
+            for word in _DIGIT_WORDS:
+                if text.startswith(word, i):
+                    hit += len(word)
+                    i += len(word)
+                    break
+            else:
+                i += 1
+        return hit / len(text)
 
     @property
     def reference(self) -> str:
@@ -156,6 +201,20 @@ def main() -> int:
     parser.add_argument("--domain", default="", help="only this domain (see --list-domains)")
     parser.add_argument("--seed", type=int, default=42, help="the selection is reproducible")
     parser.add_argument(
+        "--mix",
+        action="store_true",
+        help="balance the selection between digit-heavy and speech-heavy calls (`Q30`). "
+        "Without this the sample is random, and in this corpus random means almost every "
+        "call ends with a phone number read out - which is the wrong set to validate `B21`'s "
+        "loosened digit guard against",
+    )
+    parser.add_argument(
+        "--digit-heavy-share",
+        type=float,
+        default=0.5,
+        help="with --mix, what fraction of the set may be digit-heavy (default half)",
+    )
+    parser.add_argument(
         "--max-seconds",
         type=float,
         default=120.0,
@@ -195,7 +254,15 @@ def main() -> int:
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     chosen: list[Sample] = []
-    skipped_long = skipped_quiet = 0
+    skipped_long = skipped_quiet = skipped_digits = 0
+
+    #: Above this share of digit characters a call is "somebody reading out a number"
+    #: rather than a conversation. Chosen by looking at the distribution, not tuned: the
+    #: 12 originally prepared calls sit at 0.13-0.42 and every one of them ends with a
+    #: phone number, so the split is about which HALF of the call is digits.
+    digit_heavy_at = 0.20
+    digit_cap = int(args.n * args.digit_heavy_share) if args.mix else args.n
+    digit_heavy = 0
 
     for sample in samples:
         if len(chosen) >= args.n:
@@ -211,15 +278,23 @@ def main() -> int:
         except Exception as exc:  # pragma: no cover - one bad file must not stop the run
             print(f"  skipping {sample.stem}: {type(exc).__name__} {exc}")
             continue
+        if args.mix and sample.digit_share >= digit_heavy_at:
+            if digit_heavy >= digit_cap:
+                skipped_digits += 1
+                continue
+            digit_heavy += 1
         chosen.append(sample)
 
     if not chosen:
         print("nothing selected - loosen --max-seconds or --min-speech-seconds")
         return 2
 
-    print(f"\nselected {len(chosen)}  (skipped {skipped_long} too long, {skipped_quiet} too quiet)")
+    print(
+        f"\nselected {len(chosen)}  (skipped {skipped_long} too long, "
+        f"{skipped_quiet} too quiet, {skipped_digits} already enough digit-heavy calls)"
+    )
     print(f"writing to {out}\n")
-    print(f"  {'call':<44}{'dur':>7}{'speech':>8}{'segs':>6}{'chars':>7}")
+    print(f"  {'call':<44}{'dur':>7}{'speech':>8}{'segs':>6}{'chars':>7}{'digit%':>8}")
     print("  " + "-" * 72)
 
     total_speech = 0.0
@@ -230,7 +305,7 @@ def main() -> int:
         print(
             f"  {sample.stem[:42]:<44}{sample.duration_s:>6.0f}s"
             f"{sample.speech_seconds:>7.0f}s{len(sample.speech):>6}"
-            f"{len(sample.reference):>7}"
+            f"{len(sample.reference):>7}{100 * sample.digit_share:>7.0f}%"
         )
 
     # The noise spans, kept because they are ground truth our own endpointer can be

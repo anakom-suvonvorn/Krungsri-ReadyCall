@@ -1,7 +1,7 @@
 # NEXT_SESSION
 
 _The live working state. READ THIS FIRST every session. Keep it short and current._
-_Last updated: 2026-09-04._
+_Last updated: 2026-09-04 (evening)._
 
 ---
 
@@ -70,7 +70,7 @@ right queue through a real menu hearing real (pre-rendered) Thai — and now, **
 is settled, they are offered the pre-call recording, and take it or
 refuse it or ignore it, all three reaching the same agent**.
 
-Verified **2026-09-03**: **662 tests** — 620 pass + 42 skipped without the Postgres
+Verified **2026-09-03**: **666 tests** — 624 pass + 42 skipped without the Postgres
 container (the 42 are the database cases). `ruff check` + `ruff format --check` clean over 177 files,
 `mypy --strict` clean, all scenarios replay, diagrams current, prompt pack fresh.
 
@@ -257,7 +257,25 @@ the PyPI wheel is CPU-only and installing it fails silently.
 **Read `B20` first if you have not.** It rewrote what the rest of this list is about: the
 accuracy problem was ours and is fixed, and the problem that was underneath it is latency.
 
-1. **THE LATENCY — the real open problem, and it is worse than a missed budget**
+1. **THE LATENCY — still the open problem, now with one fix landed** (`Q29`, `D101`).
+   **Batching is built and measured as a NULL RESULT on this GPU** — `busy` median
+   0.45 -> 0.45, worst 1.48 -> 1.46, per-call change -7% to +13% averaging zero, with CER
+   and turn counts identical. It is kept (correct, tested, 1 MB of VRAM, changes no output,
+   and the demo machine may have the spare capacity that makes it pay) but **do not expect
+   it to help here, and do not repeat the inference that the earlier project's
+   `batch_size=4` explains its speed** — that was my guess and the measurement refuted it.
+   Batching *overlaps* work; on a card with no spare capacity there is nothing to overlap.
+   **PACKING is therefore the front-runner, and `D101` records its design** in the user's
+   improved form: pack past a configurable **minimum** speech duration (~1.5-5 s) rather
+   than toward the 30 s maximum. It is the only lever in this design that removes
+   arithmetic rather than rescheduling it — seven 30 s windows per call become one or two.
+   It also keeps the delay and boundary loss to a fraction of the naive full-window
+   version, and — the part that matters more than throughput — **stops us handing the model
+   single-word clips**, which is the input `B14` measured at 8.6 s and invented Thai.
+   **Run the CT2 and Typhoon rows first** (cheaper, and a cheaper 30 s window is the other
+   real lever); build packing if `busy` is still near 1.00 after them.
+
+   The original problem, for reference:
    (`Q29`). Paced over all 12 real calls, p95 utterance-end to turn ranges
    **4.5 s to 58.7 s** against `ARCHITECTURE` §15's **1.5 s**. It was invisible because
    every measurement used `--fast`, which blanks the latency column — the flag added in
@@ -438,7 +456,7 @@ Whoever has the strongest GPU should own the demo machine.
 | **Q21** | **Which storage backend does the DEMO run on?** `memory` is the default and needs nothing; `postgres` is what survives a restart, and it is what makes the persistence work visible on stage at all. Running it on the day adds a container to the list of things that can fail, against `PLAN.md`'s risk register — *never depend on the venue*. Leaning: **rehearse on `postgres`, keep `memory` as the one-keystroke fallback**, since both pass the same suite. | Not decided |
 
 | **Q22** | **Does the committed prompt pack carry actual audio once a real voice is chosen?** `D24` calls the checked-in pack the offline fallback, which is the whole reason the IVR works with no internet — but `CLAUDE.md` says never commit audio. That rule means *call recordings*, not TTS output of our own sentences, so the two are probably compatible; 63 short Thai clips is a few MB. Undecided because there is no audio yet. | Manifest only, for now |
-| **Q30** | **The prepared test set is number-heavy.** Almost every call in this corpus ends with a phone number read aloud, so the 12 prepared calls over-represent digits and under-represent ordinary conversation. That was harmless until `B21` **loosened** the repetition guard for digits — the set that would catch a regression from that loosening is exactly the speech-heavy set we do not have. Re-prepare with a deliberate mix (the user raised this; they are right). | Known, not yet fixed |
+| **Q30** | **The prepared test set is number-heavy.** Almost every call in this corpus ends with a phone number read aloud, so the 12 prepared calls over-represent digits and under-represent ordinary conversation. That was harmless until `B21` **loosened** the repetition guard for digits — the set that would catch a regression from that loosening is exactly the speech-heavy set we do not have. Re-prepare with a deliberate mix (the user raised this; they are right). | **Tool built 2026-09-04**: `prepare_dataset.py --mix` caps the digit-heavy share and prints a `digit%` column. **The set itself has not been re-prepared yet** |
 | **Q28** | **The reference mixes scripts, and CER charges us for being right.** The dataset's transcripts write brand and place names in **Latin** (`True move`, `Mezzox Drip Cafe`, `Frosen Khaoyai`, `Router`, `L O S`) while Thonburian correctly transliterates them into Thai (`ทูมู`, `เมโซเอ็กซ์ดิสกาแฟ`, `โฟร์เซนต์ เขา ใหญ่`). Every character of those differs, so a *correct* transcription is scored as a total miss, and on the two worst files that is most of the residual CER. Options: normalise both sides through a transliteration map before scoring (real work, and it can flatter); report CER with those spans excluded and say so; or accept it and treat the number as a floor. **Do not quietly "fix" the reference** — editing ground truth to match the model is how a metric stops meaning anything. | **Decided 2026-09-04: one headline + one diagnostic.** `bake_off.py` reports `CER` (the only ranking metric) and `CERth` (Latin spans stripped from both sides). The GAP between them is the answer; three competing scores would just move the argument. Not ranked on `CERth` because that excuses every engine from the words it is most likely to get wrong. **And it does not block the engine choice** — the mismatch hits every engine equally, so it distorts the absolute number, not the ranking |
 | **Q29** | **The p95 latency runs from 4.5 s to 58.7 s against a 1.5 s budget**, and the spread tracks throughput: at rtf <= 0.31 it is 4.5-8 s, at rtf >= 0.65 it is 31-59 s, because once decode is slower than speech the backlog compounds for the rest of the call. `D30`'s table is the thing that decides what to do. Thonburian medium fp16 takes ~3 s per utterance on this card and one consumer serialises them, so three short phrases in four seconds queue up. Candidates, and they are not exclusive: the **CT2 int8_float16 build** (`scripts/convert_ct2.py`, this is the row that was always meant to decide it), **Typhoon** (a transducer, so no 30 s padding — `D99` says exactly why this might be structural rather than incremental), a **smaller Thonburian**, or accepting a slower transcript because `D12` means the call is never waiting on it. | Not decided; measure before choosing |
 | **Q27** | **The dataset is all `Government` domain, not insurance.** All 3189 calls (`D97`). It measures Thai telephone ASR honestly and says nothing about insurance jargon — and our `stt_vocabulary.yaml` hint is *wrong* for it, which makes it a fair test of whether the hint hurts when it does not apply. An insurance-domain set would still be worth having, and the hackathon may supply one. | Use it, and label the numbers as general Thai |
@@ -485,6 +503,20 @@ Facts about *this laptop* rather than the repo, so a fresh session does not redi
 
 ## Things to be careful about (live landmines)
 
+- **BATCHING MUST NEVER WEAKEN A GUARD** (`D101`). `_transcribe_batch` splits into
+  prepare / dispatch / publish precisely so that the level gate still runs per segment
+  BEFORE the model and all four guards still run per segment AFTER it. Only the inference
+  in the middle is shared. A hallucination that arrives alongside three good utterances is
+  exactly as dangerous as one that arrives alone.
+- **A BATCH IS NEVER WAITED FOR** (`D101`). `_consume` takes what is *already* queued with
+  `get_nowait()`. Waiting to fill a batch would trade latency for throughput on a path
+  that does not always need throughput, and would add delay to the common case where the
+  model is keeping up. If you ever change this to wait, you have built packing without
+  the design in `D101`.
+- **RESULTS COME BACK INDEX-FOR-INDEX, AND EMPTY UTTERANCES KEEP THEIR SLOT** (`D101`).
+  `ThonburianHfEngine.transcribe_batch` gives an empty utterance a placeholder rather than
+  filtering it out, because filtering and re-appending would shift every later result onto
+  the wrong segment — `B20`'s fluent-sentence-on-the-wrong-moment failure in a new place.
 - **THAI DIGIT WORDS LEGITIMATELY REPEAT, AND THE GUARD USED TO EAT THEM** (`B21`).
   `เก้า` is nine; `0989999934` is five of them in a row and it is a real phone number.
   Nine of the twelve prepared calls contain a run of 3+ identical digit words, so the old

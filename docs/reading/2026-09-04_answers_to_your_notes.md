@@ -145,12 +145,17 @@ the GPU at once. It also had the easy version of the problem — a file on disk,
 is available up front and batching is free. We are streaming, so a clip only exists once the
 caller has said it.
 
-**My recommendation: do B first, then measure, and only reach for A if B is not enough.**
-Batching is the change that cannot make anything worse. And it fits the streaming case
-naturally in the exact place it is needed: when the model is keeping up, the queue has one
-item and we send one; when it falls behind, the queue has several and we send them together.
-The speed-up arrives precisely when there is a backlog, which is the only time it matters.
+**My recommendation was: do B first, then measure. I did, and B did nothing** — see the
+correction at the bottom of this file.
 
+**Original reasoning, left as written so the correction has something to correct:** do B
+first, then measure, and only reach for A if B is not enough. Batching is the change that
+cannot make anything worse, and it fits the streaming case in the exact place it is
+needed — when the model is keeping up the queue has one item; when it falls behind the
+queue has several and we send them together, so the speed-up arrives precisely when there
+is a backlog.
+
+That reasoning is still sound. It just turned out there was no speed-up to arrive.
 Packing stays on the table as the bigger hammer, and your "cut at the closest pause before
 30s" rule is the right shape for it.
 
@@ -297,3 +302,40 @@ uv run python scripts/bake_off.py --engines thonburian --vad silero --fast --aud
 ```
 
 Drop `--fast` for real latency numbers — it takes as long as the audio does (~16 minutes).
+
+---
+
+## Correction, later the same day: batching bought nothing
+
+I built the batching, measured it, and it made **no difference** on your GPU:
+
+| | without batching | with batching |
+|---|---|---|
+| `busy` median | 0.45 | **0.45** |
+| `busy` worst | 1.48 | **1.46** |
+| calls over 1.00 | 1 of 12 | **1 of 12** |
+| CER / turns | 0.161 / 82 | 0.161 / 82 (unchanged, as designed) |
+
+Per call it moved between -7% and +13%, averaging zero.
+
+**Why:** batching wins when a GPU has spare capacity and the cost is mostly overhead. A
+4 GB laptop card running this model has none — four 30-second windows is four times the
+arithmetic and takes four times as long however you schedule it. **Batching overlaps work;
+it does not remove any.**
+
+**Which means my explanation of why your old project was fast was wrong**, or at least
+incomplete. `batch_size=4` was a plausible cause and it is not the cause. I have said
+so in the docs so nobody repeats it.
+
+**And it promotes your packing idea from fallback to front-runner.** Packing is the only
+change in this design that removes arithmetic instead of rescheduling it — seven 30-second
+windows per call becoming one or two. Your minimum-threshold version is the one to build,
+for the reason you gave: it stops us handing the model single-word clips, which is the
+input that makes it hallucinate in the first place.
+
+I have kept the batching code — it is correct, tested, costs 1 MB, changes no output, and
+the demo machine is meant to be whoever has the strongest GPU, where the spare capacity
+might actually exist. But it is not the fix, and the docs no longer say it is.
+
+**Next, in order:** the CT2 build and Typhoon (both cheaper to try, and a cheaper 30-second
+window is the other real lever), then packing if `busy` is still near 1.00.

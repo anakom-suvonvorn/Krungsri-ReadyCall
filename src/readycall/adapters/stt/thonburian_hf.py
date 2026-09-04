@@ -95,6 +95,92 @@ class ThonburianHfEngine:
         await self.transcribe_utterance([AudioFrame(samples=_warmup_tone(), t_start_ms=0)])
         log.info("thonburian warm")
 
+    async def transcribe_batch(
+        self,
+        utterances: Sequence[Sequence[AudioFrame]],
+        *,
+        hint: SttHint | None = None,
+    ) -> list[SttResult]:
+        """Several utterances through the GPU in one pass (`D101`, `BatchSttEngine`).
+
+        This is the mechanism behind the team's earlier Thai project being fast: it passed
+        `batch_size=4` to this same pipeline. Whisper encodes a fixed 30-second window per
+        clip whatever its length, so four short utterances cost four full windows either
+        way — batching overlaps them on the GPU rather than paying for them one after the
+        other.
+
+        **The empty-utterance case is handled by position, not by filtering.** Dropping an
+        empty one before the call and appending the results back would silently shift every
+        later result onto the wrong segment, which is `B20`'s failure — a fluent sentence
+        attributed to the wrong moment — reappearing in a new place. Empties get a
+        placeholder result so the returned list stays index-for-index with the input.
+        """
+        if self._pipe is None:
+            await self.warmup()
+        language = hint.language if hint else self._language
+        self._warn_about_unused_vocabulary(hint)
+
+        audios: list[object] = []
+        bounds: list[tuple[int, int]] = []
+        keep: list[int] = []
+        for index, frames in enumerate(utterances):
+            samples: list[float] = []
+            for frame in frames:
+                samples.extend(frame.samples)
+            if not samples:
+                bounds.append((0, 0))
+                continue
+            t_start = frames[0].t_start_ms
+            bounds.append((t_start, t_start + int(len(samples) / 16000 * 1000)))
+            audios.append(self._np.asarray(samples, dtype=self._np.float32))
+            keep.append(index)
+
+        texts: dict[int, str] = {}
+        if audios:
+
+            def run() -> list[str]:
+                out = self._pipe(
+                    audios,
+                    batch_size=len(audios),
+                    generate_kwargs={"language": language, "task": "transcribe"},
+                )
+                # The pipeline returns a list when handed a list, and a bare dict when
+                # handed one array. Normalised rather than assumed.
+                items = out if isinstance(out, list) else [out]
+                return [str(item.get("text", "")).strip() for item in items]
+
+            produced = await asyncio.to_thread(run)
+            for index, text in zip(keep, produced, strict=False):
+                texts[index] = text
+
+        results: list[SttResult] = []
+        for index in range(len(utterances)):
+            t_start, t_end = bounds[index]
+            results.append(
+                SttResult(
+                    text=texts.get(index, ""),
+                    confidence=None if index in texts else 0.0,
+                    t_start_ms=t_start,
+                    t_end_ms=t_end,
+                    engine="thonburian_hf",
+                    engine_version=self._model_name,
+                    is_final=True,
+                )
+            )
+        return results
+
+    def _warn_about_unused_vocabulary(self, hint: SttHint | None) -> None:
+        """`B19`, factored out so the batch path cannot forget to say it."""
+        if hint is None or not hint.vocabulary or self._warned_vocabulary:
+            return
+        self._warned_vocabulary = True
+        log.warning(
+            "vocabulary hint IGNORED by this adapter - the number you are about to "
+            "read is unhinted (`B19`)",
+            terms=len(hint.vocabulary),
+            engine="thonburian_hf",
+        )
+
     async def transcribe_utterance(
         self,
         frames: Sequence[AudioFrame],
@@ -113,23 +199,14 @@ class ThonburianHfEngine:
         t_end = t_start + int(len(samples) / 16000 * 1000)
         audio = self._np.asarray(samples, dtype=self._np.float32)
         language = hint.language if hint else self._language
-        if hint is not None and hint.vocabulary and not self._warned_vocabulary:
-            # SAY SO rather than dropping it silently (`B19`). The port advertises the
-            # vocabulary as a "domain nudge that measurably helps on insurance jargon",
-            # `FasterWhisperEngine` honours it through `initial_prompt`, and this adapter
-            # does not - it needs `processor.get_prompt_ids()` fed as `prompt_ids`, which
-            # the pipeline API does not take directly.
-            #
-            # It was found by measuring: hint and no-hint produced CER identical to three
-            # decimals on four files, which is not what "off-domain vocabulary does not
-            # help" looks like. It is what "the argument is discarded" looks like.
-            self._warned_vocabulary = True
-            log.warning(
-                "vocabulary hint IGNORED by this adapter - the number you are about to "
-                "read is unhinted (`B19`)",
-                terms=len(hint.vocabulary),
-                engine="thonburian_hf",
-            )
+        # SAY SO rather than dropping it silently (`B19`). The port advertises the
+        # vocabulary as a "domain nudge that measurably helps on insurance jargon",
+        # `FasterWhisperEngine` honours it through `initial_prompt`, and this adapter does
+        # not - it needs `processor.get_prompt_ids()` fed as `prompt_ids`, which the
+        # pipeline API does not take directly. Found by measuring: hint and no-hint gave
+        # CER identical to three decimals, which is not what "off-domain vocabulary does
+        # not help" looks like. It is what "the argument is discarded" looks like.
+        self._warn_about_unused_vocabulary(hint)
 
         def run() -> str:
             out = self._pipe(
