@@ -51,6 +51,13 @@ class ThonburianHfEngine:
         self._dtype = dtype
         self._language = language
         self._pipe: Any = None
+        #: `prompt_ids` for one vocabulary, cached by its contents (`B19`). Built once
+        #: because tokenising the same word list per utterance is pure waste on a path
+        #: with a 1.5 s budget.
+        self._prompt_cache: dict[tuple[str, ...], Any] = {}
+        #: Set when prompt_ids cannot be built on this transformers version, so the
+        #: warning is said once and the engine keeps working unhinted.
+        self._prompt_unavailable = False
         self._np: Any = None
         self._warned_vocabulary = False
 
@@ -118,7 +125,7 @@ class ThonburianHfEngine:
         if self._pipe is None:
             await self.warmup()
         language = hint.language if hint else self._language
-        self._warn_about_unused_vocabulary(hint)
+        prompt_ids = self._prompt_ids(hint)
 
         audios: list[object] = []
         bounds: list[tuple[int, int]] = []
@@ -139,11 +146,10 @@ class ThonburianHfEngine:
         if audios:
 
             def run() -> list[str]:
-                out = self._pipe(
-                    audios,
-                    batch_size=len(audios),
-                    generate_kwargs={"language": language, "task": "transcribe"},
-                )
+                kwargs: dict[str, Any] = {"language": language, "task": "transcribe"}
+                if prompt_ids is not None:
+                    kwargs["prompt_ids"] = prompt_ids
+                out = self._pipe(audios, batch_size=len(audios), generate_kwargs=kwargs)
                 # The pipeline returns a list when handed a list, and a bare dict when
                 # handed one array. Normalised rather than assumed.
                 items = out if isinstance(out, list) else [out]
@@ -169,17 +175,53 @@ class ThonburianHfEngine:
             )
         return results
 
-    def _warn_about_unused_vocabulary(self, hint: SttHint | None) -> None:
-        """`B19`, factored out so the batch path cannot forget to say it."""
-        if hint is None or not hint.vocabulary or self._warned_vocabulary:
-            return
-        self._warned_vocabulary = True
-        log.warning(
-            "vocabulary hint IGNORED by this adapter - the number you are about to "
-            "read is unhinted (`B19`)",
-            terms=len(hint.vocabulary),
-            engine="thonburian_hf",
-        )
+    def _prompt_ids(self, hint: SttHint | None) -> Any:
+        """Turn the vocabulary hint into Whisper `prompt_ids` (`B19`), or `None`.
+
+        **This is the fix for `B19`**, which was found by measuring: hinted and unhinted
+        runs produced CER identical to three decimals on four files, and byte-identical
+        output is not what "off-domain vocabulary does not help" looks like — it is what a
+        discarded argument looks like. `FasterWhisperEngine` honours the hint through
+        `initial_prompt`; the HF pipeline does not take one, and wants `prompt_ids` in
+        `generate_kwargs` instead.
+
+        **Two hazards, both already handled elsewhere and worth naming here.** Whisper can
+        hand a prompt straight back as if the caller had said it (`B14`) — that is what
+        `echoes_the_prompt()` is for, and it becomes *more* load-bearing the moment this
+        works. And the terms come from `config/stt_vocabulary.yaml` (`D28`), so adding a
+        common word there would make that guard start eating real sentences.
+
+        Failure is non-fatal on purpose: the transformers API for this has moved between
+        versions, and an engine that stops transcribing because a *hint* could not be built
+        would be a far worse bug than an unhinted transcript.
+        """
+        if hint is None or not hint.vocabulary or self._prompt_unavailable:
+            return None
+        key = tuple(hint.vocabulary)
+        if key in self._prompt_cache:
+            return self._prompt_cache[key]
+        try:
+            tokenizer = self._pipe.tokenizer
+            ids = tokenizer.get_prompt_ids(" ".join(hint.vocabulary), return_tensors="pt")
+            ids = ids.to(self._pipe.device)
+        except Exception as exc:  # pragma: no cover - depends on the transformers version
+            self._prompt_unavailable = True
+            log.warning(
+                "could not build prompt_ids - continuing UNHINTED (`B19`). Any accuracy "
+                "number from this run is an unhinted one",
+                engine="thonburian_hf",
+                error=f"{type(exc).__name__}: {exc}",
+            )
+            return None
+        if not self._warned_vocabulary:
+            self._warned_vocabulary = True
+            log.info(
+                "vocabulary hint applied via prompt_ids (`B19` fixed)",
+                terms=len(hint.vocabulary),
+                engine="thonburian_hf",
+            )
+        self._prompt_cache[key] = ids
+        return ids
 
     async def transcribe_utterance(
         self,
@@ -199,20 +241,13 @@ class ThonburianHfEngine:
         t_end = t_start + int(len(samples) / 16000 * 1000)
         audio = self._np.asarray(samples, dtype=self._np.float32)
         language = hint.language if hint else self._language
-        # SAY SO rather than dropping it silently (`B19`). The port advertises the
-        # vocabulary as a "domain nudge that measurably helps on insurance jargon",
-        # `FasterWhisperEngine` honours it through `initial_prompt`, and this adapter does
-        # not - it needs `processor.get_prompt_ids()` fed as `prompt_ids`, which the
-        # pipeline API does not take directly. Found by measuring: hint and no-hint gave
-        # CER identical to three decimals, which is not what "off-domain vocabulary does
-        # not help" looks like. It is what "the argument is discarded" looks like.
-        self._warn_about_unused_vocabulary(hint)
+        prompt_ids = self._prompt_ids(hint)
 
         def run() -> str:
-            out = self._pipe(
-                audio,
-                generate_kwargs={"language": language, "task": "transcribe"},
-            )
+            kwargs: dict[str, Any] = {"language": language, "task": "transcribe"}
+            if prompt_ids is not None:
+                kwargs["prompt_ids"] = prompt_ids
+            out = self._pipe(audio, generate_kwargs=kwargs)
             return str(out.get("text", "")).strip()
 
         text = await asyncio.to_thread(run)

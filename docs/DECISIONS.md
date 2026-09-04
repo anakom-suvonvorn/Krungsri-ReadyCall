@@ -3024,6 +3024,36 @@ means the screen is simply empty when they do. The two failures are not on the s
   set (`Q30`). The accuracy numbers here are honest for *this* corpus; re-run on a mixed
   set before treating 0.182 as the engine's CER.
 
+### The CER half of this table was not a fair comparison, and the latency half was
+
+Found immediately after committing it, which is the right time to say so and the wrong
+time to have found it.
+
+**`FasterWhisperEngine` applies the vocabulary hint through `initial_prompt`.
+`ThonburianHfEngine` did not apply it at all** (`B19`). So in the table above the **CT2 row
+was hinted and the fp16 row was not** — with 15 insurance terms, on a corpus that is
+entirely `Government` domain (`Q27`), so the hint was not even in-domain.
+
+This is precisely what `B19` warned about in its own last line: *an engine comparison where
+the engines disagree about whether they read a parameter is not a comparison.* I wrote that
+sentence and then produced the table anyway.
+
+**What survives and what does not:**
+
+- **The latency, `busy` and VRAM conclusions stand.** An `initial_prompt` prepends a
+  handful of tokens to the decoder context. It cannot produce 12x at the median and 24x at
+  the worst, and it has nothing to do with a 2731 -> 1106 MB memory footprint. **The
+  decision to ship CT2 is not in question.**
+- **The CER comparison, 0.161 vs 0.182, is contaminated and should not be quoted.** The
+  direction of the contamination is not even obvious: an off-domain hint plausibly *hurts*,
+  in which case int8's real accuracy cost is smaller than measured; if it helped, the cost
+  is larger. Either way the number is not the difference between fp16 and int8.
+
+**Fixed both ways.** `ThonburianHfEngine` now builds `prompt_ids` from the vocabulary and
+passes them in `generate_kwargs`, so the hint is genuinely applied (`B19` closed). And the
+re-measurement runs `--no-hint`, so both engines are equally unhinted and the comparison is
+of the quantisation and nothing else.
+
 ### Why the earlier CT2 VRAM figure of 585 MB is withdrawn
 
 The first CT2 run reported 585 MB. That was measured with the previous engine's weights
