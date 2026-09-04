@@ -150,14 +150,37 @@ it.
 **The dataset changed what can be measured.** 22 GB of real Thai call-centre audio now
 sits outside the repo (`D97`), and its scripts carry per-segment timestamps *including
 explicit `noise` spans* — ground truth for **where nobody is speaking**, which is exactly
-what the endpointer decides and the one thing an accuracy score cannot tell us. Nothing
-consumes `segments.tsv` yet; it is the cheapest remaining measurement in this phase.
+what the endpointer decides and the one thing an accuracy score cannot tell us.
+`scripts/score_endpointer.py` consumes `segments.tsv` and reports **coverage 0.782, span
+recall 0.885** on the balanced set — and the seconds it "misses" are 86% near-silent and
+72% within half a second of an annotated boundary, i.e. an annotator rounding outward.
+`D9`'s inherited constants are right for this audio; leave them.
 
-**First real numbers**, and they are recorded as unexplained rather than as a verdict:
-Thonburian medium fp16 + Silero over 12 real calls gives **CER 0.09-0.50, median 0.29** (the earlier 0.47-0.76 was measured through `B20`), throughput
-rtf 0.12, 2.8 GiB of the 3.2 available. Speed and memory are comfortable; accuracy is not.
-⚠️ **Rank on CER, never WER** (`B18`) — whitespace word error on unsegmented Thai read
-**0.94-1.12** on a model that was working perfectly.
+**The engine is settled** (`D30` closed by `D104`). Paced, 20 real calls, against
+`ARCHITECTURE` §15's p95 < 1.5 s:
+
+| | Thonburian fp16 | CT2 int8 + hint | **Typhoon** |
+|---|---|---|---|
+| p95 median / worst | 19.5 s / 58.7 s | 1.68 s / 2.53 s | **0.19 s / 0.28 s** |
+| inside the budget | 0 of 12 | 7 of 20 | **20 of 20** |
+| CER mean | **0.109** | 0.128 | 0.133 |
+| VRAM | 2716 MB | ~1000 MB | 1068 MB |
+
+**Typhoon ships; CT2 is the fallback for a box where NeMo will not install.** The reason is
+structural and was predicted in `D99` before it was measured: a transducer has **no 30 s
+window**, so it does not pay a full encode for a two-second utterance the way every Whisper
+variant does. It also returns **empty in 149 ms** on silence where Whisper spends **8578 ms
+inventing Thai** (`B14`).
+
+The trade, stated rather than buried: Typhoon is ~22% relatively worse than fp16 on CER,
+**cannot use the vocabulary hint at all**, and is measurably weaker on spoken digits
+(digit-heavy calls 0.132 vs CT2's 0.099, while beating it on conversation 0.137 vs 0.171).
+Mitigated by architecture rather than by the model — `D44`'s keypad is how a policy number
+actually arrives.
+
+⚠️ **Rank on the CER MEAN, never the median and never WER.** The median is unstable at 20
+samples (two identical runs gave 0.087 then 0.124); whitespace WER on unsegmented Thai read
+**0.94-1.12** on a model that was working perfectly (`B18`).
 
 **What is still not in this picture, and why:** the encrypted recording to object storage
 (P7's key management), the live transcript on the workstation, and a *finished* bake-off

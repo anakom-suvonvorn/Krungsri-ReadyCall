@@ -1,5 +1,5 @@
 %% HANDWRITTEN. Checked against ARCHITECTURE.md S6 + S7 + D9 + D21 + D26 + D88 + D96 + D97 + D98
-%% + B7 + B14 + B16 + B18 + B19 + B20
+%% + B7 + B14 + B16 + B18 + B19 + B20 + B21 + B22 + B23 + D103 + D104
 flowchart TB
     subgraph OUT["outside — does not exist yet (P5)"]
         TEL["Asterisk / Twilio<br/>forks EACH LEG separately (D26)"]
@@ -24,10 +24,11 @@ flowchart TB
         E1["EnergyVad — no dependencies.<br/>The CI path AND the degradation rung"]
         E2["SileroVad — from the PACKAGE,<br/>never torch.hub during a call (D9)"]
         S1["ScriptedSttEngine — every test, the stage-safe path"]
-        S2["FasterWhisper CT2 int8_float16<br/>ThonburianHf fp16"]
+        S2["TyphoonAsr - THE ENGINE (D104). A NeMo transducer,<br/>so NO 30s window: p95 0.19s, 20 of 20 calls inside<br/>the 1.5s budget. Nothing else has ever met it.<br/>Fed silence it returns EMPTY in 149ms, where Whisper<br/>spends 8578ms inventing Thai (B14 vs D99)."]
+        S3["FasterWhisper CT2 int8_float16 - THE FALLBACK (D103),<br/>for a box where NeMo will not install. Needs the hint:<br/>without it int8 costs 0.109 -> 0.171 CER (B19).<br/>ThonburianHf fp16 - the original, 19.5s p95. Too slow."]
     end
 
-    GUARDS{{"THREE guards, three DIFFERENT KINDS — none optional<br/>1. a repeated chunk burying the sentence? (B16: the first<br/>version split on spaces and caught 0 of 3 REAL Thai loops)<br/>2. mostly OUR OWN vocabulary handed back? (B14)<br/>3. more speech than physically possible? (D98: real Thai is<br/>median 7.6 chars/s, max 15; the real loops are 39-53)"}}
+    GUARDS{{"THREE guards, three DIFFERENT KINDS — none optional<br/>1. a repeated chunk burying the sentence? (B16: the first<br/>version split on spaces and caught 0 of 3 REAL Thai loops)<br/>2. mostly OUR OWN vocabulary handed back? (B14)<br/>3. more speech than physically possible? (D98: real Thai is<br/>median 7.6 chars/s, max 15; the real loops are 39-53)<br/>DIGITS ARE EXEMPT from guard 1 (B21): a real Thai phone<br/>number has FIVE identical digit words in a row, and the<br/>guard was deleting them in 9 of 12 calls.<br/>The guards STAY under Typhoon even though it does not<br/>hallucinate on silence - they are the degradation path<br/>back to the CT2 fallback, and cost microseconds."}}
     INTAKE["IntakeService.on_turn<br/>waiting for this since D88"]
 
     TEL -. "P5" .-> NORM
@@ -45,8 +46,10 @@ flowchart TB
     GATE -->|"silent — DROP"| DROP["8.6s and invented Thai if we<br/>had sent it. 55x a real utterance (B14)"]
     STREAM --> S1
     STREAM --> S2
+    STREAM --> S3
     S1 --> GUARDS
     S2 --> GUARDS
+    S3 --> GUARDS
     GUARDS -->|"survived"| INTAKE
     GUARDS -->|"refused"| BIN["never reaches the agent's screen.<br/>Invented jargon looks MORE credible,<br/>not less — D16's hazard, one layer down"]
 
