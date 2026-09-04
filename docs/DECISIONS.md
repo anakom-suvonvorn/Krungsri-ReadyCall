@@ -2966,3 +2966,68 @@ The obvious way to go faster is to transcribe two segments concurrently. It brea
 ordering guarantee `stream.py` exists to provide — a two-word phrase finishes before the
 sentence in front of it and the caller's words reach the agent shuffled. If throughput is
 the problem the answer is a faster engine or fewer windows, not a second consumer.
+
+## D102. The engine is the CT2 `int8_float16` build of Thonburian — this is `D30`'s answer
+_The measurement `D30` has been asking for since P0. Paced, on 12 real Thai call-centre
+calls, with the endpointer and guards that ship._
+
+### The table
+
+| | Thonburian medium fp16 | **CT2 `int8_float16`** |
+|---|---|---|
+| p95 utterance-end -> turn, median | 19.5 s | **1.65 s** |
+| p95, worst call | **58.7 s** | **2.48 s** |
+| p95, best call | 4.5 s | 1.21 s |
+| calls inside the 1.5 s budget | **0 of 12** | 3 of 12 |
+| `busy` (model-seconds per second of audio), median | 0.45 | **0.09** |
+| `busy`, worst | **1.48** | **0.13** |
+| CER, median | **0.161** | 0.182 |
+| VRAM | 2731 MB | **1106 MB** |
+
+### The decision
+
+**Ship the CT2 build.** `models/whisper-th-medium-combined-ct2`, produced once by
+`scripts/convert_ct2.py` from the same `biodatlab/whisper-th-medium-combined` weights.
+
+- **Latency improves by 12x at the median and 24x at the worst**, which is the difference
+  between a transcript that helps the agent and one that arrives after the call.
+- **`busy` drops from 1.48 to 0.13 at its worst**, so no call is anywhere near the point
+  where the transcriber falls permanently behind. That was the *stability* problem, and it
+  is gone rather than reduced — `D101`'s whole concern about compounding backlog no longer
+  has a case that triggers it.
+- **VRAM drops from 2731 MB to 1106 MB.** On a card with 3.2 GiB free that is the
+  difference between the STT model owning the machine and leaving room for something else.
+
+### The cost, stated plainly
+
+**CER median goes from 0.161 to 0.182** — about 13% relatively worse, and it is a real
+cost, not noise: per call it moves in both directions but the median is clearly up. Some
+calls improve (0.188 -> 0.125, 0.139 -> 0.089), several get worse (0.126 -> 0.185,
+0.152 -> 0.273).
+
+**It is worth paying, and the reason is not "small number beats big number".** A transcript
+that is 2% less accurate is a transcript the agent reads with slightly more care. A
+transcript that arrives 58 seconds after the caller finished speaking is not a transcript
+at all — the agent has already answered, and `D12`'s promise that AI never delays the call
+means the screen is simply empty when they do. The two failures are not on the same scale.
+
+### What this does NOT close
+
+- **The 1.5 s budget is still missed**, at 1.65 s median and 2.48 s worst — but by a factor
+  of 1.1-1.7 rather than 13-39. `ARCHITECTURE` §15's number is now a target to close rather
+  than a fantasy, and two levers remain: **packing** (`D101`, fewer 30 s windows) and the
+  **distilled** checkpoint already in the HF cache, which cuts the decoder rather than
+  quantising it. Try distil first; it is a download we have already paid for.
+- **Typhoon is still unmeasured** (`D99`, NeMo now installed). A transducer has no 30 s
+  window at all, so it is the one candidate that could make packing unnecessary.
+- **`B21`'s digit guard was loosened**, and this table was produced on a digit-heavy test
+  set (`Q30`). The accuracy numbers here are honest for *this* corpus; re-run on a mixed
+  set before treating 0.182 as the engine's CER.
+
+### Why the earlier CT2 VRAM figure of 585 MB is withdrawn
+
+The first CT2 run reported 585 MB. That was measured with the previous engine's weights
+still resident (`B22`), so the per-engine baseline was polluted and the delta was not the
+model's footprint. The clean number is **1106 MB**. Recorded because the wrong figure is
+more flattering than the right one, which is exactly when a withdrawn number needs saying
+out loud.

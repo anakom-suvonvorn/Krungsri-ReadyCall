@@ -314,8 +314,23 @@ uv run python scripts/convert_ct2.py
 ```
 
 Thonburian publishes a transformers checkpoint only, and faster-whisper needs a CTranslate2
-build, so it has to be converted once locally. Downloads ~3 GB the first time and writes a
-quantised copy to `models/` (gitignored). Only needed for `STT_ENGINE=thonburian_ct2`.
+build, so it has to be converted once locally. It writes a quantised copy (~737 MB) to
+`models/`, which is gitignored — so **a fresh clone has to run this**. About a minute if the
+Hugging Face cache already holds the checkpoint, plus a ~1.6 GB download if it does not.
+
+**This is no longer optional: the CT2 build is the chosen engine** (`D102`). Measured paced
+over 12 real Thai calls against the fp16 original:
+
+| | Thonburian fp16 | CT2 `int8_float16` |
+|---|---|---|
+| p95 utterance-end → turn, median | 19.5 s | **1.65 s** |
+| p95, worst call | 58.7 s | **2.48 s** |
+| VRAM | 2731 MB | **1106 MB** |
+| CER median | 0.161 | 0.182 |
+
+Twelve times faster at the median and twenty-four at the worst, for about 13% relatively
+more character error. The budget is still missed (1.5 s), but by 1.1–1.7x rather than
+13–39x.
 
 ### Measure the speech engines against each other
 

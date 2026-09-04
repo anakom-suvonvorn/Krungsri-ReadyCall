@@ -1,7 +1,7 @@
 # NEXT_SESSION
 
 _The live working state. READ THIS FIRST every session. Keep it short and current._
-_Last updated: 2026-09-04 (evening)._
+_Last updated: 2026-09-04 (late)._
 
 ---
 
@@ -257,7 +257,38 @@ the PyPI wheel is CPU-only and installing it fails silently.
 **Read `B20` first if you have not.** It rewrote what the rest of this list is about: the
 accuracy problem was ours and is fixed, and the problem that was underneath it is latency.
 
-1. **THE LATENCY — still the open problem, now with one fix landed** (`Q29`, `D101`).
+1. **~~THE LATENCY~~ — largely SOLVED by the CT2 build** (`D102`, closing most of `Q29`).
+   `D30` finally has its answer, measured paced over 12 real calls:
+
+   | | Thonburian fp16 | **CT2 int8_float16** |
+   |---|---|---|
+   | p95 median | 19.5 s | **1.65 s** |
+   | p95 worst | 58.7 s | **2.48 s** |
+   | `busy` worst | 1.48 (over 1.00!) | **0.13** |
+   | VRAM | 2731 MB | **1106 MB** |
+   | CER median | 0.161 | 0.182 |
+
+   **The stability problem is gone**: nothing is near `busy` 1.00, so the compounding
+   backlog that produced the 23-59 s latencies has no case that triggers it. The 1.5 s
+   budget is still missed, but by **1.1-1.7x instead of 13-39x**. Cost is CER 0.161 ->
+   0.182, which is worth paying — a slightly less accurate transcript is still a
+   transcript; one that arrives a minute late is an empty screen.
+
+   **Convert it before anything else on a fresh machine:**
+   ```bash
+   uv run python scripts/convert_ct2.py     # ~1 min, no download if the HF cache is warm
+   ```
+
+   **To close the last 1.1-1.7x, in cost order:**
+   - **the `distill-whisper-th-large-v3` checkpoint is ALREADY in the HF cache** (3.1 GB,
+     paid for by the earlier project). A distilled model cuts the decoder to a couple of
+     layers, which is a bigger lever than quantisation and costs nothing to try.
+   - **Typhoon** (`D99`, NeMo installed): a transducer with **no 30 s window at all**, so
+     it is the one candidate that could make packing unnecessary.
+   - **packing** (`D101`), in the user's minimum-threshold form. Now a refinement rather
+     than a rescue.
+
+2. **THE OLD LATENCY ITEM, kept for the reasoning** (`Q29`, `D101`).
    **Batching is built and measured as a NULL RESULT on this GPU** — `busy` median
    0.45 -> 0.45, worst 1.48 -> 1.46, per-call change -7% to +13% averaging zero, with CER
    and turn counts identical. It is kept (correct, tested, 1 MB of VRAM, changes no output,
@@ -301,8 +332,8 @@ accuracy problem was ours and is fixed, and the problem that was underneath it i
    - **Do not read the low-rtf rows as the answer.** The same engine produced both halves;
      what varies is the call.
    - **Measure paced.** It takes as long as the audio does, and that is the point.
-2. **Finish `D30`'s table, which is now the thing that decides `Q29`** rather than a
-   formality. Everything it needs is on this machine.
+3. **Finish `D30`'s table.** The engine is chosen (`D102`); what is missing are the rows
+   that could close the last 1.1-1.7x. Everything they need is on this machine.
    ```bash
    uv run python scripts/bake_off.py --engines thonburian --vad silero \
        --audio "tests/audio/thai_calls/*.wav" --out bakeoff.txt --dump transcripts.txt
@@ -322,30 +353,30 @@ accuracy problem was ours and is fixed, and the problem that was underneath it i
    - **the large-v3 row**: `--engines thonburian:biodatlab/whisper-th-large-v3-combined`.
      Probably will not fit in 3.2 GiB alongside anything; finding that out is the point.
    - record the table in `PROJECT_STATE` §8 and pick the engine on it.
-3. **Decide `Q28` before quoting a CER to anyone.** The reference writes brand and place
+4. **Decide `Q28` before quoting a CER to anyone.** The reference writes brand and place
    names in **Latin** while the model correctly transliterates them into **Thai**, and CER
    charges every character of a right answer. On the two worst files that is most of the
    residual. Either normalise both sides, or report the number with those spans excluded
    and say so — but **do not edit the ground truth to match the model.**
-4. **`B19`: implement the vocabulary hint in `ThonburianHfEngine`**
+5. **`B19`: implement the vocabulary hint in `ThonburianHfEngine`**
    (`processor.get_prompt_ids()` -> `prompt_ids`) and re-measure. It warns loudly now, so a
    run can no longer be quietly unhinted, but an engine comparison where the engines
    disagree about whether they read a parameter is not a comparison.
-5. **The decode timeout** (`D98`'s missing half). The rate guard *detects* a runaway; only
+6. **The decode timeout** (`D98`'s missing half). The rate guard *detects* a runaway; only
    a killable worker process can *stop* one, and `D2` already plans `entrypoints/stt.py`.
    Do not fake it with `asyncio.wait_for` — that does not kill the thread, and a guard that
    looks like one and is not is `B7`'s whole family.
-6. **The encrypted recording to object storage.** `ARCHITECTURE` §6 asks the gateway for it;
+7. **The encrypted recording to object storage.** `ARCHITECTURE` §6 asks the gateway for it;
    it needs MinIO wired and per-recording key refs, which is P7's key management.
-7. **The live transcript on the workstation.** Turns exist and are published; nothing draws
+8. **The live transcript on the workstation.** Turns exist and are published; nothing draws
    them.
-8. **P4** — analysis and brief v2+ with Claude and Typhoon compared on the golden set.
-9. **`D85` is implemented and parked.** Wire `acw_stats.py` into `expected_free_in()` when
+9. **P4** — analysis and brief v2+ with Claude and Typhoon compared on the golden set.
+10. **`D85` is implemented and parked.** Wire `acw_stats.py` into `expected_free_in()` when
    P6 brings real ACW data, as a **score, never a filter** (`D73`).
-10. **Wire the matcher inputs that are fed by nothing** (`B12`): `is_vulnerable`,
+11. **Wire the matcher inputs that are fed by nothing** (`B12`): `is_vulnerable`,
     `last_agent_id`, `last_contact_at` are set on the Customer / brief / snapshot but never
     on the `WaitingCall`, so `customer_priority` and `continuity` score 0 on every real call.
-11. **Small:** `call_intents` / `app_context_events` still in memory · `D64` the live
+12. **Small:** `call_intents` / `app_context_events` still in memory · `D64` the live
     matching board · `Q26` the env var that changes nothing.
 
 ### Settled this session, so nobody re-opens them
@@ -503,6 +534,15 @@ Facts about *this laptop* rather than the repo, so a fresh session does not redi
 
 ## Things to be careful about (live landmines)
 
+- **THE ENGINE IS THE CT2 BUILD NOW** (`D102`), and it is a **local directory** produced
+  by `scripts/convert_ct2.py`, not a Hugging Face id — inventing one was `B17`. A fresh
+  clone has no `models/` (gitignored), so the conversion is a setup step. It takes about a
+  minute when the HF cache is warm and downloads ~1.6 GB when it is not.
+- **`close()` MUST FREE THE DEVICE MEMORY, NOT JUST THE OBJECT** (`B22`). Dropping the
+  reference leaves the weights in torch's caching allocator, so the driver still counts
+  them: a second engine in the same process is measured against a polluted baseline and,
+  on a 4 GiB card, may not fit at all. This invalidated a CT2 VRAM figure (585 MB, real
+  answer 1106 MB) before it was caught by **watching `nvidia-smi`, not by a failure**.
 - **BATCHING MUST NEVER WEAKEN A GUARD** (`D101`). `_transcribe_batch` splits into
   prepare / dispatch / publish precisely so that the level gate still runs per segment
   BEFORE the model and all four guards still run per segment AFTER it. Only the inference
