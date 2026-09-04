@@ -257,3 +257,30 @@ def test_the_hf_engine_is_not_affected() -> None:
 
     s = Settings(stt_engine="thonburian_hf", stt_model="biodatlab/whisper-th-medium-combined")
     assert s.stt_model == "biodatlab/whisper-th-medium-combined"
+
+
+def test_every_engine_the_docs_recommend_can_actually_be_selected() -> None:
+    """`B23`'s lesson, generalised. Twice now the engine chosen by a decision entry could
+    not be turned on: `thonburian_ct2` was handed the wrong kind of model id, and `typhoon`
+    fell through to a scripted fallback with only a warning. Both would have failed on the
+    box with the GPU, on demo morning, after the docs said they were the engine.
+
+    This asserts the wiring exists, not that the model loads — constructing a real engine
+    needs the `ml`/`asr` extras and a GPU. `build_stt` is inspected for the branch instead.
+    """
+    import inspect
+
+    from readycall.api import deps
+    from readycall.config import SttEngineName
+
+    source = inspect.getsource(deps.build_stt)
+    wired = (
+        SttEngineName.THONBURIAN_CT2,
+        SttEngineName.THONBURIAN_HF,
+        SttEngineName.TYPHOON,
+    )
+    for engine in wired:
+        assert f"SttEngineName.{engine.name}" in source, (
+            f"{engine.value} has no branch in build_stt, so selecting it silently gives "
+            f"you something else"
+        )

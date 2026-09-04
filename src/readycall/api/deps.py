@@ -169,8 +169,15 @@ def build_stt(settings: Settings) -> SttEngine:
         from readycall.adapters.stt.thonburian_hf import DEFAULT_MODEL, ThonburianHfEngine
 
         return ThonburianHfEngine(model=settings.stt_model or DEFAULT_MODEL, device=device)
+    if name is SttEngineName.TYPHOON:
+        from readycall.adapters.stt.typhoon_asr import DEFAULT_MODEL, TyphoonAsrEngine
+
+        # The engine `D104` selects. It needs the `asr` extra (NeMo), which is deliberately
+        # separate from `ml` (`D99`) - so this import is the thing that fails, loudly and
+        # with instructions, on a box that has not installed it.
+        return TyphoonAsrEngine(model=settings.stt_model or DEFAULT_MODEL, device=device)
     if name is not SttEngineName.SCRIPTED:
-        # `distill`, `typhoon` and `cloud` are named in the enum and not built (`D30`).
+        # `distill` and `cloud` are named in the enum and not built (`D30`).
         # Saying so beats a silent fallback that makes a demo look like it is running a
         # model it is not.
         log.warning(

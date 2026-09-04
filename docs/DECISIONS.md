@@ -3069,6 +3069,12 @@ more flattering than the right one, which is exactly when a withdrawn number nee
 out loud.
 
 ## D103. The engine is CT2 int8 **with the vocabulary hint**, measured on a balanced set
+> **SUPERSEDED as the engine choice by `D104` the same day.** Typhoon meets the 1.5 s
+> budget on 20 of 20 calls where this reaches 7 of 20. Everything below stays correct
+> and stays useful: **CT2 is now the documented fallback** for a box where NeMo will
+> not install, and the hinted/unhinted 2x2 and the median-instability note below are
+> what the rest of this table's methodology rests on.
+
 _Supersedes the accuracy half of `D102`. Same conclusion about which engine; almost none of
 the same reasoning, because both of `D102`'s inputs were wrong._
 
@@ -3190,3 +3196,95 @@ large; quantising a medium wins. Recorded so nobody spends the download again.
 - **Packing** (`D101`) looks unnecessary now: it existed to cut the number of windows, and
   at `busy` 0.11 there is no throughput problem left to solve. It stays designed and
   unbuilt, which is the right state for it.
+
+## D104. Typhoon ASR is the engine — it is the only one that meets the latency budget
+_Supersedes `D103`'s engine choice, hours after it was made. `D99` predicted this
+outcome and gave the structural reason; the measurement confirms it._
+
+### The complete `D30` table, at last
+
+Balanced 20-call set, Silero, same endpointer and guards throughout. Latency paced.
+
+| | fp16 | CT2 int8 + hint | **Typhoon** |
+|---|---|---|---|
+| p95 utterance-end -> turn, median | 19.5 s | 1.68 s | **0.19 s** |
+| p95 worst | 58.7 s | 2.53 s | **0.28 s** |
+| **inside the 1.5 s budget** | **0 of 12** | 7 of 20 | **20 of 20** |
+| `busy` worst | 1.25 | 0.11 | **0.020** |
+| VRAM | 2716 MB | ~1000 MB | 1068 MB |
+| CER mean | **0.109** (unhinted) | 0.128 (hinted) | 0.133 (no hint possible) |
+| turns produced | 145 | 146 | 143 |
+
+**`ARCHITECTURE` §15's budget has never been met by anything until now, and Typhoon meets
+it on every call in the set** — nine times faster than the CT2 build that superseded fp16
+this morning, and roughly a hundred times faster than fp16 itself.
+
+### Why, and it is the reason `D99` gave before any of this was measured
+
+Typhoon is an **NVIDIA NeMo FastConformer transducer**, not a Whisper model. `D99` wrote:
+
+> *"it does not pad to 30 seconds. Whisper transcribes a fixed window whatever you give it,
+> which is why a two-second utterance costs the same as a twenty-second one here. If the
+> latency budget turns out to be the problem on this GPU, this is the structural reason it
+> might not be."*
+
+That is exactly what happened. Every Whisper variant pays a full 30-second encode per
+utterance — the `pad` column measures it at **2.5-3.0x** the audio actually spoken. A
+transducer processes what it is given. Quantising a Whisper (`D103`) makes each window
+cheaper; Typhoon does not have the window.
+
+**This is the one prediction in this project that was written down before the measurement
+and then confirmed by it**, which is worth noting precisely because most of the others have
+gone the other way.
+
+### The accuracy cost, and the honest framing of it
+
+**CER mean 0.133 against fp16's 0.109** — about 22% relatively worse, and it sits between
+the two Whisper configurations rather than beating them:
+
+    fp16 unhinted   0.109      <- the most accurate thing measured
+    fp16 hinted     0.119
+    CT2 hinted      0.128
+    Typhoon         0.133      <- and it CANNOT be hinted
+    CT2 unhinted    0.171
+
+**Typhoon's number is an unhinted one and cannot be improved the way CT2's was.** A
+transducer has no prompt mechanism, so `SttHint.vocabulary` does nothing for it — which is
+now an *honest* nothing rather than `B19`'s silent one, because the adapter never claimed
+otherwise. That also means the 6 CER points the hint buys CT2 are not available here, and
+any future accuracy work on Typhoon is fine-tuning rather than prompting.
+
+**It is still the right choice**, for the reason that has survived every correction today:
+a transcript that is a few points less accurate is read with more care; a transcript that
+misses the budget is one the agent does not have when they answer. Typhoon is the only
+engine where the transcript is reliably *there*.
+
+### Also worth recording
+
+- **It produces 3 fewer turns than the Whisper engines** (143 against 146). Small, and not
+  yet explained. It may be the same 3% of real speech the endpointer trims (`score_endpointer`),
+  landing differently — but it has not been checked, and "the fast engine also says less"
+  is exactly the kind of thing that turns out to matter.
+- **`D99`'s other prediction is untested**: that a transducer should not hallucinate on
+  silence the way Whisper does (`B14`). The three guards stay regardless.
+- **The `pad` column is meaningless on this row.** It computes `30 x calls / audio`, a
+  Whisper fact; Typhoon's honest pad is 1.0. Noted in `bake_off.py` rather than left to be
+  misread.
+- **`D101`'s packing is now definitively unnecessary.** It existed to reduce the number of
+  30-second windows. The chosen engine has none.
+
+### The deployment cost, stated plainly
+
+Typhoon needs `nemo_toolkit[asr]`, which is a large install kept in its own `asr` extra
+(`D99`). That is a real cost on a metered connection and a real risk on demo morning if the
+box has not been prepared. **CT2 remains the fallback** and is now the *second* engine
+rather than the first: it needs no extra beyond `ml`, and `D103`'s numbers stand as the
+answer to "what if NeMo will not install".
+
+### `STT_ENGINE=typhoon` now actually selects Typhoon
+
+It did not until this entry. `build_stt` had `typhoon` in the "named in the enum and not
+built" branch, so selecting it logged a warning and returned the **scripted** engine — the
+second time in one day that the engine a decision entry had just chosen could not be turned
+on (`B23` was the first). A test now asserts that every engine the docs recommend has a
+branch in `build_stt`, because twice is a pattern.

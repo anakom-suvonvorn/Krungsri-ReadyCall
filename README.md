@@ -318,7 +318,9 @@ build, so it has to be converted once locally. It writes a quantised copy (~737 
 `models/`, which is gitignored — so **a fresh clone has to run this**. About a minute if the
 Hugging Face cache already holds the checkpoint, plus a ~1.6 GB download if it does not.
 
-**This is no longer optional: the CT2 build is the chosen engine** (`D103`). Turn it on with
+**The CT2 build is now the FALLBACK engine, not the first choice** (`D104` chose Typhoon).
+Convert it anyway: it needs only the `ml` extra, where Typhoon needs NeMo, so this is what
+runs on a box where that will not install. Turn it on with
 
 ```bash
 STT_ENGINE=thonburian_ct2       # STT_MODEL is left UNSET on purpose (`B23`)
@@ -339,6 +341,35 @@ over 12 real Thai calls against the fp16 original:
 Twelve times faster at the median and twenty-four at the worst, for about 13% relatively
 more character error. The budget is still missed (1.5 s), but by 1.1–1.7x rather than
 13–39x.
+
+### The chosen engine: Typhoon ASR
+
+```bash
+uv sync --extra ml --extra asr
+STT_ENGINE=typhoon
+```
+
+- **Needs set up:** §1, plus **both** extras. `asr` is `nemo_toolkit[asr]`, a large install
+  kept separate from `ml` on purpose (`D99`).
+- **Needs running alongside:** nothing. Downloads the model on first use.
+
+**It is the only engine that meets the latency budget** (`D104`). Measured paced over 20
+real Thai calls, against a target of p95 < 1.5 s:
+
+| | fp16 | CT2 int8 + hint | **Typhoon** |
+|---|---|---|---|
+| p95 median | 19.5 s | 1.68 s | **0.19 s** |
+| p95 worst | 58.7 s | 2.53 s | **0.28 s** |
+| calls inside budget | 0 of 12 | 7 of 20 | **20 of 20** |
+| CER mean | **0.109** | 0.128 | 0.133 |
+
+It is a **transducer**, not a Whisper model, so it has no 30-second window and does not pay
+a full encode for a two-second utterance. That is the whole reason it is fast, and it was
+predicted in `D99` before any of it was measured.
+
+The trade: about 22% relatively more character error than fp16, and **it cannot take the
+vocabulary hint** — a transducer has no prompt mechanism, so `SttHint.vocabulary` does
+nothing for it.
 
 ### Measure the speech engines against each other
 

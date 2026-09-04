@@ -70,7 +70,7 @@ right queue through a real menu hearing real (pre-rendered) Thai — and now, **
 is settled, they are offered the pre-call recording, and take it or
 refuse it or ignore it, all three reaching the same agent**.
 
-Verified **2026-09-03**: **675 tests** — 633 pass + 42 skipped without the Postgres
+Verified **2026-09-03**: **676 tests** — 634 pass + 42 skipped without the Postgres
 container (the 42 are the database cases). `ruff check` + `ruff format --check` clean over 177 files,
 `mypy --strict` clean, all scenarios replay, diagrams current, prompt pack fresh.
 
@@ -257,7 +257,30 @@ the PyPI wheel is CPU-only and installing it fails silently.
 **Read `B20` first if you have not.** It rewrote what the rest of this list is about: the
 accuracy problem was ours and is fixed, and the problem that was underneath it is latency.
 
-1. **~~THE LATENCY~~ — largely SOLVED by the CT2 build** (`D103`, closing most of `Q29`).
+1. **~~THE LATENCY~~ — SOLVED. `Q29` is CLOSED** (`D104`). Typhoon ASR meets
+   `ARCHITECTURE` §15's 1.5 s budget on **20 of 20 calls**: p95 **0.19 s median, 0.28 s
+   worst**, `busy` worst **0.020**. Nine times faster than the CT2 build that superseded
+   fp16 the same morning, and ~100x faster than fp16.
+
+   | paced, balanced set | fp16 | CT2 + hint | **Typhoon** |
+   |---|---|---|---|
+   | p95 median | 19.5 s | 1.68 s | **0.19 s** |
+   | inside 1.5 s | 0 of 12 | 7 of 20 | **20 of 20** |
+   | `busy` worst | 1.25 | 0.11 | **0.020** |
+   | CER mean | **0.109** | 0.128 | 0.133 |
+
+   **`D99` predicted this before it was measured** — a transducer has no 30 s window, so it
+   does not pay a full encode per utterance. It is the one prediction on this project that
+   was written down first and then confirmed.
+
+   `STT_ENGINE=typhoon` (needs the `asr` extra). **CT2 is the documented fallback** for a
+   box where NeMo will not install.
+
+   Still open on it: it produces **3 fewer turns** than the Whisper engines (143 vs 146),
+   unexplained; and `D99`'s other prediction — that a transducer should not hallucinate on
+   silence (`B14`) — is untested. The guards stay regardless.
+
+2. **~~The CT2 build~~ — now the fallback** (`D103`, superseded as first choice).
    `D30` has its answer, measured paced on the **balanced** 20-call set with both engines
    treated the same:
 
