@@ -980,3 +980,48 @@ those drops were really hallucinations._
   question that would have found this on day one is not "does the guard work?" but **"what
   in this language legitimately repeats?"** — and it was the user, who has heard these
   calls, who asked it.
+
+## B22. `close()` released the model object but not the GPU memory
+_Found 2026-09-04 while running the first two-engine bake-off, by watching `nvidia-smi`
+rather than by anything failing._
+
+- **Symptoms.** Running `--engines thonburian faster_whisper:<ct2>` in one table, the card
+  sat at **3848 MiB of 4096** with the GPU at 100% — after the first engine had been
+  closed and while only the second was supposed to be loaded. The run also took far longer
+  than either engine had taken alone.
+- **Root cause.** Both adapters' `close()` was one line:
+
+  ```python
+  async def close(self) -> None:
+      self._pipe = None
+  ```
+
+  Dropping the Python reference frees the *object*. It does not return the device memory:
+  torch keeps freed blocks in its own caching allocator, so the driver — which is what
+  `mem_get_info()` asks, and what `nvidia-smi` reports — still counts them as in use.
+- **Two consequences, and the second is worse than the first.**
+  1. **The bake-off's VRAM column stops meaning anything in a multi-engine run.**
+     `baseline = vram_in_use_mb()` is sampled per engine, before its weights load. For the
+     second engine that baseline already contains the first engine's model, so the
+     reported delta is not that engine's cost — it is whatever the allocator happened to
+     reuse. `D30`'s whole purpose is a fair table, and a VRAM column that depends on run
+     order is not one.
+  2. **On a 4 GiB card it is most of the way to an out-of-memory failure**, and `D2`
+     explicitly plans for the STT engine to be swappable. An engine swap that leaks a
+     model's worth of VRAM works exactly once.
+- **Fix.** `close()` drops the reference, then `gc.collect()` and `torch.cuda.empty_cache()`,
+  wrapped so that releasing memory can never fail a call. Applied to all three real
+  adapters (`thonburian_hf`, `faster_whisper`, `typhoon_asr`).
+- **`empty_cache()` is normally a smell** — it fights the allocator that exists precisely
+  to avoid re-allocating, and sprinkling it through a hot path is a classic way to make
+  something slower. It is right *here* because the meaning of `close()` is "this process is
+  finished with the model and something else needs the card". That is the one situation the
+  call is for.
+- **How it was found is the reusable part.** Nothing failed. No test could have caught it —
+  the suite runs on the scripted engine and never loads a model at all. It was found by
+  **watching the card while a long run was in progress** and noticing the number was too
+  big for what was supposed to be loaded. The same family as `B14` and `B18`: an
+  instrument disagreeing with the story, noticed only because somebody looked.
+- **The measurement it invalidated has to be re-run**, which is the honest cost of finding
+  it late: the first CT2-vs-Thonburian table was produced under this bug, so its VRAM
+  column — and possibly its timings, since the card was contended — cannot be quoted.

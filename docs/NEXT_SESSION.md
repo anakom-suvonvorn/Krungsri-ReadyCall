@@ -636,7 +636,17 @@ Facts about *this laptop* rather than the repo, so a fresh session does not redi
   (`D97`). `Copy of audiofiles.zip` is a second 22 GB and is deletable once the
   extraction is trusted. The prepared subset and `/models/` are gitignored — the
   transcripts are real customer speech with account numbers in them (`D14`).
-- **The HF cache is ~9.5 GB** after Thonburian medium, at `~/.cache/huggingface/hub`.
+- **The HF cache already holds FOUR Thai checkpoints, from the user's earlier project**,
+  so several bake-off rows cost **no download at all**. Checked 2026-09-04:
+
+  | cached model | size | why it matters |
+  |---|---|---|
+  | `biodatlab/whisper-th-medium-combined` | 1.6 GB | the current baseline |
+  | `biodatlab/whisper-th-large-v3-combined` | 3.1 GB | the large row, free to try |
+  | **`biodatlab/distill-whisper-th-large-v3`** | 3.1 GB | **a DISTILLED model — built for speed, and it was not on our list.** Distil-Whisper cuts the decoder to a couple of layers, which is a far bigger latency lever than int8 quantisation. Try it before packing |
+  | `Thaweewat/whisper-th-medium-ct2` | 1.5 GB | somebody else's pre-built Thai CT2; different weights from ours, worth a row as a sanity check |
+
+  Total cache ~11.8 GB at `~/.cache/huggingface/hub`.
 - **Thonburian medium fp16 uses ~2.75 GiB and peaks near 3.8 of 4.0 GiB** with Silero
   alongside. It fits, with very little room. large-v3 probably will not.
 - **Never edit the reference folders** (`scamprojectthing/ProjectCode`, `music-backlog-adder`).

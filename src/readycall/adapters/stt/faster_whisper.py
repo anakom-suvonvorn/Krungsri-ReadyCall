@@ -217,7 +217,34 @@ class FasterWhisperEngine:
         yield  # type: ignore[unreachable]  # pragma: no cover - makes this a generator
 
     async def close(self) -> None:
+        """Release the model AND the device memory it is holding (`B22`).
+
+        Dropping the Python reference is not enough: torch keeps freed blocks in its own
+        caching allocator, so `mem_get_info()` — which asks the **driver** — still counts
+        them as in use. Two consequences, and the second is the one that matters:
+
+        * a bake-off row for the second engine is measured against a baseline that still
+          contains the first engine's weights, so its VRAM column is not that engine's
+          cost;
+        * on a 4 GiB card, loading a second model without releasing the first is most of
+          the way to an out-of-memory failure, and `D2` explicitly plans for engines to be
+          swappable.
+
+        `empty_cache()` is normally a smell — it fights the allocator that exists to avoid
+        re-allocating. Here it is correct, because the point is precisely that this process
+        is done with the model and something else needs the card.
+        """
         self._model = None
+        try:
+            import gc
+
+            import torch
+
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except Exception:  # pragma: no cover - releasing memory must never fail a call
+            pass
 
 
 __all__ = ["DEFAULT_MODEL", "FasterWhisperEngine"]
