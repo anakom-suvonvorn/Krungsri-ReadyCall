@@ -34,9 +34,10 @@ used `.split()` on a language with no spaces), `B17` (a model id invented from a
 convention), `B18` (an accuracy metric that cannot work on Thai, reporting 100% error on
 a model that was fine). Read those three before touching the audio path.
 
-**If you are the USER rather than a fresh session, read
-`docs/reading/2026-09-03_what_happened.md` and then
-`docs/reading/2026-09-04_answers_to_your_notes.md` instead of this file.** It explains the whole
+**If you are the USER rather than a fresh session, read the three plain-language pages
+instead of this file, in order:** `docs/reading/2026-09-03_what_happened.md`, then
+`docs/reading/2026-09-04_answers_to_your_notes.md`, then
+`docs/reading/2026-09-04_the_engine_decision.md`. It explains the whole
 of 3 September from zero — no decision ids, no jargon without a glossary — and ends with
 the two decisions that need your answer. It was written because three terminal summaries
 in a row failed to land, which is a documentation bug, not a user problem.
