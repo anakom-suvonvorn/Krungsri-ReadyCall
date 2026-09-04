@@ -1298,6 +1298,54 @@ thonburian       3  0.86      2796   </span><span class="bad">0.468</span><span 
   </p>
 </section>
 
+<section class="wide">
+  <span class="part">Added 4 September — the open problem above is closed</span>
+  <h2>The delay is fixed, by changing the model</h2>
+
+  <p>
+    The section above ended with the honest problem: words were arriving on screen
+    <strong>4.5 to 59 seconds</strong> after the caller finished speaking, against a target
+    of 1.5. That is now <strong>0.19 seconds typical, 0.28 at worst</strong>, and it meets
+    the target on <strong>every call in the test set</strong>.
+  </p>
+
+  <div class="tablewrap wrap">
+    <table>
+      <thead><tr><th>paced, 20 real calls</th><th>the original</th><th>compressed</th><th>Typhoon</th></tr></thead>
+      <tbody>
+        <tr><td>delay, typical</td><td class="num bad">19.5 s</td><td class="num">1.68 s</td><td class="num">0.19 s</td></tr>
+        <tr><td>delay, worst call</td><td class="num bad">58.7 s</td><td class="num">2.53 s</td><td class="num">0.28 s</td></tr>
+        <tr><td>calls inside the 1.5 s target</td><td class="num bad">0 of 12</td><td class="num">7 of 20</td><td class="num">20 of 20</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note good">
+    <strong>This is the 30-second padding insight, confirmed.</strong> Typhoon is a
+    different kind of model — it has <em>no 30-second window at all</em>, so it never pays
+    for padding a two-second clip out to thirty. Compressing the old model made each window
+    cheaper; this one does not have the window. We had written that down as a prediction
+    before measuring it, and it is the one prediction on this project that came out right.
+  </div>
+
+  <div class="note trap">
+    <strong>What it costs, because it is not free.</strong> Typhoon is about 22% less
+    accurate than the original model, it <em>cannot</em> use the vocabulary hint at all, and
+    it is noticeably weaker when somebody reads out a phone number — while being
+    <em>better</em> than the alternative on ordinary conversation. The number weakness is
+    survivable only because the system never relied on speech for digits: a policy number
+    arrives as keypresses, and the caller's own number comes from the phone line.
+  </div>
+
+  <p>
+    One more thing worth knowing, since the section above made a point of it: fed a second of
+    silence, the old model spent <strong>8.6 seconds inventing Thai</strong>. Typhoon returns
+    <strong>nothing, in 149 milliseconds</strong>. The three safety guards stay anyway —
+    they cost almost nothing, and they are what protects us if we ever have to fall back to
+    the older engine on a machine where the new one will not install.
+  </p>
+</section>
+
 <footer class="end">
   <p>
     <strong>If something here does not match what you see, that is worth telling me</strong> —
