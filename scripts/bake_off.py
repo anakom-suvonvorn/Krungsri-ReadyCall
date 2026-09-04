@@ -270,7 +270,13 @@ class Run:
 
         Every call to the model encodes a full 30 s window even for a one-second
         utterance, so this is `30 x calls / audio seconds`. It is the size of the prize
-        for batching several utterances into one window before dispatching."""
+        for batching several utterances into one window before dispatching.
+
+        **Meaningless for a non-Whisper engine.** A transducer such as Typhoon (`D99`) has
+        no fixed window at all — it processes what it is given — so this column is
+        computing a Whisper fact about a model that does not have it. Read it only on the
+        Whisper rows; the honest number for a transducer is 1.0 and the column does not
+        know that."""
         return WHISPER_WINDOW_S * self.model_calls / self.audio_s if self.audio_s else 0.0
 
 
@@ -529,6 +535,8 @@ async def main() -> int:
         "because pacing makes wall time equal the audio length by construction.",
         "",
         "pad = seconds Whisper actually ENCODED per second of call. It pads every clip to 30 s,",
+        "so it is a WHISPER fact and is meaningless on a transducer row (typhoon): that",
+        "architecture has no fixed window, and its honest pad is 1.0 whatever this prints.",
         "so twelve one-second utterances cost twelve full windows. This is the size of the",
         "prize for batching utterances into one window before dispatch.",
         "",
