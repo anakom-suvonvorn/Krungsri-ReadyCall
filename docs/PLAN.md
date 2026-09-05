@@ -229,7 +229,9 @@ which is P6 (`D26`).
   Typhoon ASR — CER (never WER, `B18`), p95 utterance latency, VRAM — recorded in
   `PROJECT_STATE.md` §8 and decided in `D104` (`D30`, `INTEGRATIONS.md` §2.1).
 - ✅ `TranscriptTurn` events (`transcript.turn`, published per turn). ☐ incremental DB writes —
-  `transcript_turns` has no table and no ORM model yet. ✅ live transcript in the agent
+  **MET 2026-09-06** (`D114`): `transcript_turns` is a table, written per turn by a fourth
+  subscriber, verified on a live Postgres with six rows for a call nobody accepted.
+  ✅ live transcript in the agent
   desktop (`D105`–`D107`) — held while the call is unassigned, flushed on accept, in memory.
 - ✅ `IntakeStrategy` seam with `PassiveRecordIntake`; `finalize(reason)`; **ring-time
   grace** (`D21`) — the accept endpoint finalises a live intake as partial, proved on a

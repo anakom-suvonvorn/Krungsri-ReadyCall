@@ -31,6 +31,7 @@ from readycall.db.stores import (
     PostgresMatchingDecisionStore,
     PostgresRecordingStore,
     PostgresSnapshotStore,
+    PostgresTranscriptStore,
     PostgresWrapupStore,
 )
 from readycall.domain.enums import (
@@ -42,6 +43,7 @@ from readycall.domain.enums import (
     MatchKind,
     OfferOutcome,
     RecordingPhase,
+    SpeakerRole,
 )
 from readycall.domain.models import (
     Assignment,
@@ -55,6 +57,7 @@ from readycall.domain.models import (
     FitBreakdown,
     MatchCandidate,
     MatchingDecision,
+    TranscriptTurn,
     UrgencyBreakdown,
 )
 from readycall.services.agents.assignment import InMemoryAssignmentStore
@@ -72,6 +75,7 @@ from readycall.services.identity.attestation import (
     InMemoryAttestationStore,
 )
 from readycall.services.recording.store import InMemoryRecordingStore
+from readycall.services.transcription.store import InMemoryTranscriptStore
 from readycall.services.wrapup.store import InMemoryWrapupStore
 
 #: A **separate database** from the one the app uses, and that separation is load-bearing.
@@ -93,6 +97,7 @@ BUILDERS: dict[str, tuple[Any, Any]] = {
     "captures": (InMemoryCaptureStore, PostgresCaptureStore),
     "decisions": (InMemoryMatchingDecisionStore, PostgresMatchingDecisionStore),
     "recordings": (InMemoryRecordingStore, PostgresRecordingStore),
+    "transcripts": (InMemoryTranscriptStore, PostgresTranscriptStore),
     "snapshots": (InMemorySnapshotStore, PostgresSnapshotStore),
     "wrapups": (InMemoryWrapupStore, PostgresWrapupStore),
 }
@@ -631,3 +636,69 @@ async def test_deleting_a_recording_removes_the_row(stores: Any) -> None:
     assert await stores.recordings.for_calls([CALL]) == []
     # Twice is not an error: a purge and an erasure request can genuinely race.
     await stores.recordings.delete("rec_1")
+
+
+# --- transcript turns (D114) ------------------------------------------------------------
+
+
+def _turn(seq: int, text: str = "รถผมชนครับ", *, is_final: bool = True) -> TranscriptTurn:
+    return TranscriptTurn(
+        turn_id=f"turn_{seq}",
+        call_session_id=CALL,
+        seq=seq,
+        speaker_role=SpeakerRole.CUSTOMER,
+        text=text,
+        t_start_ms=seq * 1000,
+        t_end_ms=seq * 1000 + 800,
+        asr_confidence=0.91,
+        engine="typhoon",
+        engine_version="scb10x/typhoon-asr-realtime",
+        is_final=is_final,
+        intake_id="ik_1",
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_turn_round_trips_whole(stores: Any) -> None:
+    """Including `is_final`, which is the one field with a claim in it: `False` means the
+    caller was still talking when the endpointer cut them off."""
+    turn = _turn(1, "รถผมชนที่พระราม 9 ครับ", is_final=False)
+
+    await stores.transcripts.append(turn)
+
+    assert await stores.transcripts.for_calls([CALL]) == [turn]
+
+
+@pytest.mark.asyncio
+async def test_turns_come_back_in_sequence_order(stores: Any) -> None:
+    """`seq` is the only thing that makes a transcript a transcript.
+
+    Written out of order on purpose: insertion order is what a store returns when nobody
+    asked it to sort, and it is right until two writes race.
+    """
+    for seq in (3, 1, 2):
+        await stores.transcripts.append(_turn(seq, f"ประโยคที่ {seq}"))
+
+    assert [t.seq for t in await stores.transcripts.for_calls([CALL])] == [1, 2, 3]
+
+
+@pytest.mark.asyncio
+async def test_the_same_turn_twice_is_one_row(stores: Any) -> None:
+    """The bus is at-least-once by design (`D15`), and a transcript with a sentence in it
+    twice reads as the caller having repeated themselves."""
+    await stores.transcripts.append(_turn(1))
+    await stores.transcripts.append(_turn(1))
+
+    assert len(await stores.transcripts.for_calls([CALL])) == 1
+
+
+@pytest.mark.asyncio
+async def test_erasing_a_call_takes_every_turn(stores: Any) -> None:
+    """The text half of a PDPA erasure request (`D14`); `D110` covers the audio half."""
+    for seq in (1, 2, 3):
+        await stores.transcripts.append(_turn(seq))
+
+    removed = await stores.transcripts.delete_for_call(CALL)
+
+    assert removed == 3
+    assert await stores.transcripts.for_calls([CALL]) == []

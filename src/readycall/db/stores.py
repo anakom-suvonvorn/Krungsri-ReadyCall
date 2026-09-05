@@ -38,9 +38,16 @@ from readycall.db.models import (
     ContextSnapshotRow,
     KeypadCaptureRow,
     MatchingDecisionRow,
+    TranscriptTurnRow,
 )
 from readycall.db.session import session_scope
-from readycall.domain.enums import DegradationReason, MatchKind, OfferOutcome, RecordingPhase
+from readycall.domain.enums import (
+    DegradationReason,
+    MatchKind,
+    OfferOutcome,
+    RecordingPhase,
+    SpeakerRole,
+)
 from readycall.domain.models import (
     Assignment,
     AudioRecording,
@@ -50,6 +57,7 @@ from readycall.domain.models import (
     FieldProvenance,
     MatchCandidate,
     MatchingDecision,
+    TranscriptTurn,
     UrgencyBreakdown,
 )
 from readycall.logging import get_logger
@@ -492,6 +500,81 @@ def _recording(row: AudioRecordingRow) -> AudioRecording:
     )
 
 
+# --- transcript turns: written as they happen (D114) -----------------------------------------
+
+
+class PostgresTranscriptStore:
+    """`transcript_turns`. One row per utterance, written incrementally.
+
+    `append` upserts on `turn_id` rather than inserting: the bus is at-least-once by
+    design (`D15`), and a transcript with a sentence in it twice reads as the caller
+    having repeated themselves.
+    """
+
+    name = "postgres"
+
+    def __init__(self, factory: async_sessionmaker[AsyncSession]) -> None:
+        self._factory = factory
+
+    async def append(self, turn: TranscriptTurn) -> None:
+        async with session_scope(self._factory) as db:
+            row = await db.get(TranscriptTurnRow, turn.turn_id)
+            if row is None:
+                row = TranscriptTurnRow(turn_id=turn.turn_id)
+                db.add(row)
+            row.call_session_id = turn.call_session_id
+            row.seq = turn.seq
+            row.speaker_role = str(turn.speaker_role)
+            row.text = turn.text
+            row.t_start_ms = turn.t_start_ms
+            row.t_end_ms = turn.t_end_ms
+            row.asr_confidence = turn.asr_confidence
+            row.engine = turn.engine
+            row.engine_version = turn.engine_version
+            row.is_final = turn.is_final
+            row.intake_id = turn.intake_id
+
+    async def for_calls(self, call_session_ids: Sequence[str]) -> list[TranscriptTurn]:
+        if not call_session_ids:
+            return []
+        async with session_scope(self._factory) as db:
+            found = await db.execute(
+                select(TranscriptTurnRow)
+                .where(TranscriptTurnRow.call_session_id.in_(list(call_session_ids)))
+                .order_by(TranscriptTurnRow.call_session_id, TranscriptTurnRow.seq)
+            )
+            return [_turn(row) for row in found.scalars().all()]
+
+    async def delete_for_call(self, call_session_id: str) -> int:
+        async with session_scope(self._factory) as db:
+            found = await db.execute(
+                select(TranscriptTurnRow).where(
+                    TranscriptTurnRow.call_session_id == call_session_id
+                )
+            )
+            rows = list(found.scalars().all())
+            for row in rows:
+                await db.delete(row)
+            return len(rows)
+
+
+def _turn(row: TranscriptTurnRow) -> TranscriptTurn:
+    return TranscriptTurn(
+        turn_id=row.turn_id,
+        call_session_id=row.call_session_id,
+        seq=row.seq,
+        speaker_role=SpeakerRole(row.speaker_role),
+        text=row.text,
+        t_start_ms=row.t_start_ms,
+        t_end_ms=row.t_end_ms,
+        asr_confidence=row.asr_confidence,
+        engine=row.engine,
+        engine_version=row.engine_version,
+        is_final=row.is_final,
+        intake_id=row.intake_id,
+    )
+
+
 __all__ = [
     "PostgresAssignmentStore",
     "PostgresAttestationStore",
@@ -499,5 +582,6 @@ __all__ = [
     "PostgresMatchingDecisionStore",
     "PostgresRecordingStore",
     "PostgresSnapshotStore",
+    "PostgresTranscriptStore",
     "PostgresWrapupStore",
 ]

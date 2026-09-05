@@ -118,6 +118,18 @@ class IntakeStarted(Event):
 
 
 class TranscriptTurnAdded(Event):
+    """One utterance, on the bus. Consumed by Analysis, Agent Delivery and the recorder.
+
+    ⚠️ **The event has to carry everything a consumer needs, because it is the only
+    carrier.** `engine`, `engine_version`, `is_final` and `intake_id` were added by `D114`
+    when the turns became durable: `transcript_turns` has had those columns on paper since
+    P0, and a subscriber that persists what it is given cannot invent what it was not.
+
+    `is_final=False` is not a detail — it means the endpointer cut the utterance at
+    `max_segment_ms` rather than at a pause, so the caller was still talking and a brief
+    built from it must not read as a finished thought.
+    """
+
     name: ClassVar[str] = "transcript.turn"
     turn_id: str
     seq: int
@@ -126,6 +138,10 @@ class TranscriptTurnAdded(Event):
     t_start_ms: int
     t_end_ms: int
     asr_confidence: float | None = None
+    engine: str | None = None
+    engine_version: str | None = None
+    is_final: bool = True
+    intake_id: str | None = None
 
 
 class IntakeFinalized(Event):

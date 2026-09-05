@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Float, ForeignKey, Index, Integer, String
+from sqlalchemy import Boolean, Float, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from readycall.db.base import Base, Utc
@@ -62,4 +62,38 @@ class AudioRecordingRow(Base):
     )
 
 
-__all__ = ["AudioRecordingRow"]
+class TranscriptTurnRow(Base):
+    """`transcript_turns` — one utterance, written as it happens (`D114`).
+
+    **Incremental by design** (`ARCHITECTURE` §6): a dropped call still leaves the
+    sentences it produced, which is the case a durable transcript is actually for.
+
+    `is_final` is not decoration. `False` means the endpointer cut the utterance at
+    `max_segment_ms` rather than at a pause, so the caller was still talking — a brief
+    built from it must not read as a finished thought.
+
+    Indexed on `(call_session_id, seq)` because that is the only query: give me this
+    call's transcript, in order. `seq` is what makes a transcript a transcript.
+    """
+
+    __tablename__ = "transcript_turns"
+
+    turn_id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    call_session_id: Mapped[str] = mapped_column(
+        String(40), ForeignKey("call_sessions.call_session_id"), nullable=False
+    )
+    seq: Mapped[int] = mapped_column(Integer, nullable=False)
+    speaker_role: Mapped[str] = mapped_column(String(16), nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    t_start_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    t_end_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    asr_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    engine: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    engine_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    is_final: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    intake_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
+
+    __table_args__ = (Index("ix_transcript_turns_call_seq", "call_session_id", "seq"),)
+
+
+__all__ = ["AudioRecordingRow", "TranscriptTurnRow"]

@@ -23,7 +23,7 @@ from readycall.db.models.calls import (
 )
 from readycall.db.models.identity import AttestationRow, KeypadCaptureRow
 from readycall.db.models.matching import MatchingDecisionRow
-from readycall.db.models.media import AudioRecordingRow
+from readycall.db.models.media import AudioRecordingRow, TranscriptTurnRow
 
 __all__ = [
     "AgentStateLogRow",
@@ -36,4 +36,5 @@ __all__ = [
     "ContextSnapshotRow",
     "KeypadCaptureRow",
     "MatchingDecisionRow",
+    "TranscriptTurnRow",
 ]

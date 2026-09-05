@@ -107,6 +107,12 @@ class PassiveRecordIntake:
                 t_start_ms=turn.t_start_ms,
                 t_end_ms=turn.t_end_ms,
                 asr_confidence=turn.asr_confidence,
+                # Everything the durable row needs (`D114`). The event is the only carrier
+                # a subscriber has, so anything missing here is a column nothing can fill.
+                engine=turn.engine,
+                engine_version=turn.engine_version,
+                is_final=turn.is_final,
+                intake_id=self._intake_id,
             )
         )
 

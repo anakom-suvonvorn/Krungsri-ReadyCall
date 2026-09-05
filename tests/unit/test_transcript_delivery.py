@@ -28,6 +28,10 @@ from readycall.services.transcription.delivery import (
     TRANSCRIPT_MESSAGE,
     TranscriptDeliveryService,
 )
+from readycall.services.transcription.store import (
+    InMemoryTranscriptStore,
+    TranscriptRecorder,
+)
 
 CALL = "cs_1"
 AGENT = "A006"
@@ -375,3 +379,81 @@ async def test_one_failing_handler_does_not_stop_the_pump_forever() -> None:
     await bus.publish(accepted())
     await pump_once(container)  # type: ignore[arg-type]
     assert notifier.sent, "the pump must survive a bad handler and keep delivering"
+
+
+# --- D114: and the same turns are written down --------------------------------------------
+
+
+async def test_a_published_turn_reaches_the_store(bus: InMemoryEventBus) -> None:
+    """`ARCHITECTURE` §6 has asked for this since P0 and nothing wrote a row until `D114`.
+
+    The assertion is on the STORE, not on a counter: a recorder that incremented `written`
+    and swallowed the write would pass a counter test and lose the transcript.
+    """
+    store = InMemoryTranscriptStore()
+    TranscriptRecorder(store=store).subscribe(bus)
+
+    await bus.publish(turn(1, "รถผมชนครับ"))
+    await bus.publish(turn(2, "อยู่แถวรัชดาครับ"))
+    await bus.drain()
+
+    rows = await store.for_calls([CALL])
+    assert [r.text for r in rows] == ["รถผมชนครับ", "อยู่แถวรัชดาครับ"]
+    assert [r.seq for r in rows] == [1, 2]
+
+
+async def test_the_durable_copy_carries_what_the_screen_does_not(bus: InMemoryEventBus) -> None:
+    """`engine`, `engine_version`, `is_final` and `intake_id` (`D114`).
+
+    The event is the only carrier a subscriber has, so a column the event does not carry
+    is a column nothing can fill — which is why `TranscriptTurnAdded` grew four fields
+    rather than the store inventing them.
+    """
+    store = InMemoryTranscriptStore()
+    TranscriptRecorder(store=store).subscribe(bus)
+
+    cut_off = turn(1, "ยังพูดไม่จบ").model_copy(
+        update={"is_final": False, "engine": "typhoon", "intake_id": "ik_1"}
+    )
+    await bus.publish(cut_off)
+    await bus.drain()
+
+    row = (await store.for_calls([CALL]))[0]
+    assert row.is_final is False, "the caller was cut off mid-sentence and the row must say so"
+    assert row.engine == "typhoon"
+    assert row.intake_id == "ik_1"
+
+
+async def test_a_storage_failure_does_not_stop_the_screen(
+    bus: InMemoryEventBus, notifier: SpyNotifier
+) -> None:
+    """`D12` at the last hop. The durable copy is what fails here; the call is not.
+
+    Both subscribers are on the same bus, and the bus is built `strict_handlers=True` — so
+    a recorder that let an exception out would abort the whole pass and take Agent
+    Delivery with it. That is `D105`'s `pump_once` reasoning, one level down.
+
+    The delivery service is already subscribed by the autouse fixture; this only adds the
+    broken recorder beside it.
+    """
+
+    class Broken:
+        async def append(self, row: Any) -> None:
+            raise RuntimeError("disk is on fire")
+
+        async def for_calls(self, call_session_ids: Any) -> list[Any]:  # pragma: no cover
+            return []
+
+        async def delete_for_call(self, call_session_id: str) -> int:  # pragma: no cover
+            return 0
+
+    recorder = TranscriptRecorder(store=Broken())
+    recorder.subscribe(bus)
+
+    await bus.publish(accepted())
+    await bus.publish(turn(1, "รถผมชนครับ"))
+    await bus.drain()
+
+    assert recorder.failed == 1
+    assert notifier.transcripts(), "the agent's screen must still have been written to"
+    assert notifier.transcripts()[-1][-1]["text"] == "รถผมชนครับ"

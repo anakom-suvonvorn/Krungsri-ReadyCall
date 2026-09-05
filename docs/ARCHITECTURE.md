@@ -817,7 +817,7 @@ call already knowing who it is and what it is about:
 | Smart Routing — assigned to + why (incl. any deferral) | `matching_decisions` |
 | Next Best Action + Recommended Actions | Analysis, from a per-intent playbook |
 | AI Suggested Opening | Analysis (Thai, polite register, editable) |
-| Live transcript (intake + call) + audio player | **BUILT for the intake half** (`D106`): `services/transcription/delivery.py` holds the turns and pushes them to `AgentHub` on accept. The agent's own leg is P6 (`D26`). The recording itself now exists and is encrypted (`D110`), so the **player** is the only missing half and it is a UI job, not a storage one. ⚠️ The transcript is **in memory only** — `transcript_turns` still has no table (`DATA_MODEL` §6) |
+| Live transcript (intake + call) + audio player | **BUILT for the intake half** (`D106`): `services/transcription/delivery.py` holds the turns and pushes them to `AgentHub` on accept. The agent's own leg is P6 (`D26`). The recording itself now exists and is encrypted (`D110`), so the **player** is the only missing half and it is a UI job, not a storage one. The transcript is durable too since `D114` — `TranscriptRecorder` writes every turn as it happens; this in-memory list is the *live* read path, not the record |
 | PDPA badges (what's consented / what's masked) | `consents` |
 | **Call controls** — accept/decline, mute, hold, hangup, DTMF, transfer, device picker | The in-page softphone (§9) |
 | **Queue strip** — depth, longest wait, my status, my next-up position | Matching Engine, live |

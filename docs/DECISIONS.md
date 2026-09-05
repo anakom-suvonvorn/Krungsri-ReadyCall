@@ -3463,7 +3463,9 @@ at hang-up would empty the panel at the one moment the agent is reading it.
 
 ### What it is not: durable
 
-`transcript_turns` has no table and no ORM model (`DATA_MODEL` §6), so this is a projection
+⚠️ This was true when written and is **no longer**: `D114` gave `transcript_turns` a
+table and a subscriber that writes it per turn. What follows describes the state at
+`D106`. `transcript_turns` had no table and no ORM model (`DATA_MODEL` §6), so this was a projection
 with **no durable half** — said plainly rather than implied. A restart loses an in-flight
 intake's transcript, which is the same thing a restart already does to the caller's place
 in the queue (`D78`). Persisting turns is its own slice and `PLAN` lists it separately.
@@ -3952,3 +3954,71 @@ gone round more than once.
 offer", and that is still true** — the set is cleared, so a re-offered agent is no longer in
 it. What is no longer true is "nobody is ever rung twice about one call", which the
 invariant never said.
+
+## D114. The transcript is written down as it happens, by a fourth subscriber
+_`ARCHITECTURE` §6 has asked for this since P0 and `DATA_MODEL` §6 has carried the column
+list just as long, under a warning that nothing wrote them. `D106` said plainly that the
+delivery service was "a projection with no durable half". This is the durable half._
+
+- **Problem.** Turns were produced, ordered, published, held for delivery and rendered —
+  and never written anywhere. A restart lost an in-flight transcript, which was defensible
+  while it matched what a restart already does to the caller's place in the queue (`D78`),
+  and stopped being defensible once the *audio* became durable (`D110`): a call whose
+  recording survives and whose words do not is a worse asymmetry than losing both.
+
+- **Decision.** `transcript_turns` is the eleventh table, and `TranscriptRecorder` is a
+  **fourth subscriber** to `transcript.turn`.
+
+### Its own subscriber, not a line inside delivery
+
+`ARCHITECTURE` §14 lists Analysis, Agent Delivery and call-progress as the consumers;
+persistence is another one and it gets its own. Putting the write inside
+`TranscriptDeliveryService` would tie a storage failure to the agent's screen — and the
+screen is the half that must not be blocked (`D12`). Separated, a failed write costs a
+durable row and nothing else, which a test asserts by publishing through a store that
+raises and checking the screen still received the turn.
+
+That test is doing more work than it looks: the bus is built `strict_handlers=True`, so a
+recorder that let an exception out would abort the whole drain pass and take Agent Delivery
+with it. Same shape as `D105`'s reasoning for `pump_once` swallowing, one level down.
+
+### Incremental, per turn
+
+The alternative — write the whole transcript when the intake finalises — is one write
+instead of a dozen, and it loses everything precisely when the thing that goes wrong is the
+call ending badly, which is the case a durable transcript exists for. Verified on a running
+server against Postgres: six turns in the table for a call **nobody accepted**.
+
+### The event had to grow four fields, and that is the interesting part
+
+`TranscriptTurnAdded` carried text and timings. `transcript_turns` has had `engine`,
+`engine_version`, `is_final` and `intake_id` on paper since P0 — and **the event is the
+only carrier a subscriber has**, so a column the event does not carry is a column nothing
+can fill. Adding them to the store instead would have meant inventing values, which is how
+a row ends up confidently wrong.
+
+`is_final` is the one with a claim in it: `False` means the endpointer cut the utterance at
+`max_segment_ms` rather than at a pause, so the caller was still talking and a brief built
+from it must not read as a finished thought. A durable transcript that lost that would be
+storing a sentence as complete when it was not.
+
+### `turn_id` is the primary key, so a re-delivery overwrites
+
+The bus is at-least-once by design (`D15`). A transcript with a sentence in it twice reads
+as the caller having repeated themselves — which is not a formatting problem, it is a false
+statement about what somebody said. Both stores upsert, and the contract suite publishes
+the same turn twice and asserts one row.
+
+### Reads are ordered by `seq`, in the store rather than by the caller
+
+`seq` is the only thing that makes a transcript a transcript. A store that returned
+insertion order would be right until two writes raced, and the failure would be a
+plausible-looking transcript in the wrong order — `B20`'s family.
+
+### What this is not
+
+Not a read path anything uses yet: the agent's screen is still served from
+`TranscriptDeliveryService`'s in-memory list, which is correct while the call is live and
+is where the socket push comes from. The durable copy is for what comes *after* — P4's
+analysis, P6's wrap-up draft and the Call Explorer, and `D14`'s erasure job, which now has
+a `delete_for_call` on the text half to match `D110`'s on the audio.

@@ -58,6 +58,10 @@ json: candidates, urgency
 pk: recording_id
 indexed: call_session_id, delete_after
 13 columns"]:::tbl
+        t_transcript_turns["<b>transcript_turns</b>
+pk: turn_id
+indexed: call_session_id, seq
+12 columns"]:::tbl
     end
     t_agent_state_log -. "FK" .-> t_call_sessions
     t_assignments -. "FK" .-> t_call_sessions
@@ -67,6 +71,7 @@ indexed: call_session_id, delete_after
     t_identity_attestations -. "FK" .-> t_call_sessions
     t_keypad_captures -. "FK" .-> t_call_sessions
     t_matching_decisions -. "FK" .-> t_call_sessions
+    t_transcript_turns -. "FK" .-> t_call_sessions
     D["NOT tables, on purpose (D78)
 "]:::hdr
     D --- d_current_presence["current presence

@@ -36,6 +36,7 @@ from readycall.services.identity.attestation import (
     InMemoryAttestationStore,
 )
 from readycall.services.recording.store import InMemoryRecordingStore, RecordingStore
+from readycall.services.transcription.store import InMemoryTranscriptStore, TranscriptStore
 from readycall.services.wrapup.store import InMemoryWrapupStore, WrapupStore
 
 log = get_logger(__name__)
@@ -68,6 +69,7 @@ class Storage:
     captures: CaptureStore
     decisions: MatchingDecisionStore
     recordings: RecordingStore
+    transcripts: TranscriptStore
     snapshots: SnapshotStore
     wrapups: WrapupStore
     #: Closed on shutdown. `None` for the in-memory backend, which owns no connections.
@@ -86,6 +88,7 @@ def build_storage(settings: Settings) -> Storage:
             captures=InMemoryCaptureStore(),
             decisions=InMemoryMatchingDecisionStore(),
             recordings=InMemoryRecordingStore(),
+            transcripts=InMemoryTranscriptStore(),
             snapshots=InMemorySnapshotStore(),
             wrapups=InMemoryWrapupStore(),
         )
@@ -105,6 +108,7 @@ def build_storage(settings: Settings) -> Storage:
         PostgresMatchingDecisionStore,
         PostgresRecordingStore,
         PostgresSnapshotStore,
+        PostgresTranscriptStore,
         PostgresWrapupStore,
     )
 
@@ -121,6 +125,7 @@ def build_storage(settings: Settings) -> Storage:
         decisions=PostgresMatchingDecisionStore(factory),
         recordings=PostgresRecordingStore(factory),
         snapshots=PostgresSnapshotStore(factory),
+        transcripts=PostgresTranscriptStore(factory),
         wrapups=PostgresWrapupStore(factory),
         engine=engine,
     )

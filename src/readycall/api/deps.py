@@ -89,6 +89,7 @@ from readycall.services.queues.hours import QueueHours
 from readycall.services.recording.service import RecordingService
 from readycall.services.transcription.delivery import TranscriptDeliveryService
 from readycall.services.transcription.service import TranscriptionService
+from readycall.services.transcription.store import TranscriptRecorder
 from readycall.voiceprompts import load_prompt_pack
 
 log = get_logger(__name__)
@@ -415,6 +416,12 @@ class Container:
         #: drain in the live process was a background task on `POST /v1/calls/intents`.
         self.transcript_delivery = TranscriptDeliveryService(notifier=self.hub)
         self.transcript_delivery.subscribe(self.bus)
+
+        #: The FOURTH consumer of `transcript.turn` (`D114`), and its own subscriber
+        #: rather than a line inside delivery: a storage failure must not be able to
+        #: touch the agent's screen, which is the half that may not be blocked (`D12`).
+        self.transcript_recorder = TranscriptRecorder(store=self.storage.transcripts)
+        self.transcript_recorder.subscribe(self.bus)
 
     # --- restore (D78) ------------------------------------------------------------------
 

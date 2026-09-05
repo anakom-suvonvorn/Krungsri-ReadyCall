@@ -3,10 +3,10 @@
 _The two databases, every table, and — most importantly — how the bank's half gets swapped out for the real thing on hackathon day._
 _Status: **partly built as of P2c, plus `audio_recordings` (`D110`)**. Last updated: 2026-09-06._
 
-> **What is real today:** **ten tables** with Alembic migrations, verified against a live
+> **What is real today:** **eleven tables** with Alembic migrations, verified against a live
 > Postgres — `call_sessions`, `call_state_transitions`, `agent_state_log`, `assignments`,
 > `identity_attestations`, `keypad_captures`, `matching_decisions`, `context_snapshots`,
-> `call_wrapups` (all P2c), and **`audio_recordings`** (`D110`, 2026-09-06). Everything
+> `call_wrapups` (all P2c), plus **`audio_recordings`** (`D110`) and **`transcript_turns`** (`D114`), both 2026-09-06. Everything
 > else on this page is still design. Five corrections to what is below, all from building
 > it:
 >
@@ -121,18 +121,26 @@ and a demo must be reproducible even if the upstream source changes.
 |---|---|
 | `intake_sessions` | `intake_id`, `call_session_id`, `strategy` (passive/guided/conversational), `started_at`, `ended_at`, `finalize_reason` (customer_done / queue_pop / timeout / error), `is_partial`, `slots_json` |
 | `audio_recordings` ✅ | `recording_id`, `call_session_id`, `phase` (intake/live_call), `storage_ref`, `audio_format`, `sample_rate`, `duration_s`, `size_bytes`, `checksum`, `encryption_key_ref`, `delete_after`, `intake_id` — **built** (`D110`) |
-| `transcript_turns` | `turn_id`, `call_session_id`, `intake_id?`, `seq`, `speaker_role` (customer/ai/agent), `text`, `t_start_ms`, `t_end_ms`, `asr_confidence`, `engine`, `engine_version`, `is_final`, `created_at` |
+| `transcript_turns` ✅ | `turn_id`, `call_session_id`, `intake_id?`, `seq`, `speaker_role` (customer/ai/agent), `text`, `t_start_ms`, `t_end_ms`, `asr_confidence`, `engine`, `engine_version`, `is_final` — **built** (`D114`). Indexed `(call_session_id, seq)`, which is the only query there is |
 
-> ⚠️ **`transcript_turns` has no table and no ORM model yet.** The audio path *produces*
-> `TranscriptTurn` objects and publishes them on the bus (`D96`), `IntakeService` holds them
-> for the life of the intake, and since `D106` `TranscriptDeliveryService` holds them again
-> for delivery to the agent's screen — but **nothing persists them**, so a restart loses a
-> transcript in flight. That is the same thing a restart already does to the caller's place
-> in the queue (`D78`), and it is said plainly in the delivery service rather than implied:
-> it is a projection with no durable half. `ARCHITECTURE` §6 asks for incremental writes
-> precisely so a dropped call still leaves usable text; that write is not built. It is a
-> small job (the shape above is exactly the domain model) and it belongs with the encrypted
-> recording, since both are about audio outliving the process.
+> ✅ **`transcript_turns` is built** (`D114`, 2026-09-06). `TranscriptRecorder` is a fourth
+> subscriber to `transcript.turn` — its own, not a line inside `TranscriptDeliveryService`,
+> so a storage failure cannot reach the agent's screen (`D12`). Written **incrementally,
+> per turn**, which is `ARCHITECTURE` §6's actual promise: verified against a live Postgres
+> with six rows for a call nobody accepted.
+>
+> `turn_id` is the primary key and both stores upsert, because the bus is at-least-once by
+> design (`D15`) and a transcript with a sentence in it twice reads as the caller having
+> repeated themselves. Reads are ordered by `seq` **in the store**, not by the caller.
+>
+> The event had to grow `engine`, `engine_version`, `is_final` and `intake_id` to carry
+> them: a subscriber can only persist what it is given, and a column the event does not
+> carry is one nothing can fill without inventing it.
+>
+> The **read** path still comes from `TranscriptDeliveryService`'s in-memory list while a
+> call is live. The durable copy is for what comes after — P4's analysis, P6's wrap-up
+> draft and the Call Explorer — and for `D14`'s erasure job, which now has
+> `delete_for_call` on the text half to match `D110`'s on the audio.
 >
 > Note `is_final` carries real meaning already: `False` means the endpointer cut the
 > utterance at `max_segment_ms` rather than at a pause, so the caller was still talking and

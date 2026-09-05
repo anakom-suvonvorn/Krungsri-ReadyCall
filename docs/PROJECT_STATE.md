@@ -47,11 +47,11 @@ the disclosure gate moves when the agent attests. **What they said while waiting
 screen** (`D106`), and if they consented, **their audio is in object storage encrypted**
 (`D110`) with a key ref and a retention date. If they declined, it is nowhere.
 
-Verified on 2026-09-06: **797 tests** — 785 pass + 12 skipped with Postgres and MinIO both
+Verified on 2026-09-06: **812 tests** — 800 pass + 12 skipped with Postgres and MinIO both
 up (the 12 are foreign-key cases the in-memory backend cannot have, and the `ml`-extra ones).
 Without those containers the count of skips rises and nothing fails.
-`ruff check` and `ruff format --check` clean over **199** files, `mypy --strict`
-clean over **143** source files, 64/64 diagrams current, the prompt pack fresh, and all three
+`ruff check` and `ruff format --check` clean over **202** files, `mypy --strict`
+clean over **145** source files, 64/64 diagrams current, the prompt pack fresh, and all three
 scenarios replay byte-identically. The database suites ran against a **live Postgres** on
 2026-09-02, and a restart was verified outside pytest with two real uvicorn processes.
 
@@ -176,6 +176,8 @@ FullProject/
 │  │  ├─ ivr/                flow.py  prompts.py  dtmf.py  rating.py
 │  │  ├─ intake/             base.py  passive.py  guided.py  conversational.py  slots.py
 │  │  ├─ transcription/*     # P3 step 4b. Audio -> TranscriptTurn (D96)
+│  │  │  ├─ delivery.py*     #   D106. Held while nobody owns the call, flushed on accept
+│  │  │  ├─ store.py*        #   D114. The FOURTH subscriber: writes transcript_turns
 │  │  │  ├─ endpointer.py*   #   WHERE an utterance starts/stops. No model, no I/O (D9)
 │  │  │  ├─ stream.py*       #   one leg: ring buffer, ordered turns, the B14 guards
 │  │  │  └─ service.py*      #   the driver. Feeds IntakeService.on_turn at last (D88)
@@ -308,7 +310,7 @@ see `NEXT_SESSION`
 ☑ SQLAlchemy 2.0 async + Alembic, URL from `Settings` (`D75`) · ☑ **10 tables**:
 `call_sessions`, `call_state_transitions`, `agent_state_log`, `assignments`,
 `identity_attestations`, `keypad_captures`, `matching_decisions`, `context_snapshots`,
-`call_wrapups`, and `audio_recordings` since `D110` · ☑ Postgres stores returning **domain models** (`D77`) · ☑ **one contract
+`call_wrapups`, plus `audio_recordings` (`D110`) and `transcript_turns` (`D114`) · ☑ Postgres stores returning **domain models** (`D77`) · ☑ **one contract
 suite across three backends**, SQLite with foreign keys enforced · ☑ **write-through with
 an in-memory projection** (`D78`): services keep their working set, write durably, and
 restore at startup · ☑ presence, the waiting pool and the live identity are **derived, not
@@ -416,11 +418,11 @@ performing by hand, i.e. what the next services take over (`D36`).
 
 | | |
 |---|---|
-| Source files | 201 Python files (`src/` 141 + `tests/` + `scripts/` + `mock/`) |
-| Tests | **797**, all passing, ~120 s with every backend up (**6 on `Q31`'s circle-back and the offer card's two new sentences**, `D113`; **13 on the loss reporting and the killable STT worker**, `D111`/`D112` - the timeout one asserts the child PROCESS is gone, not that an exception was raised; **54 on the recording and the blob port**, `D110`: 15 on the service, 27 on the store contract across memory/localfs/MinIO, 12 on `audio_recordings` across memory/SQLite/Postgres; **20 on agent availability and the wait on screen**, `B25`/`B26`; 149 store contract + restart across 3 backends; 56 on the prompt pack and the IVR; 40 on the hold and the intake seam; 41 on matching, 12 of them on the wait ceiling under contention; **61 on the audio path**; **21 on the transcript reaching the screen**) |
+| Source files | 203 Python files (`src/` 143 + `tests/` + `scripts/` + `mock/`) |
+| Tests | **812**, all passing, ~123 s with every backend up (**15 on the durable transcript**, `D114` - including one that publishes through a store which raises and asserts the agent's screen still got the turn; **6 on `Q31`'s circle-back and the offer card's two new sentences**, `D113`; **13 on the loss reporting and the killable STT worker**, `D111`/`D112` - the timeout one asserts the child PROCESS is gone, not that an exception was raised; **54 on the recording and the blob port**, `D110`: 15 on the service, 27 on the store contract across memory/localfs/MinIO, 12 on `audio_recordings` across memory/SQLite/Postgres; **20 on agent availability and the wait on screen**, `B25`/`B26`; 149 store contract + restart across 3 backends; 56 on the prompt pack and the IVR; 40 on the hold and the intake seam; 41 on matching, 12 of them on the wait ceiling under contention; **61 on the audio path**; **21 on the transcript reaching the screen**) |
 | Ports defined | **10** (telephony, stt, **vad**, llm, tts, core_data, event_bus, blob_storage, agent_directory, **keyring**) - `vad` added by `D96`, `keyring` by `D110`. Plus three **capability** protocols, one adapter each: `BatchSttEngine` (`D101`), `ReplayableSttEngine` (`D107`) and `ProvisionableBlobStorage` (`D110`) |
 | Process entrypoints | **2** of `D2`'s four: `api.py` and `stt.py` (`D112`). `worker.py` and `media.py` are still one process with the API |
-| Persisted tables | **10** + Alembic, verified on a live Postgres - `audio_recordings` added by `D110`. Presence, the waiting pool and the live identity are deliberately **not** among them (`D78`), and neither are transcript turns, which is a gap rather than a design (`DATA_MODEL` §6) |
+| Persisted tables | **11** + Alembic, verified on a live Postgres - `audio_recordings` (`D110`) and `transcript_turns` (`D114`) added 2026-09-06. Presence, the waiting pool and the live identity are deliberately **not** among them (`D78`) |
 | Adapters | 9 fakes/nulls + two decorators (`CachingCoreDataProvider`, `EncryptingBlobStorage`), **plus seven real ones**: `SileroVad`, `EnergyVad`, `TyphoonAsrEngine`, `FasterWhisperEngine`, `ThonburianHfEngine`, `LocalFsBlobStorage`, `S3BlobStorage` |
 | Spoken lines | 27 prompts + 15 flow roles -> **54 distinct clips** after dedupe (`D80`); rendered by the null engine, so a manifest rather than audio |
 | Call states | 15, transition table self-validated (the rating is an event, not a state — `D46`) |

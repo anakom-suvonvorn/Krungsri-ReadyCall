@@ -70,10 +70,10 @@ class TranscriptDeliveryService:
     def __init__(self, *, notifier: AgentNotifier) -> None:
         self._notifier = notifier
         #: call_session_id -> the turns so far, oldest first, as wire payloads.
-        #: **Not a table.** `transcript_turns` has no ORM model yet (`DATA_MODEL` §6), so
-        #: this is a projection with no durable half — say so rather than implying one.
-        #: A restart loses an in-flight intake's transcript, which is the same thing a
-        #: restart already does to the caller's place in the queue (`D78`).
+        #: The LIVE read path, and only that. Since `D114` the durable copy is
+        #: `transcript_turns`, written per turn by `TranscriptRecorder` — a separate
+        #: subscriber on purpose, so a storage failure cannot reach this screen (`D12`).
+        #: A restart still loses *this* list, and no longer loses the transcript.
         self._turns: dict[str, list[dict[str, Any]]] = {}
         #: call_session_id -> the agent it was accepted by. Absent means nobody yet, which
         #: is the normal state for the whole of intake.

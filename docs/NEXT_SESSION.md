@@ -52,13 +52,9 @@ median** (unstable at n=20), and **the test set moved the headline by 1.8x**.
 
 ### What is NOT built, precisely
 
-1. **Persisted transcript turns.** `transcript_turns` has no table (`DATA_MODEL` §6), so a
-   restart loses an in-flight transcript. ⚠️ **The recording it belongs beside now exists**
-   (`D110`), so the pattern to copy is `services/recording/store.py` plus
-   `db/models/media.py` — an hour's work, not a design problem.
-2. **P7's real key management.** `LocalKeyRing` holds the master in the process
+1. **P7's real key management.** `LocalKeyRing` holds the master in the process
    environment. The port exists so a vault is a second adapter, and nothing else changes.
-3. **A player on the agent's screen.** The recording exists and decrypts; nothing offers it
+2. **A player on the agent's screen.** The recording exists and decrypts; nothing offers it
    to the agent. That is now a UI job rather than a storage one.
 
 ### How to see the whole thing working, in one minute
@@ -99,9 +95,9 @@ moment in the recording it was said — **and if they consented, their audio is 
 storage encrypted, with the key ref and the retention date on an `audio_recordings` row.**
 If they declined, it is nowhere.
 
-Verified **2026-09-06**: **797 tests** — 785 pass + 12 skipped with Postgres and MinIO both
-up. `ruff check` + `ruff format --check` clean over 199 files, `mypy --strict` clean over
-143, all scenarios replay, 64/64 diagrams current, prompt pack fresh (54 clips),
+Verified **2026-09-06**: **812 tests** — 800 pass + 12 skipped with Postgres and MinIO both
+up. `ruff check` + `ruff format --check` clean over 202 files, `mypy --strict` clean over
+145, all scenarios replay, 64/64 diagrams current, prompt pack fresh (54 clips),
 `audit_docs.py` clean on the live files. **And verified against a running server with a
 real MinIO container**: the bucket holds `RCE1`-framed ciphertext, the right master key
 returns the original 622,124-byte WAV, a wrong one refuses, and the caller who pressed 2
@@ -349,6 +345,17 @@ model load is outside it, and the engine is warmed at startup · verified on a r
 server: six Thai sentences transcribed across a process boundary and onto the screen, and
 no orphaned child after the parent was hard-killed.
 
+**P3 step 4g — the durable transcript (`D114`), 2026-09-06.** `transcript_turns` is the
+**eleventh table** and `TranscriptRecorder` is a **fourth subscriber** to `transcript.turn`
+— its own, not a line inside delivery, so a storage failure cannot reach the agent's screen
+(`D12`); a test publishes through a store that raises and asserts the screen still got the
+turn · written **incrementally, per turn**, which is `ARCHITECTURE` §6's actual promise:
+six rows on a live Postgres for a call **nobody accepted** · `turn_id` is the primary key
+and both stores upsert, because the bus is at-least-once (`D15`) and a doubled sentence is
+a false statement about what somebody said · the event had to grow `engine`,
+`engine_version`, `is_final` and `intake_id`, because a subscriber can only persist what it
+is handed.
+
 ## Designed but NOT built (read before touching these areas)
 
 - **`D63` — call transfer.** One filtered roster menu covering all three needs (named agent /
@@ -362,9 +369,9 @@ no orphaned child after the parent was hard-killed.
 
 ## What to do next (in order)
 
-_Rewritten 2026-09-06, after `D110`–`D113`. The encrypted recording, the degradation
-reporting, the decode timeout and `Q31`'s circle-back are all done and recorded; they are
-not work. **P4 is now the top item and nothing is blocking it.**_
+_Rewritten 2026-09-06, after `D110`–`D114`. The encrypted recording, the degradation
+reporting, the decode timeout, `Q31`'s circle-back and the durable transcript are all done
+and recorded; they are not work. **P4 is the top item and nothing is blocking it.**_
 
 **1. P4 — analysis and the brief v2+.** The largest remaining phase and the one the pitch
 leans on hardest. Intent classification, entity extraction, a rolling summary, brief
@@ -377,14 +384,7 @@ caller speaking health data into a recording nobody consented to hold *as such* 
 decided **before** an entity extractor exists, because that is the first code that can
 breach it.
 
-**2. Persisted `transcript_turns`** (`DATA_MODEL` §6). A restart currently loses an
-in-flight transcript. ⚠️ **This is now an hour rather than a design problem**: `D110` built
-the pattern next door — `services/recording/store.py` for the protocol plus in-memory
-implementation, `db/models/media.py` for the row, `db/stores.py` for the Postgres half, and
-a block in `tests/contracts/test_workstation_stores.py` that runs it on all three backends.
-Copy that shape.
-
-**3. Then, roughly in this order:** P5 real telephony, which is what replaces
+**2. Then, roughly in this order:** P5 real telephony, which is what replaces
 `POST /v1/demo/calls` and `D107`'s WAV player — and which is also what turns
 `RecordingService` on for the *live* leg (`D26`, P6) · `D85`'s `acw_stats` into
 `expected_free_in()` as a **score, never a filter** (`D73`) · the matcher inputs still fed
@@ -537,6 +537,20 @@ Facts about *this laptop* rather than the repo, so a fresh session does not redi
 
 ## Things to be careful about (live landmines)
 
+- **THE TRANSCRIPT HAS TWO COPIES NOW, AND THEY ANSWER DIFFERENT QUESTIONS** (`D114`).
+  `TranscriptDeliveryService`'s in-memory list is the **live** path — what the socket
+  pushes and what `GET /v1/agent/me` renders while the call is happening.
+  `transcript_turns` is the **record**, written per turn by `TranscriptRecorder`. Do not
+  make the screen read from the table on a hot path, and do not make the recorder the
+  thing the screen depends on: they are separate subscribers precisely so a storage
+  failure cannot blank a panel.
+- **THE EVENT IS THE ONLY CARRIER A SUBSCRIBER HAS** (`D114`). `TranscriptTurnAdded` grew
+  `engine`, `engine_version`, `is_final` and `intake_id` because `transcript_turns` has
+  those columns and a store that filled them from anywhere else would be inventing them.
+  If you add a column, add the field to the event in the same change.
+- **`turn_id` IS THE PRIMARY KEY AND BOTH STORES UPSERT** (`D114`, `D15`). The bus is
+  at-least-once by design. A transcript with a sentence in it twice is not a formatting
+  problem — it is a false statement about what the caller said.
 - **`stt_unavailable` MEANS "THE ENGINE FAILED **AND** NOTHING WAS TRANSCRIBED"** (`D111`).
   Not "the transcript is empty" — most callers who take the recording and then wait quietly
   produce no turns at all, and a rule that looked only at emptiness would put a system
