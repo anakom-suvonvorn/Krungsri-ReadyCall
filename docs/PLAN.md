@@ -1,7 +1,7 @@
 # PLAN
 
 _The master build plan for the full system: what gets built, in what order, and what "done" means for each phase._
-_Last updated: 2026-09-05._
+_Last updated: 2026-09-06._
 
 ---
 
@@ -135,7 +135,7 @@ render is **0.2 ms** (a re-render of a frozen snapshot, not a fetch — `D42`), 
 20-caller × 3-session run has not been done. The matching engine's own determinism is covered
 by `scripts/run_matching.py --seed`.
 
-**P2c — done, 2026-08-25.** Nine tables, one storage factory, and a restart that is
+**P2c — done, 2026-08-25.** Nine tables (ten since `D110`), one storage factory, and a restart that is
 proved rather than asserted.
 
 - SQLAlchemy 2.0 + Alembic, URL from `Settings`; `call_sessions`,
@@ -165,12 +165,20 @@ already Protocol-shaped or dict-backed behind one class each.
 
 ---
 
-## P3 — Voice, IVR, and AI Pre-Call Intake v1 (passive) — 🔶 **steps 1–3 done (2026-08-25)**
+## P3 — Voice, IVR, and AI Pre-Call Intake v1 (passive) — ✅ **the machine is complete (2026-09-06)**
+_Two exit criteria are still 🔶 and neither is P3's to close: a **real TTS voice** (nothing
+synthesises yet, so the pack is a manifest — `Q22`), and **killing a real STT worker
+mid-call**, which waits on the worker being its own process at P5. Everything the phase was
+for is built._
 **Goal:** the pitch's Step 2 — the line talks, audio goes in, transcript comes out, live.
 
 The phase was ordered lowest-risk-first, and that order held. Steps 1–3 needed no model, no
-audio hardware and no network; step 4 is where the RTX 3050 risk actually lives and is not
-started. `explanations/P3_voice.md` covers the built half; `diagrams/12_the_menu.md` draws it.
+audio hardware and no network; step 4 is where the RTX 3050 risk lived, and it landed in
+four parts — the audio path (`D96`), the engine chosen on measurements (`D104`), the
+transcript on the screen (`D105`–`D107`), and the encrypted recording (`D110`).
+`explanations/P3_voice.md` covers it; `diagrams/12_the_menu.md` and `07_voice_and_ai.md`
+draw it. **What is left in this area is not P3**: a real TTS voice, and the live-call leg,
+which is P6 (`D26`).
 
 ### ✅ Done
 
@@ -197,16 +205,17 @@ started. `explanations/P3_voice.md` covers the built half; `diagrams/12_the_menu
 - **Handover complete.** `run_scenario.py`'s `# P1:` IVR marker and `demo.py`'s `# P2b:` are
   both retired; the only thing still faked is the number dialled and the keys pressed.
 
-### ☐ Remaining — step 4, the GPU half
+### Step 4 — the GPU half, and what remains after it
 
-- A **real TTS voice**: `TTS_ENGINE=null` synthesises nothing today, so the pack is a manifest.
+- ☐ A **real TTS voice**: `TTS_ENGINE=null` synthesises nothing today, so the pack is a manifest.
   Choose on a listening test of the actual 63 lines, not a spec sheet. Plus the checked-in
   audio pack and the admin **prompt studio** page.
 - ✅ **The press-1/press-2 intake offer, with its re-offer** — `services/intake/` (`D88`).
   The identify step is **gone**, not pending (`D84`). The **post-call rating keypress** still
   has a prompt and a role and nothing calling it.
-- Media Gateway: AudioSocket + WebSocket media servers, **per-leg forking**, resampling to
-  16 kHz mono float32, framing, encrypted recording to MinIO, per-recording key refs.
+- Media Gateway: AudioSocket + WebSocket media servers (P5), **per-leg forking** ✅,
+  resampling to 16 kHz mono float32 ✅, framing ✅, ✅ **encrypted recording to MinIO with
+  per-recording key refs** (`D110`) — a *subscriber* to the gateway rather than part of it.
 - Consent gate (IVR keypress + in-app toggle) writing `consents` before a single frame is analysed.
 - `transcription/`: rolling buffer, Silero VAD endpointing (threshold 0.65 / 500 ms / 100 ms +
   120 ms·60 ms padding, per `D9`), utterance dispatch, repetition guard.
@@ -257,7 +266,14 @@ started. `explanations/P3_voice.md` covers the built half; `diagrams/12_the_menu
   so the audio path had never transcribed anything in the running system and any subscriber
   would have been correct, tested and unreached. Verified in a browser against a running
   server, not from a test alone.
-- 🔶 The encrypted recording to object storage — P7's key management.
+- ✅ The encrypted recording to object storage. **MET 2026-09-06** (`D110`). AES-256-GCM
+  envelope encryption in one wrapper over the blob port, so a MinIO bucket, a directory and
+  a dict get identical guarantees; `KeyRing` is the tenth port and `LocalKeyRing` is
+  explicitly dev-grade; `audio_recordings` carries the ref, the key ref and `delete_after`;
+  `scripts/purge_recordings.py` is `D14`'s erasure job for the audio half. Verified against
+  a real MinIO container: the bucket holds `RCE1`-framed ciphertext with no RIFF header, the
+  right master key returns the original 622,124-byte WAV, and a wrong one refuses. The
+  *vault* is still P7 — the master lives in the environment.
 - ✅ A caller who presses 2, and a caller who consents to nothing, both still reach **the correct
   queue** with a menu-derived brief — because routing never depended on the AI (`D37`).
   Proved end to end: `test_every_answer_leaves_the_queue_exactly_where_the_menu_put_it`,
@@ -268,9 +284,10 @@ started. `explanations/P3_voice.md` covers the built half; `diagrams/12_the_menu
 - 🔶 Killing the STT worker mid-call degrades to recording-only; the call is unaffected. The
   swallow-and-log path exists in `TranscriptionStream._consume` (`D12`) and is asserted by test;
   killing a *real* worker mid-call waits on the worker being a separate process (P5).
-- ✅ No audio ever written to local disk unencrypted — because **no audio is written to disk at
-  all** yet. Everything is per-utterance and in memory (`D9`). The encrypted recording is the
-  remaining piece and it wants P7's key management.
+- ✅ No audio ever written to local disk unencrypted. Analysis is still per-utterance and in
+  memory (`D9`), and the one thing that now *is* written goes through
+  `EncryptingBlobStorage` — the only way `build_blob_storage` hands a store out, which is
+  what makes `localfs` safe by construction rather than by absence (`D110`).
 - 🔶 Changing a line of Thai in `voice_prompts.yaml` changes what the caller hears after one re-render.
   *(The re-render is proved; "what the caller hears" waits on a real voice.)*
 

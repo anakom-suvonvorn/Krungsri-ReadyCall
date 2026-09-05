@@ -1,7 +1,7 @@
 # DECISIONS
 
 _Significant engineering decisions and their rationale. Append new ones at the bottom; never silently reverse one without a new entry explaining why._
-_Last updated: 2026-09-05._
+_Last updated: 2026-09-06._
 
 Format per entry: **Problem → Decision → Reasoning → Alternatives → Tradeoffs → Future.**
 
@@ -3587,3 +3587,134 @@ letting the ringing time run out."_
   says a different sentence for each. It is logged `set_by="agent"` where RONA is
   `set_by="platform"`, so the state log keeps the difference too.
 - **What this deliberately is not:** a *"show me a different caller"* button. See `Q32`.
+
+## D110. The encrypted recording: one wrapper does the crypto, and the key ring is the tenth port
+_The last piece of P3, and it turned out to be four decisions rather than one. Closes
+`ARCHITECTURE` §6's third clause, which the media gateway's own docstring had been quoting
+as "not built" since `D96`._
+
+- **Problem.** `ARCHITECTURE` §6 asks the media gateway to *"write the encrypted recording
+  to object storage"* with a per-recording key reference, and `DATA_MODEL` §6 has had an
+  `audio_recordings` table on paper since P0. None of it existed. What *did* exist was the
+  MinIO container in `infra/docker-compose.yml`, `ports/blob_storage.py` with
+  `encryption_key_ref` already on `StoredObject`, and `BlobStorageName.{memory,localfs,
+  minio,s3}` in `Settings` — a config surface with **nothing behind it**, which is `B23`'s
+  shape: a name that cannot select anything is worse than no name at all.
+  `InMemoryBlobStorage` was written, correct, and instantiated by nothing in the
+  repository, including its own tests.
+
+### 1. Encryption is a WRAPPER over the port, not a feature of each backend
+
+`EncryptingBlobStorage` wraps any `BlobStorage` and hands the backend ciphertext. Four
+implementations exist and there will be more; if each encrypted its own objects there
+would be four pieces of cryptography to review, and the one nobody reviewed would be the
+one holding a real recording. **Envelope encryption**, AES-256-GCM: a fresh data key per
+object, that key wrapped by a master which never leaves the ring, and the wrapped key
+stored in the object's own header.
+
+    RCE1 | u16 len(key_ref) | key_ref | u16 len(wrapped) | wrapped | nonce(12) | ciphertext+tag
+
+Self-describing on purpose — restoring one recording needs the ring and that object and
+nothing else. A blob that does not begin `RCE1` is returned untouched, which is how a
+store that also holds plaintext prompt clips keeps working, and it is why `encrypt=False`
+still reports `encryption_key_ref=None` rather than pretending.
+
+**The checksum is of the plaintext.** GCM's nonce is fresh on every write, so a checksum
+over the ciphertext could never answer the question the column exists for: *is this the
+same recording?*
+
+### 2. `KeyRing` is the tenth port, and `LocalKeyRing` says out loud that it is dev-grade
+
+A key ref only means something if something outside this process owns the key. The port
+has two methods — give me a data key for this object, unwrap this one — which is what
+every KMS does, so P7's vault adapter is a second implementation and nothing else changes.
+
+`LocalKeyRing` has two modes and **the difference is a startup decision rather than a
+detail**. With `RECORDING_MASTER_KEY` it is durable. Without one it generates a master at
+construction and logs a warning, which keeps the promise that this system runs with no
+keys, no services and no GPU. `Settings._check_coherent` then **refuses an ephemeral key
+against a durable store**: ciphertext nobody will ever read again is a recording that
+exists, costs money, satisfies an audit on paper and plays nothing — strictly worse than
+an honest gap. Against `memory` it is exactly right, because the objects die with the key.
+
+### 3. `localfs` is allowed now, and the old refusal was right at the time
+
+`InMemoryBlobStorage`'s docstring said a local store was *"deliberately not"* built,
+because a real recording must never land unencrypted on a dev machine (`D14`). Correct
+while nothing encrypted; wrong now. The factory always applies the wrapper, so what lands
+in a directory is ciphertext with no key beside it, and the property the refusal protected
+is true **by construction** rather than by absence. `build_blob_storage` is the
+enforcement point — constructing a backend directly is a test's business, and nothing in
+`services/` does it.
+
+**One adapter covers `minio` and `s3`**, because the difference is an endpoint URL and
+MinIO exists to be S3 on a laptop. boto3 is synchronous and runs in a thread, which is
+fine for a call that happens once per recording and never on a request path; it lives in
+an `s3` extra imported at point of use, the same shape as the STT adapters, because this
+module is imported on a CI box with no AWS SDK. `ensure_bucket()` is a **capability**
+(`ProvisionableBlobStorage`, the `D101`/`D107` pattern) called once at startup — not
+lazily on the first `put`, because the first recording of the day is not the moment to
+discover the credentials are wrong, and because `flush_pending` treats a write failure as
+transient and would retry a misconfiguration forever.
+
+### 4. The recorder is a SINK, and the upload never happens on the accept path
+
+`services/recording/` **subscribes** to the gateway rather than living inside it. The
+gateway already fans normalised frames to whoever asked and the transcriber is one such
+consumer; a second costs nothing and keeps the boundary that lets P5 swap Asterisk for
+Twilio — writing the object from inside would put a bucket, a key ring and a retention
+policy behind it.
+
+Two consequences, both load-bearing:
+
+- **`MediaGateway.open_leg` is now idempotent.** Two independent consumers open a leg and
+  neither may depend on the other running (`D12`): a transcriber that is down must still
+  record, and a caller who declined analysis may still be recorded. Replacing the leg
+  would have silently discarded the first opener's `sinks` — a component correct, running,
+  and fed nothing, which is `B24` exactly. Where the two disagree about the format the
+  first wins and the second is logged, because a silent disagreement decodes A-law as
+  µ-law: loud, plausible garbage nobody would blame on the codec (`D96`).
+- **`close()` seals; `flush_pending()` uploads, from the sweep.** An object-store round
+  trip between an agent pressing Accept and the caller hearing them is `D12`'s rule broken
+  in a new place. Sealing is a list handed to a queue. A failed upload keeps its place and
+  is retried on the next pass, and **the row is written only after the store confirms it**
+  — a reference to an object that was never written is a recording that looks retrievable,
+  satisfies an audit, and plays nothing.
+
+**Consent is checked at close, at the last possible moment.** A caller who pressed 2 has
+frames flowing the whole time — the offer window IS the recording window (`D21`) — and no
+`recording` consent, so their speech is transcribed in memory for the brief and **never
+stored**. Checking at `open()` would be too early: consent arrives on a keypress that can
+land after the leg does. Verified on a running server against real MinIO — two calls, one
+consenting and one declining, one object in the bucket.
+
+**Every ending that is not Accept arrives as a state change**, so the service subscribes
+to `call.state.changed` for terminal states, the same shape as `TranscriptDeliveryService`
+(`D106`). Without it an abandoned caller's buffer would sit open for the life of the
+process, holding audio nobody stored. `WRAP_UP` is not terminal and does not seal.
+
+### What the retention promise actually is
+
+`delete_after` is written at upload time from `RECORDING_RETENTION_DAYS`, never computed
+at purge time. Computing it later would mean lowering the setting silently shortened the
+life of audio already held and raising it silently extended it — and the promise that
+matters is the one made when the caller said yes.
+
+`scripts/purge_recordings.py` is the job (`D14`'s *"erasure job across both stores and
+object storage"*, for the audio half). **A script, not a background task**: a purge
+running unattended inside the demo process is one more thing that can fail on stage, and
+deletion is the operation you least want happening on its own. It prints the store it is
+about to act on every time, has `--dry-run`, and **refuses outright on
+`STORAGE_BACKEND=memory`**, where a clean run would be a green tick over an untouched
+bucket — the most misleading possible outcome.
+
+**The object goes before the row.** The other order can leave an object with no row
+pointing at it, which is audio nobody knows they are holding and is invisible to every
+report. A failed object delete keeps its row and is retried.
+
+### What this is not
+
+Not the live call — `D26`'s agent leg is P6. Not the transcript, which still has no table
+(`DATA_MODEL` §6). Not a player on the agent's screen. And **not P7's real key
+management**: `LocalKeyRing` holds the master in the process environment, so anyone who
+can read that environment can read the recordings, and it says so in its own docstring.

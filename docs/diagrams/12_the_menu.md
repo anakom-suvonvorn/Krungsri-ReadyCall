@@ -257,24 +257,34 @@ from *"finished their thought"*, and under a busy queue the first is the **expec
 
 ### What is still missing here
 
-**The audio arrived** (`D96`, 2026-09-02). There is a media gateway, a VAD port with two
-adapters, an endpointer, a transcription service and three real STT engines — and since
-`D104` a chosen one, Typhoon, which meets the latency budget on every call measured.
-`IntakeService.on_turn` is fed for real, not only by the test suite and the scenario runner.
+_Rewritten 2026-09-06. This section used to describe the last hop to the screen and the
+encrypted recording as future work; both have landed, so what follows is what is genuinely
+still absent._
 
-What is still missing is **the last hop to the screen** — and it is smaller than it looks.
-The event exists and is already published: `PassiveRecordIntake.on_turn` emits
-`TranscriptTurnAdded` on the bus for every turn. **Nothing subscribes to it.** `AgentHub`
-in `api/realtime.py` is a push mechanism with per-agent sequencing already built; nobody
-takes `transcript.turn` off the bus and calls it.
+**The audio arrived** (`D96`, 2026-09-02): a media gateway, a VAD port with two adapters,
+an endpointer, a transcription service and three real STT engines — and since `D104` a
+chosen one, Typhoon, which meets the latency budget on every call measured.
 
-The part that is not plumbing: during intake the call has **no assigned agent yet**, so the
-turns have to be buffered against the call and flushed when somebody accepts (`D69`'s gated
-brief preview is the precedent), then streamed live once it is assigned.
+**The words reach the screen** (`D105`–`D107`, 2026-09-05). The turns are held against the
+call while nobody owns it — which is the whole of intake, and is the product rather than an
+edge case — and flushed to whoever *accepts*, never to whoever was merely offered.
+`diagrams/07_voice_and_ai.md` §7.y draws it.
 
-Also still missing: the encrypted recording to object storage (P7's key management), and
-`_degradation()` returning `NONE` even though `TranscriptionService` now knows whether the
-engine failed.
+**The audio itself is kept, encrypted** (`D110`, 2026-09-06), if the caller consented. If
+they pressed `2` it is transcribed in memory for the brief and stored nowhere at all — the
+one property on this page you can verify by counting objects in a bucket. §7.z draws it.
+
+What is still missing from this picture:
+
+- **`_degradation()` returns `NONE` unconditionally**, even though `TranscriptionService`
+  now knows whether the engine failed. The screen is already waiting for it:
+  `emptyTranscriptReason()` renders a different sentence for `stt_unavailable` and that
+  branch is currently unreachable.
+- **The decode timeout** (`D98`'s missing half), which needs `D2`'s killable worker.
+- **Transcript turns are not persisted** (`DATA_MODEL` §6), so a restart loses one in
+  flight — the same thing a restart already does to the caller's place in the queue.
+- **A real TTS voice.** `TTS_ENGINE=null` synthesises nothing, so the pack is a manifest
+  and this whole page describes lines nobody has heard out loud yet (`Q22`).
 
 ---
 

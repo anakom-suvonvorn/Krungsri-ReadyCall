@@ -182,9 +182,9 @@ actually arrives.
 samples (two identical runs gave 0.087 then 0.124); whitespace WER on unsegmented Thai read
 **0.94-1.12** on a model that was working perfectly (`B18`).
 
-**What is still not in this picture:** the encrypted recording to object storage, which
-needs P7's key management. The bake-off table is finished (`D104`, above) and the transcript
-now reaches the agent's screen — §7.y draws that half.
+**What is still not in this picture:** the *live* call — `D26`'s agent leg is P6. The
+bake-off table is finished (`D104`, above), the transcript reaches the agent's screen
+(§7.y), and the recording reaches object storage encrypted (§7.z).
 
 ---
 
@@ -244,3 +244,92 @@ exists to prevent. Every test passed, because each placed one call. `open()` now
 engine that offers `reset()`, through a capability protocol like `BatchSttEngine`'s
 (`D107`), and a test places **three** calls.
 
+---
+
+## 7.z The recording, and the key that protects it
+
+![the recording reaching object storage](recording_to_storage.svg)
+
+The third clause of `ARCHITECTURE` §6 — *"writes the encrypted recording to object
+storage"* — and the last thing P3 was missing (`D110`, 2026-09-06). Everything above this
+section analyses audio and keeps none of it; this is the one place a caller's voice becomes
+a durable object, and almost every decision in it is about that fact rather than about
+audio.
+
+**The recorder is a second subscriber, not part of the gateway.** The gateway already fans
+normalised frames to whoever asked; the transcriber is one consumer and this is another.
+Writing the object from inside would put a bucket, a key ring and a retention policy behind
+the boundary that lets P5 swap Asterisk for Twilio. It also buys independence in the
+direction that matters: a transcriber that is down still records, and a caller who refused
+*analysis* is not thereby refused a recording — or the reverse.
+
+That independence forced a change with a bug's shape behind it: **`open_leg` is now
+idempotent**. Two consumers open a leg, and replacing it on the second call would have
+silently discarded the first one's sinks — a component correct, running, subscribed, and
+fed nothing. That is `B24` exactly, and it is why the fix has two tests that fail without
+it rather than a comment saying it should be fine.
+
+### Consent is checked at the seal, not at the open
+
+The offer window **is** the recording window (`D21`), so a caller who presses `2` has had
+frames flowing the whole time. Checking consent when the leg opens would be too early —
+the keypress can land after it. So the audio accumulates in memory, is transcribed for the
+brief, and at `close()` the session is asked whether `recording` was granted. If it was
+not, the buffer is dropped and **nothing is written anywhere**.
+
+That is the version of `D14` you can check rather than read: place two calls, one pressing
+`1` and one pressing `2`, and count the objects in the bucket. There is one.
+
+### The upload is not on the accept path
+
+`close()` moves a list onto a queue and returns; `flush_pending()` uploads, from
+`sweep_once`. An object-store round trip between an agent pressing Accept and the caller
+hearing them is `D12`'s rule broken in a place it had not had to be applied before. A
+failed upload keeps its place and retries on the next sweep, and **the `audio_recordings`
+row is written only after the store confirms the object** — a reference to an object that
+was never written is a recording that looks retrievable, satisfies an audit, and plays
+nothing.
+
+An abandoned caller never produces an Accept at all, so the service also listens for a
+terminal state. Without that their buffer would sit open for the life of the process,
+holding audio nobody stored.
+
+### One wrapper does the cryptography
+
+`EncryptingBlobStorage` wraps *any* backend. There are four and there will be more; four
+copies of the cryptography means the one nobody reviewed is the one holding a real
+recording. Envelope encryption, the shape every KMS uses: a fresh AES-256 data key per
+object, wrapped by a master that stays in the ring, stored in the object's own header.
+
+The consequence worth stating plainly is that **`localfs` is allowed now**. The in-memory
+store's docstring used to say a local one was *deliberately* not built, because a real
+recording must never land unencrypted on a dev machine. That was right while nothing
+encrypted. It is wrong now: the factory always applies the wrapper, so what lands in a
+directory is ciphertext with no key beside it, and the property the refusal was protecting
+is true by construction rather than by absence.
+
+`KeyRing` is the tenth port and `LocalKeyRing` is honest about being dev-grade: the master
+lives in the process environment, so anyone who can read that environment can read the
+recordings. What it does do is refuse to be *silently* useless — with no key set it
+generates one per process and warns, and `Settings` then **refuses to start** with that
+against any durable store. Ciphertext nobody can ever read is worse than an honest gap.
+
+### What the retention promise is, exactly
+
+`delete_after` is stamped on the row **when the object is stored**, from
+`RECORDING_RETENTION_DAYS`. Computing it at purge time instead would mean lowering the
+setting silently shortened the life of audio already held, and raising it silently extended
+it — and the promise that matters is the one that was true when the caller said yes.
+
+`scripts/purge_recordings.py` is `D14`'s erasure job for the audio half. A script rather
+than a background task, because deletion is the operation you least want happening
+unattended on a demo machine. **The object goes before the row**: the other order can leave
+an object with no row pointing at it, which is audio nobody knows they are holding and is
+invisible to every report.
+
+### What is still not in this picture
+
+The **live call** — `D26`'s agent leg is P6, and this covers the intake only. The
+**transcript**, which still has no table (`DATA_MODEL` §6), so a restart loses one in
+flight. A **player** on the agent's screen, which is now a UI job rather than a storage
+one. And P7's **real** key management, which is the whole point of the port being a port.

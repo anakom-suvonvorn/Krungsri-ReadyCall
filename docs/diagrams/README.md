@@ -2,7 +2,7 @@
 
 _Last updated: 2026-09-06._
 
-**63 diagrams** covering every part of Krungsri ReadyCall. Written to be read in order the
+**64 diagrams** covering every part of Krungsri ReadyCall. Written to be read in order the
 first time, and dipped into afterwards.
 
 ---
@@ -119,7 +119,7 @@ uv run python scripts/render_diagrams.py brief_gating
 docs/diagrams/
 ├─ README.md              ← you are here
 ├─ 01_start_here.md …     ← the twelve explanation pages
-├─ *.svg                  ← 63 rendered diagrams (committed, so no tooling is needed to read them)
+├─ *.svg                  ← 64 rendered diagrams (committed, so no tooling is needed to read them)
 ├─ .render-manifest.json  ← source hash per diagram, so --check compares content not mtimes
 └─ src/*.mmd              ← mermaid sources; GENERATED ones say so in the header
 ```

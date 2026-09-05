@@ -31,7 +31,7 @@ demonstrable slice, so "the demo" is the current state plus a chosen scenario (`
 
 ---
 
-## 2. Status: **P0 · P1 · P1b · P2a · P2b · P2c complete; P3 complete bar the encrypted recording**
+## 2. Status: **P0 · P1 · P1b · P2a · P2b · P2c complete; P3 complete**
 
 The spine runs. A full call lifecycle - arrival, IVR, consent, queue, intake, matching, the offer
 handshake, the live call, wrap-up, rating, closed - executes end to end on fake adapters with no
@@ -43,12 +43,15 @@ the React workstation are all real services doing real work - only the *edges* (
 AI, the bank's data, the agent roster) are still fakes. An agent signs in at `/workstation`, a
 caller keys their way through the real menu to the right queue, is offered
 the recording and either takes it or does not, the desk rings, the brief is already there, and
-the disclosure gate moves when the agent attests.
+the disclosure gate moves when the agent attests. **What they said while waiting is on that
+screen** (`D106`), and if they consented, **their audio is in object storage encrypted**
+(`D110`) with a key ref and a retention date. If they declined, it is nowhere.
 
-Verified on 2026-09-05: **723 tests** — 681 pass + 42 skipped without the Postgres container
-(the 42 are the database cases).
-`ruff check` and `ruff format --check` clean over **178** files, `mypy --strict`
-clean over **125** source files, 63/63 diagrams current, the prompt pack fresh, and all three
+Verified on 2026-09-06: **777 tests** — 765 pass + 12 skipped with Postgres and MinIO both
+up (the 12 are foreign-key cases the in-memory backend cannot have, and the `ml`-extra ones).
+Without those containers the count of skips rises and nothing fails.
+`ruff check` and `ruff format --check` clean over **196** files, `mypy --strict`
+clean over **140** source files, 64/64 diagrams current, the prompt pack fresh, and all three
 scenarios replay byte-identically. The database suites ran against a **live Postgres** on
 2026-09-02, and a restart was verified outside pytest with two real uvicorn processes.
 
@@ -117,7 +120,7 @@ FullProject/
 ├─ uv.lock  .python-version  .env.example  .gitignore
 ├─ README.md*
 ├─ docs/*                    # ← this documentation system
-│  ├─ diagrams/*           # 63 diagrams + 12 explanation pages; a quarter generated from source
+│  ├─ diagrams/*           # 64 diagrams + 12 explanation pages; a quarter generated from source
 │  └─ reading/*            # readable twins: the keypad, the restart, the workstation, the offer,
 │                          #   the audio path (which also carries the verification commands)
 ├─ config/*                  # ← the entire insurance-specific "domain pack" (D28)
@@ -159,7 +162,11 @@ FullProject/
 │  │  ├─ core_data/  mock_postgres.py  fixtures.py  http_api.py  sql_passthrough.py
 │  │  │               caching.py  null.py  mapping.py   # YAML-driven field mapper
 │  │  ├─ event_bus/  redis_streams.py  kafka.py  memory.py
-│  │  └─ storage/    minio.py  s3.py  localfs.py
+│  │  ├─ blob_storage/*      # D110. Named for its port, which the diagram generator assumes
+│  │  │  ├─ encrypting.py*   #   AES-256-GCM over ANY backend. The only crypto in the repo
+│  │  │  ├─ memory.py*  localfs.py*  s3.py*   # s3.py covers MinIO too; needs the `s3` extra
+│  │  │  └─ factory.py*      #   build_blob_storage - the ONLY place a store is constructed
+│  │  └─ keyring/    local.py*        # D110. The master key. P7 replaces it with a vault
 │  ├─ services/*             # NO insurance-specific literals may live here (D28)
 │  │  ├─ call_orchestrator/  machine.py  handlers.py     # single writer of call state
 │  │  ├─ identity/           resolver.py  assurance.py   # L0–L3 ladder (D20)
@@ -187,13 +194,17 @@ FullProject/
 │  │  │  ├─ strategy.py*     #   the IntakeStrategy seam. Turns in, not frames in (D10/D88)
 │  │  │  ├─ passive.py*      #   PassiveRecordIntake: listen, keep every word, say nothing
 │  │  │  └─ service.py*      #   the driver + the LIVE holds an accept has to end (D21)
+│  │  ├─ recording/*         # D110. The consented leg's audio -> one encrypted object
+│  │  │  ├─ service.py*      #   a SINK on the gateway. Seals on accept, uploads on the sweep
+│  │  │  └─ store.py*        #   audio_recordings. The only store with no memory projection
 │  │  ├─ wrapup/             service.py  callbacks.py
 │  │  └─ metrics/            rollups.py
 │  ├─ media/*                # the media gateway (D96)
 │  │  ├─ audio.py*           #   G.711 both laws, resample, mono. PURE PYTHON on purpose
 │  │  ├─ gateway.py*         #   per-LEG fan-out, so speaker id is structural (D26)
 │  │  ├─ sources.py*         #   replay a WAV as if it were a phone line
-│  │  └─ audiosocket.py  ws_media.py  recorder.py   # P5 / P7. NOT THERE
+│  │  └─ audiosocket.py  ws_media.py   # P5. NOT THERE
+│  │                        # (the recorder is services/recording/, not here - D110)
 │  ├─ api/*
 │  │  ├─ app.py*  deps.py*  security.py*  realtime.py*   # realtime = the agent hub
 │  │  ├─ routers/  mobile.py*  agent.py*  demo.py*  health.py*  telephony_webhooks.py  admin.py
@@ -286,10 +297,10 @@ split into mine/all (`D70`) · ☐ **Postgres/SQLAlchemy/Alembic** (`D39`) — d
 see `NEXT_SESSION`
 
 **P2c — persistence** (done)
-☑ SQLAlchemy 2.0 async + Alembic, URL from `Settings` (`D75`) · ☑ **9 tables**:
+☑ SQLAlchemy 2.0 async + Alembic, URL from `Settings` (`D75`) · ☑ **10 tables**:
 `call_sessions`, `call_state_transitions`, `agent_state_log`, `assignments`,
 `identity_attestations`, `keypad_captures`, `matching_decisions`, `context_snapshots`,
-`call_wrapups` · ☑ Postgres stores returning **domain models** (`D77`) · ☑ **one contract
+`call_wrapups`, and `audio_recordings` since `D110` · ☑ Postgres stores returning **domain models** (`D77`) · ☑ **one contract
 suite across three backends**, SQLite with foreign keys enforced · ☑ **write-through with
 an in-memory projection** (`D78`): services keep their working set, write durably, and
 restore at startup · ☑ presence, the waiting pool and the live identity are **derived, not
@@ -393,15 +404,15 @@ performing by hand, i.e. what the next services take over (`D36`).
 
 ---
 
-## 8. Real numbers (as of 2026-09-05)
+## 8. Real numbers (as of 2026-09-06)
 
 | | |
 |---|---|
-| Source files | 168 Python files (`src/` 126 + `tests/` + `scripts/` + `mock/`) |
-| Tests | 723, all passing, ~125 s (**20 on agent availability and the wait on screen**, `B25`/`B26`; 137 store contract + restart across 3 backends; 56 on the prompt pack and the IVR; 40 on the hold and the intake seam; 41 on matching, 12 of them on the wait ceiling under contention; **61 on the audio path** - 10 on normalisation, 13 on endpointing, 11 on the VAD contract across both detectors, 19 on the transcription stream and 8 on the wiring; **21 on the transcript reaching the screen**, 13 on the delivery service and 8 driving it over HTTP) |
-| Ports defined | **9** (telephony, stt, **vad**, llm, tts, core_data, event_bus, blob_storage, agent_directory) - `vad` added by `D96`. Plus two **capability** protocols on `stt`: `BatchSttEngine` (`D101`) and `ReplayableSttEngine` (`D107`), which one adapter each implements |
-| Persisted tables | **9** + Alembic, verified on a live Postgres. Presence, the waiting pool and the live identity are deliberately **not** among them (`D78`) |
-| Adapters | 9 fakes/nulls + a caching/circuit-breaking decorator, **plus five real ones**: `SileroVad`, `EnergyVad`, `TyphoonAsrEngine`, `FasterWhisperEngine`, `ThonburianHfEngine` |
+| Source files | 197 Python files (`src/` 138 + `tests/` + `scripts/` + `mock/`) |
+| Tests | **777**, all passing, ~100 s with every backend up (**54 on the recording and the blob port**, `D110`: 15 on the service, 27 on the store contract across memory/localfs/MinIO, 12 on `audio_recordings` across memory/SQLite/Postgres; **20 on agent availability and the wait on screen**, `B25`/`B26`; 149 store contract + restart across 3 backends; 56 on the prompt pack and the IVR; 40 on the hold and the intake seam; 41 on matching, 12 of them on the wait ceiling under contention; **61 on the audio path**; **21 on the transcript reaching the screen**) |
+| Ports defined | **10** (telephony, stt, **vad**, llm, tts, core_data, event_bus, blob_storage, agent_directory, **keyring**) - `vad` added by `D96`, `keyring` by `D110`. Plus three **capability** protocols, one adapter each: `BatchSttEngine` (`D101`), `ReplayableSttEngine` (`D107`) and `ProvisionableBlobStorage` (`D110`) |
+| Persisted tables | **10** + Alembic, verified on a live Postgres - `audio_recordings` added by `D110`. Presence, the waiting pool and the live identity are deliberately **not** among them (`D78`), and neither are transcript turns, which is a gap rather than a design (`DATA_MODEL` §6) |
+| Adapters | 9 fakes/nulls + two decorators (`CachingCoreDataProvider`, `EncryptingBlobStorage`), **plus seven real ones**: `SileroVad`, `EnergyVad`, `TyphoonAsrEngine`, `FasterWhisperEngine`, `ThonburianHfEngine`, `LocalFsBlobStorage`, `S3BlobStorage` |
 | Spoken lines | 27 prompts + 15 flow roles -> **54 distinct clips** after dedupe (`D80`); rendered by the null engine, so a manifest rather than audio |
 | Call states | 15, transition table self-validated (the rating is an event, not a state — `D46`) |
 | Event types | 19 |
@@ -419,7 +430,7 @@ performing by hand, i.e. what the next services take over (`D36`).
 | **Rejected: `distill-whisper-th-large-v3`** | Free to try (already in the HF cache) and worse than CT2 on every axis: CER 0.096 vs 0.087 median, `busy` worst 0.23 vs 0.11, VRAM 1942 vs ~1000 MB. A distilled *large* is still a large |
 | **Throughput** | `busy` = model-seconds per second of audio; above 1.00 the transcriber never catches up. fp16 **0.25 median / 1.25 worst**; CT2 hinted **0.08 / 0.11**. `pad` = seconds Whisper encoded per second of call: median **2.7**, because it pads every clip to a fixed 30 s window |
 | **Real Thai latency** (`D30`) | Paced over 12 calls: p95 **4.5 s - 58.7 s** against a **1.5 s** budget, and the spread tracks throughput — rtf <= 0.31 gives 4.5-8 s, rtf >= 0.65 gives 31-59 s. Once decode is slower than speech the backlog compounds and the last utterance lands a minute late; **half these calls are in that regime.** Invisible until now because every run used `--fast` (`B20`). No segment was abandoned, so these are honest end-to-end numbers. This is `Q29` and it is what `D30`'s table now decides |
-| Diagrams | 63 (14 generated from source, 49 hand-drawn), across 12 explanation pages |
+| Diagrams | 64 (14 generated from source, 50 hand-drawn), across 12 explanation pages |
 
 ---
 
@@ -436,10 +447,18 @@ enforced by a lint check.
 
 ## 10. What comes next
 
-**The encrypted recording to object storage** — the last piece of P3, and it is P7's key
-management rather than an audio problem: `ARCHITECTURE` §6 asks the gateway to write the call
-to object storage with a per-recording key reference, and neither MinIO nor the key handling
-exists. Then **P4** (analysis and the brief v2+, Claude vs Typhoon measured rather than argued).
+**P4** — analysis and the brief v2+, Claude vs Typhoon measured rather than argued. It is the
+largest remaining phase and the one the pitch leans on hardest. Two things already point at it:
+`OfferOut.summary_th` is rendered on the offer card today from the rule-based builder and is the
+field an AI summary fills, so **no client change is needed**; and `D92` draws the line P4 must
+not cross — speech may change WHO answers and HOW SOON, never WHICH QUEUE — which should be
+written as a test *with* the blend rather than after it.
+
+**The encrypted recording landed 2026-09-06** (`D110`), which closes P3's last exit criterion.
+One wrapper does the crypto for every backend, `KeyRing` is the tenth port, `audio_recordings`
+is the tenth table, and `scripts/purge_recordings.py` is `D14`'s erasure job for the audio half.
+Verified against a real MinIO container: the bucket holds ciphertext, the right key returns the
+original WAV, a wrong one refuses, and a caller who pressed 2 left nothing behind.
 
 Two smaller things in the same area, both written down rather than left to be rediscovered:
 **`IntakeService._degradation()` returns `NONE` unconditionally** even though

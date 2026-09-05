@@ -10,13 +10,14 @@ _Last updated: 2026-09-06._
 _Rewritten 2026-09-06. Everything settled before this block is in the sections below; what
 follows is what a fresh session needs and nothing it does not._
 
-**P3 is complete except the encrypted recording.** A caller reaches the right queue through
-a real menu, is offered the pre-call recording, their speech is transcribed by an engine
-chosen on measurements, and **what they said is on the agent's screen the moment Accept is
-pressed**. That last hop landed 2026-09-05.
+**P3 is complete.** A caller reaches the right queue through a real menu, is offered the
+pre-call recording, their speech is transcribed by an engine chosen on measurements, **what
+they said is on the agent's screen the moment Accept is pressed** (2026-09-05), and **their
+audio is in object storage encrypted** with a key ref and a retention date (2026-09-06,
+`D110`) — or nowhere at all, if they declined.
 
-**The next slice is the encrypted recording to object storage, and it is P7's key
-management rather than an audio problem.** After that, P4. See "What to do next" below.
+**The next slice is P4**, analysis and the brief v2+, with two small well-defined things in
+the audio path first and `Q31` needing two answers from the user. See "What to do next".
 
 ### The engine, in one table
 
@@ -50,28 +51,27 @@ median** (unstable at n=20), and **the test set moved the headline by 1.8x**.
 
 ### What is NOT built, precisely
 
-1. **The encrypted recording to object storage.** `ARCHITECTURE` §6 asks the media gateway
-   to write the call with a per-recording key reference. The **container** is in
-   `infra/docker-compose.yml` and the **port** is defined; what does not exist is an
-   adapter for it (only `InMemoryBlobStorage`, which nothing instantiates — `Container`
-   has no blob field at all), the key handling, or anything that writes a frame. `D9` was
-   deliberate about not writing a caller's audio to disk before there is a key to protect
-   it. **This is the last piece of P3.**
-2. **`IntakeService._degradation()` returns `NONE` unconditionally.** A *wait* until `D96`
+1. **`IntakeService._degradation()` returns `NONE` unconditionally.** A *wait* until `D96`
    and a *gap* since: `TranscriptionService` knows whether the engine failed and nothing
    carries it back. The screen is already ready for it — `emptyTranscriptReason()` in
    `panels.tsx` renders a different sentence for `stt_unavailable` and that branch is
    currently unreachable.
-3. **The decode timeout** (`D98`'s missing half) needs `D2`'s killable worker process. Do
+2. **The decode timeout** (`D98`'s missing half) needs `D2`'s killable worker process. Do
    not fake it with `asyncio.wait_for`: it does not kill the thread, and a guard that looks
    like one and is not is `B7`'s whole family.
-4. **A caller every qualified agent declined waits forever** (`Q31`). Reported honestly as
+3. **A caller every qualified agent declined waits forever** (`Q31`). Reported honestly as
    `ALL_DECLINED` since `D108`, but nothing rescues them — `D52`'s exclusion has no expiry
    and `D93`'s wait-ceiling rescue picks from qualified agents, all of whom are excluded.
    **The design for circling back is written out in `Q31` and needs two decisions from the
    user before building.**
-5. **Persisted transcript turns.** `transcript_turns` has no table (`DATA_MODEL` §6), so a
-   restart loses an in-flight transcript.
+4. **Persisted transcript turns.** `transcript_turns` has no table (`DATA_MODEL` §6), so a
+   restart loses an in-flight transcript. ⚠️ **The recording it belongs beside now exists**
+   (`D110`), so the pattern to copy is `services/recording/store.py` plus
+   `db/models/media.py` — an hour's work, not a design problem.
+5. **P7's real key management.** `LocalKeyRing` holds the master in the process
+   environment. The port exists so a vault is a second adapter, and nothing else changes.
+6. **A player on the agent's screen.** The recording exists and decrypts; nothing offers it
+   to the agent. That is now a UI job rather than a storage one.
 
 ### How to see the whole thing working, in one minute
 
@@ -84,7 +84,9 @@ curl -X POST http://127.0.0.1:8000/v1/demo/calls -H "Content-Type: application/j
 #   press Accept: six Thai sentences, each with its moment in the recording.
 ```
 
-`README.md` §"Watch a caller's words reach the agent's screen" is the long version.
+`README.md` §"Watch a caller's words reach the agent's screen" is the long version, and
+§"Prove the recording is encrypted" is the `D110` half — place the same call twice, once
+pressing `1` and once pressing `2`, and count the objects in the bucket. There is one.
 
 ### Before changing the matcher or the workstation, read these two
 
@@ -96,22 +98,26 @@ curl -X POST http://127.0.0.1:8000/v1/demo/calls -H "Content-Type: application/j
 
 ## Where things stand right now
 
-**P0 · P1 · P1b · P2a · P2b · P2c complete. P3 complete except the encrypted
-recording-to-storage — `D30`'s bake-off is CLOSED (`D104`) and the live transcript is on the
-screen (`D106`).** The system knows who is calling and how much to believe it, why they are
+**P0 · P1 · P1b · P2a · P2b · P2c complete. P3 COMPLETE — `D30`'s bake-off is closed
+(`D104`), the live transcript is on the screen (`D106`), and the encrypted recording is in
+object storage (`D110`).** The system knows who is calling and how much to believe it, why they are
 calling, everything we hold about them assembled before the phone is answered, which agent
 should take it and why, the desk rings and a human accepts with the screen already right —
 the caller keys their own way to the right queue through a real menu hearing real
 (pre-rendered) Thai, is offered the pre-call recording and takes it or refuses it or ignores
 it, all three reaching the same agent — **and what they said while they were waiting is on
 that agent's screen the moment they press Accept**, in order, each sentence carrying the
-moment in the recording it was said.
+moment in the recording it was said — **and if they consented, their audio is in object
+storage encrypted, with the key ref and the retention date on an `audio_recordings` row.**
+If they declined, it is nowhere.
 
-Verified **2026-09-05**: **723 tests** — 681 pass + 42 skipped without the Postgres
-container (the 42 are the database cases). `ruff check` + `ruff format --check` clean over 182 files,
-`mypy --strict` clean over 126, all scenarios replay, 63/63 diagrams current, prompt pack
-fresh (54 clips), `audit_docs.py` clean on the live files. **And verified in a browser
-against a running server**, which is where the last two bugs came from.
+Verified **2026-09-06**: **777 tests** — 765 pass + 12 skipped with Postgres and MinIO both
+up. `ruff check` + `ruff format --check` clean over 196 files, `mypy --strict` clean over
+140, all scenarios replay, 64/64 diagrams current, prompt pack fresh (54 clips),
+`audit_docs.py` clean on the live files. **And verified against a running server with a
+real MinIO container**: the bucket holds `RCE1`-framed ciphertext, the right master key
+returns the original 622,124-byte WAV, a wrong one refuses, and the caller who pressed 2
+left nothing behind.
 
 ### The bugs the user found by using the thing, in one place
 
@@ -178,7 +184,7 @@ real, wired and optional: `STORAGE_BACKEND=postgres` switches one factory line
 
 **P0 — foundations.** Config with startup coherence checks · structured logging · injected
 `Clock` + swappable ids (`D35`) · UTF-8 console (`B1`) · **15** call states, 19 event types
-· 8 ports each with a fake · call state machine + orchestrator (single writer) · in-memory
+· 8 ports each with a fake (10 now: `vad` from `D96`, `keyring` from `D110`) · call state machine + orchestrator (single writer) · in-memory
 event bus.
 
 **P1 — context.** `domainpack.py` · `services/identity/` (the L0–L3 ladder) ·
@@ -323,6 +329,24 @@ resets per recording through a capability protocol · `TranscriptPanel` draws it
 brief, and says *why* when it is empty · **`B24`: two services were written, correct,
 tested and called by nothing**, which is `B7`'s family with a fourth member.
 
+**P3 step 4e — the encrypted recording (`D110`), 2026-09-06. P3 is now complete.**
+`ports/keyring.py` is the **tenth port** and `LocalKeyRing` wraps a data key per object with
+a master from `RECORDING_MASTER_KEY` — envelope encryption, the shape a KMS has, so P7's
+vault is a second adapter · `adapters/blob_storage/`: `EncryptingBlobStorage` is **the only
+cryptography in the repo** and wraps every backend, which is what makes `localfs` allowed
+now where the in-memory store's docstring used to refuse it · `S3BlobStorage` covers MinIO
+and real S3 (boto3 in a thread, in an `s3` extra, imported at point of use) ·
+`build_blob_storage` is the enforcement point and the only place a store should be
+constructed · `services/recording/` is a **sink on the gateway**, not part of it: it seals on
+Accept and uploads from the sweep, so no object-store round trip ever sits between the agent
+answering and the caller hearing them (`D12`) · **consent is checked at the seal**, so a
+caller who pressed 2 is transcribed in memory and stored nowhere · `MediaGateway.open_leg` is
+**idempotent**, because two consumers now open a leg and replacing it would have discarded
+the first one's sinks — `B24`'s shape, caught by two tests that fail without the fix ·
+`audio_recordings` is the **tenth table**, written only after the store confirms ·
+`scripts/purge_recordings.py` is `D14`'s erasure job, object before row, refusing to run
+against `memory` · verified against a real MinIO container, not from tests alone.
+
 ## Designed but NOT built (read before touching these areas)
 
 - **`D63` — call transfer.** One filtered roster menu covering all three needs (named agent /
@@ -336,60 +360,59 @@ tested and called by nothing**, which is `B7`'s family with a fourth member.
 
 ## What to do next (in order)
 
-_Rewritten 2026-09-06. Everything the previous version listed as steps 1-5 and 8 is done:
-`D30`'s bake-off (`D104`), the vocabulary hint (`B19`), `Q28`, and the live transcript
-(`D105`-`D107`). Those are recorded in `DECISIONS.md`; they are not work._
+_Rewritten 2026-09-06, after `D110`. The old step 1 — the encrypted recording — is done and
+recorded; it is not work. Everything the version before that listed is done too._
 
-**1. The encrypted recording to object storage — the last piece of P3.**
-`ARCHITECTURE` §6 asks the media gateway to write the call to object storage with a
-per-recording key reference, and nothing writes one. This is **P7's key management arriving
-early**, not an audio problem: the audio path already produces the frames, and `D9` was
-deliberate that a caller's audio must not reach disk before there is a key to protect it.
-**What already exists:** the MinIO service in `infra/docker-compose.yml` (since P0),
-`ports/blob_storage.py` with `encryption_key_ref` on `StoredObject`, and
-`BlobStorageName.{memory,localfs,minio,s3}` in `Settings`. **What does not:** any adapter
-but the in-memory one, a `build_blob_storage` factory (`Container` has no blob field —
-`InMemoryBlobStorage` is instantiated by nothing, including the tests), a writer on
-`MediaGateway`, a per-recording key ref on the call, and `D14`'s retention
-(`recording_retention_days = 90`) meaning something. ⚠️ It is also the first code
-that writes customer speech anywhere durable — `D97`/`D14` apply.
-
-**2. Two small things in the audio path, both well defined.**
+**1. Two small things in the audio path, both well defined and both a session's work.**
 - **`IntakeService._degradation()` returns `NONE` unconditionally.** `TranscriptionService`
   knows whether the engine failed; nothing carries it back. The screen is already waiting
-  for it: `emptyTranscriptReason()` renders a sentence for `stt_unavailable` that nothing
-  can currently reach.
+  for it: `emptyTranscriptReason()` in `panels.tsx` renders a sentence for
+  `stt_unavailable` that nothing can currently reach.
 - **The decode timeout** (`D98`'s missing half) needs `D2`'s killable worker. Do not fake
-  it with `asyncio.wait_for`.
+  it with `asyncio.wait_for`: it does not kill the thread, and a guard that looks like one
+  and is not is `B7`'s whole family.
 
-**3. `Q31` — a caller everyone declined waits forever.** Reported honestly since `D108`,
+**2. `Q31` — a caller everyone declined waits forever.** Reported honestly since `D108`,
 and still stuck: `D52`'s exclusion has no expiry and `D93`'s rescue only picks from
 qualified agents, all of whom are excluded. The design for circling back is written out in
 `Q31` and is ready to build — **but it needs two answers from the user first**: does a RONA
 timeout count as a decline for exhaustion, and is there a round cap before voicemail
 (`D25`). Ask; do not guess.
 
-**4. P4 — analysis and the brief v2+.** The largest remaining phase and the one the pitch
+**3. P4 — analysis and the brief v2+.** The largest remaining phase and the one the pitch
 leans on hardest. Intent classification, entity extraction, a rolling summary, brief
-versioning, confidence calibration, the suggested opening. Two things already point at it:
-`OfferOut.summary_th` is rendered on the offer card today from the rule-based builder and
-is the field an AI summary fills — **no client change needed**; and `D92` draws the line
-P4 must not cross (speech may change WHO answers and HOW SOON, never WHICH QUEUE), which
-should be written as a test *with* the blend rather than after it.
+versioning, confidence calibration, the suggested opening. Three things already point at
+it: `OfferOut.summary_th` is rendered on the offer card today from the rule-based builder
+and is the field an AI summary fills — **no client change needed**; `D92` draws the line P4
+must not cross (speech may change WHO answers and HOW SOON, never WHICH QUEUE), which
+should be written as a test *with* the blend rather than after it; and `Q24` — a health-line
+caller speaking health data into a recording nobody consented to hold *as such* — has to be
+decided **before** an entity extractor exists, because that is the first code that can
+breach it.
 
-**5. Then, roughly in this order:** persisted `transcript_turns` (`DATA_MODEL` §6 — a
-restart currently loses an in-flight transcript) · P5 real telephony, which is what replaces
-`POST /v1/demo/calls` and `D107`'s WAV player · `D85`'s `acw_stats` into `expected_free_in()`
-as a **score, never a filter** (`D73`) · the matcher inputs still fed by nothing (`B12`:
-`is_vulnerable`, `last_agent_id`, `last_contact_at` are set on the Customer and the brief
-but never on the `WaitingCall`, so `customer_priority` and `continuity` score 0 on every
-real call) · `call_intents` / `app_context_events` still in memory · `D64`'s live matching
-board · `Q26`'s env var that changes nothing.
+**4. Persisted `transcript_turns`** (`DATA_MODEL` §6). A restart currently loses an
+in-flight transcript. ⚠️ **This is now an hour rather than a design problem**: `D110` built
+the pattern next door — `services/recording/store.py` for the protocol plus in-memory
+implementation, `db/models/media.py` for the row, `db/stores.py` for the Postgres half, and
+a block in `tests/contracts/test_workstation_stores.py` that runs it on all three backends.
+Copy that shape.
+
+**5. Then, roughly in this order:** P5 real telephony, which is what replaces
+`POST /v1/demo/calls` and `D107`'s WAV player — and which is also what turns
+`RecordingService` on for the *live* leg (`D26`, P6) · `D85`'s `acw_stats` into
+`expected_free_in()` as a **score, never a filter** (`D73`) · the matcher inputs still fed
+by nothing (`B12`: `is_vulnerable`, `last_agent_id`, `last_contact_at` are set on the
+Customer and the brief but never on the `WaitingCall`, so `customer_priority` and
+`continuity` score 0 on every real call) · a **player** for the recording on the agent's
+screen, which is a UI job now that the audio exists and decrypts · `call_intents` /
+`app_context_events` still in memory · `D64`'s live matching board · `Q26`'s env var that
+changes nothing.
 
 **Before the hackathon**, separately from the build: `Q21` (which storage backend the demo
-runs on), `Q23` (personalised menus renumber, and a human reading a script off paper will
-press what the script says), `Q17` (whether `apps/workstation/dist/` is committed, which
-decides whether a venue with no internet can build the workstation at all).
+runs on — and now also which **blob** backend, since `memory` is the one that needs no key
+and no container), `Q23` (personalised menus renumber, and a human reading a script off
+paper will press what the script says), `Q17` (whether `apps/workstation/dist/` is
+committed, which decides whether a venue with no internet can build the workstation at all).
 
 ### Settled this session, so nobody re-opens them
 
@@ -476,11 +499,22 @@ menu-first flow (`D37`).
 
 Facts about *this laptop* rather than the repo, so a fresh session does not rediscover them.
 
-- **Docker works** (v29.2.0) and the Postgres container is **stopped**, not removed — it was
-  brought up on 2026-08-25 to verify the P3 numbers and stopped again. Bring it back with
-  `docker compose -f infra/docker-compose.yml up -d postgres`. Everything runs without it; with the
-  container down the database cases skip (the 42 are the database cases) and with it up
-  they all run bar three FK cases the in-memory backend cannot have.
+- **Docker works** (v29.2.0) and **Docker Desktop has to be started by hand** — it was not
+  running on 2026-09-06 and `docker compose` failed with a named-pipe error rather than
+  anything about Docker being down. `Start-Process "C:\Program Files\Docker\Docker\Docker
+  Desktop.exe"`, then wait about a minute.
+- **Two containers are now up: `readycall-postgres-1` and `readycall-minio-1`.** Everything
+  runs without either; with both up the suite is 765 pass / 12 skip, and with neither the
+  count of skips rises and nothing fails.
+- ⚠️ **MinIO is published on 19000/19001 here, not 9000/9001.** Another process on this
+  laptop (a system Python, PID varies) holds `127.0.0.1:9000`, and the symptom was not a
+  bind failure — Docker's proxy answered second and boto3 reported a *protocol violation*.
+  `MINIO_PORT=19000 MINIO_CONSOLE_PORT=19001 docker compose -f infra/docker-compose.yml up
+  -d minio`, and `BLOB_ENDPOINT_URL=http://127.0.0.1:19000` to match.
+- **The demo master key used while verifying `D110`** was
+  `ZGVtby1tYXN0ZXIta2V5LTMyLWJ5dGVzLWxvbmchISE=` (the ASCII string
+  `demo-master-key-32-bytes-long!!!`). It is in no file and is not a secret — it exists so
+  the bucket's one object can still be opened. Generate a real one for anything else.
 - **The GPU stack is installed and working**: `torch` + `cu128`, `nemo_toolkit[asr]`, and
   the HF cache holds four Thai checkpoints (~11.8 GB) paid for by the earlier project. So
   `STT_ENGINE=typhoon` runs here with no download. A fresh machine does not have any of it.
@@ -513,6 +547,53 @@ Facts about *this laptop* rather than the repo, so a fresh session does not redi
 
 ## Things to be careful about (live landmines)
 
+- **`build_blob_storage` IS THE ONLY PLACE A STORE MAY BE CONSTRUCTED** (`D110`). It always
+  wraps the backend in `EncryptingBlobStorage`, and that wrapper is the entire reason
+  `localfs` is allowed at all — the in-memory store's docstring used to refuse a local one
+  precisely because nothing encrypted. Building `LocalFsBlobStorage(...)` or
+  `S3BlobStorage(...)` directly opts out of the guarantee. Only tests do it, and the test
+  that matters reaches through `.inner` to assert the backend holds ciphertext: asserting
+  on `store.get()` would pass just as happily on a store writing plaintext.
+- **AN EPHEMERAL MASTER KEY AGAINST A DURABLE STORE IS REFUSED AT STARTUP** (`D110`), and
+  that refusal is the feature. Without `RECORDING_MASTER_KEY` the ring generates a master
+  per process; combined with `localfs`/`minio`/`s3` that writes ciphertext nobody will ever
+  read again — a recording that exists, costs money, satisfies an audit on paper, and plays
+  nothing. Against `memory` it is exactly right, because the objects die with the key. If
+  you find yourself deleting that check to make something start, set the key instead.
+- **`open_leg` IS IDEMPOTENT, AND UNDOING THAT SILENTLY UNSUBSCRIBES SOMEBODY** (`D110`).
+  Two consumers open a leg now — the transcriber and the recorder — and neither may depend
+  on the other running (`D12`). Replacing the leg discards the first opener's `sinks`, so
+  it stays correct, running, and fed nothing: `B24`. Two tests in `test_recording.py` fail
+  without it; both were checked by disabling the fix.
+- **THE RECORDING IS SEALED ON THE ACCEPT PATH AND UPLOADED FROM THE SWEEP** (`D110`,
+  `D12`). `close()` moves a list onto a queue and returns; `flush_pending()` does the I/O.
+  Moving the upload into `close()` puts an object-store round trip between the agent
+  pressing Accept and the caller hearing them, and `test_close_does_not_touch_storage`
+  fails rather than merely getting slower.
+- **CONSENT IS CHECKED AT THE SEAL, NOT AT THE OPEN** (`D110`, `D14`). The offer window IS
+  the recording window (`D21`), so a caller who presses `2` has had frames flowing the
+  whole time. Checking at `open()` would be too early — the keypress can land after the leg
+  does — and would mean either recording them anyway or losing the audio of everyone whose
+  consent arrived a second late.
+- **NOTHING IS RECORDED UNTIL THE STORE CONFIRMS** (`D110`). The `audio_recordings` row is
+  written after `put()` returns, never before. A reference to an object that was never
+  written is a recording that looks retrievable, satisfies an audit, and plays nothing. The
+  purge does the same thing in the other direction: **object first, then row** — the other
+  order leaves audio nobody knows they are holding.
+- **`delete_after` IS STAMPED AT UPLOAD TIME AND NEVER RECOMPUTED** (`D110`, `D14`).
+  Lowering `RECORDING_RETENTION_DAYS` must not silently shorten the life of audio already
+  held, and raising it must not extend it. The promise that binds is the one that was true
+  when the caller said yes.
+- **PORT 9000 IS POPULAR AND THE FAILURE DOES NOT LOOK LIKE A PORT CONFLICT** (`D110`). On
+  this laptop a stray Python server holds `127.0.0.1:9000`, so MinIO bound fine, Docker's
+  proxy answered second, and boto3 reported *"the server committed a protocol violation"*.
+  `MINIO_PORT=19000 MINIO_CONSOLE_PORT=19001 docker compose ... up -d minio`, and set
+  `BLOB_ENDPOINT_URL` to match. `Get-NetTCPConnection -LocalPort 9000 -State Listen` lists
+  every listener; there were three.
+- **THE MINIO ROW OF THE BLOB CONTRACT SUITE IS OPT-IN** (`READYCALL_TEST_MINIO=1`), the
+  same shape as the Postgres one. A socket answering on 9000 is not necessarily this
+  project's MinIO, and a contract suite that quietly writes into somebody else's bucket is
+  worse than one that skips.
 - **A DURATION IN A PAYLOAD NEEDS AN ANCHOR OR IT WILL NOT MOVE** (`B27`, `D68`, `B8`).
   A number only changes when a snapshot arrives, and for a caller sitting in a queue
   nothing ever happens to cause one. Send the *instant* alongside it — `waited_since`,

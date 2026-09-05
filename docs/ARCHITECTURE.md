@@ -1,10 +1,10 @@
 # ARCHITECTURE
 
 _How the full ReadyCall system works, end to end. Read this to understand the machine._
-_Status: **partly built**. P0–P2c are implemented and P3 is built including the audio
-path, with the STT engine chosen on measurements (`D104`); the analysis passes and the
-telephony integration are still design, as are the encrypted recording and the live
-transcript on the agent's screen.
+_Status: **partly built**. P0–P2c are implemented and **P3 is complete**: the audio path,
+the STT engine chosen on measurements (`D104`), the live transcript on the agent's screen
+(`D106`) and the encrypted recording in object storage (`D110`). The analysis passes and
+the telephony integration are still design.
 Each section says what is real where it matters. See `PLAN.md` for the build order._
 _Last updated: 2026-09-06._
 
@@ -75,7 +75,8 @@ Three hard architectural rules follow from that picture:
 | **Context Assembler** (`services/context/`) | Building `Customer360` from the read-only core + our history; freezing it as a `ContextSnapshot` with provenance + freshness. | Write to the bank core. |
 | **Call Orchestrator** (`services/call_orchestrator/`) | The per-call state machine; the single writer of `call_sessions.state`; emitting lifecycle events. | Talk to a vendor SDK directly; do AI work inline. |
 | **IVR / Voice** (`services/ivr/`) | The spoken menu, consent capture, DTMF handling, queue announcements, post-call rating. Plays **pre-rendered TTS** clips. | Synthesise speech at call time (`D24`). |
-| **Media Gateway** (`services/media_gateway/`) | Receiving forked audio **per call leg**, normalising to 16 kHz mono PCM, persisting the encrypted recording, fanning frames out. | Interpret content. |
+| **Media Gateway** (`media/`) | Receiving forked audio **per call leg**, normalising to 16 kHz mono float32, fanning frames out. | Interpret content; store anything. |
+| **Recording** (`services/recording/`) | Keeping a consented leg's audio and writing it to object storage **encrypted**, with a per-recording key ref and a retention date (`D110`). A *subscriber* to the gateway, not part of it. | Store audio without consent; upload on a request path. |
 | **Transcription** (`services/transcription/`) | VAD endpointing, streaming Thai STT, emitting `TranscriptTurn`s — for both the intake and the live agent call. | Decide meaning. |
 | **Analysis** (`services/analysis/`) | Intent, entities, urgency/sentiment, summary, next-best-action, suggested opening, confidence calibration, PII spans, **call-progress estimation**. | Choose the agent. |
 | **Matching Engine** (`services/matching/`) | The waiting pool, agent presence/capacity, fit scoring, the global match, deferral decisions, and the full rationale. | Use an LLM to pick a human (`D8`). |
@@ -415,8 +416,11 @@ Design points worth arguing about (all runtime-tunable):
 - Telephony forks the media (Asterisk AudioSocket / `externalMedia`, Twilio Media Streams, or the
   app's mic over WebSocket). **Each call leg is forked separately** — which means speaker identity is
   free and correct, with no diarisation needed (§10).
-- **Media Gateway** normalises to 16 kHz mono float32 frames, writes the encrypted recording to
-  object storage, and fans frames to the transcriber.
+- **Media Gateway** normalises to 16 kHz mono float32 frames and fans them out. Two consumers
+  subscribe: the transcriber, and **the recorder** (`services/recording/`, `D110`), which writes
+  the encrypted recording to object storage with a per-recording key ref. Neither depends on the
+  other running — a transcriber that is down still records, and a caller who refused analysis is
+  still not stored.
 - **Transcription** runs a ring buffer + Silero VAD endpointing; each completed utterance goes to the
   Thai STT engine and is emitted as a `TranscriptTurn` (text, `t_start_ms`, `t_end_ms`,
   `asr_confidence`, speaker role, engine version). Turns are persisted **incrementally** — a dropped
@@ -813,7 +817,7 @@ call already knowing who it is and what it is about:
 | Smart Routing — assigned to + why (incl. any deferral) | `matching_decisions` |
 | Next Best Action + Recommended Actions | Analysis, from a per-intent playbook |
 | AI Suggested Opening | Analysis (Thai, polite register, editable) |
-| Live transcript (intake + call) + audio player | **BUILT for the intake half** (`D106`): `services/transcription/delivery.py` holds the turns and pushes them to `AgentHub` on accept. The agent's own leg is P6 (`D26`), and the audio player waits on the recording (P7). ⚠️ **In memory only** — `transcript_turns` still has no table (`DATA_MODEL` §6) |
+| Live transcript (intake + call) + audio player | **BUILT for the intake half** (`D106`): `services/transcription/delivery.py` holds the turns and pushes them to `AgentHub` on accept. The agent's own leg is P6 (`D26`). The recording itself now exists and is encrypted (`D110`), so the **player** is the only missing half and it is a UI job, not a storage one. ⚠️ The transcript is **in memory only** — `transcript_turns` still has no table (`DATA_MODEL` §6) |
 | PDPA badges (what's consented / what's masked) | `consents` |
 | **Call controls** — accept/decline, mute, hold, hangup, DTMF, transfer, device picker | The in-page softphone (§9) |
 | **Queue strip** — depth, longest wait, my status, my next-up position | Matching Engine, live |
@@ -1025,8 +1029,16 @@ budget degrades (§16) rather than delaying.
   mid-capture returns the fact that a capture happened, never its value.
 - **Encryption.** TLS in transit (mTLS between services), AES-256 at rest for recordings and
   transcripts, keys in a vault, per-recording key refs.
+  **BUILT for recordings** (`D110`): AES-256-GCM envelope encryption in one wrapper over the
+  blob port, a fresh data key per object wrapped by a master the ring holds, and the key ref
+  on `audio_recordings`. ⚠️ The *vault* is not built — `LocalKeyRing` keeps the master in the
+  process environment, which is P7's job to replace. A durable store with an ephemeral key is
+  refused at startup.
 - **Retention.** Configurable per artifact (recordings ≪ transcripts ≪ briefs); an erasure job honours
   deletion requests across both stores and object storage.
+  **BUILT for recordings** (`D110`): `delete_after` is written at upload time from
+  `RECORDING_RETENTION_DAYS`, and `scripts/purge_recordings.py` deletes by retention or erases
+  one call outright. Transcripts and briefs are not covered yet.
 - **RBAC + audit.** Agents see only their assigned customers; every read of a customer record is
   written to `audit_log` (who, what, when, why).
 - **No discriminatory decisioning.** Matching uses skills, availability, stated intent and waiting

@@ -16,7 +16,7 @@ Built for the Krungsri Universe × KMITL Hackathon (*Reimagine Insurance Brokera
 
 ## Status
 
-**P0 · P1 · P1b · P2a · P2b · P2c complete. P3 done, including the audio and the live transcript — except the encrypted recording, which is key management.**
+**P0 · P1 · P1b · P2a · P2b · P2c complete. P3 complete — the audio path, the live transcript, and the encrypted recording in object storage.**
 
 The identity ladder, the keypad IVR, the intake offer, the context assembler, the brief builder,
 the public API, the matching engine, agent presence, the offer handshake, the React workstation and
@@ -29,12 +29,17 @@ routing before any of it ran. They are deliberately **not** told a position in t
 re-solves the whole caller × agent matrix every tick, so there is no arrival order to report
 (`docs/DECISIONS.md` `D91`).
 
-**The audio path is real** (§6). A WAV file or a phone leg is normalised, endpointed by a voice
+**The audio path is real** (§7). A WAV file or a phone leg is normalised, endpointed by a voice
 activity detector and transcribed by a Thai speech model into ordered `TranscriptTurn`s that reach
 `IntakeService.on_turn`. The engine was picked on measurements over 20 real Thai call-centre calls
 rather than argued about: **Typhoon ASR**, the only one that meets the 1.5 s utterance-to-turn
-budget, on **20 of 20** calls (`docs/DECISIONS.md` `D104`). What is still missing is the encrypted
-recording to object storage, which needs key management.
+budget, on **20 of 20** calls (`docs/DECISIONS.md` `D104`).
+
+**And a consented recording is kept, encrypted.** The same frames the transcriber reads are written
+to object storage under AES-256-GCM, with a data key per recording wrapped by a master the process
+never writes down, and a retention date set the moment it is stored (`docs/DECISIONS.md` `D110`).
+A caller who declines the recording is transcribed in memory for the brief and **stored nowhere** —
+which is a property you can check yourself, in the walkthrough below.
 
 **And the agent sees what the caller said.** By the time somebody presses Accept, the sentences
 spoken while the caller was waiting are on their screen, in order, each with the moment in the
@@ -76,7 +81,7 @@ build step — see [§2](#2-the-agent-workstation-react-bundle).
 | **Node 18+** | building the agent workstation bundle, **once** | Only for `/workstation` |
 | **Docker** | Postgres, so a shift survives a restart | Optional |
 | **mermaid-cli** | re-rendering the docs diagrams to SVG | Only if you edit diagrams |
-| **An NVIDIA GPU** | local Thai speech-to-text | Only for real STT (§6). Everything else, tests included, runs without one |
+| **An NVIDIA GPU** | local Thai speech-to-text | Only for real STT (§7). Everything else, tests included, runs without one |
 
 Python is pinned to **3.11** (`.python-version`); `uv` fetches it for you. Nothing here needs a
 system Python.
@@ -110,7 +115,7 @@ one. See [Configuration](#configuration).
 |---|---|---|
 | `uv sync` | runtime only | the scenario runner, the matching simulator, the doc scripts |
 | `uv sync --extra web` | **+ FastAPI / uvicorn / websockets** | the API, the simulator, the workstation, **the full test suite** |
-| `uv sync --extra ml` | **+ torch (CUDA) / transformers / faster-whisper / silero-vad** | Silero voice detection and the two Whisper engines. ~3 GB, wants an NVIDIA GPU (§6) |
+| `uv sync --extra ml` | **+ torch (CUDA) / transformers / faster-whisper / silero-vad** | Silero voice detection and the two Whisper engines. ~3 GB, wants an NVIDIA GPU (§7) |
 | `uv sync --extra ml --extra asr` | **+ `nemo_toolkit[asr]`** | **Typhoon**, the shipped engine. Large; the CT2 fallback exists for a box where this will not install (`D103`, `D104`) |
 
 Three test files import FastAPI, so **`--extra web` is the one to use** unless you have a reason not
@@ -150,9 +155,10 @@ uv run alembic upgrade head
 
 Then run anything with `STORAGE_BACKEND=postgres` set, in `.env` or the environment.
 
-The compose file also defines **redis**, **minio** and **pgweb**. None of them is used yet — they
-are there so the day a phase needs one is not also the day someone learns Docker networking. Name
-the service explicitly (`up -d postgres`) rather than starting all four.
+The compose file also defines **redis**, **minio** and **pgweb**. `minio` is used since `D110` —
+see the next section — and the other two are not yet, standing ready so the day a phase needs one
+is not also the day someone learns Docker networking. Name the service explicitly
+(`up -d postgres`) rather than starting all four.
 
 <details>
 <summary>The test database, and why it is separate</summary>
@@ -171,7 +177,63 @@ Point it elsewhere with `READYCALL_TEST_DATABASE_URL`. **Never point it at the d
 teardown drops every table and leaves Alembic claiming the schema is current.
 </details>
 
-### 4. Generated mock bank data — *optional*
+### 4. Object storage for recordings — *optional; without it recordings stay in memory*
+
+The recording is written **encrypted, always** (`D110`) — `build_blob_storage` wraps every backend
+in AES-256-GCM, so what reaches a bucket or a directory is ciphertext with the key nowhere near it.
+The default `BLOB_STORAGE=memory` needs nothing and keeps recordings for the life of the process,
+which is right for development and for the stage.
+
+To keep them for real, you need a store **and** a master key. The key is not optional: a durable
+store with a per-process key would write ciphertext nobody can ever read again, so the app refuses
+to start in that combination.
+
+```bash
+python -c "import base64,os;print(base64.b64encode(os.urandom(32)).decode())"
+```
+
+Put that in `.env` as `RECORDING_MASTER_KEY`. **Lose it and every recording written under it is
+gone** — that is what envelope encryption means, and it is also what makes `D14`'s erasure
+guarantee real.
+
+The simplest durable option is a local directory, which needs no container:
+
+```bash
+BLOB_STORAGE=localfs
+```
+
+Objects land under `BLOB_ROOT` (`var/blobs`, gitignored). For the S3 path, install the extra and
+start MinIO:
+
+```bash
+uv sync --extra s3
+```
+
+```bash
+docker compose -f infra/docker-compose.yml up -d minio
+```
+
+```ini
+BLOB_STORAGE=minio
+BLOB_ENDPOINT_URL=http://127.0.0.1:9000
+BLOB_ACCESS_KEY=readycall
+BLOB_SECRET_KEY=readycall123
+```
+
+The bucket is created at startup if it is missing. The console is at http://localhost:9001.
+
+> ⚠️ **Port 9000 is popular and something else may already hold it.** On the development laptop a
+> stray Python server did, and the symptom was not a bind failure — Docker's proxy answered second,
+> so boto3 reported *"the server committed a protocol violation"*. Publish it elsewhere and point
+> the client to match:
+>
+> ```bash
+> MINIO_PORT=19000 MINIO_CONSOLE_PORT=19001 docker compose -f infra/docker-compose.yml up -d minio
+> ```
+
+Recordings are deleted by retention with `scripts/purge_recordings.py`; see *Things you can run*.
+
+### 5. Generated mock bank data — *optional*
 
 Three hand-authored customers ship in `mock/bank_core/fixtures/` and are used by default. Generate
 a larger set when you want load or matching realism:
@@ -183,7 +245,7 @@ uv run python mock/bank_core/generate.py --seed 42 --customers 2000
 Writes to `mock/bank_core/generated/` (gitignored). Deterministic: the same seed produces
 byte-identical files.
 
-### 5. Diagram rendering — *only if you edit the docs*
+### 6. Diagram rendering — *only if you edit the docs*
 
 ```bash
 npm install -g @mermaid-js/mermaid-cli
@@ -192,7 +254,7 @@ npm install -g @mermaid-js/mermaid-cli
 Or set `MMDC=/path/to/mmdc`. The renderer drives a headless browser; if it cannot find one, set
 `PUPPETEER_EXECUTABLE_PATH` to an installed Chrome or Edge rather than downloading a second Chromium.
 
-### 6. Speech-to-text — *optional, and it needs an NVIDIA GPU to be worth installing*
+### 7. Speech-to-text — *optional, and it needs an NVIDIA GPU to be worth installing*
 
 ```bash
 uv sync --extra ml --extra web
@@ -294,10 +356,10 @@ never reads the caller's words (`D106`).
 `STT_ENGINE=scripted` the words come from `config/demo_transcript.yaml`, one line per
 utterance the detector found — so the **audio decides the timings and the number of turns**
 and the file decides what they say. That is the stage-safe path, and it is why the demo does
-not depend on a model loading in a noisy room. Set `STT_ENGINE=typhoon` (§6) and the same
+not depend on a model loading in a noisy room. Set `STT_ENGINE=typhoon` (§7) and the same
 walkthrough transcribes real Thai speech for real.
 
-- **Needs set up:** §1 and §2. §6 only if you want real transcription rather than the
+- **Needs set up:** §1 and §2. §7 only if you want real transcription rather than the
   scripted lines.
 - **Needs running:** the API server. Nothing else.
 
@@ -308,6 +370,66 @@ walkthrough transcribes real Thai speech for real.
 > nothing in the log to explain it. `make_demo_audio.py` computes the length from the
 > longest line in the script and warns if you force it below the floor; if you bring your
 > own recording, that is the arithmetic to do.
+
+### Prove the recording is encrypted, and that a refusal is honoured
+
+Two claims worth checking yourself rather than believing: what lands in the bucket cannot be
+played, and a caller who declines leaves nothing behind at all (`D110`, `D14`).
+
+Set up §4 first, then start the API with a durable store — here MinIO, published on 19000 because
+9000 was taken:
+
+```bash
+MINIO_PORT=19000 MINIO_CONSOLE_PORT=19001 docker compose -f infra/docker-compose.yml up -d minio
+```
+
+```ini
+BLOB_STORAGE=minio
+BLOB_ENDPOINT_URL=http://127.0.0.1:19000
+BLOB_ACCESS_KEY=readycall
+BLOB_SECRET_KEY=readycall123
+RECORDING_MASTER_KEY=<your base64 key>
+```
+
+Run the walkthrough above twice — once with `"intake_keys": ["1"]` and once with `["2"]` — and
+accept the first. Then look at what is actually there. The console at <http://localhost:19001>
+(`readycall` / `readycall123`) shows **one** object, under the consenting call:
+
+```bash
+uv run python -c "import boto3,os; c=boto3.client('s3', endpoint_url=os.environ['BLOB_ENDPOINT_URL'], aws_access_key_id=os.environ['BLOB_ACCESS_KEY'], aws_secret_access_key=os.environ['BLOB_SECRET_KEY']); print([o['Key'] for o in c.list_objects_v2(Bucket='readycall-recordings').get('Contents', [])])"
+```
+
+Download it and it starts `RCE1`, not `RIFF`: the framing header, the key ref, the wrapped data
+key, then AES-256-GCM ciphertext. It opens through `EncryptingBlobStorage` with the right master
+key and refuses with any other — the same failure a tampered byte produces, because GCM
+authenticates as well as encrypts.
+
+- **Needs set up:** §1, §4.
+- **Needs running:** the API server, and MinIO if `BLOB_STORAGE=minio`.
+
+### Delete recordings past their retention
+
+`D14` promises retention per artifact and an erasure job across both stores. This is that job for
+the audio half. It is a script rather than a background task on purpose: deletion is the thing you
+least want happening unattended on a demo machine.
+
+```bash
+uv run python scripts/purge_recordings.py --dry-run
+```
+
+It prints the store and the retention it is about to act on before anything else, and **refuses
+outright on `STORAGE_BACKEND=memory`**, where a fresh process holds no rows and a clean run would
+be a green tick over an untouched bucket. To honour a PDPA erasure request for one call, ignoring
+retention entirely:
+
+```bash
+uv run python scripts/purge_recordings.py --call call_01ABCDEF
+```
+
+The object goes before the row. The other order can leave audio nobody knows they are holding.
+
+- **Needs set up:** §1, §3 (rows) and §4 (objects).
+- **Needs running:** whatever backends those are pointed at.
 
 ### The workstation dev server — *only while editing the React app*
 
@@ -445,7 +567,7 @@ nothing for it.
 uv run python scripts/bake_off.py --list
 ```
 
-- **Needs set up:** §1 for the harness itself; **§6 (the `ml` extra) for any real engine**.
+- **Needs set up:** §1 for the harness itself; **§7 (the `ml` extra) for any real engine**.
 - **Needs running alongside:** nothing.
 
 `.gitignore` excludes `*.wav`, so a fresh clone has no test audio. Generate the synthetic
@@ -509,7 +631,7 @@ than two minutes.** The dataset's calls are 65–90 s, which is why it is safe h
 uv run python scripts/score_endpointer.py --vad silero
 ```
 
-- **Needs set up:** §1, plus §6 (the `ml` extra) for `--vad silero`. `--vad energy` needs
+- **Needs set up:** §1, plus §7 (the `ml` extra) for `--vad silero`. `--vad energy` needs
   nothing at all.
 - **Needs running alongside:** nothing. **No GPU is used** — the detector runs on CPU and no
   speech model is loaded.
@@ -536,10 +658,10 @@ Two things about this table that are easy to misread, and both are in the output
 - **WER over whitespace tokens is a phrase error rate on unsegmented Thai.** Fine for
   ranking engines against each other; not quotable as an absolute number.
 
-⚠️ **`D30` is not closed, but it is no longer blocked on missing things.** Real Thai
-telephone speech and the Thai checkpoint are both on this machine. What is missing is the
-CT2 and Typhoon rows — see `NEXT_SESSION`. Read `B14`, `B20` and `B21` before believing any
-number this prints: all three were measurement bugs that produced confident wrong figures.
+⚠️ **`D30` is closed** — `D104` picked Typhoon on a balanced 20-call set, and the table is
+in `docs/PLAN.md`'s P3 exit criteria. Read `B14`, `B20` and `B21` before believing any
+number this prints: all three were measurement bugs that produced confident wrong figures,
+and no accuracy figure from before 2026-09-04 is quotable at all.
 
 ### Preparing the test audio, and why `--mix` matters
 
@@ -631,7 +753,7 @@ pydantic models, the event registry, the ORM metadata. Never hand-edit a `.mmd` 
 uv run python scripts/render_diagrams.py
 ```
 
-Renders every `.mmd` to an SVG. Needs mermaid-cli (§5); `--check` verifies freshness without
+Renders every `.mmd` to an SVG. Needs mermaid-cli (§6); `--check` verifies freshness without
 rendering, and takes diagram names to render just a few.
 
 ```bash
@@ -667,6 +789,12 @@ uv sync --extra ml ──┬─▶ STT_ENGINE=thonburian_ct2 / thonburian_hf   (
                      ├─▶ VAD_ENGINE=silero        (CPU; energy is the default and needs nothing)
                      └─▶ scripts/bake_off.py with a real engine
                      (nothing else in the system needs any of this)
+
+RECORDING_MASTER_KEY ──┬─▶ BLOB_STORAGE=localfs   (a directory; no container)
+                       └─▶ uv sync --extra s3 ──▶ docker compose up -d minio
+                                                    └─▶ BLOB_STORAGE=minio
+     (without the key: BLOB_STORAGE=memory only — any durable store REFUSES to start,
+      because ciphertext nobody can ever read is worse than no recording at all)
 ```
 
 Nothing in the left column depends on anything in the right.
@@ -687,6 +815,15 @@ The audio path is two env vars and both default to needing nothing:
 | `DEMO_AUDIO_DIR` | `tests/audio` | The only directory `POST /v1/demo/calls` will play a WAV out of (`D107`). The request sends a bare filename; this says where it may live, so the endpoint is never a way to read an arbitrary file. |
 | `DEMO_TRANSCRIPT_FILE` | `config/demo_transcript.yaml` | The lines the `scripted` engine speaks, one per endpointed utterance (`D107`). Keep them short enough for the audio they play over — `D98`'s rate guard refuses more than ~15 characters per second and does not care that the text came from a file. |
 
+The recording is four more, and they also default to needing nothing (`D110`):
+
+| Variable | Default | Notes |
+|---|---|---|
+| `RECORDING_ENABLED` | `true` | `false` keeps audio out of storage entirely: analysed per utterance, in memory, never on a disk. |
+| `BLOB_STORAGE` | `memory` | `localfs` writes to `BLOB_ROOT`; `minio` and `s3` are one adapter and need `uv sync --extra s3`. **Every one of them is wrapped in AES-256-GCM** — that is what `build_blob_storage` does, and it is why `localfs` is allowed at all. |
+| `RECORDING_MASTER_KEY` | *(unset)* | Base64, 32 bytes. Unset means a master generated for this process only, and the app **refuses to start** with that against any durable store: ciphertext nobody can ever read is worse than no recording. |
+| `RECORDING_RETENTION_DAYS` | `90` | Stamped onto each recording as `delete_after` **when it is stored**, so changing this never silently re-dates audio already held (`D14`). |
+
 
 
 Settings come from the environment or a `.env` file, via `pydantic-settings`. Every one has a
@@ -700,6 +837,7 @@ change what actually runs:
 | `STT_ENGINE` | `scripted` | canned transcripts, no GPU |
 | `LLM_PROVIDER` | `rulebased` | no API key needed |
 | `TTS_ENGINE` | `null` | records lines, synthesises no audio |
+| `BLOB_STORAGE` | `memory` | recordings live and die with the process; `localfs`/`minio` keep them, encrypted |
 | `CORE_DATA_PROVIDER` | `fixtures` | the three hand-authored customers |
 | `API_HOST` / `API_PORT` | `127.0.0.1` / `8000` | where the server binds |
 | `DEMO_LOGIN_ENABLED` | `true` | the persona picker. **Must be false anywhere near real data** |
@@ -719,10 +857,10 @@ the same reason.
 | A Thai character crashes a script | Windows consoles are cp1252. The app calls `enable_utf8()`; ad-hoc scripts must too, or write to a UTF-8 file |
 | 42 tests skipped | Postgres is not running. Expected — §3 if you want them |
 | `alembic upgrade head` does nothing, but the app says *"relation does not exist"* | the version table is stamped with nothing behind it: `uv run alembic stamp base && uv run alembic upgrade head` |
-| `Could not locate cudnn_ops64_9.dll` | CTranslate2 cannot find the cuDNN torch already ships. The adapter adds `torch/lib` to the DLL search path itself, so this should not happen — if it does, torch is missing or is the CPU wheel (§6) |
+| `Could not locate cudnn_ops64_9.dll` | CTranslate2 cannot find the cuDNN torch already ships. The adapter adds `torch/lib` to the DLL search path itself, so this should not happen — if it does, torch is missing or is the CPU wheel (§7) |
 | The transcript contains insurance jargon the caller never said | `B14`. The model can echo `config/stt_vocabulary.yaml` back on a non-speech segment. `echoes_the_prompt()` is supposed to catch it; if something got through, that guard is the place to look — not the model |
 | Transcription is very slow and the text looks invented | Almost certainly near-silence reaching the model (`B14`: 8.6 s for one second of digital silence). Check the level gate in `TranscriptionStream._transcribe` and the VAD threshold |
-| `torch.cuda.is_available()` is `False` | you have the CPU wheel. The version string will lack `+cu128`. `uv sync --reinstall --extra ml` (§6) |
+| `torch.cuda.is_available()` is `False` | you have the CPU wheel. The version string will lack `+cu128`. `uv sync --reinstall --extra ml` (§7) |
 | A queue is closed and a call goes to voicemail | queue hours are real. Pass `ignore_hours` on the demo endpoint, or check `config/queue_hours.yaml` |
 | `render_diagrams.py` cannot find a browser | set `PUPPETEER_EXECUTABLE_PATH` to an installed Chrome or Edge |
 

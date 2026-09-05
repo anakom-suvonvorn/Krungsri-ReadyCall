@@ -1,13 +1,14 @@
 # DATA_MODEL
 
 _The two databases, every table, and — most importantly — how the bank's half gets swapped out for the real thing on hackathon day._
-_Status: **partly built as of P2c**. Last updated: 2026-09-04._
+_Status: **partly built as of P2c, plus `audio_recordings` (`D110`)**. Last updated: 2026-09-06._
 
-> **What is real today (`P2c`, complete):** **nine tables** with an Alembic migration,
-> verified against a live Postgres — `call_sessions`, `call_state_transitions`,
-> `agent_state_log`, `assignments`, `identity_attestations`, `keypad_captures`,
-> `matching_decisions`, `context_snapshots`, `call_wrapups`. Everything else on this page is
-> still design. Four corrections to what is below, all from building it:
+> **What is real today:** **ten tables** with Alembic migrations, verified against a live
+> Postgres — `call_sessions`, `call_state_transitions`, `agent_state_log`, `assignments`,
+> `identity_attestations`, `keypad_captures`, `matching_decisions`, `context_snapshots`,
+> `call_wrapups` (all P2c), and **`audio_recordings`** (`D110`, 2026-09-06). Everything
+> else on this page is still design. Five corrections to what is below, all from building
+> it:
 >
 > * **There is no `agent_presence` table and there will not be one** — current presence is a
 >   projection of `agent_state_log` (`D76`). Two places recording one fact will disagree.
@@ -16,6 +17,10 @@ _Status: **partly built as of P2c**. Last updated: 2026-09-04._
 >   is a second answer to a question the call's own `state` already answers.
 > * The **column vs JSON rule** settled while mapping: anything the matcher, a report or a
 >   query *filters on* is a column; anything only read back whole is JSON (`D77`).
+> * **`audio_recordings` is an index, never the audio and never the key** (`D110`). It says
+>   which object holds the recording and which *master* key wrapped that object's own data
+>   key; the wrapped data key lives in the object's header. Someone who reads this table
+>   learns that a recording exists and can decrypt none of it.
 > * **`keypad_captures` does not always store the digits.** Capture is untyped, so the mask
 >   and the count are always written and the value only once something has named it (`D44`,
 >   `D78`).
@@ -115,7 +120,7 @@ and a demo must be reproducible even if the upstream source changes.
 | Table | Key columns |
 |---|---|
 | `intake_sessions` | `intake_id`, `call_session_id`, `strategy` (passive/guided/conversational), `started_at`, `ended_at`, `finalize_reason` (customer_done / queue_pop / timeout / error), `is_partial`, `slots_json` |
-| `audio_recordings` | `recording_id`, `call_session_id`, `phase` (intake/live_call), `storage_ref`, `format`, `sample_rate`, `duration_s`, `checksum`, `encryption_key_ref`, `delete_after` |
+| `audio_recordings` ✅ | `recording_id`, `call_session_id`, `phase` (intake/live_call), `storage_ref`, `audio_format`, `sample_rate`, `duration_s`, `size_bytes`, `checksum`, `encryption_key_ref`, `delete_after`, `intake_id` — **built** (`D110`) |
 | `transcript_turns` | `turn_id`, `call_session_id`, `intake_id?`, `seq`, `speaker_role` (customer/ai/agent), `text`, `t_start_ms`, `t_end_ms`, `asr_confidence`, `engine`, `engine_version`, `is_final`, `created_at` |
 
 > ⚠️ **`transcript_turns` has no table and no ORM model yet.** The audio path *produces*

@@ -629,5 +629,38 @@ useful thing in this entry.
 - **numbers now:** 697 tests, 107 decisions, 24 bug entries, 63 diagrams, 9 ports plus two
   capability protocols, 5 real adapters.
 
+### 2026-09-06 — the encrypted recording, which finishes P3 (`D110`)
+
+- **The third clause of `ARCHITECTURE` §6 is built.** The media gateway's own docstring had
+  been quoting *"the encrypted recording is not built"* since `D96`; it is now
+  `services/recording/`, and it is a **subscriber** to the gateway rather than part of it.
+  The gateway already fanned frames to whoever asked, so the recorder is simply a second
+  consumer beside the transcriber — which also keeps a bucket, a key ring and a retention
+  policy out from behind the boundary that lets P5 swap Asterisk for Twilio.
+- **The cryptography lives in exactly one place.** `EncryptingBlobStorage` wraps any
+  backend: AES-256-GCM, a fresh data key per object, wrapped by a master the ring holds.
+  Four backends exist and more will, and four copies of the crypto means the one nobody
+  reviewed is the one holding a real recording. `KeyRing` is the **tenth port**, and
+  `LocalKeyRing` is honest about being dev-grade — the master sits in the process
+  environment, which is P7's to replace.
+- **`localfs` is allowed now, and the old refusal was right at the time.** The in-memory
+  store's docstring said a local one was *deliberately* not built, because a real recording
+  must never land unencrypted on a dev machine. Correct while nothing encrypted; wrong once
+  the factory always wraps. The property is enforced by construction rather than by absence.
+- **Consent is checked at the seal, not at the open** — the offer window *is* the recording
+  window (`D21`), so a caller who presses `2` has had frames flowing the whole time. Their
+  speech is transcribed in memory for the brief and stored nowhere at all, which is the
+  version of `D14` you can verify by counting objects in a bucket.
+- **One more instance of `B24`'s shape, caught before it shipped.** Two consumers now open a
+  media leg, and `open_leg` replaced the leg on the second call — silently discarding the
+  first opener's sinks, leaving it correct, running, subscribed and fed nothing. It is
+  idempotent now, and the two tests that cover it were checked by disabling the fix.
+- **Verified against a real MinIO container**, not from tests alone: the bucket holds
+  `RCE1`-framed ciphertext with no RIFF header, the right master key returns the original
+  622,124-byte WAV, a wrong key refuses, and after two calls — one consenting, one declining
+  — there is exactly one object.
+- **numbers now:** 777 tests, 110 decisions, 27 bug entries, 64 diagrams, **10 ports** plus
+  three capability protocols, 7 real adapters, 10 persisted tables.
+
 _Earlier body text stays as written — it is a record of what was true on 2026-08-25._ Append dated entries here rather than editing the body — this file is a record
 of what was true on 2026-08-25, and the "why" above stays useful even when a number moves._

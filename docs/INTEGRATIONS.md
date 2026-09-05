@@ -1,7 +1,7 @@
 # INTEGRATIONS
 
 _Every external thing the system touches: the port that hides it, the adapters behind it, and the config that selects one._
-_Status: **mostly design; the persistence stack, the whole audio path and the transcript's route to the agent's screen are real.** Last updated: 2026-09-05._
+_Status: **mostly design; the persistence stack, the whole audio path, the transcript's route to the agent's screen and the encrypted recording are real.** Last updated: 2026-09-06._
 
 > **Real as of P2c (complete):** SQLAlchemy 2.0 (async) + Alembic + `asyncpg`, against
 > Postgres 16 in `infra/docker-compose.yml`, verified on a live container — **nine tables**,
@@ -406,7 +406,8 @@ vendor), ElevenLabs (quality, cost). Choose on a listening test of the actual pr
 | Port | Default adapter | Alternatives |
 |---|---|---|
 | `EventBus` | **Redis Streams** (consumer groups, replay, at-least-once) | `KafkaAdapter` for real scale; `InMemoryBus` for tests **and for everything that runs today**. ⚠️ **`publish()` only enqueues; handlers run on `drain()`** (`D15`) — which is what makes a scenario replay byte-identical, and which means a live process needs something to *call* `drain()`. `api/app.py`'s `pump_once` does, every `BUS_DRAIN_INTERVAL_S` (0.05 s). Before `D105` nothing did, and a subscriber to anything but `intent.created` was correct, tested and unreached (`B24`) |
-| `BlobStorage` | **MinIO** (S3 API) in dev | `S3Adapter`, `LocalFsAdapter` (dev only, never for real recordings) |
+| `BlobStorage` ✅ | `memory` by default; **MinIO** (S3 API) in dev, real S3 in production | `LocalFsBlobStorage` (a directory) and `S3BlobStorage` (one adapter for both `minio` and `s3` — the difference is an endpoint URL). ⚠️ **Every backend is wrapped in `EncryptingBlobStorage`** by `build_blob_storage`, which is the only place a store should be constructed: AES-256-GCM envelope encryption, one implementation for all of them (`D110`). That is what makes `localfs` safe now, where the earlier note said "never for real recordings" — the property is enforced by the wrapper rather than by refusing the backend. `minio`/`s3` need the **`s3` extra** (`uv sync --extra s3`) and the factory refuses them with a useful message when boto3 is absent |
+| `KeyRing` ✅ | `LocalKeyRing` — one master key from `RECORDING_MASTER_KEY` | **The tenth port** (`D110`). Two methods, the same two a KMS has: generate a wrapped data key, unwrap one. P7 replaces this with a vault adapter and nothing else changes. ⚠️ **Dev-grade**: the master sits in the process environment. With no key set it generates one per process and warns; a *durable* store with an ephemeral key is refused at startup, because ciphertext nobody can ever read is worse than an honest gap |
 | `AgentDirectory` | Our `agents` tables | `LdapAdapter` / bank HR feed |
 | `Notifier` | WebSocket push to agent desktops | Email/LINE/webhook for the "desktop offline" degradation rung |
 | `MetricsSink` | Prometheus | OTLP |
@@ -522,6 +523,19 @@ of the real system.
 | `STT_DEVICE` | `auto` | Resolves to `cuda` when a GPU is genuinely usable, `cpu` otherwise — resolved in `build_stt`, so importing config never imports torch |
 | `STT_COMPUTE_TYPE` | `int8_float16` | int8 weights, fp16 compute. The default because of the measured 4.00 GiB / ~3.2 GiB free (`D95`) |
 
+**The recording, added at `D110`.** Also defaults to needing nothing installed:
+
+| Variable | Default | Notes |
+|---|---|---|
+| `RECORDING_ENABLED` | `true` | `false` puts the system back where `D9` left it: audio analysed per utterance, in memory, never reaching a disk |
+| `BLOB_STORAGE` | `memory` | `memory` · `localfs` · `minio` · `s3`. The last two need `uv sync --extra s3` |
+| `RECORDING_MASTER_KEY` | *(unset)* | Base64, 32 bytes. Unset means a master generated per process, which is coherent only with `BLOB_STORAGE=memory` — **any durable store refuses to start without one**. Generate: `python -c "import base64,os;print(base64.b64encode(os.urandom(32)).decode())"` |
+| `BLOB_ROOT` | `var/blobs` | Where `localfs` writes. Gitignored: ciphertext of a real person is still not a thing to commit (`D97`) |
+| `BLOB_BUCKET` | `readycall-recordings` | Created at startup if missing, through the `ProvisionableBlobStorage` capability |
+| `BLOB_ENDPOINT_URL` | `http://127.0.0.1:9000` | MinIO. Leave unset for real AWS. ⚠️ **9000 is a popular port** — on the dev laptop another process held it and boto3 reported a *protocol violation* rather than a bind failure, because Docker's proxy answered second. `MINIO_PORT` in compose overrides the published port |
+| `BLOB_ACCESS_KEY` / `BLOB_SECRET_KEY` | *(unset)* | `readycall` / `readycall123` for the compose MinIO |
+| `RECORDING_RETENTION_DAYS` | `90` | Written onto each row as `delete_after` **at upload time**, so changing this never silently re-dates audio already held (`D14`) |
+
 
 Everything selectable, nothing hardcoded:
 
@@ -540,7 +554,13 @@ CORE_DATA_PROVIDER=mock_postgres      # mock_postgres | fixtures | http_api | sq
 CORE_MAPPING_FILE=config/core_mapping.yaml
 INTAKE_STRATEGY=passive               # passive | guided | conversational
 EVENT_BUS=redis                       # redis | kafka | memory
-BLOB_STORAGE=minio                    # minio | s3 | localfs
+BLOB_STORAGE=minio                    # memory | localfs | minio | s3   (D110)
+RECORDING_ENABLED=true
+RECORDING_MASTER_KEY=                 # base64, 32 bytes; REQUIRED for any durable store
+BLOB_ENDPOINT_URL=http://127.0.0.1:9000
+BLOB_BUCKET=readycall-recordings
+BLOB_ACCESS_KEY=readycall
+BLOB_SECRET_KEY=readycall123
 
 # --- intake / IVR ---
 INTAKE_MAX_DURATION_S=180

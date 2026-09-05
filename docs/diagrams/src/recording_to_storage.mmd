@@ -1,0 +1,49 @@
+%% HANDWRITTEN. Checked against ARCHITECTURE.md S6 + S13 (security) + DATA_MODEL S6
+%% + D9 + D12 + D14 + D21 + D26 + D88 + D96 + D97 + D110 + B7 + B24
+flowchart TB
+    subgraph GW["media/gateway.py — fans NORMALISED frames, interprets nothing"]
+        LEG["one leg = one direction of one call (D26).<br/>Speaker identity is STRUCTURAL — no diarisation<br/>model to be wrong about who spoke"]
+        IDEM{{"open_leg is IDEMPOTENT since D110, and it is a<br/>CORRECTNESS fix. Two consumers now open a leg and<br/>neither may depend on the other running (D12).<br/>Replacing it would discard the first one's sinks —<br/>correct, running, fed nothing, which is B24.<br/>On a format disagreement the FIRST wins and the<br/>second is logged: silently decoding A-law as u-law<br/>is loud plausible garbage nobody blames on the codec"}}
+    end
+
+    TRANS["services/transcription — subscriber #1<br/>endpoints, transcribes, publishes turns"]
+
+    subgraph REC["services/recording — subscriber #2 (D110)"]
+        BUF[("frames appended per leg, in memory.<br/>Capped at MAX_SAMPLES (600 s): a stuck media source<br/>keeps recording and stops accumulating, and says so —<br/>the same shape as B20's backlog cap")]
+        SEAL{{"close(session) — CHEAP, and it runs INSIDE the accept.<br/>It moves a list onto a queue and returns. An object-store<br/>round trip between the agent pressing Accept and the caller<br/>hearing them is D12's rule broken in a new place."}}
+        CONSENT{{"CONSENT IS CHECKED HERE, at the last possible moment.<br/>The offer window IS the recording window (D21), so a caller<br/>who pressed 2 has had frames flowing the whole time and no<br/>recording consent. Their speech is transcribed IN MEMORY for<br/>the brief and stored NOWHERE. Checking at open() would be too<br/>early: consent arrives on a keypress that can land after the leg."}}
+        TERM["call.state.changed -> TERMINAL: seal too.<br/>Nobody presses Accept for a caller who hangs up while<br/>waiting, so without this their buffer sits open for the<br/>life of the process. WRAP_UP is not terminal (D106)"]
+    end
+
+    FLUSH{{"flush_pending() — from sweep_once, never from a request (B7).<br/>A failed upload KEEPS ITS PLACE and retries next pass."}}
+
+    subgraph ENC["adapters/blob_storage — the crypto lives in ONE place"]
+        WRAP["EncryptingBlobStorage wraps ANY backend.<br/>Four implementations exist and more will; four copies of<br/>the cryptography means one nobody reviewed is the one<br/>holding a real recording."]
+        RING[["ports/keyring.py — the TENTH port.<br/>LocalKeyRing: master from RECORDING_MASTER_KEY.<br/>Unset = generated per process + a warning, which is<br/>coherent ONLY with BLOB_STORAGE=memory. Any durable<br/>store REFUSES TO START without one: ciphertext nobody<br/>can ever read is worse than an honest gap.<br/>P7 swaps this for a vault; nothing else changes."]]
+        FRAME["RCE1 | key_ref | wrapped data key | nonce | AES-256-GCM<br/>Self-describing: restoring one recording needs the<br/>ring and that object, and nothing else.<br/>A blob without RCE1 is returned untouched — which is<br/>how plaintext prompt clips keep working."]
+    end
+
+    BACKENDS[("memory / localfs / s3 (MinIO is s3 with an endpoint).<br/>localfs is ALLOWED NOW: the old refusal protected a property<br/>the wrapper now guarantees by construction. build_blob_storage<br/>is the enforcement point — nothing in services/ builds one.")]
+
+    ROW[("audio_recordings — the INDEX, never the audio and never the key.<br/>storage_ref, encryption_key_ref (the MASTER, not the data key),<br/>checksum OF THE PLAINTEXT (GCM's nonce is fresh every write, so<br/>a checksum of the ciphertext could never answer 'same recording?'),<br/>and delete_after.<br/>WRITTEN ONLY AFTER THE STORE CONFIRMS: a reference to an object<br/>that was never written is a recording that looks retrievable,<br/>satisfies an audit, and plays nothing.")]
+
+    RETAIN{{"delete_after is stamped AT UPLOAD TIME from<br/>RECORDING_RETENTION_DAYS (D14) — not computed at purge time.<br/>Otherwise lowering the setting silently shortens the life of<br/>audio already held, and the promise that matters is the one<br/>made when the caller said yes."}}
+
+    PURGE["scripts/purge_recordings.py — D14's erasure job.<br/>A SCRIPT, not a background task: deletion is the thing you<br/>least want happening unattended on a demo machine.<br/>THE OBJECT GOES BEFORE THE ROW — the other order leaves audio<br/>nobody knows they hold, invisible to every report.<br/>Refuses on STORAGE_BACKEND=memory, where a clean run would be<br/>a green tick over an untouched bucket."]
+
+    LEG --> TRANS
+    LEG --> BUF
+    IDEM -.-> LEG
+    BUF --> SEAL
+    CONSENT -.-> SEAL
+    TERM --> SEAL
+    SEAL -->|"queued, not uploaded"| FLUSH
+    FLUSH --> WRAP
+    RING -.-> WRAP
+    WRAP --> FRAME
+    FRAME --> BACKENDS
+    BACKENDS -->|"and only then"| ROW
+    RETAIN -.-> ROW
+    ROW --> PURGE
+    PURGE -->|"1. delete the object"| BACKENDS
+    PURGE -->|"2. then the row"| ROW
