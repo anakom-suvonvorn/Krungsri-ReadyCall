@@ -67,6 +67,37 @@ writing this brief and checked before leaving it here:
   the strategy, and the strategy is what publishes. So there is nothing to add at the
   intake end.
 
+**Corrected 2026-09-05, before writing any of it: it is FOUR pieces, and two of them
+were invisible from the intake end.** Both were found by tracing the path from a WAV file
+to a browser tab and asking, at each hop, *what calls this?* — the `B7` question. Neither
+would have failed a test, because in both cases the code is correct and unreached.
+
+0. **NOTHING OPENS A TRANSCRIPTION.** `TranscriptionService.open()` is called by
+   `tests/unit/test_transcription_service.py` and by nothing else in the repository. In
+   the running API no recording is ever opened, so no frame is ever endpointed and **no
+   `transcript.turn` is ever published from a real call** — the events the rest of this
+   brief is about do not currently exist outside tests and scenarios. `run_offer` returns
+   a `HoldReport` with `recording=True` and nothing acts on it. This is `B7`'s family
+   exactly: written, correct, tested, driven by nothing.
+
+1b. **NOTHING DRAINS THE BUS PERIODICALLY, so a subscriber would never run.**
+   `InMemoryEventBus.publish()` only enqueues; handlers run on `drain()`; and the only
+   `drain()` in the live process is a FastAPI background task fired by
+   `POST /v1/calls/intents` (`mobile.py`), plus one at shutdown. **The sweep does not
+   drain.** Measured, not read:
+
+   ```
+   published on the bus : ['intake.started', 'transcript.turn']
+   subscriber saw       : []    <- after publish, before any drain
+   subscriber saw       : []    <- after 5 sweeps
+   subscriber saw       : ['transcript.turn']    <- after an explicit drain()
+   ```
+
+   So a subscriber wired the obvious way is **correct, tested, and never runs** until some
+   unrelated app request happens to schedule a drain. Do not fix this by draining inside
+   the sweep: `agent_sweep_interval_s` is 1.0 s and the whole transcript budget is 1.5 s,
+   of which the model already spends 0.19 s. It needs its own faster driver.
+
 1. **Nothing subscribes.** `api/realtime.py`'s `AgentHub` is a *push* mechanism —
    `send(agent_id, kind, payload)`, with per-agent sequencing and replay-on-reconnect
    already built (`D68`, `B7`). Nothing takes `transcript.turn` off the bus and calls it.
