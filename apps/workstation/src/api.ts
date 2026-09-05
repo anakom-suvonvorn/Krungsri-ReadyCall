@@ -251,8 +251,15 @@ export const api = {
 
   accept: (assignmentId: string) =>
     call<Snapshot>("POST", `/v1/agent/offers/${assignmentId}/accept`),
-  decline: (assignmentId: string, reason: string) =>
-    call<Snapshot>("POST", `/v1/agent/offers/${assignmentId}/decline`, { reason }),
+  /** `stopOffering` is the "not now" ending (`D109`): decline AND stop being rung, which
+   *  is what letting the offer ring out already does. The server owns the state change —
+   *  a client cannot declare `not_ready` itself (`D51`), so this is a flag rather than a
+   *  second request. */
+  decline: (assignmentId: string, reason: string, stopOffering = false) =>
+    call<Snapshot>("POST", `/v1/agent/offers/${assignmentId}/decline`, {
+      reason,
+      stop_offering: stopOffering,
+    }),
 
   endCall: (callId: string, reason = "caller_hung_up") =>
     call<Snapshot>("POST", `/v1/agent/calls/${callId}/end`, { reason }),

@@ -338,3 +338,70 @@ async def test_a_caller_everyone_declined_says_so_instead_of_blaming_the_roster(
         f"every qualified agent declined; got {decision.kind} - {decision.rationale_th}"
     )
     assert "ปฏิเสธ" in (decision.rationale_th or "")
+
+
+# --- D109: decline, and stop being rung ---------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_plain_decline_leaves_the_agent_ready(client: Any) -> None:
+    """The default has to stay the default: they turned down THIS caller, not all of them."""
+    client.post("/v1/agent/demo-login", json={"agent_id": "A001"})
+    client.post("/v1/agent/state", json={"agent_intent": "ready"})
+    place(client)
+
+    offer = me(client)["offer"]
+    client.post(
+        f"/v1/agent/offers/{offer['assignment_id']}/decline",
+        json={"reason": "busy"},
+    )
+    presence = me(client)["presence"]
+    assert presence["agent_intent"] == "ready"
+    assert presence["offerable"] is True
+
+
+@pytest.mark.asyncio
+async def test_decline_and_stop_offering_lands_where_a_missed_offer_lands(client: Any) -> None:
+    """`D109`. The same ending as letting the card ring out, chosen instead of waited for.
+
+    And the *reason* differs on purpose: `rona_missed_offer` means nobody picked up,
+    `declined_and_stopped` means somebody made a choice. The screen says a different
+    sentence for each, which is `D59`'s whole point.
+    """
+    client.post("/v1/agent/demo-login", json={"agent_id": "A001"})
+    client.post("/v1/agent/state", json={"agent_intent": "ready"})
+    place(client)
+
+    offer = me(client)["offer"]
+    snapshot = client.post(
+        f"/v1/agent/offers/{offer['assignment_id']}/decline",
+        json={"reason": "busy", "stop_offering": True},
+    ).json()
+
+    presence = snapshot["presence"]
+    assert presence["agent_intent"] == "not_ready"
+    assert presence["offerable"] is False
+    assert presence["intent_reason"] == "declined_and_stopped"
+
+
+@pytest.mark.asyncio
+async def test_declining_with_stop_is_not_immediately_rung_again(client: Any) -> None:
+    """The actual complaint: decline, and the next caller arrives a second later.
+
+    Two callers waiting and one agent, so without the fix the re-match in the decline
+    route hands them the second one before the first snapshot has even rendered.
+    """
+    client.post("/v1/agent/demo-login", json={"agent_id": "A001"})
+    client.post("/v1/agent/state", json={"agent_intent": "ready"})
+    place(client)
+    offer = me(client)["offer"]
+    place(client)  # a second caller, waiting behind the first
+
+    after = client.post(
+        f"/v1/agent/offers/{offer['assignment_id']}/decline",
+        json={"reason": "busy", "stop_offering": True},
+    ).json()
+    assert after["offer"] is None, "asked not to be rung, and was rung again in the same request"
+
+    await sweep_once(client.app.state.container)
+    assert me(client)["offer"] is None, "nor on the next tick"

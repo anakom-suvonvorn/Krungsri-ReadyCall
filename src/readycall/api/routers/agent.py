@@ -225,6 +225,13 @@ async def decline_offer(
         )
     except PermanentError as exc:
         raise _bad_request(exc) from exc
+    if body.stop_offering:
+        # Before the tick, not after (`D109`). The tick is what re-matches this caller,
+        # and an agent who has just said "stop offering" must not be a candidate for the
+        # very call they declined, nor for the next one that lands in the same pass.
+        await container.presence.stop_offering(
+            who.agent_id, call_session_id=session.call_session_id
+        )
     # Straight back into the pool: the caller keeps their accrued wait, and this agent is
     # now excluded from re-matching them (`D52`).
     await container.dispatch.tick()

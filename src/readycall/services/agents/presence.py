@@ -460,6 +460,34 @@ class PresenceService:
         )
         return updated
 
+    async def stop_offering(self, agent_id: str, *, call_session_id: str) -> AgentPresence:
+        """The agent declined and asked not to be rung again (`D109`).
+
+        The same landing state as RONA — `AVAILABLE` + `NOT_READY` — and deliberately a
+        **different reason**, because they are different facts about the same person:
+        `rona_missed_offer` means nobody picked up, this means somebody made a choice.
+        `set_by="agent"` for the same reason; RONA is the platform stepping in, this is
+        not.
+
+        It writes the person's axis, which is `D51`'s narrow exception, and it is narrow
+        here too: the agent asked for it in the same click that declined the call.
+        """
+        presence = self._require(agent_id)
+        updated = presence.model_copy(
+            update={
+                "system_state": AgentSystemState.AVAILABLE,
+                "agent_intent": AgentIntent.NOT_READY,
+                "since": self._clock.now(),
+            }
+        )
+        await self._commit(
+            updated,
+            set_by="agent",
+            reason="declined_and_stopped",
+            call_session_id=call_session_id,
+        )
+        return updated
+
     # --- heartbeat ----------------------------------------------------------------------
 
     async def heartbeat(self, agent_id: str) -> None:

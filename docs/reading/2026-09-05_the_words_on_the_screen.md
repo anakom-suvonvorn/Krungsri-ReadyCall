@@ -125,20 +125,29 @@ an agent who declined would have read the caller's words **verbatim** for a call
 took. Over a shift that is a lot of people's private problems read by people who did not
 handle them.
 
-The offer card still shows a short *summary* of what the call is about — that already
-existed, and it is deliberately gated by how sure we are of the caller's identity. A summary
-is a different kind of disclosure from a transcript.
+The offer card still shows a short *summary* of what the call is about. That already
+existed, and a summary is a different kind of disclosure from a verbatim transcript.
 
-### One thing I deliberately did *not* gate
+### Where the transcript sits in the assurance rules
 
-There is a rule in this system that the agent only sees a customer's **record** — policy
-numbers, coverage — once the caller's identity is established.
+**Correction to an earlier version of this page, which had the rule backwards.** I wrote
+that the agent only sees a customer's record once their identity is established. That was
+the rule *until `D74` reversed it*, and reversing it was your argument:
 
-The transcript is **not** gated that way, and that is a decision rather than an oversight.
-It is the caller's own speech, on the call the agent is about to take. It is not anything we
-looked up about them. And the case where it matters most is an **anonymous** caller — the
-one where we know nothing else at all. Withholding it there would delete the feature to
-protect nothing.
+> the level is just how **sure** the system is that this is who we think it is — it is not
+> a decision about what to show
+
+So the agent sees the whole record from **L1** upward. `L0` shows nothing, and that is not
+a restriction either: at `L0` there is genuinely nobody to show. What assurance gates is
+what the agent may **say and do** — reading a policy number back, confirming a figure,
+changing something. `D74` puts it in one line: showing the record to the bank's own agent,
+who was routed this call in order to serve it, is *internal processing*, not a disclosure.
+The disclosure event is the sentence the agent speaks out loud.
+
+**The transcript follows the same logic, one step further.** It is not even a lookup — it
+is the caller's own speech, on the call this agent is about to take. So it is ungated at
+every level including `L0`, which is precisely the caller with no other source of context.
+The line that matters is *"nothing here was looked up"*, and nothing in that panel is.
 
 ---
 

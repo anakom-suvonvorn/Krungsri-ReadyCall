@@ -438,9 +438,9 @@ export default function App() {
           offer &&
           run(() => api.accept(offer.assignment_id)).then((next) => next && setSnapshot(next))
         }
-        onDecline={(reason) =>
+        onDecline={(reason, stopOffering) =>
           offer &&
-          run(() => api.decline(offer.assignment_id, reason)).then(
+          run(() => api.decline(offer.assignment_id, reason, stopOffering)).then(
             (next) => next && setSnapshot(next),
           )
         }

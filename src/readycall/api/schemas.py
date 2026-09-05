@@ -265,6 +265,17 @@ class OfferOut(ApiModel):
 
 class DeclineOfferRequest(ApiModel):
     reason: str = Field(default="declined", max_length=64)
+    #: Decline **and stop offering** (`D109`). Without it, declining leaves the agent
+    #: `READY` and the very next tick can ring them with the next caller — which is right
+    #: when they turned this *particular* call down, and wrong when what they meant was
+    #: "not now". Letting the offer ring out already does this (RONA, `D33`); this is the
+    #: same ending, chosen deliberately instead of by waiting twenty seconds in silence.
+    #:
+    #: A flag rather than a second request, because "declare not_ready" is not something
+    #: an agent may do: `NOT_READY` is the one intent the **platform** writes (`D51`), so
+    #: a client-side decline-then-declare would be refused - correctly - by
+    #: `declarable_intents`.
+    stop_offering: bool = False
 
 
 class EndCallRequest(ApiModel):

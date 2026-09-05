@@ -65,6 +65,7 @@ const REASON_HINT: Record<string, string> = {
   rona_missed_offer:
     "มีสายที่เสนอให้แล้วไม่มีการตอบรับ ระบบจึงหยุดส่งสายชั่วคราว — กดสถานะใหม่เมื่อพร้อม",
   last_call_fulfilled: "สายสุดท้ายของคุณจบแล้ว — เลือกสถานะถัดไปเองเมื่อพร้อม",
+  declined_and_stopped: "คุณเลือกไม่รับสายนั้นและให้หยุดส่งสายไว้ก่อน — กดสถานะใหม่เมื่อพร้อม",
 };
 
 const LOOKUP_LABEL: Record<string, string> = {
@@ -138,7 +139,7 @@ export function OfferCard({
 }: {
   offer: Offer | null;
   onAccept: () => void;
-  onDecline: (reason: string) => void;
+  onDecline: (reason: string, stopOffering: boolean) => void;
   busy: boolean;
 }) {
   const now = useSecondTicker(offer !== null);
@@ -203,8 +204,21 @@ export function OfferCard({
           <button className="primary" onClick={onAccept} disabled={busy}>
             รับสาย (Accept)
           </button>
-          <button className="ghost" onClick={() => onDecline("busy")} disabled={busy}>
+          <button className="ghost" onClick={() => onDecline("busy", false)} disabled={busy}>
             ไม่รับ (Decline)
+          </button>
+          {/* The "not now" ending (`D109`). Declining alone leaves the agent ready and
+              the next tick can ring them again a second later — right when they turned
+              down THIS caller, wrong when they meant "stop for a moment". Letting the
+              card time out already does exactly this; the button is the same ending
+              without twenty seconds of a ringing desk. */}
+          <button
+            className="ghost"
+            onClick={() => onDecline("busy", true)}
+            disabled={busy}
+            title="ไม่รับสายนี้ และหยุดส่งสายใหม่จนกว่าคุณจะกดพร้อมอีกครั้ง"
+          >
+            ไม่รับ + พักรับสาย
           </button>
           <div className="spacer" />
           <span className="faint">{offer.accept_mode}</span>
