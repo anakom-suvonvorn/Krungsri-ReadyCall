@@ -29,7 +29,8 @@ from datetime import timedelta
 
 from readycall.clock import Clock
 from readycall.config import Settings
-from readycall.domain.enums import ConsentScope, RecordingPhase, SpeakerRole
+from readycall.domain import events as ev
+from readycall.domain.enums import TERMINAL_STATES, ConsentScope, RecordingPhase, SpeakerRole
 from readycall.domain.models import AudioRecording, CallSession
 from readycall.errors import TransientError
 from readycall.ids import generate
@@ -37,7 +38,9 @@ from readycall.logging import get_logger
 from readycall.media.audio import TARGET_SAMPLE_RATE, AudioFormat, encode_wav
 from readycall.media.gateway import MediaGateway
 from readycall.ports.blob_storage import BlobStorage
+from readycall.ports.event_bus import EventBus
 from readycall.ports.stt import AudioFrame
+from readycall.services.call_orchestrator.repository import CallSessionRepository
 from readycall.services.recording.store import InMemoryRecordingStore, RecordingStore
 
 log = get_logger(__name__)
@@ -76,12 +79,14 @@ class RecordingService:
         settings: Settings,
         gateway: MediaGateway,
         store: RecordingStore | None = None,
+        calls: CallSessionRepository | None = None,
     ) -> None:
         self._blob = blob
         self._clock = clock
         self._settings = settings
         self._gateway = gateway
         self._store: RecordingStore = store or InMemoryRecordingStore()
+        self._calls = calls
         self._open: dict[tuple[str, SpeakerRole], _Open] = {}
         self._pending: list[_Sealed] = []
 
@@ -166,6 +171,47 @@ class RecordingService:
             )
         )
         return True
+
+    # --- the endings that do not come through Accept -------------------------------------
+
+    def subscribe(self, bus: EventBus) -> None:
+        """Seal on a terminal state, so an abandoned call still keeps its audio.
+
+        Accept is the common ending and closes explicitly, in an order that matters
+        (`B24`). Every *other* ending — the caller hangs up while waiting, the queue
+        closes, the call fails — arrives only as a state change, and without this the
+        buffer would sit open for the life of the process holding audio nobody stored.
+        The same shape as `TranscriptDeliveryService` (`D106`), and for the same reason:
+        the service owns its own subscriptions so the topics sit beside the handlers.
+        """
+        bus.subscribe(ev.CallStateChanged.name, self._on_state_changed)
+
+    async def _on_state_changed(self, event: ev.Event) -> None:
+        if not isinstance(event, ev.CallStateChanged):  # pragma: no cover - topic guard
+            return
+        if event.to_state not in TERMINAL_STATES:
+            return
+        if not self._is_open(event.call_session_id):
+            return
+        session = await self._calls.get(event.call_session_id) if self._calls else None
+        if session is None:
+            # Nothing to check consent against, so nothing may be stored — but the
+            # buffer must still go, or a lookup failure becomes a memory leak that only
+            # shows up after a long shift.
+            self._discard(event.call_session_id)
+            log.warning(
+                "recording dropped: the call could not be loaded at its terminal state",
+                call_session_id=event.call_session_id,
+            )
+            return
+        self.close(session)
+
+    def _is_open(self, call_session_id: str) -> bool:
+        return any(key[0] == call_session_id for key in self._open)
+
+    def _discard(self, call_session_id: str) -> None:
+        for key in [k for k in self._open if k[0] == call_session_id]:
+            self._open.pop(key, None)
 
     # --- and then, from the sweep -------------------------------------------------------
 

@@ -30,6 +30,7 @@ from readycall.config import Settings, get_settings
 from readycall.console import enable_utf8
 from readycall.db.storage import Storage
 from readycall.logging import configure, get_logger
+from readycall.ports.blob_storage import ProvisionableBlobStorage
 
 log = get_logger(__name__)
 
@@ -65,6 +66,13 @@ async def sweep_once(container: Container) -> None:
     `INTAKE_REOFFER_AFTER_S` fires *because the wait got long*, and nothing else about the
     call happens at that moment to carry it.
 
+    `RecordingService.flush_pending()` is the newest, and it is here for a slightly
+    different reason (`D110`): the work is not triggered by time, it is *deferred* off the
+    accept path on purpose. An object-store round trip between an agent pressing Accept
+    and the caller hearing them would be `D12`'s rule broken in a new place, so the accept
+    seals the buffer in memory and the upload happens here. A failed upload keeps its
+    place and is retried on the next pass.
+
     Exceptions are logged and swallowed: this loop must survive a bad tick, because the
     thing it drives is the thing that recovers from bad ticks.
     """
@@ -73,8 +81,9 @@ async def sweep_once(container: Container) -> None:
         dropped = await container.presence.sweep()
         reoffered = await container.intake.reoffer_due()
         recordings = await container.transcription.check_timeouts()
+        stored = await container.recording.flush_pending()
         result = await container.dispatch.tick()
-        if expired or dropped or reoffered or recordings or result.offered:
+        if expired or dropped or reoffered or recordings or stored or result.offered:
             log.info(
                 "sweep",
                 offers_expired=len(expired),
@@ -82,6 +91,7 @@ async def sweep_once(container: Container) -> None:
                 calls_offered=len(result.offered),
                 intake_reoffers=len(reoffered),
                 recordings_timed_out=len(recordings),
+                recordings_stored=len(stored),
             )
     except Exception:
         log.exception("sweep failed")
@@ -145,6 +155,15 @@ def create_app(
         # see an empty floor, so it would do real damage in the half-second before restore
         # finished. Restoring first is not tidiness; it is the ordering the sweeper assumes.
         restored = await container.restore()
+        # The bucket, once, here. A store that needs provisioning says so through a
+        # capability protocol (`D110`) — a dict and a directory do not grow a no-op for
+        # it. Deliberately not fatal: object storage being unreachable must not stop a
+        # call centre answering calls (`D12`), and `flush_pending` retries every sweep.
+        if isinstance(container.blob.inner, ProvisionableBlobStorage):
+            try:
+                await container.blob.inner.ensure_bucket()
+            except Exception:
+                log.exception("object storage is not ready - recordings will retry")
         sweeper = (
             asyncio.create_task(_sweep_forever(container, settings.agent_sweep_interval_s))
             if settings.agent_sweep_interval_s > 0

@@ -52,8 +52,16 @@ indexed: at, call_session_id, kind
 json: candidates, urgency
 16 columns"]:::tbl
     end
+    subgraph g_4["other"]
+        direction TB
+        t_audio_recordings["<b>audio_recordings</b>
+pk: recording_id
+indexed: call_session_id, delete_after
+13 columns"]:::tbl
+    end
     t_agent_state_log -. "FK" .-> t_call_sessions
     t_assignments -. "FK" .-> t_call_sessions
+    t_audio_recordings -. "FK" .-> t_call_sessions
     t_call_state_transitions -. "FK" .-> t_call_sessions
     t_call_wrapups -. "FK" .-> t_call_sessions
     t_identity_attestations -. "FK" .-> t_call_sessions

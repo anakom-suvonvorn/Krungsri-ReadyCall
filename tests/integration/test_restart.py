@@ -41,6 +41,7 @@ from readycall.db.stores import (
     PostgresAttestationStore,
     PostgresCaptureStore,
     PostgresMatchingDecisionStore,
+    PostgresRecordingStore,
     PostgresSnapshotStore,
     PostgresWrapupStore,
 )
@@ -86,6 +87,7 @@ def _storage(backend: str, factory: Any) -> Storage:
         attestations=PostgresAttestationStore(factory),
         captures=PostgresCaptureStore(factory),
         decisions=PostgresMatchingDecisionStore(factory),
+        recordings=PostgresRecordingStore(factory),
         snapshots=PostgresSnapshotStore(factory),
         wrapups=PostgresWrapupStore(factory),
     )

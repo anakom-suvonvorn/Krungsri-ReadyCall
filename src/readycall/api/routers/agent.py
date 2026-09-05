@@ -209,6 +209,11 @@ async def accept_offer(
     # agent picked up, silently missing from the brief. `D21` says the offer window IS the
     # grace period; this is what makes that true rather than merely intended.
     await container.transcription.close(session.call_session_id)
+    # The recording is SEALED here and uploaded from the sweep (`D110`). Sealing is a
+    # list handed to a queue; the object-store round trip is not something to put between
+    # this agent pressing Accept and the caller hearing them (`D12`). Consent is read off
+    # the session at this moment, so a caller who pressed 2 is transcribed and not stored.
+    container.recording.close(session)
     await container.intake.on_agent_accepted(session.call_session_id)
     try:
         await container.assignments.accept(session, assignment_id=assignment_id)

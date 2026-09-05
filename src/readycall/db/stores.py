@@ -33,15 +33,17 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from readycall.db.models import (
     AssignmentRow,
     AttestationRow,
+    AudioRecordingRow,
     CallWrapupRow,
     ContextSnapshotRow,
     KeypadCaptureRow,
     MatchingDecisionRow,
 )
 from readycall.db.session import session_scope
-from readycall.domain.enums import DegradationReason, MatchKind, OfferOutcome
+from readycall.domain.enums import DegradationReason, MatchKind, OfferOutcome, RecordingPhase
 from readycall.domain.models import (
     Assignment,
+    AudioRecording,
     CallWrapup,
     ContextSnapshot,
     Customer360,
@@ -408,11 +410,94 @@ class PostgresWrapupStore:
             ]
 
 
+# --- recordings: where the audio is, and when it dies (D110) --------------------------------
+
+
+class PostgresRecordingStore:
+    """`audio_recordings`. The index to the objects, never the audio and never the key.
+
+    The only store here with **no in-memory projection to keep in step** (`D78`): nothing
+    reads a recording on a hot path, so there is no working set to rebuild at startup and
+    no second copy of the fact to go stale.
+    """
+
+    name = "postgres"
+
+    def __init__(self, factory: async_sessionmaker[AsyncSession]) -> None:
+        self._factory = factory
+
+    async def save(self, recording: AudioRecording) -> None:
+        async with session_scope(self._factory) as db:
+            row = await db.get(AudioRecordingRow, recording.recording_id)
+            if row is None:
+                row = AudioRecordingRow(recording_id=recording.recording_id)
+                db.add(row)
+            row.call_session_id = recording.call_session_id
+            row.phase = str(recording.phase)
+            row.storage_ref = recording.storage_ref
+            row.created_at = recording.created_at
+            row.duration_s = recording.duration_s
+            row.size_bytes = recording.size_bytes
+            row.checksum = recording.checksum
+            row.sample_rate = recording.sample_rate
+            row.audio_format = recording.audio_format
+            row.encryption_key_ref = recording.encryption_key_ref
+            row.delete_after = recording.delete_after
+            row.intake_id = recording.intake_id
+
+    async def for_calls(self, call_session_ids: Sequence[str]) -> list[AudioRecording]:
+        if not call_session_ids:
+            return []
+        async with session_scope(self._factory) as db:
+            found = await db.execute(
+                select(AudioRecordingRow).where(
+                    AudioRecordingRow.call_session_id.in_(list(call_session_ids))
+                )
+            )
+            return [_recording(row) for row in found.scalars().all()]
+
+    async def due_for_deletion(self, *, now: datetime, limit: int = 500) -> list[AudioRecording]:
+        async with session_scope(self._factory) as db:
+            found = await db.execute(
+                select(AudioRecordingRow)
+                .where(AudioRecordingRow.delete_after.is_not(None))
+                .where(AudioRecordingRow.delete_after <= now)
+                .order_by(AudioRecordingRow.created_at)
+                .limit(limit)
+            )
+            return [_recording(row) for row in found.scalars().all()]
+
+    async def delete(self, recording_id: str) -> None:
+        async with session_scope(self._factory) as db:
+            row = await db.get(AudioRecordingRow, recording_id)
+            if row is not None:
+                await db.delete(row)
+
+
+def _recording(row: AudioRecordingRow) -> AudioRecording:
+    return AudioRecording(
+        recording_id=row.recording_id,
+        call_session_id=row.call_session_id,
+        phase=RecordingPhase(row.phase),
+        storage_ref=row.storage_ref,
+        created_at=row.created_at,
+        duration_s=row.duration_s,
+        size_bytes=row.size_bytes,
+        checksum=row.checksum,
+        sample_rate=row.sample_rate,
+        audio_format=row.audio_format,
+        encryption_key_ref=row.encryption_key_ref,
+        delete_after=row.delete_after,
+        intake_id=row.intake_id,
+    )
+
+
 __all__ = [
     "PostgresAssignmentStore",
     "PostgresAttestationStore",
     "PostgresCaptureStore",
     "PostgresMatchingDecisionStore",
+    "PostgresRecordingStore",
     "PostgresSnapshotStore",
     "PostgresWrapupStore",
 ]

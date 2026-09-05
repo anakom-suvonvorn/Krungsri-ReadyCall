@@ -21,6 +21,7 @@ from typing import Annotated, Any
 from fastapi import Depends, Request
 
 from readycall.adapters.agent_directory.fixtures import FixtureAgentDirectory
+from readycall.adapters.blob_storage import build_blob_storage
 from readycall.adapters.core_data.caching import CachingCoreDataProvider
 from readycall.adapters.core_data.fixtures import FixtureFileProvider
 from readycall.adapters.core_data.null import NullCoreDataProvider
@@ -83,6 +84,7 @@ from readycall.services.matching.engine import MatchingEngine
 from readycall.services.matching.scoring import WaitingCall
 from readycall.services.matching.weights import MatchingWeights
 from readycall.services.queues.hours import QueueHours
+from readycall.services.recording.service import RecordingService
 from readycall.services.transcription.delivery import TranscriptDeliveryService
 from readycall.services.transcription.service import TranscriptionService
 from readycall.voiceprompts import load_prompt_pack
@@ -295,6 +297,24 @@ class Container:
             settings=settings,
             hint=SttHint(language="th", vocabulary=self.pack.stt_vocabulary),
         )
+        #: The encrypted recording (`D110`) — the last piece of `ARCHITECTURE` §6. It
+        #: shares the transcriber's gateway rather than opening a second one, so both
+        #: subscribe to the same normalised frames and neither depends on the other
+        #: running: a transcriber that is down still records, and a caller who refused
+        #: analysis is still not recorded, because consent is checked at close.
+        self.blob = build_blob_storage(settings)
+        self.recording = RecordingService(
+            blob=self.blob,
+            clock=self.clock,
+            settings=settings,
+            gateway=self.transcription.gateway,
+            store=self.storage.recordings,
+            calls=self.calls,
+        )
+        #: Accept closes the recording explicitly, in an order that matters (`B24`).
+        #: Every other ending — an abandoned call, a failure, the queue closing — only
+        #: ever arrives as a state change, so the service listens for one.
+        self.recording.subscribe(self.bus)
         self.hub = AgentHub(clock=self.clock)
         self.presence = PresenceService(
             clock=self.clock,

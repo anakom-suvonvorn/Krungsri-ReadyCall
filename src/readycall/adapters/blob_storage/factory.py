@@ -34,7 +34,7 @@ def build_keyring(settings: Settings) -> KeyRing:
     return LocalKeyRing(decode_master_key(raw) if raw else None)
 
 
-def build_blob_storage(settings: Settings, keyring: KeyRing | None = None) -> BlobStorage:
+def build_blob_storage(settings: Settings, keyring: KeyRing | None = None) -> EncryptingBlobStorage:
     keys = keyring or build_keyring(settings)
     inner: BlobStorage
     match settings.blob_storage:
@@ -60,6 +60,10 @@ def build_blob_storage(settings: Settings, keyring: KeyRing | None = None) -> Bl
                 secret_key=settings.blob_secret_key,
                 region=settings.blob_region,
             )
+    # Returns the WRAPPER concretely rather than the port, because it always wraps and
+    # because startup needs to reach the backend underneath for `ensure_bucket` — through
+    # `.inner`, so the capability check stays about the backend rather than about the
+    # wrapper, which would answer yes to everything.
     store = EncryptingBlobStorage(inner, keys)
     log.info(
         "blob storage ready",

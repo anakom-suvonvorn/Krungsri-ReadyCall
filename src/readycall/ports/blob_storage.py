@@ -43,3 +43,21 @@ class BlobStorage(Protocol):
     async def delete_prefix(self, prefix: str) -> int:
         """Used by retention/erasure. Returns how many objects were removed."""
         ...
+
+
+@runtime_checkable
+class ProvisionableBlobStorage(Protocol):
+    """A store whose container has to be made before anything can be written (`D110`).
+
+    A capability, the same shape as `ReplayableSttEngine` and `BatchSttEngine` (`D101`,
+    `D107`), and for the same reason: only the S3 adapter has one, and putting
+    `ensure_bucket()` on `BlobStorage` would oblige a dict and a directory to grow a
+    meaningless no-op.
+
+    Called once at startup rather than lazily on the first `put`, because the first
+    recording of the day is not the moment to discover the credentials are wrong — and
+    because `flush_pending` treats a write failure as transient and would retry a
+    misconfiguration forever.
+    """
+
+    async def ensure_bucket(self) -> None: ...

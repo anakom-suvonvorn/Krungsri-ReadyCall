@@ -308,9 +308,12 @@ async def place_call(
         # transcribe a call played at double speed, which is the kind of wrong that reads
         # as a bad model.
         source = _demo_audio_source(container, body.audio) if body.audio else None
-        await container.transcription.open(
-            session.call_session_id, fmt=source.fmt if source is not None else None
-        )
+        fmt = source.fmt if source is not None else None
+        await container.transcription.open(session.call_session_id, fmt=fmt)
+        # And the recorder joins the same leg (`D110`). Two subscribers to one stream of
+        # normalised frames, neither depending on the other: the transcript is built even
+        # when storage is down, and the recording is kept even when the model is.
+        container.recording.open(session.call_session_id, fmt=fmt)
         if source is not None:
             await _play_demo_audio(
                 container, session.call_session_id, source, realtime=body.audio_realtime

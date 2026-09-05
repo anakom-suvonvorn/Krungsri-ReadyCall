@@ -1,10 +1,10 @@
-"""One suite, all six workstation stores, three backends each (`D3`, `D75`, `D78`).
+"""One suite, every durable store, three backends each (`D3`, `D75`, `D78`).
 
-These are the stores that finish P2c: assignments, attestations, keypad captures, matching
-decisions, context snapshots and wrap-ups. Every one of them has an in-memory
-implementation that the default configuration uses and a Postgres implementation that
-survives a restart, and the whole value of that arrangement depends on the two behaving
-identically. So they are tested together, against the same assertions.
+Six of them finished P2c — assignments, attestations, keypad captures, matching decisions,
+context snapshots and wrap-ups — and `audio_recordings` joined them with `D110`. Every one
+has an in-memory implementation that the default configuration uses and a Postgres
+implementation that survives a restart, and the whole value of that arrangement depends on
+the two behaving identically. So they are tested together, against the same assertions.
 
 **The round-trips compare whole objects**, not field by field. A field added to a domain
 model and forgotten in a hand-written mapper is the failure mode this layer has (`D77`),
@@ -29,6 +29,7 @@ from readycall.db.stores import (
     PostgresAttestationStore,
     PostgresCaptureStore,
     PostgresMatchingDecisionStore,
+    PostgresRecordingStore,
     PostgresSnapshotStore,
     PostgresWrapupStore,
 )
@@ -40,9 +41,11 @@ from readycall.domain.enums import (
     IdentityMethod,
     MatchKind,
     OfferOutcome,
+    RecordingPhase,
 )
 from readycall.domain.models import (
     Assignment,
+    AudioRecording,
     CallSession,
     CallWrapup,
     ContextSnapshot,
@@ -68,6 +71,7 @@ from readycall.services.identity.attestation import (
     AttestationOutcome,
     InMemoryAttestationStore,
 )
+from readycall.services.recording.store import InMemoryRecordingStore
 from readycall.services.wrapup.store import InMemoryWrapupStore
 
 #: A **separate database** from the one the app uses, and that separation is load-bearing.
@@ -88,6 +92,7 @@ BUILDERS: dict[str, tuple[Any, Any]] = {
     "attestations": (InMemoryAttestationStore, PostgresAttestationStore),
     "captures": (InMemoryCaptureStore, PostgresCaptureStore),
     "decisions": (InMemoryMatchingDecisionStore, PostgresMatchingDecisionStore),
+    "recordings": (InMemoryRecordingStore, PostgresRecordingStore),
     "snapshots": (InMemorySnapshotStore, PostgresSnapshotStore),
     "wrapups": (InMemoryWrapupStore, PostgresWrapupStore),
 }
@@ -112,7 +117,7 @@ async def _prepare(engine: AsyncEngine) -> None:
 
 
 class _Bundle:
-    """All six stores on one backend, plus the parent call every FK points at."""
+    """Every store on one backend, plus the parent call their FKs point at."""
 
     def __init__(self, backend: str, factory: Any = None) -> None:
         self.backend = backend
@@ -561,3 +566,68 @@ async def test_the_identity_resolution_on_a_call_survives(stores: Any) -> None:
     restored = await repo.get(CALL)
     assert restored is not None
     assert restored.identity == resolution
+
+
+# --- recordings (D110, D14) ----------------------------------------------------------------
+
+
+def _recording(
+    recording_id: str = "rec_1", *, delete_after: datetime | None = None
+) -> AudioRecording:
+    return AudioRecording(
+        recording_id=recording_id,
+        call_session_id=CALL,
+        phase=RecordingPhase.INTAKE,
+        storage_ref="s3://readycall-recordings/calls/call_store_1/intake-customer.wav",
+        created_at=T0,
+        duration_s=19.44,
+        size_bytes=622228,
+        checksum="a" * 64,
+        encryption_key_ref="local:v1",
+        delete_after=delete_after,
+        intake_id="ik_1",
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_recording_round_trips_whole(stores: Any) -> None:
+    """Including `encryption_key_ref` — a row that loses it is a recording nobody can open."""
+    recording = _recording(delete_after=T0.replace(month=11))
+
+    await stores.recordings.save(recording)
+
+    assert await stores.recordings.for_calls([CALL]) == [recording]
+
+
+@pytest.mark.asyncio
+async def test_retention_finds_only_what_is_actually_due(stores: Any) -> None:
+    """The purge job's only query, and the one that must not over-collect (`D14`)."""
+    await stores.recordings.save(_recording("rec_due", delete_after=T0.replace(day=1)))
+    await stores.recordings.save(_recording("rec_later", delete_after=T0.replace(month=12)))
+    #: No `delete_after` at all means an indefinite hold, not "delete immediately". The
+    #: opposite reading would quietly erase anything written before retention existed.
+    await stores.recordings.save(_recording("rec_forever", delete_after=None))
+
+    due = await stores.recordings.due_for_deletion(now=T0)
+
+    assert [r.recording_id for r in due] == ["rec_due"]
+
+
+@pytest.mark.asyncio
+async def test_the_purge_cap_is_honoured(stores: Any) -> None:
+    """An erasure run has to be resumable rather than one enormous transaction."""
+    for i in range(5):
+        await stores.recordings.save(_recording(f"rec_{i}", delete_after=T0.replace(day=1)))
+
+    assert len(await stores.recordings.due_for_deletion(now=T0, limit=2)) == 2
+
+
+@pytest.mark.asyncio
+async def test_deleting_a_recording_removes_the_row(stores: Any) -> None:
+    await stores.recordings.save(_recording())
+
+    await stores.recordings.delete("rec_1")
+
+    assert await stores.recordings.for_calls([CALL]) == []
+    # Twice is not an error: a purge and an erasure request can genuinely race.
+    await stores.recordings.delete("rec_1")

@@ -2,9 +2,11 @@
 
 `ARCHITECTURE` §6 gives this component one sentence — *"normalises to 16 kHz mono float32
 frames, writes the encrypted recording to object storage, and fans frames to the
-transcriber"* — and this is the first two thirds of it. **The encrypted recording is not
-built**: it needs blob storage and per-recording key refs that P7 owns, and writing audio
-to disk before that exists would be the one thing `D9` was careful to avoid.
+transcriber"* — and this is two thirds of it. The third, the encrypted recording, is
+`services/recording/` (`D110`): it **subscribes** here rather than living here, because
+this file fans frames out and the recorder is just another consumer of them. Writing the
+object from inside the gateway would put a bucket, a key ring and a retention policy
+behind the boundary that lets P5 swap Asterisk for Twilio.
 
 **Legs are separate streams, and that is the whole design** (`D26`). Asterisk forks each
 leg, so `open_leg(call, CUSTOMER)` and `open_leg(call, AGENT)` are two independent

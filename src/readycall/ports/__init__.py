@@ -5,7 +5,11 @@ external. That single rule is what turns "the hackathon data is not what we assu
 from a rewrite into a config change (`D3`).
 """
 
-from readycall.ports.blob_storage import BlobStorage, StoredObject
+from readycall.ports.blob_storage import (
+    BlobStorage,
+    ProvisionableBlobStorage,
+    StoredObject,
+)
 from readycall.ports.core_data import CoreDataProvider
 from readycall.ports.event_bus import EventBus, Handler
 from readycall.ports.keyring import DataKey, KeyRing
@@ -37,6 +41,7 @@ __all__ = [
     "LlmUsage",
     "MediaFork",
     "PromptRef",
+    "ProvisionableBlobStorage",
     "StoredObject",
     "SttEngine",
     "SttHint",
