@@ -1,7 +1,7 @@
 # PLAN
 
 _The master build plan for the full system: what gets built, in what order, and what "done" means for each phase._
-_Last updated: 2026-09-03._
+_Last updated: 2026-09-04._
 
 ---
 
@@ -219,25 +219,37 @@ started. `explanations/P3_voice.md` covers the built half; `diagrams/12_the_menu
 - `TranscriptTurn` events + incremental DB writes; live transcript in the agent desktop.
 - ✅ `IntakeStrategy` seam with `PassiveRecordIntake`; `finalize(reason)`; **ring-time
   grace** (`D21`) — the accept endpoint finalises a live intake as partial, proved on a
-  running server. Turns arrive through `IntakeService.on_turn`; nothing feeds it yet.
+  running server. Turns arrive through `IntakeService.on_turn`, **fed for real since
+  `D96`** by `services/transcription/`. What `on_turn` does not do is publish an event,
+  which is why the screen has no live transcript yet.
 
 **Exit criteria**
-- 🔶 Utterance end → turn visible **p95 < 1.5 s** on the RTX 3050, with the chosen engine named and
-  the bake-off table recorded. **Measured on real Thai for the first time (2026-09-02):**
-  Thonburian medium fp16 with Silero over **12** real call-centre calls gives **CER 0.09-0.50, median 0.29**,
-  throughput **rtf 0.12** (about 8x faster than real time), **2.8 GiB VRAM** of the 3.2 available.
-  Speed and memory are comfortable; **accuracy is not, and is not yet explained.** Four candidate
-  reasons, none eliminated: the reference counts only annotated speech spans while we transcribe
-  everything the detector finds; Silero returned 3-4 turns against 4-6 annotated segments; the
-  audio is 8 kHz-grade telephone speech and Thonburian's published figures are read speech; and
-  `B19` means the vocabulary hint was never applied. **Do not quote 0.6 CER as a verdict on the
-  model** — it is a verdict on this pipeline against this reference, and the next step is to find
-  out which. **Earlier half met.** The harness is built and the pipeline runs on the GPU;
-  faster-whisper `tiny` at `int8_float16` measures **155 ms** per utterance containing speech, which
-  is comfortably inside the budget. The table is **not** filled, and deliberately: a real WER or
-  latency figure needs real Thai telephone audio and the Thai weights, and synthetic tones measure
-  the model's pathology rather than its performance (`B14`). Do not close `D30` from a signal
-  generator.
+- ✅ Utterance end → turn visible **p95 < 1.5 s** on the RTX 3050, with the chosen engine named and
+  the bake-off table recorded. **MET 2026-09-04** (`D104`), paced over a balanced 20-call set of
+  real Thai call-centre audio:
+
+  | | Thonburian fp16 | CT2 int8 + hint | **Typhoon** |
+  |---|---|---|---|
+  | p95 median / worst | 19.5 s / 58.7 s | 1.68 s / 2.53 s | **0.19 s / 0.28 s** |
+  | inside the budget | 0 of 12 | 7 of 20 | **20 of 20** |
+  | CER mean | **0.109** | 0.128 | 0.133 |
+  | VRAM | 2716 MB | ~1000 MB | 1068 MB |
+
+  **Typhoon ships; CT2 int8 is the fallback** for a box where NeMo will not install. The reason
+  Typhoon wins is structural and was written down in `D99` before it was measured: a transducer
+  has **no 30 s window**, so it does not pay a full encode for a two-second utterance.
+
+  **The road here is worth more than the table**, and every step of it is a bug entry: the
+  earlier figures of CER 0.47–0.76 were `B20` (our buffer dropping audio), then 0.161 was a
+  digit-heavy test set plus `B21` (the guard deleting phone numbers), then the engine comparison
+  itself was unfair until `B19` was fixed. **Do not quote an accuracy number from before
+  2026-09-04**; and rank on the CER **mean**, because the median is unstable at this sample size
+  and cost `D103` a self-correction.
+
+- 🔶 The live transcript on the agent's screen. Turns exist, are ordered and reach
+  `IntakeService.on_turn`; `on_turn` publishes no event, so `api/realtime.py` never sees one.
+  **This is the next slice** and `NEXT_SESSION` breaks it into three pieces.
+- 🔶 The encrypted recording to object storage — P7's key management.
 - ✅ A caller who presses 2, and a caller who consents to nothing, both still reach **the correct
   queue** with a menu-derived brief — because routing never depended on the AI (`D37`).
   Proved end to end: `test_every_answer_leaves_the_queue_exactly_where_the_menu_put_it`,

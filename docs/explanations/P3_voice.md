@@ -518,5 +518,50 @@ was the answer**, and the process of eliminating them is worth more than the con
   arrived.
 - **numbers now:** 650 tests (608 pass + 42 skipped), 100 decisions, 20 bug entries.
 
+
+**2026-09-04 — the engine, chosen on measurements, and four more of my own bugs.**
+This is the entry that closes `D30`. The short version: the audio path was fine; almost
+every *number* about it had been wrong, in a different way each time.
+
+- **The user made me fix the test set first, and that was the single biggest effect.**
+  Re-prepared with `--mix --seed 7` — 20 calls, digit share 0–49%, where every call in the
+  old set ended with a phone number read aloud. Same engine, same code: **CER median 0.161
+  on the old set, 0.089 on the balanced one.** A 1.8x swing from the audio alone. Every
+  accuracy figure recorded before this was measured on the pessimistic set.
+- **`B21`: the repetition guard was deleting real phone numbers.** The user read their own
+  bake-off log and asked whether `เก้า เก้า เก้า แปด` was really a hallucination. It was
+  not — `เก้า` is nine, and a real Thai number in this corpus has **five** identical digit
+  words in a row. Nine of twelve calls had a run of 3+. Fixing it moved median CER
+  0.292 → 0.161 and recovered 8 lines. `B16` had rebuilt that guard around three real
+  loops and all three repeated a *word*; the fixture was broadened from one example to
+  three and all three were the same **kind**.
+- **`B19` closed, and it invalidated a table I had just committed.** `ThonburianHfEngine`
+  dropped `hint.vocabulary`; `FasterWhisperEngine` honoured it. So `D102`'s comparison had
+  one engine hinted and the other not — the exact thing `B19`'s own last line warned about,
+  written by me. The fair 2x2 shows int8 genuinely costs accuracy (0.109 → 0.171 unhinted)
+  and the prompt repairs most of it, and the *speed* moves the same way, which is what makes
+  the story believable rather than convenient.
+- **`B22` and `B23`: the configuration around a model, twice.** `close()` freed the object
+  and not the GPU memory, found by watching `nvidia-smi` during a long run. Then the engine
+  `D102` had just chosen **could not be selected by config** — and after `D104` chose
+  Typhoon, that one could not either. Twice is a pattern, so there is now a test asserting
+  every engine the docs recommend has a branch in `build_stt`.
+- **Two methodology traps, each of which cost a published number.** The **median** is
+  unstable at n=20 — two runs of an identical configuration gave 0.087 then 0.124 while the
+  mean moved 0.128 → 0.130 — which forced `D103` to correct itself hours after it was
+  written. And the bake-off's audio column truncated filenames from the *left*, where
+  several calls share their first 18 characters, so a join on that label silently used
+  **11 of 20 rows** in an analysis I nearly published.
+- **`D101`: batching was built, measured, and did nothing.** A null result, and the useful
+  kind — it says the bottleneck is the 30 s window itself, not scheduling, which is what
+  made Typhoon the answer rather than packing.
+- **The one prediction that came out right.** `D99` said a transducer might not have the
+  latency problem *structurally*, and that it should not hallucinate on silence. Both
+  confirmed: 20 of 20 calls inside the budget, and **149 ms and empty** on a second of
+  silence where Whisper spends **8578 ms inventing Thai**. Worth noting because most
+  predictions on this project have gone the other way.
+- **numbers now:** 676 tests (634 pass + 42 skipped), 104 decisions, 23 bug entries,
+  62 diagrams, 9 ports, 4 real STT adapters.
+
 _Earlier body text stays as written — it is a record of what was true on 2026-08-25._ Append dated entries here rather than editing the body — this file is a record
 of what was true on 2026-08-25, and the "why" above stays useful even when a number moves._

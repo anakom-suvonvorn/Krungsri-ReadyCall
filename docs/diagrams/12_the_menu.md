@@ -257,10 +257,18 @@ from *"finished their thought"*, and under a busy queue the first is the **expec
 
 ### What is still missing here
 
-The audio. No media gateway, no VAD, no STT worker, no recording to storage, no live
-transcript on the workstation. Turns arrive through `IntakeService.on_turn`, and today the
-only things that call it are the test suite and the scenario runner. That is the next slice,
-and it is the one with the GPU in it.
+**The audio arrived** (`D96`, 2026-09-02). There is a media gateway, a VAD port with two
+adapters, an endpointer, a transcription service and three real STT engines — and since
+`D104` a chosen one, Typhoon, which meets the latency budget on every call measured.
+`IntakeService.on_turn` is fed for real, not only by the test suite and the scenario runner.
+
+What is still missing is **the last hop to the screen**: `on_turn` hands the turn to the
+intake strategy and publishes nothing, so `api/realtime.py` never sees it and the
+workstation cannot draw it. The turns exist and are ordered; nobody forwards them.
+
+Also still missing: the encrypted recording to object storage (P7's key management), and
+`_degradation()` returning `NONE` even though `TranscriptionService` now knows whether the
+engine failed.
 
 ---
 

@@ -1,7 +1,7 @@
 # INTEGRATIONS
 
 _Every external thing the system touches: the port that hides it, the adapters behind it, and the config that selects one._
-_Status: **mostly design; the persistence stack and the whole audio path are real.** Last updated: 2026-09-03._
+_Status: **mostly design; the persistence stack and the whole audio path are real.** Last updated: 2026-09-04._
 
 > **Real as of P2c (complete):** SQLAlchemy 2.0 (async) + Alembic + `asyncpg`, against
 > Postgres 16 in `infra/docker-compose.yml`, verified on a live container — **nine tables**,
@@ -122,11 +122,13 @@ class SttEngine(Protocol):
 
 | Adapter | Model / stack | Status |
 |---|---|---|
-| **`ThonburianHfEngine`** ⭐ the baseline | `biodatlab/whisper-th-medium-combined` via `transformers` + `torch` | **BUILT.** WER 7.42 on Common Voice 13 *(their number, on read speech — ours on real phone audio is much worse, see below)*. ⚠️ **`B19`: it accepts an `SttHint` and silently ignores `hint.vocabulary`.** It warns now; `prompt_ids` is not implemented. |
-| **`FasterWhisperEngine`** | CTranslate2, `int8_float16` | **BUILT.** The latency and VRAM play. ⚠️ **Thonburian publishes no CT2 build** — `biodatlab/whisper-th-medium-combined-ct2` was assumed and **does not exist** (`B17`). `scripts/convert_ct2.py` converts it once, locally. Generic sizes (`tiny`…`large-v3`) need no conversion. |
+| **`TyphoonAsrEngine`** ⭐⭐ **THE ENGINE** (`D104`) | `scb10x/typhoon-asr-realtime` — a NeMo **FastConformer transducer**, not a Whisper | **BUILT AND CHOSEN.** The only engine that meets `ARCHITECTURE` §15: **p95 0.19 s median / 0.28 s worst, 20 of 20 calls inside the 1.5 s budget**, `busy` worst 0.020, VRAM 1068 MB. **No 30 s window**, which is the structural reason (`D99`, predicted before measuring). Returns **empty in 149 ms** on silence where Whisper spends 8578 ms inventing Thai (`B14`). ⚠️ CER mean **0.133** vs fp16's 0.109; **cannot use `hint.vocabulary` at all** (a transducer has no prompt); measurably weaker on spoken digits. Needs the **`asr`** extra. |
+| **`FasterWhisperEngine` (CT2)** ⭐ **THE FALLBACK** (`D103`) | CTranslate2 `int8_float16` over a locally converted Thonburian | **BUILT.** For a box where NeMo will not install: needs only `ml`. p95 1.68 s / 2.53 s, 7 of 20 inside budget, CER mean 0.128 **with the hint** and 0.171 without — the hint is load-bearing here, and it also steadies the decoder (`busy` worst 0.46 → 0.11). ⚠️ **Thonburian publishes no CT2 build** (`B17`); `scripts/convert_ct2.py` converts it once. `STT_MODEL` must stay unset (`B23`). |
+| **`ThonburianHfEngine`** the original | `biodatlab/whisper-th-medium-combined` via `transformers` + `torch` | **BUILT, and too slow to ship**: p95 **19.5 s median / 58.7 s worst**, 0 of 12 calls inside budget, `busy` worst 1.25 — above 1.00 the transcriber never catches up. It is the **most accurate** engine measured (CER mean 0.109 unhinted) and that did not save it. `B19` is fixed: the hint is applied via `prompt_ids`, and it makes this engine slightly *worse* (+0.010) while helping int8 a lot. |
+
 | **`TyphoonAsrEngine`** | `scb10x/typhoon-asr-realtime` — **NVIDIA NeMo FastConformer transducer**, `cc-by-4.0` | **BUILT, not installable yet.** Not a Whisper model (`D99`): no 30 s padding, genuinely streaming, and no free-running decoder to hallucinate with — which is exactly why it is worth measuring against `B14`. Needs `nemo_toolkit[asr]`, deliberately **not** in the `ml` extra. |
 | **`ScriptedSttEngine`** | Replays known turns with realistic timings | **BUILT.** Every test, all three scenarios, and the stage-safe demo path. The default (`STT_ENGINE=scripted`). |
-| `ThonburianDistillEngine` | `biodatlab/distill-whisper-th-*` | Named only. A row in the bake-off when somebody runs it. |
+| `ThonburianDistillEngine` | `biodatlab/distill-whisper-th-large-v3` | **MEASURED AND REJECTED** (`D104`). It was already in the HF cache so it cost nothing to try, and it is worse than CT2 on every axis: CER 0.096 vs 0.087 median, `busy` worst 0.23 vs 0.11, VRAM 1942 vs ~1000 MB. A distilled *large* is still a large. Recorded so nobody spends the download again. |
 | `CloudSttEngine` | Google / Azure / Gemini | Named only. Backup with no GPU; a data-residency question in production. |
 
 ### 2.0 Voice activity — the ninth port (`D96`)
@@ -189,7 +191,7 @@ The streaming latency budget is tight:
   work. The default split is **STT local on the GPU, LLM via API**. If a fully local stack is wanted,
   it needs a bigger card or a second machine.
 - **Benchmark, don't guess** — and `scripts/bake_off.py` now does it. **First real numbers**
-  (Thonburian medium fp16 + Silero, 12 real Thai call-centre calls, `D97`): **CER 0.09–0.50, median 0.29** (the earlier 0.47–0.76 was measured through `B20`),
+  (**Typhoon**, 20 real Thai call-centre calls on the balanced set, `D104`): **CER mean 0.133**, p95 **0.19 s**, VRAM 1068 MB. Earlier figures of 0.47–0.76 (`B20`) and 0.161 (a digit-heavy set plus `B21`) are **withdrawn**; rank on the **mean**, never the median (`D103`),
   throughput **rtf 0.12**, **2.8 GiB**. Speed and memory are comfortable; **accuracy is not, and
   is not yet explained** — four candidate reasons are listed in `NEXT_SESSION`, none eliminated.
   Do not read 0.6 CER as a verdict on the model; it is a verdict on this pipeline against this
@@ -410,6 +412,8 @@ vendor), ElevenLabs (quality, cost). Choose on a listening test of the actual pr
 
 **Audio / ML**
 `torch`, `torchaudio`, `transformers`, `accelerate`, `faster-whisper` (+`ctranslate2`), `onnxruntime`,
+
+**Two extras, not one** (`D99`, `D104`): `ml` carries the Whisper stack above; **`asr` carries `nemo_toolkit[asr]`** and is what the shipped engine needs. They are separate because NeMo is a large install with a heavy transitive tree, and a box that only runs the CT2 fallback should not pay for it. `uv sync --extra ml --extra asr` for the full audio box.
 `silero-vad`, `numpy`, `soundfile`, `librosa`, `pydub`; system **`ffmpeg`**.
 
 **AI clients**

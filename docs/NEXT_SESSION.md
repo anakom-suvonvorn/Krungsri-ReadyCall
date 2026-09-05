@@ -7,63 +7,83 @@ _Last updated: 2026-09-04 (night)._
 
 ## If you have just been compacted, read this first
 
-**P3 step 4b (the audio) has landed.** The last commits are the whole of it and their
-messages are long on purpose — `git log -5` is the fastest way back in.
+_Rewritten 2026-09-04 (night). Everything above the horizon of this block is settled; what
+follows is what a fresh session needs and nothing it does not._
 
-**The page to read first is `docs/reading/the_audio_path.html`** (published, link in the
-table at the bottom). It explains this whole session in plain language and ends with a
-set of commands that verify every claim in it — written because the terminal summary of
-this work left the user with no idea what had been built, which is the second time that
-has happened. **When a slice is hard to see, the readable page is part of finishing it.**
+**P3 is complete, including the GPU half. `D30` is closed.** The audio path runs end to end
+from a WAV file to `IntakeService.on_turn`, an engine is chosen on measurements, and it
+meets `ARCHITECTURE` §15's latency budget on every call in the test set — which nothing had
+ever done before 2026-09-04.
 
-**The one thing to know before touching the audio path**: `B14`. Whisper fed near-silence
-takes **8.6 seconds** and invents Thai text — including handing back the words in
-`config/stt_vocabulary.yaml` as if the caller had said them. Three guards exist because of
-it and none of them is optional. Read `B14` before "simplifying" any of them.
+### The engine, in one table
 
-**The dataset arrived and the first real measurements have been made.** The user
-downloaded 22 GB of real Thai call-centre audio to `krungsri/data/` (`D97`), Thonburian
-medium runs on the GPU, and `scripts/prepare_dataset.py` turns the dataset into the
-audio/reference pairs the bake-off wants. **`D30`'s table is still not finished** — see
-the next-steps list — but it is now blocked on running things rather than on missing
-things.
+Paced, 20 real Thai call-centre calls, same detector and guards throughout:
 
-**Three bugs came out of that first contact with real data, and all three are the same
-shape:** something I had written down myself and then walked past. `B16` (the loop guard
-used `.split()` on a language with no spaces), `B17` (a model id invented from a naming
-convention), `B18` (an accuracy metric that cannot work on Thai, reporting 100% error on
-a model that was fine). Read those three before touching the audio path.
+| | Thonburian fp16 | CT2 int8 + hint | **Typhoon (`D104`)** |
+|---|---|---|---|
+| p95 utterance-end -> turn | 19.5 s / 58.7 s worst | 1.68 s / 2.53 s | **0.19 s / 0.28 s** |
+| inside the 1.5 s budget | 0 of 12 | 7 of 20 | **20 of 20** |
+| `busy` worst | 1.25 | 0.11 | **0.020** |
+| VRAM | 2716 MB | ~1000 MB | 1068 MB |
+| CER **mean** | **0.109** | 0.128 | 0.133 |
 
-**If you are the USER rather than a fresh session, read the three plain-language pages
-instead of this file, in order:** `docs/reading/2026-09-03_what_happened.md`, then
-`docs/reading/2026-09-04_answers_to_your_notes.md`, then
-`docs/reading/2026-09-04_the_engine_decision.md`. It explains the whole
-of 3 September from zero — no decision ids, no jargon without a glossary — and ends with
-the two decisions that need your answer. It was written because three terminal summaries
-in a row failed to land, which is a documentation bug, not a user problem.
+**Ship Typhoon** (`STT_ENGINE=typhoon`, needs the `asr` extra). **CT2 is the fallback** for
+a box where NeMo will not install (`STT_ENGINE=thonburian_ct2`, `STT_MODEL` unset, and run
+`scripts/convert_ct2.py` first). Typhoon is ~22% relatively worse on CER than fp16, cannot
+use the vocabulary hint at all, and is weaker on spoken digits while better on
+conversation — all recorded in `D104` with the mitigation.
 
-**Then read `B20`, which is the biggest of them and was found on 2026-09-03.** The
-"unexplained" CER of 0.47-0.76 was not a property of the model at all: `TranscriptionStream`
-**released a segment's audio out of its buffer before the model was ever shown it**, so a
-third to a half of every call went missing — and the slice that replaced it was clamped
-rather than refused, so a segment could be handed *the wrong moment's audio at the right
-length* and transcribe into a fluent Thai sentence that belongs to a different instant of
-the call. Every CER this project has recorded was measured through it. The corrected figure
-over 12 real calls is **CER 0.09-0.50, median 0.29**.
+### The four days that produced it, and the lesson from each
 
-**None of the four hypotheses in the old step 2 was the answer**, and the way they were
-eliminated is the reusable part: measure the cheapest one first, and when a measurement
-comes back clean, believe it and move down the list rather than arguing with it. The
-un-annotated 75% of each file turned out to be digital silence (so no insertions were
-available); the detector turned out to lose 3% of real speech, not 20%, once the *energy*
-of the missed seconds was measured rather than their duration. What actually found the bug
-was **looking at the text next to the reference** — `bake_off.py --dump`, which did not
-exist until it was needed.
+Read the bug entries before touching the audio path. **Every one of these was found by a
+measurement or by the user, and not one by a test.**
+
+| | what it was | the lesson |
+|---|---|---|
+| `B20` | the buffer released a segment's audio before the model saw it, and `_slice` **clamped** so it returned the wrong moment at the right length | a slice that cannot be satisfied must **refuse**, never approximate |
+| `B21` | the repetition guard deleted real phone numbers — a Thai number has **five** identical digit words in a row | ask *"what in this language legitimately repeats?"*, not *"does the guard work?"* |
+| `B22` | `close()` freed the model object but not the GPU memory | found by **watching `nvidia-smi`**, not by a failure |
+| `B23` | the engine a decision had just chosen **could not be selected by config**. Then it happened again with Typhoon | read the wiring while writing the instructions for it |
+| `B19` | one adapter silently dropped the vocabulary hint, so an engine comparison was really a hinted-vs-unhinted one | an experiment returning *exactly no difference* is a broken experiment |
+
+Two methodology traps that each cost a published number:
+
+- **Rank on the CER MEAN, never the median.** At n=20 the median is unstable — two runs of
+  an *identical* config gave 0.087 then 0.124 while the mean moved 0.128 -> 0.130. This
+  cost `D103` a self-correction hours after it was written.
+- **The test set moved the headline by 1.8x.** Same engine, same code: CER median 0.161 on
+  the old digit-heavy set, 0.089 on the balanced one. The set is now `--mix --seed 7`.
+
+### What is NOT built, precisely
+
+**The live transcript on the agent's screen — this is the next slice, and it is well
+defined.** The turns exist, are ordered, carry timings and provenance, and reach
+`IntakeService.on_turn` for real. **`on_turn` publishes nothing**, so `api/realtime.py`
+never sees a turn and the workstation cannot draw one. Three pieces, in order:
+
+1. **publish an event from `on_turn`** — `services/intake/service.py`, and its docstring
+   now names this as the seam. Needs a new event type; `D26` says the speaker label is
+   structural, so it is already on the turn.
+2. **forward it per agent** in `api/realtime.py`, which already does per-agent sequencing
+   and replay-on-reconnect — the transcript should use that, not a second mechanism.
+3. **draw it** in `apps/workstation/`. Read `explanations/P2b_workstation_client.md` first;
+   `B6` was six faults that came from not reading it.
+
+Two smaller things in the same area:
+
+- **`IntakeService._degradation()` returns `NONE` unconditionally.** That was a *wait*
+  until `D96` and is a *gap* now: `TranscriptionService` knows whether the engine failed and
+  nothing carries it back. Do not guess `stt_unavailable` — wire it.
+- **The decode timeout** (`D98`'s missing half) still needs `D2`'s killable worker process.
+  Do not fake it with `asyncio.wait_for`: that does not kill the thread, and a guard that
+  looks like one and is not is `B7`'s whole family.
+
+Then: the encrypted recording to object storage (P7 key management), and P4.
 
 ## Where things stand right now
 
 **P0 · P1 · P1b · P2a · P2b · P2c complete. P3 complete except the recording-to-storage
-and the measured bake-off.** The system knows who
+and the live transcript on the screen — `D30`'s bake-off is CLOSED (`D104`).** The system knows who
 is calling and how much to believe it, why they are calling, everything we hold about them
 assembled before the phone is answered, which agent should take it and why, the desk rings
 and a human accepts with the screen already right — the caller keys their own way to the
@@ -71,9 +91,10 @@ right queue through a real menu hearing real (pre-rendered) Thai — and now, **
 is settled, they are offered the pre-call recording, and take it or
 refuse it or ignore it, all three reaching the same agent**.
 
-Verified **2026-09-03**: **676 tests** — 634 pass + 42 skipped without the Postgres
-container (the 42 are the database cases). `ruff check` + `ruff format --check` clean over 177 files,
-`mypy --strict` clean, all scenarios replay, diagrams current, prompt pack fresh.
+Verified **2026-09-04 (night)**: **676 tests** — 634 pass + 42 skipped without the Postgres
+container (the 42 are the database cases). `ruff check` + `ruff format --check` clean over 178 files,
+`mypy --strict` clean over 125, all scenarios replay, 62/62 diagrams current, prompt pack
+fresh (54 clips), `audit_docs.py` clean on the live files.
 
 ### The four sessions of review since P2b, in one place
 
@@ -238,9 +259,21 @@ third no-I/O machine carrying `D9`'s inherited constants where they can be asser
 a list of floats; `stream.py`, which never blocks ingestion on the model and keeps turns in
 order with one consumer; `service.py`, which finally feeds `IntakeService.on_turn` and
 drives both recording timeouts **from the sweep** (`B7`) · `adapters/stt/`: `faster_whisper`
-(CTranslate2, `int8_float16`, with the Windows cuDNN discovery handled in the adapter) and
-`thonburian_hf` · `scripts/bake_off.py` · **`torch` comes from the CUDA index** (`D95`) —
-the PyPI wheel is CPU-only and installing it fails silently.
+(CTranslate2, `int8_float16`, with the Windows cuDNN discovery handled in the adapter),
+`thonburian_hf` (hint applied via `prompt_ids` since `B19`) and `typhoon_asr` (NeMo
+transducer, **the shipped engine** since `D104`) · `scripts/bake_off.py` with `busy`, `pad`,
+`CERth` and a per-engine aggregate · `scripts/score_endpointer.py` · `scripts/convert_ct2.py`
+· **`torch` comes from the CUDA index** (`D95`) — the PyPI wheel is CPU-only and installing
+it fails silently.
+
+**P3 step 4c — the engine chosen (`D102` → `D103` → `D104`, `B19`–`B23`), 2026-09-04.**
+`D30` closed on measurements over a **balanced** 20-call set (`--mix --seed 7`, `Q30`):
+Typhoon meets the 1.5 s budget on **20 of 20** calls at p95 0.19 s where fp16 managed 0 of
+12 at 19.5 s · batch dispatch built and measured as a **no-op on this GPU** (`D101`) · the
+digit exemption that stopped the guard deleting phone numbers (`B21`) · `close()` freeing
+device memory (`B22`) · two engines that could not be selected by config (`B23`, then
+Typhoon) · and two methodology corrections that each cost a published number — rank on the
+**mean** not the median, and the **test set** alone moved the headline by 1.8x.
 
 ## Designed but NOT built (read before touching these areas)
 

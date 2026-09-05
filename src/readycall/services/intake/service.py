@@ -118,7 +118,12 @@ class IntakeService:
         and what ends that is a silence the media side detects, the maximum duration, or
         an agent pressing Accept - none of which this function can see, and the last of
         which is a different request entirely (`D21`). Looping on would mean owning a
-        media loop that does not exist yet and inventing what it reports.
+        media loop that belongs to somebody else and inventing what it reports.
+
+        The media loop **now exists** (`D96`): `services/transcription/` drives it and
+        calls `on_turn` / `on_silence` / `on_max_duration` from outside. That does not
+        change this function — it is the reason the split was drawn here in the first
+        place, and the driver arriving is what it was drawn for.
         """
         run, step = self._machine.begin(call_session_id=session.call_session_id)
         live = _LiveHold(
@@ -215,9 +220,14 @@ class IntakeService:
 
         Deliberately not decided inside the strategy: an intake with no turns can mean
         the caller said nothing or that the transcriber was down, and only a layer that
-        can see the transcriber knows which. That layer is the next slice, so this
-        returns `NONE` today rather than guessing `stt_unavailable` and putting a claim
-        on the agent's screen that nothing has checked.
+        can see the transcriber knows which.
+
+        **That layer now exists** (`D96`, `services/transcription/service.py`) and this
+        still returns `NONE`, which is now a gap rather than a wait: `TranscriptionService`
+        knows whether the engine failed, and nothing carries that knowledge back here. See
+        `NEXT_SESSION` — it is a small, well-defined piece of the live-transcript slice, and
+        until it is wired, guessing `stt_unavailable` would put a claim on the agent's
+        screen that nothing has checked.
         """
         _ = live
         return DegradationReason.NONE
@@ -247,8 +257,16 @@ class IntakeService:
         return await self._report(live, step)
 
     async def on_turn(self, call_session_id: str, turn: TranscriptTurn) -> None:
-        """One transcribed utterance from the media side. Nothing feeds this yet — the
-        transcriber is the next slice — so it is exercised by tests and by scenarios."""
+        """One transcribed utterance from the media side.
+
+        **Fed for real since `D96`** by `services/transcription/`, as well as by the tests
+        and the scenario runner. It hands the turn to the strategy and stops there.
+
+        **It does not publish an event**, which is why the agent's screen has no live
+        transcript: the turns exist, are ordered, and reach the intake strategy, and
+        nothing forwards them to `api/realtime.py`. That is the seam the live-transcript
+        slice starts from — see `NEXT_SESSION`.
+        """
         live = self._live.get(call_session_id)
         if live is not None:
             await live.strategy.on_turn(turn)

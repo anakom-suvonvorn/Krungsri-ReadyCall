@@ -1,7 +1,7 @@
 # DATA_MODEL
 
 _The two databases, every table, and — most importantly — how the bank's half gets swapped out for the real thing on hackathon day._
-_Status: **partly built as of P2c**. Last updated: 2026-09-02._
+_Status: **partly built as of P2c**. Last updated: 2026-09-04._
 
 > **What is real today (`P2c`, complete):** **nine tables** with an Alembic migration,
 > verified against a live Postgres — `call_sessions`, `call_state_transitions`,

@@ -4,7 +4,7 @@ _How the full ReadyCall system works, end to end. Read this to understand the ma
 _Status: **partly built**. P0–P2c are implemented, and P3 is built through the intake
 offer; the audio, the analysis passes and the telephony integration are still design.
 Each section says what is real where it matters. See `PLAN.md` for the build order._
-_Last updated: 2026-09-03._
+_Last updated: 2026-09-04._
 
 ---
 
