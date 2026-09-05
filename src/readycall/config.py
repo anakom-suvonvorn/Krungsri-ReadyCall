@@ -248,6 +248,24 @@ class Settings(BaseSettings):
     sip_wss_url: str | None = None
     sip_realm: str = "readycall.local"
 
+    # --- the recording, and the keys that protect it (D14, D110) ---
+    #: Whether a consented intake is written to object storage at all. Off makes the
+    #: system behave exactly as it did before `D110`: audio is analysed in memory,
+    #: per utterance, and never reaches a disk (`D9`).
+    recording_enabled: bool = True
+    #: Base64, 32 bytes. Unset means a key generated for this process only, which is
+    #: fine against `memory` and refused against a durable store — see `_check_coherent`.
+    recording_master_key: str | None = None
+    #: Where `localfs` puts objects. Gitignored; it holds ciphertext, but ciphertext of
+    #: a real customer talking is still a thing to keep out of a repository (`D97`).
+    blob_root: Path = Path("var/blobs")
+    blob_bucket: str = "readycall-recordings"
+    #: MinIO in `infra/docker-compose.yml`. Leave unset for real AWS.
+    blob_endpoint_url: str | None = "http://127.0.0.1:9000"
+    blob_access_key: str | None = None
+    blob_secret_key: str | None = None
+    blob_region: str = "us-east-1"
+
     # --- retention (D14) ---
     recording_retention_days: int = 90
     transcript_retention_days: int = 365
@@ -312,6 +330,27 @@ class Settings(BaseSettings):
                     f"then either leave STT_MODEL unset or point it at models/"
                     f"whisper-th-medium-combined-ct2"
                 )
+        if self.recording_enabled and not self.recording_master_key:
+            # An ephemeral master key against a store that outlives the process writes
+            # ciphertext nobody will ever read again — a recording that exists, costs
+            # money, satisfies an audit on paper, and cannot be played (`D110`). Against
+            # `memory` it is exactly right, because the objects die with the key.
+            durable = self.blob_storage is not BlobStorageName.MEMORY
+            if durable:
+                raise ConfigError(
+                    f"BLOB_STORAGE={self.blob_storage.value} needs RECORDING_MASTER_KEY. "
+                    f"Without one the master key is generated per process, so anything "
+                    f"written now is unreadable after a restart. Generate one with:\n"
+                    f'  python -c "import base64,os;'
+                    f'print(base64.b64encode(os.urandom(32)).decode())"\n'
+                    f"or set RECORDING_ENABLED=false to keep audio out of storage entirely."
+                )
+        if self.recording_master_key:
+            # Validated here rather than at first use: a bad key is otherwise discovered
+            # by a playback weeks later, against recordings that are already unreadable.
+            from readycall.adapters.keyring.local import decode_master_key
+
+            decode_master_key(self.recording_master_key)
         if self.acw_long_after_s > self.acw_supervisor_alert_after_s:
             raise ConfigError(
                 "ACW_LONG_AFTER_S must be <= ACW_SUPERVISOR_ALERT_AFTER_S — the agent "

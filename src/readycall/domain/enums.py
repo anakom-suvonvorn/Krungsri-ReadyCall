@@ -116,6 +116,19 @@ class SpeakerRole(StrEnum):
     UNKNOWN = "unknown"
 
 
+class RecordingPhase(StrEnum):
+    """Which part of the call a stored recording covers (`DATA_MODEL` §6).
+
+    Separate rows rather than one file per call: the intake happens before anybody is
+    assigned and is consented for on its own (`D88`), while the live call is the agent's
+    conversation and is P6's. They have different consent, different retention arguments
+    and different owners, so they are different objects.
+    """
+
+    INTAKE = "intake"
+    LIVE_CALL = "live_call"
+
+
 class Language(StrEnum):
     """Spoken languages the service supports.
 

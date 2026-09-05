@@ -47,7 +47,12 @@ services:
     environment:
       MINIO_ROOT_USER: readycall
       MINIO_ROOT_PASSWORD: readycall123
-    ports: ["9000:9000", "9001:9001"]
+    # Overridable because 9000 is a popular port and something else may already hold it
+    # - on the dev laptop it was a stray Python server, and the symptom was a "protocol
+    # violation" from boto3 rather than a bind failure, because Docker's proxy answered
+    # second. `MINIO_PORT=19000 docker compose ... up -d minio`, and set
+    # BLOB_ENDPOINT_URL to match.
+    ports: ["${MINIO_PORT:-9000}:9000", "${MINIO_CONSOLE_PORT:-9001}:9001"]
     volumes: [miniodata:/data]
     healthcheck:
       test: ["CMD", "mc", "ready", "local"]

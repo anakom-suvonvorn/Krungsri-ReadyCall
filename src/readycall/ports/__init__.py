@@ -8,6 +8,7 @@ from a rewrite into a config change (`D3`).
 from readycall.ports.blob_storage import BlobStorage, StoredObject
 from readycall.ports.core_data import CoreDataProvider
 from readycall.ports.event_bus import EventBus, Handler
+from readycall.ports.keyring import DataKey, KeyRing
 from readycall.ports.llm import LlmClient, LlmResult, LlmUsage, PromptRef
 from readycall.ports.stt import AudioFrame, EngineInfo, SttEngine, SttHint, SttResult
 from readycall.ports.telephony import (
@@ -25,10 +26,12 @@ __all__ = [
     "BlobStorage",
     "CallLeg",
     "CoreDataProvider",
+    "DataKey",
     "DialTarget",
     "EngineInfo",
     "EventBus",
     "Handler",
+    "KeyRing",
     "LlmClient",
     "LlmResult",
     "LlmUsage",

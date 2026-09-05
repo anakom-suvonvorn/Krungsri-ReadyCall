@@ -21,7 +21,9 @@ is explicit rather than assumed.
 
 from __future__ import annotations
 
+import io
 import struct
+import wave
 from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
@@ -185,6 +187,30 @@ def normalise(payload: bytes, fmt: AudioFormat, *, t_start_ms: int = 0) -> Audio
     )
 
 
+def encode_wav(samples: Sequence[float], *, sample_rate: int = TARGET_SAMPLE_RATE) -> bytes:
+    """Float samples -> a complete 16-bit PCM WAV, in memory (`D110`).
+
+    The inverse of `decode`, and the format a recording is stored in: 16-bit PCM is what
+    every player on earth opens, it halves the size of float32, and the loss is below the
+    noise floor of a telephone line. No `soundfile`, no numpy - this runs on the CI box
+    with no `ml` extra, same as the rest of this module.
+
+    In memory rather than to a path because the bytes go straight into the encrypting
+    blob store: a recording that touches the filesystem on its way to being encrypted has
+    been on the filesystem in the clear, which is the thing `D9` refused.
+    """
+    pcm = b"".join(
+        int(max(-1.0, min(1.0, s)) * 32767).to_bytes(2, "little", signed=True) for s in samples
+    )
+    buffer = io.BytesIO()
+    with wave.open(buffer, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(sample_rate)
+        w.writeframes(pcm)
+    return buffer.getvalue()
+
+
 def rms(samples: Sequence[float]) -> float:
     """Root-mean-square level. Used by the energy VAD and by the level meter (`D32`)."""
     if not samples:
@@ -198,6 +224,7 @@ __all__ = [
     "AudioFormat",
     "Encoding",
     "decode",
+    "encode_wav",
     "normalise",
     "resample",
     "rms",

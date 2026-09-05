@@ -26,6 +26,10 @@ recordings/
 *.flac
 transcripts/
 mock/bank_core/generated/
+# Where BLOB_STORAGE=localfs puts objects (`D110`). It holds ciphertext, but ciphertext
+# of a real person describing their accident is still not a thing to commit (`D97`).
+# Anchored to the root, per the `B9` note below.
+/var/
 
 # Models / caches
 # NOTE: anchored to the repo root ON PURPOSE. A bare `models/` matches at ANY depth, and

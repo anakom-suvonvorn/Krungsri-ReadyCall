@@ -20,7 +20,7 @@ from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 
 from readycall.errors import ConfigError
-from readycall.media.audio import AudioFormat, Encoding
+from readycall.media.audio import AudioFormat, Encoding, encode_wav
 
 #: 20 ms, which is what SIP/RTP actually sends and therefore what the gateway should be
 #: tested against — not a round number of samples chosen for our own convenience.
@@ -83,19 +83,15 @@ class WavFileSource:
 
 
 def write_wav(path: Path | str, samples: list[float], *, sample_rate: int = 16000) -> Path:
-    """Write float samples as 16-bit PCM. For fixtures and for the bake-off's inputs."""
+    """Write float samples as 16-bit PCM. For fixtures and for the bake-off's inputs.
+
+    The encoding itself lives in `audio.encode_wav`, which is also what a recording is
+    stored as (`D110`). One encoder, so a fixture and a stored recording cannot disagree
+    about what 16-bit PCM means.
+    """
     out = Path(path)
     out.parent.mkdir(parents=True, exist_ok=True)
-    with wave.open(str(out), "wb") as w:
-        w.setnchannels(1)
-        w.setsampwidth(2)
-        w.setframerate(sample_rate)
-        w.writeframes(
-            b"".join(
-                int(max(-1.0, min(1.0, s)) * 32767).to_bytes(2, "little", signed=True)
-                for s in samples
-            )
-        )
+    out.write_bytes(encode_wav(samples, sample_rate=sample_rate))
     return out
 
 

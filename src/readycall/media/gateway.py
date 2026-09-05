@@ -66,6 +66,27 @@ class MediaGateway:
         fmt: AudioFormat | None = None,
     ) -> MediaLeg:
         key = (call_session_id, speaker_role)
+        # **Idempotent since `D110`, and it is a correctness fix rather than a
+        # convenience.** Two independent consumers now open a leg — the transcriber and
+        # the recorder — and neither may depend on the other running (`D12`). Replacing
+        # the leg would silently discard the first one's `sinks`, so whichever opened
+        # first would stop receiving audio while still believing it was subscribed:
+        # `B24`'s shape, a component that is correct, running, and fed nothing.
+        existing = self._legs.get(key)
+        if existing is not None and not existing.closed:
+            if fmt is not None and fmt != existing.fmt:
+                # The second opener disagrees about what is on the wire. The first one
+                # wins because its sinks are already attached to that interpretation,
+                # and a silent disagreement here decodes A-law as µ-law: loud, plausible
+                # garbage nobody would blame on the codec (`D96`).
+                log.warning(
+                    "media leg already open with a different format",
+                    call_session_id=call_session_id,
+                    speaker=str(speaker_role),
+                    kept=str(existing.fmt.encoding),
+                    ignored=str(fmt.encoding),
+                )
+            return existing
         leg = MediaLeg(
             call_session_id=call_session_id,
             speaker_role=speaker_role,

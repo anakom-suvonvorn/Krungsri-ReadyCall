@@ -36,6 +36,7 @@ from readycall.domain.enums import (
     PolicyStatus,
     ProductLine,
     RatingSource,
+    RecordingPhase,
     SpeakerRole,
     Urgency,
 )
@@ -293,6 +294,41 @@ class Consent(DomainModel):
     channel: str
     evidence_ref: str | None = None
     expires_at: datetime | None = None
+
+
+class AudioRecording(DomainModel):
+    """One stored recording: where it is, what unlocks it, and when it dies (`D110`).
+
+    The row exists **only after** the object is in storage — nothing is recorded
+    optimistically, because a reference to an object that was never written is a
+    recording that looks retrievable and is not.
+
+    `encryption_key_ref` names the master key that wrapped this object's own data key
+    (`ports/keyring.py`); the wrapped data key itself lives in the object's header, not
+    here, so a leak of this table is not a leak of the audio.
+
+    `delete_after` is the retention promise made concrete (`D14`). It is written at
+    upload time from `RECORDING_RETENTION_DAYS` rather than computed at purge time, so
+    changing the setting never silently extends the life of audio already held.
+    """
+
+    recording_id: str
+    call_session_id: str
+    phase: RecordingPhase
+    storage_ref: str
+    created_at: datetime
+    duration_s: float
+    size_bytes: int
+    checksum: str
+    sample_rate: int = 16000
+    audio_format: str = "wav_pcm16"
+    encryption_key_ref: str | None = None
+    delete_after: datetime | None = None
+    intake_id: str | None = None
+
+    @property
+    def is_encrypted(self) -> bool:
+        return self.encryption_key_ref is not None
 
 
 class TranscriptTurn(DomainModel):
