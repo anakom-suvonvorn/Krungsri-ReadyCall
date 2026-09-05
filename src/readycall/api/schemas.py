@@ -411,6 +411,37 @@ class ChallengeOut(ApiModel):
     requires_note: bool = False
 
 
+class TranscriptTurnOut(ApiModel):
+    """One utterance, on its way to the transcript panel (`D106`).
+
+    A wire DTO rather than the domain `TranscriptTurn`, for the reason `D53` gives and
+    `B5` proved: serialising a domain model across a boundary ships whatever fields it
+    grows later. The three this deliberately omits are `engine`, `engine_version` and
+    `intake_id` — provenance the agent's screen has no use for and which would put the
+    model's name in front of them as if it meant something.
+
+    Not gated on assurance. This is the caller's own speech on the call being taken, not
+    anything looked up about them, and the whole product is that an agent knows why
+    somebody is calling before they answer — including an anonymous caller at L0, which is
+    exactly the case with no other source of context.
+    """
+
+    turn_id: str
+    seq: int
+    #: `customer` / `agent` / `ai` — from the leg the audio was forked from, never from a
+    #: diarisation model (`D26`).
+    speaker_role: str
+    text: str
+    #: Milliseconds from the start of the recording, so the panel can show when in the
+    #: call something was said without needing a wall-clock timestamp per turn.
+    t_start_ms: int
+    t_end_ms: int
+    #: The engine's own confidence where it reports one. Rendered as a hint, never as a
+    #: filter — a low-confidence turn is still what the caller said, and hiding it would
+    #: leave a silent gap that reads as the caller having said nothing (`D16`).
+    asr_confidence: float | None = None
+
+
 class PendingWrapupOut(ApiModel):
     """A call this agent handled and never filed a wrap-up for (`D87`).
 
@@ -474,6 +505,12 @@ class WorkstationSnapshot(ApiModel):
     #: but the record still has to be fileable afterwards, or "free to leave" quietly
     #: means "the note is lost". Oldest first.
     pending_wrapups: tuple[PendingWrapupOut, ...] = ()
+    #: The live transcript of the active call, oldest first (`D106`). Also pushed on the
+    #: socket as `transcript`, and it is the **same list** from the same service rather
+    #: than a second answer to the question — the socket is a view and is allowed to be
+    #: flaky (`D32`), so a tab opening mid-call must not have to wait for the caller to
+    #: say something else before it shows anything.
+    transcript: tuple[TranscriptTurnOut, ...] = ()
 
 
 class PlaceCallRequest(ApiModel):
@@ -503,6 +540,17 @@ class PlaceCallRequest(ApiModel):
     #: closed for one of them. It stands in for nothing in the real system — production
     #: has no such flag, and the closed-queue path (`D25`) is exercised by leaving it off.
     ignore_hours: bool = False
+    #: DEMO: a WAV file to play down the line as the caller's own voice, so the audio path
+    #: runs end to end with no telephony (`D107`). A **bare filename** inside
+    #: `Settings.demo_audio_dir` — never a path — because a path in a request body is a
+    #: file-read primitive, and "it is only the demo endpoint" is how that argument always
+    #: starts. Ignored unless the caller consented, since a recording nobody agreed to is
+    #: the one thing this system must not make (`D14`).
+    audio: str | None = Field(default=None, max_length=128)
+    #: DEMO: pace the file at wall-clock speed rather than feeding it in one burst. Off by
+    #: default because a request that blocks for the length of a phone call is a bad demo
+    #: affordance; **on** is what makes the latency real, and it is what a phone does.
+    audio_realtime: bool = False
 
 
 class IntakeOut(ApiModel):

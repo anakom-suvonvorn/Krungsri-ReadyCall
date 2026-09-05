@@ -25,7 +25,7 @@ from readycall.adapters.core_data.caching import CachingCoreDataProvider
 from readycall.adapters.core_data.fixtures import FixtureFileProvider
 from readycall.adapters.core_data.null import NullCoreDataProvider
 from readycall.adapters.event_bus.memory import InMemoryEventBus
-from readycall.adapters.stt.scripted import ScriptedSttEngine
+from readycall.adapters.stt.scripted import ScriptedSttEngine, load_scripted_turns
 from readycall.adapters.telephony.simulated import SimulatedTelephonyProvider
 from readycall.adapters.vad.energy import EnergyVad
 from readycall.api.realtime import AgentHub
@@ -83,6 +83,7 @@ from readycall.services.matching.engine import MatchingEngine
 from readycall.services.matching.scoring import WaitingCall
 from readycall.services.matching.weights import MatchingWeights
 from readycall.services.queues.hours import QueueHours
+from readycall.services.transcription.delivery import TranscriptDeliveryService
 from readycall.services.transcription.service import TranscriptionService
 from readycall.voiceprompts import load_prompt_pack
 
@@ -184,7 +185,10 @@ def build_stt(settings: Settings) -> SttEngine:
             "stt engine not implemented yet, falling back to scripted",
             requested=str(name),
         )
-    return ScriptedSttEngine([])
+    # Its lines come from config (`D107`). It used to be built empty, so the engine whose
+    # own docstring calls it "the stage-safe demo path" produced a transcript with nothing
+    # in it — a fallback that looks like the system working and finding nothing to say.
+    return ScriptedSttEngine(load_scripted_turns(settings.demo_transcript_file))
 
 
 def build_core_data(settings: Settings, clock: Clock) -> CoreDataProvider:
@@ -352,6 +356,14 @@ class Container:
         #: intent_id -> snapshot_id, so an intent can report what the prefetch produced.
         self.snapshot_for_intent: dict[str, str] = {}
         self.bus.subscribe(ev.IntentCreated.name, self._prefetch_context)
+
+        #: Agent Delivery for the transcript (`D106`). It subscribes itself so the topics
+        #: live beside the handlers; what it needs from here is the hub and the bus.
+        #: **Nothing here would run without `pump_once` in `api/app.py`** — `publish()`
+        #: enqueues and handlers wait for `drain()` (`D15`), and until `D105` the only
+        #: drain in the live process was a background task on `POST /v1/calls/intents`.
+        self.transcript_delivery = TranscriptDeliveryService(notifier=self.hub)
+        self.transcript_delivery.subscribe(self.bus)
 
     # --- restore (D78) ------------------------------------------------------------------
 

@@ -222,11 +222,29 @@ class Settings(BaseSettings):
     #: drives the sweep itself. `B7`: all three were written expecting this driver and it
     #: did not exist, so an unanswered offer stranded the agent in `OFFERING` for good.
     agent_sweep_interval_s: float = 1.0
+    #: How often the API process runs the event bus's handlers. Separate from the sweep,
+    #: and much faster, because it is on the transcript's latency path: `ARCHITECTURE`
+    #: §15 budgets **1.5 s** from utterance end to a turn on screen and the model already
+    #: spends 0.19 s of it (`D104`), so a 1 s bus latency would eat most of what is left.
+    #: `publish()` only enqueues by design (`D15`) — determinism is what makes scenario
+    #: replay comparable — so **something has to call `drain()`**, and until `D105` the
+    #: only thing that did was a background task on `POST /v1/calls/intents`. Set to 0 to
+    #: disable, which is what a test wants when it drains explicitly.
+    bus_drain_interval_s: float = 0.05
     agent_session_cookie_name: str = "readycall_agent"
     agent_session_ttl_s: float = 43200.0  # a shift, not an hour
     #: DEMO: enables /v1/agent/demo-login, the staff-side equivalent of the persona
     #: picker. Must be false anywhere near real data.
     demo_agent_login_enabled: bool = True
+    #: DEMO: the only directory `POST /v1/demo/calls` will play a WAV out of (`D107`).
+    #: The request sends a bare filename and this says where it may live, so the endpoint
+    #: is never a way to read an arbitrary file. Real audio arrives from telephony at P5
+    #: and none of this exists on that path.
+    demo_audio_dir: Path = Path("tests/audio")
+    #: DEMO: the lines the `scripted` STT engine speaks, one per endpointed utterance
+    #: (`D107`). Empty or missing means the engine returns nothing, which is what it did
+    #: for its whole life and why the stage-safe fallback showed a blank panel.
+    demo_transcript_file: Path = Path("config/demo_transcript.yaml")
     sip_wss_url: str | None = None
     sip_realm: str = "readycall.local"
 

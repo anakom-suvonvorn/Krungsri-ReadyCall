@@ -16,7 +16,12 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
 
+import yaml
+
+from readycall.errors import ConfigError
 from readycall.ports.stt import AudioFrame, EngineInfo, SttHint, SttResult
 
 
@@ -97,3 +102,44 @@ class ScriptedSttEngine:
 
     def reset(self) -> None:
         self._cursor = 0
+
+
+def load_scripted_turns(path: Path) -> list[ScriptedTurn]:
+    """Read the lines the stage-safe demo path speaks (`D107`).
+
+    This module's own docstring has always claimed three jobs, and the second one — *the
+    stage-safe demo path, when we would rather not bet on live ASR in a noisy room* — was
+    not actually possible: `build_stt` constructed `ScriptedSttEngine([])`, so choosing
+    the safe engine produced a transcript with nothing in it. A demo fallback that
+    silently shows an empty panel is worse than none, because it looks like the system
+    working and finding nothing to say.
+
+    **Timings are deliberately not in the file.** `TranscriptionStream` stamps every turn
+    with the *segment's* real start and end, so a scripted line inherits the timing of
+    whatever audio was actually played — which is what makes the fallback look like a
+    transcription rather than a slideshow. Keep the lines roughly the length of the
+    utterances they stand in for: `D98`'s rate guard refuses more than
+    `MAX_CHARS_PER_SECOND` of text for the seconds of audio it arrived on, and it does
+    not care that this one came from a file.
+    """
+    if not path.exists():
+        return []
+    raw: Any = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    if not isinstance(raw, dict):
+        raise ConfigError(f"{path} must contain a mapping at the top level")
+    out: list[ScriptedTurn] = []
+    for index, entry in enumerate(raw.get("turns") or []):
+        if isinstance(entry, str):
+            out.append(ScriptedTurn(text=entry, t_start_ms=0, t_end_ms=0))
+            continue
+        if not isinstance(entry, dict) or "text" not in entry:
+            raise ConfigError(f"{path}: turn {index} needs a `text`")
+        out.append(
+            ScriptedTurn(
+                text=str(entry["text"]),
+                t_start_ms=int(entry.get("t_start_ms", 0)),
+                t_end_ms=int(entry.get("t_end_ms", 0)),
+                confidence=float(entry.get("confidence", 0.93)),
+            )
+        )
+    return out

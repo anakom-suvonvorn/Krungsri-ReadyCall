@@ -1,0 +1,34 @@
+# DEMO: what the scripted STT engine "hears" (`D107`).
+#
+# This is the stage-safe fallback the `scripted` engine has always claimed to be and could
+# not do, because `build_stt` handed it an empty list. Choosing the safe engine therefore
+# produced an empty transcript panel — which on stage reads as the system working and
+# finding nothing, and is worse than no fallback at all.
+#
+# How it behaves: one line is consumed per endpointed utterance, in order, whatever the
+# audio actually contained. So the AUDIO decides how many turns there are and when each
+# one starts and ends (`TranscriptionStream` stamps every turn with its segment's real
+# timings) — this file only decides what they say. Play a real recording behind it and the
+# panel fills at the pace of the speech.
+#
+# Two rules when editing:
+#
+#   * KEEP THE LINES SHORT ENOUGH FOR THE AUDIO. `D98`'s rate guard refuses a turn
+#     carrying more than ~15 characters per second of the segment it arrived on, measured
+#     from real Thai (median 7.6, max 15.0), and it does not care that this text came from
+#     a file. A 60-character line on a 2-second utterance is silently dropped.
+#   * THIS IS NOT A PROMPT AND NOT A BRIEF. It stands in for the transcriber only.
+#     Everything downstream — the summary, the recommended actions, the confidence — is
+#     computed from it exactly as it would be from a real transcript, which is the whole
+#     point of the fallback being at this layer rather than higher up.
+#
+# The lines below are a motor claim: the caller says why they are calling before an agent
+# has picked up, which is the product in one paragraph.
+
+turns:
+  - text: "สวัสดีครับ ผมโทรมาเรื่องเคลมรถ"
+  - text: "รถชนเมื่อเช้านี้ครับ"
+  - text: "อยู่แถวรัชดา ตอนนี้จอดข้างทางแล้ว"
+  - text: "ไม่มีใครบาดเจ็บครับ"
+  - text: "อยากทราบว่าต้องทำยังไงต่อ"
+  - text: "แล้วต้องใช้เอกสารอะไรบ้างครับ"

@@ -40,6 +40,7 @@ from readycall.api.security import DemoSessionStore
 from readycall.domain.enums import CallState, ProductLine, Urgency
 from readycall.errors import ConfigError
 from readycall.logging import get_logger
+from readycall.media.sources import WavFileSource
 from readycall.services.identity.resolver import hash_token
 from readycall.services.intake.service import HoldReport
 from readycall.services.ivr.personalise import PersonalisationInputs
@@ -292,6 +293,29 @@ async def place_call(
     # the agent presses Accept, which is a different request entirely.
     hold = await container.intake.run_offer(session, caller=ScriptedChoices(list(body.intake_keys)))
 
+    # The recording actually starts here (`D107`). `run_offer` decides *whether* there is
+    # one; nothing was turning the audio path on when there was, so `TranscriptionService`
+    # was written, tested and reached only by its own suite — `B7`'s exact shape, and it
+    # meant no `transcript.turn` was ever published by the running system.
+    #
+    # DEMO: at P5 the telephony adapter opens the leg and pushes real RTP. Until then this
+    # endpoint does both, and `audio` plays a file down it so the whole path — normalise,
+    # endpoint, transcribe, publish, deliver — runs with no phone in the room.
+    if hold.recording:
+        # The source is resolved BEFORE the leg opens, because the leg is opened in the
+        # file's own format and the gateway is what resamples (`D96`). Opening at the
+        # default 16 kHz and then feeding 8 kHz telephone audio would not fail — it would
+        # transcribe a call played at double speed, which is the kind of wrong that reads
+        # as a bad model.
+        source = _demo_audio_source(container, body.audio) if body.audio else None
+        await container.transcription.open(
+            session.call_session_id, fmt=source.fmt if source is not None else None
+        )
+        if source is not None:
+            await _play_demo_audio(
+                container, session.call_session_id, source, realtime=body.audio_realtime
+            )
+
     await container.orchestrator.transition(session, CallState.MATCHED, reason="ready_for_matching")
     container.dispatch.admit(
         session,
@@ -325,6 +349,55 @@ async def place_call(
         offered_to=result.offered[0] if result.offered else None,
         unplaced_reason=result.unplaced.get(session.call_session_id),
         intake=_intake_out(hold),
+    )
+
+
+def _demo_audio_source(container: ContainerDep, name: str) -> WavFileSource:
+    """DEMO: resolve a caller's voice to a file on disk (`D107`).
+
+    **A bare filename, resolved inside `demo_audio_dir`, and checked after resolution.**
+    A path in a request body is a file-read primitive; rejecting `..` by inspecting the
+    string is the version of this check that keeps getting bypassed, so the comparison is
+    between *resolved* paths. That the endpoint exists only when `demo_login_enabled` is
+    not the argument — a demo flag left on is precisely the configuration this would be
+    exploited through, so the check is here as well as there.
+    """
+    if "/" in name or "\\" in name or name in {"", ".", ".."}:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="audio must be a bare filename")
+    root = Path(container.settings.demo_audio_dir).resolve()
+    path = (root / name).resolve()
+    if root not in path.parents or not path.is_file():
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="no such demo audio file")
+    try:
+        return WavFileSource(path)
+    except ConfigError as exc:
+        # A 16-bit-PCM-only message is a *useful* 400: it says what to run to fix it.
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+async def _play_demo_audio(
+    container: ContainerDep,
+    call_session_id: str,
+    source: WavFileSource,
+    *,
+    realtime: bool,
+) -> None:
+    """DEMO: push the file down the open leg, the way telephony will at P5.
+
+    In 20 ms packets, in the file's own format, letting the gateway normalise — which is
+    what `sources.py` was built for (`D96`). Decoding straight to 16 kHz here would skip
+    the exact code path that carries the call on the day.
+    """
+    packets = 0
+    async for packet in source.stream(realtime=realtime):
+        await container.transcription.push(call_session_id, packet)
+        packets += 1
+    log.info(
+        "demo audio played",
+        call_session_id=call_session_id,
+        packets=packets,
+        seconds=round(source.duration_s, 2),
+        realtime=realtime,
     )
 
 

@@ -41,6 +41,7 @@ from readycall.api.schemas import (
     OfferOut,
     PendingWrapupOut,
     QueueOut,
+    TranscriptTurnOut,
     WorkstationSnapshot,
     WrapupRequest,
 )
@@ -189,6 +190,15 @@ async def accept_offer(
     # intake finalises as **partial** - everything said is kept, the brief renders it as
     # unfinished, and nobody waited a second longer for it. Before `accept`, so the last
     # of the transcript is attached to the call the agent is about to see.
+    # **Close the transcriber BEFORE finalising the intake, and the order is the whole
+    # point.** `finish()` transcribes the segment that was still open and drains the queue
+    # before it returns, and those turns go to `IntakeService.on_turn` — which hands them
+    # to the strategy only while it is still running. Finalising first makes every one of
+    # them arrive after the intake closed, where `PassiveRecordIntake.on_turn` correctly
+    # logs and drops them: the caller's last sentence, the one they were saying as the
+    # agent picked up, silently missing from the brief. `D21` says the offer window IS the
+    # grace period; this is what makes that true rather than merely intended.
+    await container.transcription.close(session.call_session_id)
     await container.intake.on_agent_accepted(session.call_session_id)
     try:
         await container.assignments.accept(session, assignment_id=assignment_id)
@@ -750,6 +760,15 @@ async def _snapshot(container: Any, agent_id: str) -> WorkstationSnapshot:
         # and never showed it at all once the call id went away on save (`D68`).
         wrapup_saved=wrapping_id is not None and wrapping_id in container.wrapups,
         pending_wrapups=await _pending_wrapups(container, agent_id),
+        # The call being handled OR wrapped up (`D106`). `active_call_session_id` drops to
+        # null the instant a wrap-up is saved, and the transcript is what the agent writes
+        # the wrap-up FROM (`ARCHITECTURE` §12) — so falling back to `wrapping_id` is the
+        # difference between a useful panel and one that empties at the worst moment. Same
+        # trap `D68` found with `wrapup_saved`.
+        transcript=tuple(
+            TranscriptTurnOut(**turn)
+            for turn in container.transcript_delivery.turns_for(active_id or wrapping_id)
+        ),
     )
 
 

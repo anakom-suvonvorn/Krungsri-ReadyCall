@@ -93,6 +93,39 @@ async def _sweep_forever(container: Container, interval_s: float) -> None:
         await sweep_once(container)
 
 
+async def pump_once(container: Container) -> None:
+    """Run whatever the event bus has queued (`D105`).
+
+    **`publish()` only enqueues.** That is deliberate and load-bearing: nothing runs until
+    `drain()`, so a scenario replay settles in the same order every time and its golden
+    output is comparable at all (`D15`). The cost is that *something* has to call `drain()`
+    in a live process, and for a long time the only thing that did was a background task on
+    `POST /v1/calls/intents` — which meant a subscriber to anything else was correct,
+    tested, and unreached until an unrelated app request happened along. Measured before it
+    was fixed: five sweeps, and the handler had still not run.
+
+    It is a **separate driver from `sweep_once`**, not a line inside it, because the two
+    have different deadlines. The sweep is about offers and heartbeats and a second is
+    fine. This one is on the transcript's path to the screen, where `ARCHITECTURE` §15
+    allows 1.5 s end to end and the model already spends 0.19 s.
+
+    Exceptions are logged and swallowed for the same reason the sweep's are — and here
+    there is a sharper one: the bus is built `strict_handlers=True`, so one handler raising
+    aborts the pass. Swallowing keeps the *next* pass running; without it a single bad
+    handler would stop every event in the process reaching every consumer, permanently.
+    """
+    try:
+        await container.bus.drain()
+    except Exception:
+        log.exception("bus drain failed")
+
+
+async def _pump_forever(container: Container, interval_s: float) -> None:
+    while True:
+        await asyncio.sleep(interval_s)
+        await pump_once(container)
+
+
 def create_app(
     settings: Settings | None = None,
     *,
@@ -117,6 +150,11 @@ def create_app(
             if settings.agent_sweep_interval_s > 0
             else None
         )
+        pump = (
+            asyncio.create_task(_pump_forever(container, settings.bus_drain_interval_s))
+            if settings.bus_drain_interval_s > 0
+            else None
+        )
         log.info(
             "api ready",
             core_data_provider=container.core.name,
@@ -124,14 +162,16 @@ def create_app(
             demo_login=settings.demo_login_enabled,
             intents=len(container.pack.intents),
             sweep_every_s=settings.agent_sweep_interval_s,
+            bus_drain_every_s=settings.bus_drain_interval_s,
             storage=container.storage.backend,
             restored=restored,
         )
         yield
-        if sweeper is not None:
-            sweeper.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await sweeper
+        for task in (sweeper, pump):
+            if task is not None:
+                task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
         # Drain anything still queued so a shutdown mid-request does not silently drop a
         # context prefetch that was already promised to a caller.
         await container.bus.drain()
