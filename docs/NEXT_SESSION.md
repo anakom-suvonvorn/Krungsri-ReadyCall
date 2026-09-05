@@ -51,9 +51,12 @@ median** (unstable at n=20), and **the test set moved the headline by 1.8x**.
 ### What is NOT built, precisely
 
 1. **The encrypted recording to object storage.** `ARCHITECTURE` §6 asks the media gateway
-   to write the call with a per-recording key reference. Neither MinIO nor the key handling
-   exists, and `D9` was deliberate about not writing a caller's audio to disk before there
-   is a key to protect it. **This is the last piece of P3.**
+   to write the call with a per-recording key reference. The **container** is in
+   `infra/docker-compose.yml` and the **port** is defined; what does not exist is an
+   adapter for it (only `InMemoryBlobStorage`, which nothing instantiates — `Container`
+   has no blob field at all), the key handling, or anything that writes a frame. `D9` was
+   deliberate about not writing a caller's audio to disk before there is a key to protect
+   it. **This is the last piece of P3.**
 2. **`IntakeService._degradation()` returns `NONE` unconditionally.** A *wait* until `D96`
    and a *gap* since: `TranscriptionService` knows whether the engine failed and nothing
    carries it back. The screen is already ready for it — `emptyTranscriptReason()` in
@@ -339,12 +342,16 @@ _Rewritten 2026-09-06. Everything the previous version listed as steps 1-5 and 8
 
 **1. The encrypted recording to object storage — the last piece of P3.**
 `ARCHITECTURE` §6 asks the media gateway to write the call to object storage with a
-per-recording key reference. Neither MinIO nor the key handling exists. This is **P7's key
-management arriving early**, not an audio problem: the audio path already produces the
-frames, and `D9` was deliberate that a caller's audio must not reach disk before there is a
-key to protect it. Needs: MinIO in `infra/docker-compose.yml`, a `BlobStorage` adapter
-behind the port that already exists, a per-recording key ref on the call, and `D14`'s
-retention (`recording_retention_days = 90`) meaning something. ⚠️ It is also the first code
+per-recording key reference, and nothing writes one. This is **P7's key management arriving
+early**, not an audio problem: the audio path already produces the frames, and `D9` was
+deliberate that a caller's audio must not reach disk before there is a key to protect it.
+**What already exists:** the MinIO service in `infra/docker-compose.yml` (since P0),
+`ports/blob_storage.py` with `encryption_key_ref` on `StoredObject`, and
+`BlobStorageName.{memory,localfs,minio,s3}` in `Settings`. **What does not:** any adapter
+but the in-memory one, a `build_blob_storage` factory (`Container` has no blob field —
+`InMemoryBlobStorage` is instantiated by nothing, including the tests), a writer on
+`MediaGateway`, a per-recording key ref on the call, and `D14`'s retention
+(`recording_retention_days = 90`) meaning something. ⚠️ It is also the first code
 that writes customer speech anywhere durable — `D97`/`D14` apply.
 
 **2. Two small things in the audio path, both well defined.**
