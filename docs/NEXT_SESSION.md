@@ -120,7 +120,7 @@ it, all three reaching the same agent — **and what they said while they were w
 that agent's screen the moment they press Accept**, in order, each sentence carrying the
 moment in the recording it was said.
 
-Verified **2026-09-05**: **697 tests** — 655 pass + 42 skipped without the Postgres
+Verified **2026-09-05**: **717 tests** — 675 pass + 42 skipped without the Postgres
 container (the 42 are the database cases). `ruff check` + `ruff format --check` clean over 182 files,
 `mypy --strict` clean over 126, all scenarios replay, 63/63 diagrams current, prompt pack
 fresh (54 clips), `audit_docs.py` clean on the live files. **And verified in a browser
@@ -593,6 +593,9 @@ Whoever has the strongest GPU should own the demo machine.
 
 | # | Question | Current default |
 |---|---|---|
+| **Q31** | **A caller every qualified agent has declined waits FOREVER, and nothing rescues them.** `D52`'s exclusion is a hard filter with no expiry, so once the pool is exhausted the matcher reports `ALL_DECLINED` (`D108`) every tick until somebody new signs in. Not even the wait ceiling saves them — `D93`'s rescue picks from qualified agents, and they are all excluded. The user is right that it has to circle back. **The design, ready to build:** when a caller's exclusions cover every agent who would otherwise qualify, clear them, increment a `round` counter on the call, and re-solve. The offer card carries the round — *"สายนี้ถูกส่งต่อครบทุกคนแล้วและวนกลับมาอีกครั้ง"* — because an agent seeing the same call twice with no explanation concludes the system is broken, and naming it is also the point: it is the sentence that makes somebody take it. Two sub-decisions to settle: does a **RONA** timeout count the same as a deliberate decline for exhaustion (leaning **yes** — the caller cannot tell the difference), and is there a **round cap** after which the call goes to voicemail (`D25`) rather than looping forever (leaning **yes, 2 rounds**). ⚠️ `D52`'s exclusion was written to stop the solver re-picking the same agent *on the very next tick*; nothing in it argues for permanence, so this extends it rather than reversing it. | **Not built.** Currently a caller in this state is stuck |
+| **Q32** | **Should there be a "decline and show me a different caller" button?** The user proposed it and then talked themselves out of it, and they were right to. Two reasons. **It already exists implicitly:** declining re-solves the matrix immediately, and the caller you get next is the best remaining match *for you* — fit is scored per call×agent, so it is not "a worse call", it is the best of what is left. **And the explicit version is harmful:** a button that lets an agent skip a caller and keep their place is cherry-picking, which is the well-known contact-centre pathology the Hungarian solver exists to prevent — the hard cases would circulate while the easy ones got taken, and `matching_decisions` would record it as the system's choice rather than as a person's. `D109`'s *decline + pause* covers the legitimate need underneath the idea ("not now"), and costs the agent their place in the rotation, which is what makes it honest. | **Decided: not building it.** `D109` covers the real need |
+| **Q33** | **Ring every qualified agent at once and give the call to whoever answers first?** The user's "random idea", and it is a real pattern — it is what a room full of desk phones does. Worth keeping because it is a genuine **degradation rung**: if nothing has been accepted after N seconds, broadcasting beats a caller waiting. As the *primary* mechanism it deletes everything the matcher buys — fit, continuity, load balance, the anti-starvation ceiling — and replaces them with *who clicked fastest*, which systematically rewards the least busy rather than the best suited and gives N-1 agents an interruption for every call. `AgentHub.broadcast()` already exists, so the mechanism is cheap; the policy is what needs deciding. **Revisit after P5**, when there is real telephony to measure a real accept latency against. | **Parked.** Not for the hackathon build |
 | Q7 | Intent taxonomy + menu wording | **User: leave as-is, revisit during the hackathon.** |
 | Q8 | Typhoon model ids / licence / pricing | Verify against live docs when writing the adapter |
 | Q9 | `OFFER_TIMEOUT_S=20`, ACW thresholds | Guesses; tune against how a real agent works |
@@ -654,6 +657,29 @@ Facts about *this laptop* rather than the repo, so a fresh session does not redi
   and expect the first `screenshot` to time out once and succeed on retry.
 
 ## Things to be careful about (live landmines)
+
+- **THE HARD FILTER IS THE ONLY THING THAT KEEPS AN UNAVAILABLE AGENT FROM BEING RUNG**
+  (`B25`). `hard_filter` checks `offline` / `not_ready` / `busy` and nothing else does —
+  `PresenceView.offerable` is for the *screen*. Until 2026-09-05 neither of them was
+  consulted by the matcher and `AgentPresence.is_available()` was dead code, so a caller
+  was offered to an agent whose own screen said `offerable: false`. If you touch
+  `hard_filter`, the test that matters is the **HTTP** one: this bug is invisible unless
+  something drives the matcher.
+- **`OFFERING` COUNTS AS BUSY, AND THAT IS LOAD-BEARING** (`B25`). Without it one ringing
+  desk is handed every waiting caller in a single tick, and none of them reaches anybody
+  else until each offer times out — twenty seconds per caller. It looks exactly like the
+  queue being stuck, and that is what it looked like.
+- **A FIX FOR ONE CONSUMER IS NOT A FIX** (`B26`). `B12` unfroze `waiting_s` for the
+  matcher and left the two places a human reads it frozen for another four days. When you
+  correct a value, `grep` for every reader before believing you are done.
+- **THE POOL'S STORED `waiting_s` IS THE ADMIT-TIME VALUE AND ALWAYS WILL BE.** Read it
+  through `DispatchService.waiting()` / `waiting_call()`, which derive the live wait from
+  `call_sessions` (`B26`, `D78`). Never write it back — that creates the second copy the
+  derivation exists to avoid.
+- **A CALLER EVERY QUALIFIED AGENT DECLINED IS STUCK FOREVER** (`Q31`, reported as
+  `ALL_DECLINED` since `D108`). `D52`'s exclusion has no expiry and `D93`'s wait-ceiling
+  rescue picks from *qualified* agents, all of whom are excluded — so nothing rescues them.
+  The design for circling back is written down in `Q31` and is **not built**.
 
 - **`publish()` DOES NOT RUN ANYTHING** (`D15`, `D105`). The in-memory bus enqueues; the
   handlers run on `drain()`. In the API process that is `pump_once` every

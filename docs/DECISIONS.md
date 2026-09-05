@@ -3526,3 +3526,64 @@ fallback script and the audio it plays over **have to be sized for each other**:
 35-character Thai sentence needs about three seconds of speech behind it, and on a
 one-second utterance every line is silently dropped. Written into the config file's own
 comments, because the failure is a blank panel with nothing in the log to explain it.
+
+
+## D108. There are four ways a caller goes unplaced, not two
+_Forced by `B25`. Extends `D50`, which split one outcome into two for the same reason._
+
+- **Problem.** Making availability a hard filter (`B25`) changes what "no qualified agent"
+  means. Before the fix an agent on their lunch break was a *candidate*; after it they fail
+  a filter, so a floor where everybody is on a break would have been reported as
+  `NO_QUALIFIED_AGENT` — whose Thai rationale reads *"ไม่มีเจ้าหน้าที่ที่มีทักษะ/ภาษาที่ตรง
+  ออนไลน์อยู่"*, i.e. **fix your roster**. That is the exact conflation `D50` was written to
+  prevent, reintroduced by a fix for something else.
+- **Decision.** `MatchKind` gains two members. All four say something operationally
+  different to whoever is watching the queue:
+
+  | kind | what it means | what to do |
+  |---|---|---|
+  | `ALL_QUALIFIED_BUSY` | qualified, available people exist; this caller lost the matrix on this tick | nothing — it resolves in about a second |
+  | **`NO_AGENT_AVAILABLE`** | people with the skill are signed in and none can take a call: break, ACW, already ringing | ask somebody. Waiting helps |
+  | **`ALL_DECLINED`** | everyone who could take it has already been offered it and said no | **nothing helps.** See `Q31` |
+  | `NO_QUALIFIED_AGENT` | nobody with the skill is here at all | roster problem; waiting cannot fix it |
+
+- **`ALL_DECLINED` is the one worth pausing on.** The other three resolve with time; this
+  one does not, because `D52`'s exclusion is permanent for the life of the call. It used to
+  be indistinguishable from an empty roster, so a supervisor looking at a stuck caller was
+  told the wrong thing about a floor of idle agents. **Naming it does not fix it** —
+  whether the exclusion should ever be lifted is a policy question and is `Q31`.
+- **Why the counts are computed the way they are.** `already_offered` is checked *first* in
+  `hard_filter`, deliberately (`D50`), so an excluded agent's other reasons are invisible.
+  That is right for this caller — "they already turned you down" beats "and they are also
+  on lunch" — and it is why `declined` is counted as its own bucket rather than folded into
+  the availability one.
+- **Alternative considered: keep two kinds and put the detail in the rationale string.**
+  Rejected for `D50`'s own reason: the kind is what a query filters on and what a dashboard
+  groups by. A distinction that exists only inside a Thai sentence is a distinction nobody
+  can count.
+
+## D109. Declining and pausing are one click, because the alternative is twenty seconds of silence
+_Raised by the user: "add a decline-and-not-ready button, about the same behaviour as
+letting the ringing time run out."_
+
+- **Problem.** A plain decline leaves the agent `READY`, and the decline route re-matches
+  immediately — so the next caller can ring the same desk a second later. That is **correct**
+  when the agent meant *"not this call"*, and wrong when they meant *"not right now"*: after
+  a long call, when something has come up, or after accidentally pressing *Save & Ready*.
+  The system already had the second ending and the only way to reach it was to **let the
+  card ring out** — twenty seconds of a desk ringing at somebody who has already decided,
+  and a caller waiting the whole of it for a `RONA` that was never in doubt.
+- **Decision.** `POST /offers/{id}/decline` takes `stop_offering: bool`. When set, the
+  agent lands in `AVAILABLE` + `NOT_READY` — the same place RONA puts them — **before** the
+  re-match tick runs, so they are not a candidate for the caller they just declined nor for
+  the next one in the same pass. The card gets a second button, *ไม่รับ + พักรับสาย*.
+- **A flag, not a second request.** `NOT_READY` is the one intent the *platform* writes
+  (`D51`); an agent cannot declare it. A client doing decline-then-declare would be refused
+  by `declarable_intents`, correctly, and working around that on the client would put a
+  rule in two places.
+- **The reason is `declined_and_stopped`, not `rona_missed_offer`.** Same state, different
+  fact: one is *nobody picked up*, the other is *somebody chose*. `D59` exists because
+  `not_ready` alone cannot tell three situations apart, and this is a fourth; the screen
+  says a different sentence for each. It is logged `set_by="agent"` where RONA is
+  `set_by="platform"`, so the state log keeps the difference too.
+- **What this deliberately is not:** a *"show me a different caller"* button. See `Q32`.

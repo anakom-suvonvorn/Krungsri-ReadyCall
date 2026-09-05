@@ -1136,3 +1136,101 @@ have failed a test._
     application's loop only advances while a request is in flight. They now poll with cheap
     requests until the turns exist. A test that passes for a reason you cannot name is not
     yet a test.
+
+
+## B25. The matcher never asked whether an agent could take a call
+_Found 2026-09-05 by the user working the workstation and noticing that declining a call
+made the queue behave in ways nothing explained. The fifth member of `B7`'s family._
+
+- **Symptoms**, all reported as *"is this a bug or just the demo?"* and all the same bug:
+  1. Sign in and do **not** press *พร้อมรับสาย*. A caller is offered to you anyway, a few
+     seconds later — while your own screen says `offerable: false` and greys out the
+     test-call button for exactly that reason.
+  2. Sign out and close the tab. Callers keep being offered to you.
+  3. Place several callers with one agent signed in. **None of them is offered.** Then,
+     after a while, they all arrive at once.
+
+- **Root cause, and it is one line missing rather than three bugs.** `hard_filter` checked
+  `already_offered`, `skill`, `language`, `at_capacity` and `inactive`, and **never asked
+  whether the person was available**. `AgentPresence.is_available()` — which says exactly
+  that, and was written for exactly this — was called by **nothing in the repository**:
+
+      $ grep -rn "is_available" src/ | grep -v torch
+      src/readycall/domain/models.py:508:    def is_available(self, agent, *, within_schedule=True)
+
+  So symptom 1 is `agent_intent` never being read; symptom 2 is `system_state` never being
+  read after `sign_out` correctly sets `OFFLINE`; and symptom 3 is `OFFERING` never being
+  read — one ringing desk was handed **every** waiting caller in a single tick, and each of
+  them was invisible to everybody else until that offer timed out. Twenty seconds per
+  caller, per ghost.
+
+- **Investigation.** The user's third symptom was the one that looked most like magic, so
+  it got a probe rather than a theory: their exact click sequence, with the matcher's own
+  decision record printed at each step. The output named it immediately —
+
+      -- A001 logs out
+         presence still known for A001? True
+        place call2: offered_to='A001'
+        place call3: offered_to='A001'
+        place call4: offered_to='A001'
+
+  A signed-out agent collecting four callers. `at_capacity` was the only thing that had
+  ever stopped an unavailable agent being chosen, and it only fires once somebody is
+  actually *on* a call.
+
+- **Fix.** Three named filters in `hard_filter` — `offline`, `not_ready`, `busy` — rather
+  than one, because `D50` is about a supervisor being told *which* thing is wrong.
+  `not_ready` covers `BREAK`, `LUNCH`, `TRAINING`, `ADMIN` and also `LAST_CALL` and
+  `DRAINING`, which mean *finish what I have, give me nothing new*. `busy` covers
+  `ON_CALL`, `AFTER_CALL_WORK` and `OFFERING`.
+
+- **The fix could not land alone**, and that is `D108`: with availability filtered, a floor
+  where everybody is on lunch would have reported `no_qualified_agent` — *"nobody with the
+  skill is online"* — while four qualified people sat signed in. Two new `MatchKind`s carry
+  the difference. See `D108`.
+
+- **Verification.** The user's sequence, replayed: the unready agent gets nothing, the
+  signed-out agent gets nothing, exactly one caller is offered to the one available agent
+  and the rest wait with `no_agent_available` on the record. Then 20 new tests, of which
+  the load-bearing ones are the HTTP ones — this bug is only visible when something
+  *drives* the matcher.
+
+- **Lessons.**
+  - **A dead method is a claim nobody checked.** `is_available` reads as though the system
+    uses it. `grep` for the definition of any rule you are relying on and confirm somebody
+    calls it — the same move that found `B24` the same day.
+  - **Two sources of truth agreed to disagree in silence.** `PresenceView.offerable` and
+    the matcher computed *the same question* from the same data and only one of them was
+    consulted. The screen said "not offerable" and the phone rang. If two places answer one
+    question, one of them must be derived from the other, or a test must assert they match
+    — there is now one that does.
+  - **655 tests passed through all of it**, because every single one of them set its agents
+    `ready` first. A fixture that always sets up the happy path tests the happy path.
+
+## B26. The wait on the agent's screen was frozen at the moment the caller arrived
+_Found in the same session, by the user noticing the number never moved._
+
+- **Symptoms.** The offer card's *รอมาแล้ว* and the queue strip's *รอนานสุด* both showed the
+  same value for the life of the call — 40 s on the demo path, because that is what the
+  test-call button credits. Every other timer on the screen ticks.
+
+- **Root cause.** `B12` fixed exactly this for the **matcher** and only for the matcher.
+  `DispatchService.tick()` rebuilds each `WaitingCall` with `waiting_s` recomputed from
+  `call_sessions.queued_at` — into a *local list* that it hands the engine. The copy in
+  `self._waiting` is never written back, so it keeps the value `admit()` was given. Every
+  read path for a screen (`waiting()`, `waiting_call()`) reads that copy. **Two answers to
+  "how long has this person waited", and the human could only see the wrong one.**
+
+- **Fix.** `DispatchService._live()` derives the wait from the session at read time, and
+  `tick()` now goes through it as well, so there is one piece of arithmetic instead of two.
+  Deliberately **not** written back into the pool: `D78`'s rule is that a second copy kept
+  in step by remembering to update it is a second copy that will one day disagree — which
+  is precisely what this bug was.
+
+- **Verification.** Two tests, one per surface, because they read the same pool through
+  different code and only one of them was ever going to be checked otherwise.
+
+- **Lesson.** **A fix aimed at one consumer is not a fix.** `B12` correctly identified that
+  `waiting_s` was frozen and correctly unfroze it for the thing it was investigating. The
+  question it did not ask is *who else reads this?* — and the answer was the only two
+  places a person ever sees the number.
