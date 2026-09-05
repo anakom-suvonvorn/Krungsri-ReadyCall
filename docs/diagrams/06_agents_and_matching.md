@@ -25,9 +25,18 @@ immediately rather than up to a tick later.
 Three stages, and the order matters.
 
 **Hard filters first.** Does the agent have the required skill? Can they speak a language
-this caller accepts? A failed hard filter is *not a low score* — it is exclusion. Scoring
-these as soft preferences is how you end up routing a caller to someone who cannot help
-them, just because everything else scored well.
+this caller accepts? **Can they take a call at all right now?** A failed hard filter is
+*not a low score* — it is exclusion. Scoring these as soft preferences is how you end up
+routing a caller to someone who cannot help them, just because everything else scored well.
+
+⚠️ **That third question was not asked until `B25`** (2026-09-05), and its absence is worth
+knowing about because nothing looked wrong: `AgentPresence.is_available()` existed, said
+exactly this, and was called by nothing. A caller was offered to an agent whose own screen
+said *ยังไม่พร้อม*, and an agent who had signed out kept collecting callers and holding each
+for the full RONA timeout. The filters now split into **capability** (`skill`, `language`)
+and **availability** (`offline`, `not_ready`, `busy`, `at_capacity`), and which group fails
+is what decides the caller's unplaced reason — see `D108`, which is why there are four of
+those rather than two.
 
 **Fit** answers "how good is this agent *for this call*": skill match and proficiency,
 continuity (did they handle this customer before?), historical performance on this intent,

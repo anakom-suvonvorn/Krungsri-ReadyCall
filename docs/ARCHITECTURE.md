@@ -6,7 +6,7 @@ path, with the STT engine chosen on measurements (`D104`); the analysis passes a
 telephony integration are still design, as are the encrypted recording and the live
 transcript on the agent's screen.
 Each section says what is real where it matters. See `PLAN.md` for the build order._
-_Last updated: 2026-09-05._
+_Last updated: 2026-09-06._
 
 ---
 
@@ -477,8 +477,14 @@ agent A's line while agent B sits free) and they make waiting-time fairness inco
 
 ### Fit
 
-`fit(caller, agent) ∈ [0,1]` — hard filters first (required skill, **language at the
-required CEFR level** (`D38`), licence/authority, capacity, not blocked), then:
+`fit(caller, agent) ∈ [0,1]` — hard filters first, then the score below. The filters are
+in two groups and the distinction is load-bearing: **capability** (required skill,
+**language at the required CEFR level** (`D38`), licence/authority) and **availability**
+(`offline`, `not_ready`, `busy`, `at_capacity`) — plus `already_offered`, which is about
+this caller rather than about the agent. The availability half was **missing entirely until
+`B25`**: the matcher would ring an agent who had never pressed ready, or who had signed out
+and closed the tab. Which group a filter is in decides what a caller's unplaced reason
+says, and there are four of those (`D108`).
 
 ```
 fit = w_skill      * skill_match          # agent_skills vs the intent's required skill

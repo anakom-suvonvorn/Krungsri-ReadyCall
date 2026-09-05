@@ -7,105 +7,89 @@ _Last updated: 2026-09-06._
 
 ## If you have just been compacted, read this first
 
-_Rewritten 2026-09-04 (night). Everything above the horizon of this block is settled; what
+_Rewritten 2026-09-06. Everything settled before this block is in the sections below; what
 follows is what a fresh session needs and nothing it does not._
 
-**P3 is complete, including the GPU half. `D30` is closed.** The audio path runs end to end
-from a WAV file to `IntakeService.on_turn`, an engine is chosen on measurements, and it
-meets `ARCHITECTURE` §15's latency budget on every call in the test set — which nothing had
-ever done before 2026-09-04.
+**P3 is complete except the encrypted recording.** A caller reaches the right queue through
+a real menu, is offered the pre-call recording, their speech is transcribed by an engine
+chosen on measurements, and **what they said is on the agent's screen the moment Accept is
+pressed**. That last hop landed 2026-09-05.
+
+**The next slice is the encrypted recording to object storage, and it is P7's key
+management rather than an audio problem.** After that, P4. See "What to do next" below.
 
 ### The engine, in one table
 
-Paced, 20 real Thai call-centre calls, same detector and guards throughout:
+Paced, 20 real Thai call-centre calls, same detector and guards throughout (`D104`):
 
-| | Thonburian fp16 | CT2 int8 + hint | **Typhoon (`D104`)** |
+| | Thonburian fp16 | CT2 int8 + hint | **Typhoon** |
 |---|---|---|---|
 | p95 utterance-end -> turn | 19.5 s / 58.7 s worst | 1.68 s / 2.53 s | **0.19 s / 0.28 s** |
 | inside the 1.5 s budget | 0 of 12 | 7 of 20 | **20 of 20** |
-| `busy` worst | 1.25 | 0.11 | **0.020** |
-| VRAM | 2716 MB | ~1000 MB | 1068 MB |
 | CER **mean** | **0.109** | 0.128 | 0.133 |
 
 **Ship Typhoon** (`STT_ENGINE=typhoon`, needs the `asr` extra). **CT2 is the fallback** for
-a box where NeMo will not install (`STT_ENGINE=thonburian_ct2`, `STT_MODEL` unset, and run
-`scripts/convert_ct2.py` first). Typhoon is ~22% relatively worse on CER than fp16, cannot
-use the vocabulary hint at all, and is weaker on spoken digits while better on
-conversation — all recorded in `D104` with the mitigation.
+a box where NeMo will not install. `scripted` is the default and is the stage-safe path —
+its lines come from `config/demo_transcript.yaml` since `D107`.
 
-### The four days that produced it, and the lesson from each
+### The seven bugs of the last two sessions, and the one sentence each is worth
 
-Read the bug entries before touching the audio path. **Every one of these was found by a
-measurement or by the user, and not one by a test.**
+**Not one of them was found by a test.** Five were found by the user clicking around a
+running workstation; two by tracing the call graph by hand.
 
 | | what it was | the lesson |
 |---|---|---|
-| `B20` | the buffer released a segment's audio before the model saw it, and `_slice` **clamped** so it returned the wrong moment at the right length | a slice that cannot be satisfied must **refuse**, never approximate |
-| `B21` | the repetition guard deleted real phone numbers — a Thai number has **five** identical digit words in a row | ask *"what in this language legitimately repeats?"*, not *"does the guard work?"* |
-| `B22` | `close()` freed the model object but not the GPU memory | found by **watching `nvidia-smi`**, not by a failure |
-| `B23` | the engine a decision had just chosen **could not be selected by config**. Then it happened again with Typhoon | read the wiring while writing the instructions for it |
-| `B19` | one adapter silently dropped the vocabulary hint, so an engine comparison was really a hinted-vs-unhinted one | an experiment returning *exactly no difference* is a broken experiment |
+| `B24` | `TranscriptionService.open()` was called by nothing, so the running system had **never transcribed anything**; and nothing drained the event bus, so any subscriber was unreached | **follow the call graph from something a user does.** "It has tests" and "it runs" are different claims |
+| `B25` | the matcher never asked whether an agent could take a call — `is_available()` was dead code. Unready agents were rung; a signed-out agent collected every caller | a **dead method is a claim nobody checked**; and two places answering one question will disagree in silence |
+| `B26` | the wait on screen was frozen: `B12` unfroze it for the matcher and never asked who else read it | **a fix for one consumer is not a fix** |
+| `B27` | the same wait was still sent as a *number* so nothing made it move; and `lastSeq` is per tab while `seq` is per agent, so a second agent in one tab discarded its own offer | **a duration on a screen is a clock and needs an anchor**; a per-session counter needs an owner for the transition |
+| `B21`–`B23` | the digit guard ate phone numbers; `close()` freed the object not the GPU; two engines could not be selected by config | measure it, watch `nvidia-smi`, and read the wiring while writing the instructions for it |
 
-Two methodology traps that each cost a published number:
-
-- **Rank on the CER MEAN, never the median.** At n=20 the median is unstable — two runs of
-  an *identical* config gave 0.087 then 0.124 while the mean moved 0.128 -> 0.130. This
-  cost `D103` a self-correction hours after it was written.
-- **The test set moved the headline by 1.8x.** Same engine, same code: CER median 0.161 on
-  the old digit-heavy set, 0.089 on the balanced one. The set is now `--mix --seed 7`.
+Two methodology traps that each cost a published number: **rank on the CER mean, never the
+median** (unstable at n=20), and **the test set moved the headline by 1.8x**.
 
 ### What is NOT built, precisely
 
-**The encrypted recording to object storage.** `ARCHITECTURE` §6 asks the media gateway to
-write the call to object storage with a per-recording key reference. Neither MinIO nor the
-key handling exists, and that is P7's work rather than an audio problem — writing a
-caller's audio to disk before there is a key to protect it is the one thing `D9` was
-careful to avoid. **This is the last piece of P3.** Then P4.
+1. **The encrypted recording to object storage.** `ARCHITECTURE` §6 asks the media gateway
+   to write the call with a per-recording key reference. Neither MinIO nor the key handling
+   exists, and `D9` was deliberate about not writing a caller's audio to disk before there
+   is a key to protect it. **This is the last piece of P3.**
+2. **`IntakeService._degradation()` returns `NONE` unconditionally.** A *wait* until `D96`
+   and a *gap* since: `TranscriptionService` knows whether the engine failed and nothing
+   carries it back. The screen is already ready for it — `emptyTranscriptReason()` in
+   `panels.tsx` renders a different sentence for `stt_unavailable` and that branch is
+   currently unreachable.
+3. **The decode timeout** (`D98`'s missing half) needs `D2`'s killable worker process. Do
+   not fake it with `asyncio.wait_for`: it does not kill the thread, and a guard that looks
+   like one and is not is `B7`'s whole family.
+4. **A caller every qualified agent declined waits forever** (`Q31`). Reported honestly as
+   `ALL_DECLINED` since `D108`, but nothing rescues them — `D52`'s exclusion has no expiry
+   and `D93`'s wait-ceiling rescue picks from qualified agents, all of whom are excluded.
+   **The design for circling back is written out in `Q31` and needs two decisions from the
+   user before building.**
+5. **Persisted transcript turns.** `transcript_turns` has no table (`DATA_MODEL` §6), so a
+   restart loses an in-flight transcript.
 
-Two smaller things, both in the audio path, both well defined:
-
-- **`IntakeService._degradation()` returns `NONE` unconditionally.** That was a *wait*
-  until `D96` and is a *gap* now: `TranscriptionService` knows whether the engine failed
-  and nothing carries it back. Do not guess `stt_unavailable` — wire it. The screen already
-  has somewhere to say it: `emptyTranscriptReason()` in `panels.tsx` renders a different
-  sentence for `intake_declined`, `no_consent` and `stt_unavailable`, and the third is
-  currently unreachable.
-- **The decode timeout** (`D98`'s missing half) still needs `D2`'s killable worker process.
-  Do not fake it with `asyncio.wait_for`: that does not kill the thread, and a guard that
-  looks like one and is not is `B7`'s whole family.
-
-### The live transcript LANDED on 2026-09-05, and how it went is the useful part
-
-`D105`, `D106`, `D107` and `B24`. The brief in this file said two pieces. **It was four**,
-and the two extra ones were invisible from either end:
-
-| | what was wrong | how it was found |
-|---|---|---|
-| **Nothing opened a recording** | `TranscriptionService.open()` was called by its own tests and nothing else, so the running system had **never transcribed anything** | `grep -rn "transcription.open" src/ tests/` while asking *what calls this?* |
-| **Nothing drained the bus** | handlers run on `drain()` (`D15`); the only drain in the live process was a background task on `POST /v1/calls/intents` — so any subscriber was correct, tested and unreached | a twelve-line probe: publish a turn, run five sweeps, check a spy |
-| **The scripted engine's cursor is shared** | one engine per process is right for a model and wrong for a script: the 1st demo call ate every line, the 2nd showed an empty panel | the running server, after every test passed |
-| **The accept ordering dropped the last sentence** | `on_agent_accepted` finalised the intake *before* `transcription.close()`, so the turns `finish()` produced arrived after the strategy stopped accepting them | reading the diff before committing it |
-
-**Read `B24` before adding a subscriber to anything, or before believing that a service
-with a passing suite is actually reached.** That entry is now the fourth member of the
-family that already contains `B7` (three services, no driver), `B9` (a package, no commit)
-and `B12` (a live service, a frozen argument). The check that finds all four is the same
-and it is not a test: **follow the call graph from something a user does.**
-
-### How to see it working, in one minute
+### How to see the whole thing working, in one minute
 
 ```bash
-uv run python scripts/make_demo_audio.py         # a fresh clone has NO audio: *.wav is gitignored
+uv run python scripts/make_demo_audio.py    # a fresh clone has NO audio: *.wav is gitignored
 uv run python -m readycall.entrypoints.api
-#   sign in at /workstation as A001/A002/A003, press พร้อมรับสาย, then:
+#   /workstation, sign in as A001/A002/A003 (motor), press พร้อมรับสาย, then:
 curl -X POST http://127.0.0.1:8000/v1/demo/calls -H "Content-Type: application/json" \
   -d '{"intent_code":"motor.claim.accident","intake_keys":["1"],"audio":"demo_intake.wav","ignore_hours":true}'
-#   press Accept. Six Thai sentences, each with its moment in the recording.
+#   press Accept: six Thai sentences, each with its moment in the recording.
 ```
 
-`README.md` has the long version. On the default `scripted` engine the words come from
-`config/demo_transcript.yaml` and the **audio decides the timings and how many turns there
-are**; `STT_ENGINE=typhoon` transcribes for real through the same path.
+`README.md` §"Watch a caller's words reach the agent's screen" is the long version.
+
+### Before changing the matcher or the workstation, read these two
+
+- **`B25`** — because the availability filter is the only thing keeping an unavailable
+  agent from being rung, and its absence was invisible for weeks.
+- **`tests/integration/test_floor_under_load.py`** — the stress suite. Seeded random walks
+  over the real API asserting *invariants*, verified to catch `B25` by disabling the fix.
+  **Add a scenario there whenever a bug is found by clicking**; that is now five for five.
 
 ## Where things stand right now
 
@@ -126,10 +110,11 @@ container (the 42 are the database cases). `ruff check` + `ruff format --check` 
 fresh (54 clips), `audit_docs.py` clean on the live files. **And verified in a browser
 against a running server**, which is where the last two bugs came from.
 
-### The four sessions of review since P2b, in one place
+### The bugs the user found by using the thing, in one place
 
-Most of the recent work came from the user driving the screen and reporting what was wrong.
-The pattern is worth knowing before reading any of it:
+Almost every fault in this list came from somebody driving the screen and reporting what
+looked wrong — not from the suite. The pattern is worth knowing before reading any of it,
+because it is now **nine** and they rhyme:
 
 1. **`B6` (2026-08-24)** — six faults, **three of which were decisions the docs already
    contained**. The lesson is about reading `.mmd` sources, not about React.
@@ -143,7 +128,19 @@ The pattern is worth knowing before reading any of it:
    was frozen at admit time, so no caller's urgency ever grew. Found by answering a question
    about a *prompt*, not by looking for a bug.
 
-All five are the same family as `B3` and `B4`: *a confident, plausible, wrong result that
+6. **`B24` (2026-09-05)** — `TranscriptionService.open()` was called by nothing, so the
+   audio path had **never transcribed anything** in the running system; and nothing drained
+   the event bus, so any subscriber would have been unreached.
+7. **`B25`** — the matcher never checked whether an agent could take a call.
+   `AgentPresence.is_available()` was **dead code**, so an unready agent was rung and a
+   signed-out one collected every caller in the queue.
+8. **`B26`** — the wait on screen was frozen. `B12` had unfrozen it *for the matcher* and
+   nobody asked who else read it.
+9. **`B27`** — the same wait was sent as a number rather than an anchor, so nothing made it
+   move; and `lastSeq` is per tab while `seq` is per agent, so the second agent in one tab
+   discarded its own offer.
+
+All of them are the same family as `B3` and `B4`: *a confident, plausible, wrong result that
 no test could see.* When something looks fine, check that it is actually running — and,
 since `B9`, check that it is actually **committed**: every other verification in this
 project is a statement about the working tree, not about the repository. `B12` adds a rung
@@ -189,10 +186,13 @@ event bus.
 **customer simulator** at `/sim`, one HTML file, no build step (`D47`). Identity comes from
 a `SessionResolver`, never the request body (`D4`).
 
-**P2a — matching.** 15-agent roster · tunable weights with startup validation · hard filters
-(skill, **graded** language, capacity, `already_offered`) · fit × urgency · **our own
-Hungarian solver** (`D49`) · guard rails · a `MatchingDecision` per call **including
-non-assignments**, saying **which** of the two unplaced reasons applies (`D50`).
+**P2a — matching.** 15-agent roster · tunable weights with startup validation · hard
+filters in two groups, **capability** (skill, **graded** language) and **availability**
+(`offline`, `not_ready`, `busy`, `at_capacity`), plus `already_offered` which is about the
+caller rather than the agent — the availability group added by `B25`, 2026-09-05 · fit ×
+urgency · **our own Hungarian solver** (`D49`) · guard rails · a `MatchingDecision` per
+call **including non-assignments**, saying **which of four** unplaced reasons applies
+(`D50`, `D108`).
 
 **P2b — the workstation.** `services/agents/` (presence, the offer handshake, dispatch) ·
 `services/queues/hours.py` + `queue_hours.yaml` · `services/capture/keypad.py` (`D44`) ·
@@ -331,179 +331,66 @@ tested and called by nothing**, which is `B7`'s family with a fourth member.
   hard-filter exclusions drawn differently from low scores. All the data is already in
   `matching_decisions`. Unscheduled; it would have caught `B4` on sight.
 
-## Next steps (in order)
+## What to do next (in order)
 
-**Read `B20` first if you have not.** It rewrote what the rest of this list is about: the
-accuracy problem was ours and is fixed, and the problem that was underneath it is latency.
+_Rewritten 2026-09-06. Everything the previous version listed as steps 1-5 and 8 is done:
+`D30`'s bake-off (`D104`), the vocabulary hint (`B19`), `Q28`, and the live transcript
+(`D105`-`D107`). Those are recorded in `DECISIONS.md`; they are not work._
 
-1. **~~THE LATENCY~~ — SOLVED. `Q29` is CLOSED** (`D104`). Typhoon ASR meets
-   `ARCHITECTURE` §15's 1.5 s budget on **20 of 20 calls**: p95 **0.19 s median, 0.28 s
-   worst**, `busy` worst **0.020**. Nine times faster than the CT2 build that superseded
-   fp16 the same morning, and ~100x faster than fp16.
+**1. The encrypted recording to object storage — the last piece of P3.**
+`ARCHITECTURE` §6 asks the media gateway to write the call to object storage with a
+per-recording key reference. Neither MinIO nor the key handling exists. This is **P7's key
+management arriving early**, not an audio problem: the audio path already produces the
+frames, and `D9` was deliberate that a caller's audio must not reach disk before there is a
+key to protect it. Needs: MinIO in `infra/docker-compose.yml`, a `BlobStorage` adapter
+behind the port that already exists, a per-recording key ref on the call, and `D14`'s
+retention (`recording_retention_days = 90`) meaning something. ⚠️ It is also the first code
+that writes customer speech anywhere durable — `D97`/`D14` apply.
 
-   | paced, balanced set | fp16 | CT2 + hint | **Typhoon** |
-   |---|---|---|---|
-   | p95 median | 19.5 s | 1.68 s | **0.19 s** |
-   | inside 1.5 s | 0 of 12 | 7 of 20 | **20 of 20** |
-   | `busy` worst | 1.25 | 0.11 | **0.020** |
-   | CER mean | **0.109** | 0.128 | 0.133 |
+**2. Two small things in the audio path, both well defined.**
+- **`IntakeService._degradation()` returns `NONE` unconditionally.** `TranscriptionService`
+  knows whether the engine failed; nothing carries it back. The screen is already waiting
+  for it: `emptyTranscriptReason()` renders a sentence for `stt_unavailable` that nothing
+  can currently reach.
+- **The decode timeout** (`D98`'s missing half) needs `D2`'s killable worker. Do not fake
+  it with `asyncio.wait_for`.
 
-   **`D99` predicted this before it was measured** — a transducer has no 30 s window, so it
-   does not pay a full encode per utterance. It is the one prediction on this project that
-   was written down first and then confirmed.
+**3. `Q31` — a caller everyone declined waits forever.** Reported honestly since `D108`,
+and still stuck: `D52`'s exclusion has no expiry and `D93`'s rescue only picks from
+qualified agents, all of whom are excluded. The design for circling back is written out in
+`Q31` and is ready to build — **but it needs two answers from the user first**: does a RONA
+timeout count as a decline for exhaustion, and is there a round cap before voicemail
+(`D25`). Ask; do not guess.
 
-   `STT_ENGINE=typhoon` (needs the `asr` extra). **CT2 is the documented fallback** for a
-   box where NeMo will not install.
+**4. P4 — analysis and the brief v2+.** The largest remaining phase and the one the pitch
+leans on hardest. Intent classification, entity extraction, a rolling summary, brief
+versioning, confidence calibration, the suggested opening. Two things already point at it:
+`OfferOut.summary_th` is rendered on the offer card today from the rule-based builder and
+is the field an AI summary fills — **no client change needed**; and `D92` draws the line
+P4 must not cross (speech may change WHO answers and HOW SOON, never WHICH QUEUE), which
+should be written as a test *with* the blend rather than after it.
 
-   **Both of the things left open on it are now answered** (`D104`):
-   - **`D99`'s silence prediction is CONFIRMED.** 1 s of digital silence: Typhoon **149 ms,
-     empty**; Whisper (`B14`) **8578 ms and invented Thai**, including our own hint terms.
-     Same for hiss and a tone. That removes `D16`'s dangerous failure mode rather than
-     catching it downstream. **The three guards stay anyway** — microseconds, and they are
-     the degradation path if the engine is swapped back to the CT2 fallback.
-   - **The 3 missing turns are endpointer-cut fragments, not a short-utterance weakness.**
-     Tested against real annotated spans at every duration: Typhoon returned empty on
-     **0 of 39**. It declines fragments whose boundaries are *ours*; Whisper guesses at
-     them. Which is better is genuinely open.
-   - **The real weakness is digits.** Split by digit share: speech-heavy calls Typhoon
-     **0.137** vs CT2 0.171 (better); digit-heavy calls Typhoon 0.132 vs CT2 **0.099**
-     (worse). A 0.067 swing. Mitigated by architecture rather than by the model — `D44`'s
-     keypad is how a policy number actually arrives and `D20`'s ANI gives the calling
-     number, so spoken digits are corroboration, not the record. **If that stops being
-     true, re-open `D104` and re-check the digit-heavy row.**
+**5. Then, roughly in this order:** persisted `transcript_turns` (`DATA_MODEL` §6 — a
+restart currently loses an in-flight transcript) · P5 real telephony, which is what replaces
+`POST /v1/demo/calls` and `D107`'s WAV player · `D85`'s `acw_stats` into `expected_free_in()`
+as a **score, never a filter** (`D73`) · the matcher inputs still fed by nothing (`B12`:
+`is_vulnerable`, `last_agent_id`, `last_contact_at` are set on the Customer and the brief
+but never on the `WaitingCall`, so `customer_priority` and `continuity` score 0 on every
+real call) · `call_intents` / `app_context_events` still in memory · `D64`'s live matching
+board · `Q26`'s env var that changes nothing.
 
-2. **~~The CT2 build~~ — now the fallback** (`D103`, superseded as first choice).
-   `D30` has its answer, measured paced on the **balanced** 20-call set with both engines
-   treated the same:
-
-   | | Thonburian fp16 | **CT2 int8 + hint** |
-   |---|---|---|
-   | p95 median | 19.5 s | **1.68 s** |
-   | p95 worst | 58.7 s | **2.53 s** |
-   | inside the 1.5 s budget | 0 of 12 | **7 of 20** |
-   | `busy` worst | 1.25 (over 1.00!) | **0.11** |
-   | VRAM | 2716 MB | **~1000 MB** |
-   | CER **mean** | **0.109** | 0.128 (17% worse) |
-
-   **It is a trade, not a free win** — that is the correction `D103` had to make to itself.
-   Ship it anyway: `D12` means a transcript arriving 58 s late is an empty screen.
-
-   **The stability problem is gone**: nothing is near `busy` 1.00, so the compounding
-   backlog that produced the 23-59 s latencies has no case that triggers it. The 1.5 s
-   budget is still missed, but by **1.1-1.7x instead of 13-39x**. Cost is CER 0.161 ->
-   0.182, which is worth paying — a slightly less accurate transcript is still a
-   transcript; one that arrives a minute late is an empty screen.
-
-   **Convert it before anything else on a fresh machine:**
-   ```bash
-   uv run python scripts/convert_ct2.py     # ~1 min, no download if the HF cache is warm
-   ```
-
-   **To close the last 1.1-1.7x, in cost order:**
-   - **the `distill-whisper-th-large-v3` checkpoint is ALREADY in the HF cache** (3.1 GB,
-     paid for by the earlier project). A distilled model cuts the decoder to a couple of
-     layers, which is a bigger lever than quantisation and costs nothing to try.
-   - **Typhoon** (`D99`, NeMo installed): a transducer with **no 30 s window at all**, so
-     it is the one candidate that could make packing unnecessary.
-   - **packing** (`D101`), in the user's minimum-threshold form. Now a refinement rather
-     than a rescue.
-
-2. **THE OLD LATENCY ITEM, kept for the reasoning** (`Q29`, `D101`).
-   **Batching is built and measured as a NULL RESULT on this GPU** — `busy` median
-   0.45 -> 0.45, worst 1.48 -> 1.46, per-call change -7% to +13% averaging zero, with CER
-   and turn counts identical. It is kept (correct, tested, 1 MB of VRAM, changes no output,
-   and the demo machine may have the spare capacity that makes it pay) but **do not expect
-   it to help here, and do not repeat the inference that the earlier project's
-   `batch_size=4` explains its speed** — that was my guess and the measurement refuted it.
-   Batching *overlaps* work; on a card with no spare capacity there is nothing to overlap.
-   **PACKING is therefore the front-runner, and `D101` records its design** in the user's
-   improved form: pack past a configurable **minimum** speech duration (~1.5-5 s) rather
-   than toward the 30 s maximum. It is the only lever in this design that removes
-   arithmetic rather than rescheduling it — seven 30 s windows per call become one or two.
-   It also keeps the delay and boundary loss to a fraction of the naive full-window
-   version, and — the part that matters more than throughput — **stops us handing the model
-   single-word clips**, which is the input `B14` measured at 8.6 s and invented Thai.
-   **Run the CT2 and Typhoon rows first** (cheaper, and a cheaper 30 s window is the other
-   real lever); build packing if `busy` is still near 1.00 after them.
-
-   The original problem, for reference:
-   (`Q29`). Paced over all 12 real calls, p95 utterance-end to turn ranges
-   **4.5 s to 58.7 s** against `ARCHITECTURE` §15's **1.5 s**. It was invisible because
-   every measurement used `--fast`, which blanks the latency column — the flag added in
-   `B14` *to stop the harness lying about latency* became the reason nobody measured it.
-
-   **The distribution is bimodal and it tracks throughput exactly**, which is the
-   actionable part:
-
-  | throughput (rtf) | files | p95 utterance-end -> turn |
-  |---|---|---|
-  | 0.19 - 0.31 | 6 | **4.5 - 8.0 s** |
-  | 0.65 - 0.90 | 5 | **31 - 49 s** |
-  | 1.50 | 1 | **59 s** |
-
-   **This is not "a bit over budget", it is a stability threshold.** Thonburian medium
-   fp16 on this card is at or beyond real time for half these calls, and once decode is
-   slower than speech the transcriber can never catch up — the backlog compounds for the
-   rest of the call and the last utterance arrives a minute late. One consumer serialises
-   by design (`D100` says why a second one is not the fix). **The engine has to get
-   faster**; nothing else in this design can absorb rtf > 1.
-   - `D100`'s 120 s backlog cap **never fired** and no segment was abandoned, so these are
-     honest end-to-end latencies, not truncated ones.
-   - **Do not read the low-rtf rows as the answer.** The same engine produced both halves;
-     what varies is the call.
-   - **Measure paced.** It takes as long as the audio does, and that is the point.
-3. **Finish `D30`'s table.** The engine is chosen (`D102`); what is missing are the rows
-   that could close the last 1.1-1.7x. Everything they need is on this machine.
-   ```bash
-   uv run python scripts/bake_off.py --engines thonburian --vad silero \
-       --audio "tests/audio/thai_calls/*.wav" --out bakeoff.txt --dump transcripts.txt
-   ```
-   **Rank on CER, never WER** (`B18`), and **read the dump** — three bugs have now been
-   found by looking at the text behind a number and none by a test. Missing rows, in order
-   of what they settle:
-   - **the CT2 row.** `uv run python scripts/convert_ct2.py` converts Thonburian once
-     (it publishes no CT2 build — that was `B17`), then
-     `--engines faster_whisper:models/whisper-th-medium-combined-ct2`. `int8_float16` on a
-     4 GiB card is the most likely fix for the latency, and this row prices its accuracy
-     cost.
-   - **the Typhoon row** (`D99`): a **transducer**, so no 30 s padding — the structural
-     reason it might not have this problem at all rather than merely less of it. Needs
-     `nemo_toolkit[asr]` as its own `asr` extra — **ask first**, it is another large
-     download.
-   - **the large-v3 row**: `--engines thonburian:biodatlab/whisper-th-large-v3-combined`.
-     Probably will not fit in 3.2 GiB alongside anything; finding that out is the point.
-   - record the table in `PROJECT_STATE` §8 and pick the engine on it.
-4. **Decide `Q28` before quoting a CER to anyone.** The reference writes brand and place
-   names in **Latin** while the model correctly transliterates them into **Thai**, and CER
-   charges every character of a right answer. On the two worst files that is most of the
-   residual. Either normalise both sides, or report the number with those spans excluded
-   and say so — but **do not edit the ground truth to match the model.**
-5. **`B19`: implement the vocabulary hint in `ThonburianHfEngine`**
-   (`processor.get_prompt_ids()` -> `prompt_ids`) and re-measure. It warns loudly now, so a
-   run can no longer be quietly unhinted, but an engine comparison where the engines
-   disagree about whether they read a parameter is not a comparison.
-6. **The decode timeout** (`D98`'s missing half). The rate guard *detects* a runaway; only
-   a killable worker process can *stop* one, and `D2` already plans `entrypoints/stt.py`.
-   Do not fake it with `asyncio.wait_for` — that does not kill the thread, and a guard that
-   looks like one and is not is `B7`'s whole family.
-7. **The encrypted recording to object storage.** `ARCHITECTURE` §6 asks the gateway for it;
-   it needs MinIO wired and per-recording key refs, which is P7's key management.
-8. **~~The live transcript on the workstation~~ — DONE** (`D105`–`D107`, `B24`,
-   2026-09-05). Held while the call is unassigned, flushed on accept, drawn under the
-   brief. What it uncovered is above; **read `B24`**.
-9. **P4** — analysis and brief v2+ with Claude and Typhoon compared on the golden set.
-10. **`D85` is implemented and parked.** Wire `acw_stats.py` into `expected_free_in()` when
-   P6 brings real ACW data, as a **score, never a filter** (`D73`).
-11. **Wire the matcher inputs that are fed by nothing** (`B12`): `is_vulnerable`,
-    `last_agent_id`, `last_contact_at` are set on the Customer / brief / snapshot but never
-    on the `WaitingCall`, so `customer_priority` and `continuity` score 0 on every real call.
-12. **Small:** `call_intents` / `app_context_events` still in memory · `D64` the live
-    matching board · `Q26` the env var that changes nothing.
+**Before the hackathon**, separately from the build: `Q21` (which storage backend the demo
+runs on), `Q23` (personalised menus renumber, and a human reading a script off paper will
+press what the script says), `Q17` (whether `apps/workstation/dist/` is committed, which
+decides whether a venue with no internet can build the workstation at all).
 
 ### Settled this session, so nobody re-opens them
 
 - **The CER is explained** — it was `B20`, not the model, not the reference, not the
-  detector, not the audio. Corrected: **CER 0.09-0.50, median 0.29** over 12 real calls.
+  detector, not the audio. ⚠️ **The figure that used to be quoted here (0.09-0.50, median
+  0.29) is withdrawn**: it was measured on the digit-heavy set, before `B21`, and with only
+  one engine hinted. The current numbers are `D104`'s table above, and they are the only
+  ones to quote. Rank on the **mean**.
 - **The endpointer is scored and it is fine.** `scripts/score_endpointer.py` (the first
   thing to read `segments.tsv`): coverage **0.797**, span recall **0.902**, 4.7 s of false
   alarm over 940 s. Dropping `D9`'s threshold from 0.65 to 0.15 buys only 0.86 coverage,
@@ -511,83 +398,38 @@ accuracy problem was ours and is fixed, and the problem that was underneath it i
   annotated boundary** — an annotator rounding outward. Real speech lost: **3%**.
   **Leave `D9`'s inherited constants alone; they are right for this audio.**
 
-## Starting P3 step 4b — read this before opening anything else
+## The constraints that still bind the audio path — do not re-litigate
 
-Steps 1–3 and **step 4a (the offer)** are done and needed no GPU. **What is left is the GPU
-half**, and it is the only part of the whole project with hardware risk.
-`explanations/P3_voice.md` covers what was built and why; `diagrams/12_the_menu.md` draws it,
-including §12.6 on the hold.
+_This section used to be a plan for P3 step 4b. **Step 4b landed** (`D96`, `D104`,
+`D105`-`D107`), so what is left here is only the part that is still a live constraint.
+`explanations/P3_voice.md` is the narrative; `diagrams/07_voice_and_ai.md` §7.x and §7.y
+draw it end to end._
 
-**The socket is already there.** `IntakeService.on_turn(call_session_id, turn)` accepts a
-`TranscriptTurn` and publishes it; `on_silence` and `on_max_duration` end a recording. Today
-only tests and the scenario runner call them. Step 4b is the thing that turns audio into
-those calls — and nothing above it has to change when it lands.
-
-### What now exists that step 4 plugs into
-
-| Already there | Why it matters |
-|---|---|
-| **`services/ivr/`** | the walk is real and drives the simulated telephony adapter. Step 4 adds what happens *after* the queue, not another menu. |
-| **`voice_prompts.yaml`** | `intake.offer`, `intake.start`, `intake.done`, `intake.declined`, `intake.reoffer`, `voicemail.*` and `rating.request` are **written, rendered and mapped to roles**. They are text waiting for the machinery that plays them; nothing calls those roles yet. |
-| **`ports/stt.py`** | streaming-first (`D9`): `AudioFrame` is **16 kHz mono float32, always**, and the media gateway normalises before anyone sees it. Per-utterance and in-memory, so no PII lands on disk. |
-| **`services/intake/`** | the offer, the consent, the strategy seam and the live-hold registry all exist (`D88`). `on_turn` / `on_silence` / `on_max_duration` are the three entry points the media side drives. |
-| **`adapters/stt/scripted.py`** | the fake that keeps every test and the stage-safe demo path off the GPU. It honours `warmup()`, so swapping to Thonburian is one env var. |
-| **`IvrResult`** | already carries `queue_id`, the intent and its `intent_source`. Whatever runs intake reads a finished routing decision rather than making one. |
-
-### What does NOT exist (checked against disk 2026-08-25)
-
-`prompts/th/` (the LLM prompt tree — `prompts/voice/manifest.json` is the *audio* one and
-does exist) · `services/transcription/` · `services/analysis/` · `media/` · `workers/` ·
-`observability/` · `config/core_mapping.yaml` · `tests/golden/`
-*(`services/intake/` existed on this list until 2026-08-31. It exists now.)*
-
-**And the `ml` extra is still commented out in `pyproject.toml`**, so `uv sync --extra ml`
-fails today. The intended set is on that commented line: `torch`, `transformers`,
-`faster-whisper`, `onnxruntime`, `silero-vad`. Declaring it is step zero and it is not free
-— this is the install that takes a while on a metered connection, and it lands on the STT
-box only (`D2`). It was deliberately **not** done this session, because nothing in steps 1–3
-needed it and an unused multi-gigabyte dependency in the lockfile is a cost with no payer.
-
-### The decisions that already constrain step 4 — do not re-litigate
-
-- **`D12`: the call is never blocked on AI**, and **`D37`**: routing is already settled by
-  the time any of this runs. Every failure here degrades to a call that is routed correctly
-  with a menu-derived brief — which is exactly what `anonymous_declined` already replays.
+- **`D12`: the call is never blocked on AI**, and **`D37`**: routing is settled before any
+  of this runs. Every failure degrades to a call routed correctly with a menu-derived
+  brief — which `anonymous_declined` replays.
 - **`D9`: STT is re-implemented streaming-first.** The reference project
   (`…/scamprojectthing/ProjectCode/STT_Thonburian_Whisper/`) is **read-only** and is
   reference for *how the model behaves*, never code to copy. Keep: VAD threshold 0.65, min
-  speech 500 ms, min silence 100 ms, ~120/60 ms padding, and the repetition guard for
-  Whisper's silence-loop. Change: `silero-vad` as a dependency, never a runtime
-  `torch.hub.load` — a network fetch during a live call is unacceptable.
-- **`D21`: the offer window IS the intake grace period.** Intake keeps recording until the
-  agent presses Accept; nobody waits longer and no sentence is lost. **Already wired**:
-  `accept_offer` calls `intake.on_agent_accepted` before `assignments.accept`, and it
-  finalises as `is_partial=True`. Proved on a running server, not just in a test.
+  speech 500 ms, min silence 100 ms, ~120/60 ms padding. `silero-vad` as a dependency,
+  never a runtime `torch.hub.load` — a network fetch during a live call is unacceptable.
+- **`D21`: the offer window IS the intake grace period.** Intake records until the agent
+  presses Accept. Proved on a running server. ⚠️ And the **order** at the accept is
+  load-bearing (`B24`): close the transcriber *before* finalising the intake, or the
+  caller's last sentence is dropped.
 - **`D26`: both legs are forked separately** — speaker labels come from the topology, not
-  from a diarisation model.
-- **`D30`**: Thonburian stays default; Typhoon ASR is benchmarked against it on the same
-  audio rather than argued about.
-- **`D10`: intake is a STRATEGY.** `PassiveRecordIntake` **is built**, same `IntakeResult` as
-  the future conversational one. Do not inline it into the orchestrator — and note `D88`: the
-  strategy takes **turns, not frames**, so the transcriber sits on the far side of the seam.
-
-### Suggested order
-
-1. **`uv add --optional ml …`** first — it is the slow one, and everything else can be
-   written while it downloads. **Ask before running it**: it is a multi-gigabyte download on
-   the user's laptop, and the docs' own note applies — an unused dependency in the lockfile
-   is a cost with no payer until something needs it.
-2. ~~The intake offer~~ — **done** (`D88`).
-3. **Media gateway + VAD**, against a WAV file rather than a phone, so endpointing can be
-   tuned without telephony. It ends by calling `IntakeService.on_turn` / `on_silence`.
-4. **The STT worker and the bake-off**, which is where the 3050 risk actually is.
+  from a diarisation model. The agent's own leg is P6.
+- **`D10`: intake is a STRATEGY**, and **`D88`**: the strategy takes **turns, not frames**,
+  so the transcriber sits on the far side of the seam. That is why the audio half could be
+  built and tested three phases before the GPU — and also why nobody was appointed to
+  *open* the recording, which was `B24`.
 
 ### The hardware reality, stated plainly
 
-RTX 3050 laptop, 4–6 GB. Whisper pads every chunk to 30 s, so `faster-whisper`/CTranslate2 at
-`int8_float16` is probably required to hit the p95 < 1.5 s budget. **Do not plan to run a
-local LLM and Whisper on the same card** — the default split is STT local, LLM via API.
-Whoever has the strongest GPU should own the demo machine.
+RTX 3050 laptop: **4.00 GiB total, ~3.2 GiB free** (`D95` — the older docs' "4–6 GB" was
+wrong; the compositor holds the rest). **Do not plan to run a local LLM and the STT engine
+on the same card** — the default split is STT local, LLM via API. Whoever has the strongest
+GPU should own the demo machine. Typhoon uses 1068 MB, so P4's model is the question.
 
 ## Still open
 
@@ -611,27 +453,33 @@ Whoever has the strongest GPU should own the demo machine.
 | **Q21** | **Which storage backend does the DEMO run on?** `memory` is the default and needs nothing; `postgres` is what survives a restart, and it is what makes the persistence work visible on stage at all. Running it on the day adds a container to the list of things that can fail, against `PLAN.md`'s risk register — *never depend on the venue*. Leaning: **rehearse on `postgres`, keep `memory` as the one-keystroke fallback**, since both pass the same suite. | Not decided |
 
 | **Q22** | **Does the committed prompt pack carry actual audio once a real voice is chosen?** `D24` calls the checked-in pack the offline fallback, which is the whole reason the IVR works with no internet — but `CLAUDE.md` says never commit audio. That rule means *call recordings*, not TTS output of our own sentences, so the two are probably compatible; 63 short Thai clips is a few MB. Undecided because there is no audio yet. | Manifest only, for now |
-| **Q30** | **The prepared test set is number-heavy.** Almost every call in this corpus ends with a phone number read aloud, so the 12 prepared calls over-represent digits and under-represent ordinary conversation. That was harmless until `B21` **loosened** the repetition guard for digits — the set that would catch a regression from that loosening is exactly the speech-heavy set we do not have. Re-prepare with a deliberate mix (the user raised this; they are right). | **Tool built 2026-09-04**: `prepare_dataset.py --mix` caps the digit-heavy share and prints a `digit%` column. **The set itself has not been re-prepared yet** |
+| **Q30** | **The prepared test set is number-heavy.** Almost every call in this corpus ends with a phone number read aloud, so the 12 prepared calls over-represent digits and under-represent ordinary conversation. That was harmless until `B21` **loosened** the repetition guard for digits — the set that would catch a regression from that loosening is exactly the speech-heavy set we do not have. Re-prepare with a deliberate mix (the user raised this; they are right). | **RESOLVED 2026-09-04.** `prepare_dataset.py --mix --seed 7` built the balanced 20-call set (digit share 0-49%), and it is the set every number in `D103`/`D104` is measured on. The re-prepare alone moved the headline CER by **1.8x**, which is why no figure from before that date may be quoted |
 | **Q28** | **The reference mixes scripts, and CER charges us for being right.** The dataset's transcripts write brand and place names in **Latin** (`True move`, `Mezzox Drip Cafe`, `Frosen Khaoyai`, `Router`, `L O S`) while Thonburian correctly transliterates them into Thai (`ทูมู`, `เมโซเอ็กซ์ดิสกาแฟ`, `โฟร์เซนต์ เขา ใหญ่`). Every character of those differs, so a *correct* transcription is scored as a total miss, and on the two worst files that is most of the residual CER. Options: normalise both sides through a transliteration map before scoring (real work, and it can flatter); report CER with those spans excluded and say so; or accept it and treat the number as a floor. **Do not quietly "fix" the reference** — editing ground truth to match the model is how a metric stops meaning anything. | **Decided 2026-09-04: one headline + one diagnostic.** `bake_off.py` reports `CER` (the only ranking metric) and `CERth` (Latin spans stripped from both sides). The GAP between them is the answer; three competing scores would just move the argument. Not ranked on `CERth` because that excuses every engine from the words it is most likely to get wrong. **And it does not block the engine choice** — the mismatch hits every engine equally, so it distorts the absolute number, not the ranking |
-| **Q29** | **The p95 latency runs from 4.5 s to 58.7 s against a 1.5 s budget**, and the spread tracks throughput: at rtf <= 0.31 it is 4.5-8 s, at rtf >= 0.65 it is 31-59 s, because once decode is slower than speech the backlog compounds for the rest of the call. `D30`'s table is the thing that decides what to do. Thonburian medium fp16 takes ~3 s per utterance on this card and one consumer serialises them, so three short phrases in four seconds queue up. Candidates, and they are not exclusive: the **CT2 int8_float16 build** (`scripts/convert_ct2.py`, this is the row that was always meant to decide it), **Typhoon** (a transducer, so no 30 s padding — `D99` says exactly why this might be structural rather than incremental), a **smaller Thonburian**, or accepting a slower transcript because `D12` means the call is never waiting on it. | Not decided; measure before choosing |
+| **Q29** | **The p95 latency runs from 4.5 s to 58.7 s against a 1.5 s budget**, and the spread tracks throughput: at rtf <= 0.31 it is 4.5-8 s, at rtf >= 0.65 it is 31-59 s, because once decode is slower than speech the backlog compounds for the rest of the call. `D30`'s table is the thing that decides what to do. Thonburian medium fp16 takes ~3 s per utterance on this card and one consumer serialises them, so three short phrases in four seconds queue up. Candidates, and they are not exclusive: the **CT2 int8_float16 build** (`scripts/convert_ct2.py`, this is the row that was always meant to decide it), **Typhoon** (a transducer, so no 30 s padding — `D99` says exactly why this might be structural rather than incremental), a **smaller Thonburian**, or accepting a slower transcript because `D12` means the call is never waiting on it. | **RESOLVED by `D104`.** Typhoon, a transducer with no 30 s window: p95 **0.19 s median / 0.28 s worst**, **20 of 20** calls inside the budget, `busy` worst 0.020. `D99` predicted the structural reason before it was measured. CT2 int8 is the documented fallback |
 | **Q27** | **The dataset is all `Government` domain, not insurance.** All 3189 calls (`D97`). It measures Thai telephone ASR honestly and says nothing about insurance jargon — and our `stt_vocabulary.yaml` hint is *wrong* for it, which makes it a fair test of whether the hint hurts when it does not apply. An insurance-domain set would still be worth having, and the hackathon may supply one. | Use it, and label the numbers as general Thai |
 | **Q26** | **`Settings.max_wait_before_any_agent_s` is an env var that changes nothing.** The matcher reads `config/matching_weights.yaml`, never `Settings`, so `MAX_WAIT_BEFORE_ANY_AGENT_S=30` in `.env` silently does nothing — and since `D94` it also describes a shape (one number) the system no longer has. It survives only as the bound for a startup coherence check against `target_wait_s`. Delete it, or wire the weights loader to it. Found while writing `D94`. | Left in place, documented |
 | **Q24** | **A health-line caller speaks health data into a recording nobody consented to hold as such.** `D14` makes `health_data` a separate scope; the offer grants only `recording` and `ai_processing` (`D88`). Three options: a third keypress (honest, and it lengthens the longest prompt in the system on the line where callers are most distressed); name the scope in the offer's wording on health lines (one keypress, three scopes); or gate the *extraction* at P4 so health entities are never pulled without it. **Leaning: the second plus the third.** Decide before P4 writes an entity extractor — that is the first code that can breach it. | Not asked for |
 | **Q23** | **Personalised menus renumber, and a human on a real keypad has no `ScriptedChoices`.** Every automated caller presses canonical keys and is translated (`D81`), so nothing in the suite or the demo endpoint can get this wrong. But at P5 a person reading a rehearsal script off paper will press what the script says, and for a recognised persona the numbers may have moved. Either rehearse with the persona that will actually be used, or set `personalisation.enabled: false` for the demo. | Enabled; decide before the day |
 
-Resolved: **`Q25` — the wait ceiling is now per urgency tier (`D94`)**, so an emergency reaches its guarantee at 60 s while a routine caller is still 120 s from theirs; when both are past their own, the more urgent goes first · rating is an event (`D46`) · single project (`D34`) · Asterisk · RTX 3050 · Claude
+Resolved: **`Q29` the latency and `Q30` the test set** (both `D104`, and `Q30` is the one that moved the number) · **`Q28` one headline plus one diagnostic** · **`Q32` no cherry-picking button, `Q33` ring-all parked** (2026-09-05) · **`Q25` — the wait ceiling is now per urgency tier (`D94`)**, so an emergency reaches its guarantee at 60 s while a routine caller is still 120 s from theirs; when both are past their own, the more urgent goes first · rating is an event (`D46`) · single project (`D34`) · Asterisk · RTX 3050 · Claude
 + Typhoon compared · React workstation with the softphone in it · web customer simulator ·
 menu-first flow (`D37`).
 
-## The machine, as left on 2026-09-01
+## The machine, as left on 2026-09-06
 
 Facts about *this laptop* rather than the repo, so a fresh session does not rediscover them.
 
 - **Docker works** (v29.2.0) and the Postgres container is **stopped**, not removed — it was
   brought up on 2026-08-25 to verify the P3 numbers and stopped again. Bring it back with
   `docker compose -f infra/docker-compose.yml up -d postgres`. Everything runs without it; with the
-  container down the database cases skip (**454 pass, 42 skipped**) and with it up they all
-  run (**493 pass, 3 skipped** — the three are FK cases the in-memory backend cannot have).
+  container down the database cases skip (the 42 are the database cases) and with it up
+  they all run bar three FK cases the in-memory backend cannot have.
+- **The GPU stack is installed and working**: `torch` + `cu128`, `nemo_toolkit[asr]`, and
+  the HF cache holds four Thai checkpoints (~11.8 GB) paid for by the earlier project. So
+  `STT_ENGINE=typhoon` runs here with no download. A fresh machine does not have any of it.
+- **`tests/audio/demo_intake.wav` exists but is gitignored** (`*.wav`). Any fresh clone
+  regenerates it with `uv run python scripts/make_demo_audio.py`, which sizes each
+  utterance from the demo script so `D98`'s rate guard cannot silently eat the lines.
 - **`readycall_test` exists inside that container's volume.** It was created by hand *and*
   added to `infra/postgres/init/02-test-database.sql` for fresh setups — init scripts only
   run on an empty data directory, so a `docker compose down -v` re-creates it and a plain

@@ -151,7 +151,7 @@ the HttpOnly cookie the JavaScript cannot read (`D4`, staff side).
 | signs in | `POST /v1/agent/demo-login` | Presence + cookie |
 | loads / refreshes | `GET /v1/agent/me` | **Snapshot** |
 | presses a status button | `POST /v1/agent/state` | Presence, then re-reads `/me` |
-| accepts / declines | `POST /v1/agent/offers/{id}/accept|decline` | **Snapshot** |
+| accepts / declines | `POST /v1/agent/offers/{id}/accept|decline` | **Snapshot**. Decline takes `stop_offering` (`D109`) — decline *and* stop being rung, the ending RONA already gave you after twenty seconds of silence |
 | hangs up | `POST /v1/agent/calls/{id}/end` | **Snapshot** |
 | saves the wrap-up | `POST /v1/agent/calls/{id}/wrapup` | **Snapshot** |
 | attests identity | `POST /v1/agent/calls/{id}/identity` | **Snapshot**, or 409 when locked |

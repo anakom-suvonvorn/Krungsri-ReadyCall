@@ -1,7 +1,7 @@
 # PROJECT_STATE
 
 _What this project is, what exists, what doesn't, and where everything lives._
-_Last updated: 2026-09-05._
+_Last updated: 2026-09-06._
 
 ---
 
@@ -262,12 +262,16 @@ assurance-gated disclosure** · ☑ mock-core generator · ☑ docker-compose + 
 
 **P2a — the matching engine** (done)
 ☑ agent directory port + 15-agent roster (every skill held by 2+, `D22`) · ☑ tunable
-`matching_weights.yaml` with startup validation · ☑ hard filters (skill, **graded language**,
-capacity) · ☑ fit + urgency scoring with full breakdowns · ☑ **Hungarian solver, ours**
-(`D49`) + greedy for comparison · ☑ guard rails: wait ceiling, anti-hot-spot, guarded
-deferral · ☑ persisted rationale on every decision incl. non-assignments · ☑ matching
-simulator with `--compare` · ☑ unplaced callers say **which** of the two reasons applies —
-roster gap vs capacity (`D50`, `B4`)
+`matching_weights.yaml` with startup validation · ☑ hard filters in two groups —
+**capability** (skill, **graded language**) and **availability** (`offline`, `not_ready`,
+`busy`, `at_capacity`), the second added by `B25` after the matcher was found ringing
+agents who had never pressed ready · ☑ fit + urgency scoring with full breakdowns ·
+☑ **Hungarian solver, ours** (`D49`) + greedy for comparison · ☑ guard rails: wait ceiling,
+anti-hot-spot, guarded deferral · ☑ persisted rationale on every decision incl.
+non-assignments · ☑ unplaced callers say **which of four** reasons applies — contention,
+staffing, everyone-declined, roster gap (`D50`, `D108`, `B4`) · ☑ matching simulator with
+`--compare` · ☑ **a floor-level stress suite** driving the real API with several agents and
+callers at once, asserting invariants (`tests/integration/test_floor_under_load.py`)
 
 **P2b — the workstation** (done, except the DB)
 ☑ queues + hours (`queue_hours.yaml`, holidays, next-open time) · ☑ presence with both axes +
