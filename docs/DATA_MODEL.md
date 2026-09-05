@@ -118,10 +118,13 @@ and a demo must be reproducible even if the upstream source changes.
 | `audio_recordings` | `recording_id`, `call_session_id`, `phase` (intake/live_call), `storage_ref`, `format`, `sample_rate`, `duration_s`, `checksum`, `encryption_key_ref`, `delete_after` |
 | `transcript_turns` | `turn_id`, `call_session_id`, `intake_id?`, `seq`, `speaker_role` (customer/ai/agent), `text`, `t_start_ms`, `t_end_ms`, `asr_confidence`, `engine`, `engine_version`, `is_final`, `created_at` |
 
-> ⚠️ **`transcript_turns` has no table and no ORM model yet.** As of P3 step 4b the audio
-> path *produces* `TranscriptTurn` objects and publishes them on the bus (`D96`), and
-> `IntakeService` holds them for the life of the call — but **nothing persists them**, so a
-> restart loses a transcript in flight. `ARCHITECTURE` §6 asks for incremental writes
+> ⚠️ **`transcript_turns` has no table and no ORM model yet.** The audio path *produces*
+> `TranscriptTurn` objects and publishes them on the bus (`D96`), `IntakeService` holds them
+> for the life of the intake, and since `D106` `TranscriptDeliveryService` holds them again
+> for delivery to the agent's screen — but **nothing persists them**, so a restart loses a
+> transcript in flight. That is the same thing a restart already does to the caller's place
+> in the queue (`D78`), and it is said plainly in the delivery service rather than implied:
+> it is a projection with no durable half. `ARCHITECTURE` §6 asks for incremental writes
 > precisely so a dropped call still leaves usable text; that write is not built. It is a
 > small job (the shape above is exactly the domain model) and it belongs with the encrypted
 > recording, since both are about audio outliving the process.

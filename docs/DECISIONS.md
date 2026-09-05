@@ -1,7 +1,7 @@
 # DECISIONS
 
 _Significant engineering decisions and their rationale. Append new ones at the bottom; never silently reverse one without a new entry explaining why._
-_Last updated: 2026-09-04._
+_Last updated: 2026-09-05._
 
 Format per entry: **Problem → Decision → Reasoning → Alternatives → Tradeoffs → Future.**
 
@@ -3356,3 +3356,173 @@ built" branch, so selecting it logged a warning and returned the **scripted** en
 second time in one day that the engine a decision entry had just chosen could not be turned
 on (`B23` was the first). A test now asserts that every engine the docs recommend has a
 branch in `build_stt`, because twice is a pattern.
+
+
+## D105. Something has to drain the event bus, and it is not the sweep
+_The live transcript's first blocker, and it would have been invisible._
+
+- **Problem.** `InMemoryEventBus.publish()` only enqueues; handlers run on `drain()`. That
+  is deliberate and load-bearing — nothing runs until you say so, which is why a scenario
+  replay settles in the same order every time and its golden output is comparable at all
+  (`D15`). But in the **running API** the only `drain()` was a FastAPI background task on
+  `POST /v1/calls/intents` (`mobile.py`), plus one at shutdown. So a subscriber to anything
+  other than `intent.created` would be **correct, tested, and never run** until some
+  unrelated app request happened along.
+
+  Measured before writing a line of the fix, because this project has a habit of asserting
+  what it has not checked:
+
+  ```
+  published on the bus : ['intake.started', 'transcript.turn']
+  subscriber saw       : []    <- after publish, before any drain
+  subscriber saw       : []    <- after 5 sweeps
+  subscriber saw       : ['transcript.turn']    <- after an explicit drain()
+  ```
+
+- **Decision.** A **second periodic driver** in `api/app.py`: `pump_once(container)` calls
+  `bus.drain()`, `_pump_forever` runs it every `BUS_DRAIN_INTERVAL_S` (default **0.05 s**),
+  and it is started and cancelled in `lifespan` beside the sweeper. The bus itself is
+  unchanged.
+
+### Why not a line inside `sweep_once`
+
+That was the obvious version and it is wrong on a number. The sweep runs every **1.0 s**
+and exists for offers, RONA and heartbeat expiry, where a second is nothing. The bus is on
+the transcript's path to the screen, where `ARCHITECTURE` §15 allows **1.5 s** end to end
+and the model already spends 0.19 s of it (`D104`). Borrowing a driver whose period is
+two-thirds of the entire budget would have spent the whole win from choosing Typhoon on
+scheduling. Two drivers, two deadlines, and a test asserts the sweep does *not* drain so
+nobody tidies them back together.
+
+### Why not drain on the request path
+
+`accept_offer` could call `drain()` and return a complete snapshot. It would also run every
+subscriber in the process — context assembly included — before the agent's screen could
+paint, which is exactly what `D6` moved **off** the request path. The cost of not doing it
+is that a turn published *inside* a request lands up to one pump later; at 0.05 s against
+§15's 1 s for match-to-screen, that is not a cost worth buying with `D6`.
+
+### The pump swallows exceptions, and that is not laziness
+
+The bus is built `strict_handlers=True`, so one handler raising aborts the whole pass. In a
+loop with no `try`, a single bad subscriber would stop **every event in the process reaching
+every consumer, permanently**, and it would look like the system had gone quiet — `B11`'s
+shape, where the only feedback is something not happening. `pump_once` logs the exception
+and the next pass runs. A test asserts exactly that.
+
+## D106. The transcript is held until somebody ACCEPTS, and every push is complete
+_`services/transcription/delivery.py`. `ARCHITECTURE` §14 calls this consumer "Agent
+Delivery"._
+
+- **Problem.** Turns are produced, ordered, and published as `transcript.turn`. Nothing
+  took them off the bus. And the obvious wiring does not work, for a reason that is the
+  product rather than a technicality: **during intake the call is not assigned to anybody**.
+  That is the whole point — the transcript is built *while the caller waits*, before an
+  agent accepts — so at the moment a turn is published there is no `agent_id` for
+  `AgentHub.send` to address.
+
+- **Decision.** One service, three subscriptions, one piece of state:
+  - `transcript.turn` -> append to that call's list; push **only if** the call already has
+    an agent.
+  - `offer.resolved` with outcome `accepted` -> record the agent and push everything so far.
+  - `call.state.changed` to a terminal state -> forget the call.
+
+### The flush is on ACCEPT, not on OFFER, and the line is deliberate
+
+An offer can be declined or time out, and the call is re-matched to somebody else (`D52`).
+Flushing on the offer would mean an agent who declines has read the caller's words
+**verbatim** for a call they never took. The offer card keeps the gated *summary* it already
+has (`D69`) — a preview built from `BriefOut`, which is a different disclosure from a
+transcript. `D69` is the precedent for waiting, not a licence to widen it.
+
+### Every push carries the WHOLE transcript, never a delta
+
+`D68`'s rule — if the server knows it, the server says it — in the place it matters most.
+A delta means the client accumulates, and a client that accumulates can drop one message
+and show a transcript with a sentence **missing from the middle**, with nothing on screen
+to say so. A complete payload is idempotent, needs no gap handling on reconnect, and makes
+the newest message the only one that matters. A turn is a few hundred bytes; a whole intake
+is smaller than one snapshot.
+
+### It is NOT gated on assurance, and that is a decision rather than an omission
+
+`D74` gates what an agent may **say and do**; `D53` and `B5` are about the customer's
+*record* — a policy number the caller never mentioned. This is neither. It is the caller's
+own speech on the call being taken, at whatever level they have reached, **including L0**.
+An anonymous cold caller explaining their problem while they wait is precisely the case
+with no other source of context, and it is the case the pitch is about. Withholding it
+would delete the feature to protect nothing. What must never appear in this panel is
+anything *looked up*, and nothing in it is.
+
+### `WRAP_UP` deliberately does not clear it
+
+The wrap-up is drafted **from the transcript** (`ARCHITECTURE` §12), and
+`active_call_session_id` goes null the instant the record is saved (`D68`). So the snapshot
+falls back to `wrapup_call_session_id`, and only a terminal state drops the buffer. Clearing
+at hang-up would empty the panel at the one moment the agent is reading it.
+
+### What it is not: durable
+
+`transcript_turns` has no table and no ORM model (`DATA_MODEL` §6), so this is a projection
+with **no durable half** — said plainly rather than implied. A restart loses an in-flight
+intake's transcript, which is the same thing a restart already does to the caller's place
+in the queue (`D78`). Persisting turns is its own slice and `PLAN` lists it separately.
+
+## D107. Nothing opened a recording, and the stage-safe engine had no lines
+_Two gaps found by tracing the path from a WAV file to a browser tab and asking, at each
+hop, what calls this. See `B24`._
+
+- **Problem.** `TranscriptionService.open()` was called by `tests/unit/test_transcription_
+  service.py` and by **nothing else in the repository**. `run_offer` returns a `HoldReport`
+  saying `recording=True` and nothing acted on it, so the running system opened no leg,
+  endpointed no frame and published no turn. Separately, `build_stt` constructed
+  `ScriptedSttEngine([])` — the engine whose own docstring calls it *"the stage-safe demo
+  path, when we would rather not bet on live ASR in a noisy room"* — so choosing the safe
+  engine produced an empty transcript panel.
+
+- **Decision, three parts.**
+  1. **The demo endpoint opens the recording** when the caller consented, and closes it on
+     accept. At P5 the telephony adapter does both; marked `# DEMO:` in place per
+     `CLAUDE.md` rather than hidden in another repo.
+  2. **`POST /v1/demo/calls` takes an `audio` filename** and plays that WAV down the open
+     leg in 20 ms packets, in the file's own format, letting the gateway normalise — which
+     is what `media/sources.py` was built for (`D96`). `audio_realtime` paces it at
+     wall-clock speed. This is what makes the whole path runnable with no telephony.
+  3. **The scripted engine's lines come from `config/demo_transcript.yaml`**, one per
+     endpointed utterance. Timings are **not** in the file: `TranscriptionStream` stamps
+     every turn with its segment's real start and end, so a scripted line inherits the
+     timing of whatever audio was actually played. That is what makes the fallback look
+     like a transcription rather than a slideshow.
+
+### The filename is a bare filename, checked after resolution
+
+`audio` names a file inside `Settings.demo_audio_dir` and may contain no separator. A path
+in a request body is a file-read primitive, and rejecting `..` by inspecting the string is
+the version of that check which keeps getting bypassed — so the comparison is between
+*resolved* paths and the containing directory. That the endpoint exists only when
+`demo_login_enabled` is not the argument: a demo flag left on is exactly the configuration
+this would be exploited through, so the check is here **as well as** there.
+
+### `ReplayableSttEngine`: a capability, because one instance per process is wrong for a script
+
+The container builds **one** `SttEngine` for the process. Correct for a model, which is
+stateless per utterance. Wrong for a script, which carries a cursor: the first demo call
+consumed every line and the second — and every one after it — found the script exhausted
+and rendered an empty panel. `TranscriptionService.open()` now calls `reset()` on an engine
+that offers it, checked with `isinstance` against a `runtime_checkable` Protocol, the same
+shape as `BatchSttEngine` (`D101`) and for the same reason: exactly one adapter has it, and
+putting `reset()` on `SttEngine` would oblige every real engine to grow a meaningless no-op.
+
+**With two recordings genuinely overlapping the cursor is shared and the second resets the
+first.** Accepted deliberately: it is a demo artefact, the demo pattern is sequential, and
+the alternative is an engine instance per call — which for a real engine means loading a
+model per call.
+
+### The rate guard applies to scripted lines too, and it is not obvious
+
+`D98` refuses a turn carrying more than ~15 characters per second of the audio it arrived
+on, measured from real Thai. It does not care that the text came from a file. So the
+fallback script and the audio it plays over **have to be sized for each other**: a
+35-character Thai sentence needs about three seconds of speech behind it, and on a
+one-second utterance every line is silently dropped. Written into the config file's own
+comments, because the failure is a blank panel with nothing in the log to explain it.

@@ -1,0 +1,57 @@
+%% HANDWRITTEN. Checked against ARCHITECTURE.md S11 + S14 + S15 + D15 + D21 + D26 + D32 + D52
+%% + D53 + D68 + D69 + D74 + D78 + D88 + D105 + D106 + D107 + B5 + B6 + B7 + B24
+flowchart TB
+    subgraph AUDIO["the audio path — see audio_path"]
+        STREAM["TranscriptionStream<br/>guards passed, turn is real"]
+    end
+
+    subgraph OPEN["who OPENS a recording — nothing did, until D107 (B24)"]
+        HOLD["run_offer returns HoldReport(recording=True)<br/>the caller pressed 1 and is talking NOW"]
+        DEMO["POST /v1/demo/calls — DEMO, stands in for P5 telephony<br/>opens the leg, and can play a WAV down it (D107)<br/>audio= is a BARE FILENAME resolved inside demo_audio_dir:<br/>a path in a request body is a file-read primitive"]
+        RESET{{"ScriptedSttEngine carries a CURSOR (D107).<br/>One engine per process is right for a model and<br/>wrong for a script — the 1st demo call ate every<br/>line and the 2nd showed an EMPTY panel.<br/>open() resets it: a capability, like BatchSttEngine"}}
+    end
+
+    subgraph INTAKE["services/intake — the strategy seam (D88)"]
+        ONTURN["IntakeService.on_turn<br/>publishes NOTHING itself"]
+        PASSIVE["PassiveRecordIntake.on_turn<br/>appends, and PUBLISHES transcript.turn"]
+    end
+
+    BUS[("the event bus.<br/>publish() only ENQUEUES — nothing runs until drain() (D15),<br/>which is what makes a scenario replay byte-identical.")]
+
+    PUMP{{"pump_once() every 0.05s (D105)<br/>ITS OWN driver, not a line in sweep_once:<br/>the sweep is 1.0s and the whole utterance-to-screen<br/>budget is 1.5s, of which the model spends 0.19s.<br/>Until this existed the ONLY drain in the live process<br/>was a background task on POST /v1/calls/intents —<br/>so any subscriber was correct, tested and unreached."}}
+
+    subgraph DELIV["services/transcription/delivery.py — 'Agent Delivery' (S14)"]
+        HOLDBUF[("held per call.<br/>During intake NOBODY OWNS THE CALL — that is the<br/>product, not an edge case: the transcript is built<br/>while the caller waits. So there is no agent_id to<br/>send to, and the turns wait for one.<br/>NOT a table: transcript_turns has no ORM model, so<br/>a restart loses it, like the caller's place in the<br/>queue (D78). Persisting turns is its own slice.")]
+        FLUSH{{"offer.resolved — ACCEPTED only.<br/>NOT on the offer: a decline re-matches the call (D52)<br/>and that agent would have read the caller's words<br/>VERBATIM for a call they never took. The offer card<br/>keeps its gated SUMMARY (D69) — a different disclosure."}}
+        FORGET["call.state.changed -> terminal: forget.<br/>WRAP_UP deliberately does NOT clear it — the wrap-up<br/>is written FROM the transcript (S12), and clearing at<br/>hang-up empties the panel when it is most useful"]
+    end
+
+    HUB["api/realtime.py: AgentHub.send(agent, 'transcript', ...)<br/>per-agent seq + 200-message outbox, replay on reconnect (D68)"]
+    REST["GET /v1/agent/me -> snapshot.transcript<br/>SAME list, same service — the socket is a view and is<br/>allowed to be flaky (D32), so a cold load is never blank"]
+    PANEL["TranscriptPanel, under the brief.<br/>The brief is DERIVED from these sentences, so the<br/>evidence sits beside the claim"]
+
+    WHOLE{{"EVERY push carries the WHOLE transcript, never a delta (D106).<br/>D68's rule where it matters most: a client that ACCUMULATES can<br/>drop one message and show a transcript with a sentence missing<br/>from the MIDDLE, with nothing on screen to say so. Complete is<br/>idempotent, needs no gap handling, and the newest message wins."}}
+
+    GATE{{"NOT gated on assurance, and that is a decision (D106).<br/>D74 gates what an agent may SAY and DO; D53/B5 gate the<br/>customer's RECORD. This is neither — it is the caller's own<br/>speech on the call being taken, at ANY level including L0,<br/>which is exactly the caller with no other context.<br/>Nothing here was LOOKED UP, which is the line that matters."}}
+
+    HOLD --> DEMO
+    DEMO --> RESET
+    RESET --> STREAM
+    STREAM -->|"TranscriptTurn"| ONTURN
+    ONTURN --> PASSIVE
+    PASSIVE --> BUS
+    BUS --> PUMP
+    PUMP --> HOLDBUF
+    HOLDBUF --> FLUSH
+    FLUSH -->|"everything said so far"| HUB
+    HOLDBUF -->|"once assigned: live, per turn (P6 feeds this)"| HUB
+    HOLDBUF -.-> REST
+    FORGET -.-> HOLDBUF
+    HUB --> PANEL
+    REST --> PANEL
+    WHOLE -.-> HUB
+    GATE -.-> PANEL
+
+    ACCEPT["agent presses Accept"] -->|"1. transcription.close() — flushes the model FIRST"| STREAM
+    ACCEPT -->|"2. intake.on_agent_accepted() — finalise as partial (D21)"| ONTURN
+    ORDER{{"THAT ORDER, and it was wrong once (B24).<br/>finish() transcribes the segment still open, and those turns<br/>reach on_turn — which hands them on ONLY while the strategy is<br/>running. Finalising first dropped every one of them: the last<br/>sentence the caller said as the agent picked up, missing from<br/>the brief, logged and gone."}} -.-> ACCEPT

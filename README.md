@@ -16,7 +16,7 @@ Built for the Krungsri Universe × KMITL Hackathon (*Reimagine Insurance Brokera
 
 ## Status
 
-**P0 · P1 · P1b · P2a · P2b · P2c complete. P3 done, including the audio — except the encrypted recording and the live transcript on the agent's screen.**
+**P0 · P1 · P1b · P2a · P2b · P2c complete. P3 done, including the audio and the live transcript — except the encrypted recording, which is key management.**
 
 The identity ladder, the keypad IVR, the intake offer, the context assembler, the brief builder,
 the public API, the matching engine, agent presence, the offer handshake, the React workstation and
@@ -34,8 +34,12 @@ activity detector and transcribed by a Thai speech model into ordered `Transcrip
 `IntakeService.on_turn`. The engine was picked on measurements over 20 real Thai call-centre calls
 rather than argued about: **Typhoon ASR**, the only one that meets the 1.5 s utterance-to-turn
 budget, on **20 of 20** calls (`docs/DECISIONS.md` `D104`). What is still missing is the encrypted
-recording to object storage, which needs key management, and the live transcript on the agent's
-screen — the turns are published on the event bus and nothing draws them yet.
+recording to object storage, which needs key management.
+
+**And the agent sees what the caller said.** By the time somebody presses Accept, the sentences
+spoken while the caller was waiting are on their screen, in order, each with the moment in the
+recording it was said. That is the pitch in one paragraph, and it is the thing you can watch
+happen in the walkthrough below.
 
 **Everything below runs with no services, no API keys, no GPU and no database.** That is deliberate
 (`docs/DECISIONS.md` `D3`): every external dependency sits behind a port with a working fake, so you
@@ -248,6 +252,62 @@ drops agents whose heartbeat died.
 > place a call from `/sim`. One process serves both — there is no second server to start.
 
 > ⚠️ The server does **not** auto-reload. Restart it after changing Python.
+
+### Watch a caller's words reach the agent's screen
+
+The demo the project is actually about, and it needs **no telephony, no GPU and no API key**.
+Two terminals and a browser.
+
+**1. Start the API** (above) and open **<http://127.0.0.1:8000/workstation>**. Sign in as an
+agent whose skills match the call you are about to place — `A001`, `A002` or `A003` for a
+motor claim — and press **พร้อมรับสาย** (*ready*). Nothing is offered to an agent who has not
+said they are ready; that is `D59`, not a bug.
+
+**2. Make the caller's audio.** A fresh clone has none: every `*.wav` is gitignored,
+because the real corpus is customer speech with account numbers in it (`D97`, `D14`). This
+synthesises one in a second, with no dependencies — and **sizes each utterance from the
+script**, so the rate guard below cannot bite you by accident:
+
+```bash
+uv run python scripts/make_demo_audio.py
+```
+
+**3. Place the call.** `POST /v1/demo/calls` takes an `audio` filename, plays that WAV down
+the call's media leg in 20 ms packets exactly as telephony will at P5, and the real
+endpointer cuts it into utterances (`D107`). Any 16-bit mono WAV in `DEMO_AUDIO_DIR`
+(`tests/audio` by default) will do — including one you record yourself:
+
+```bash
+curl -X POST http://127.0.0.1:8000/v1/demo/calls -H "Content-Type: application/json" -d "{\"intent_code\": \"motor.claim.accident\", \"caller_number\": \"0812345678\", \"intake_keys\": [\"1\"], \"audio\": \"demo_intake.wav\", \"ignore_hours\": true}"
+```
+
+`"intake_keys": ["1"]` is the caller accepting the recording offer. Press `2` instead and
+there is no transcript at all, and the panel says *why* — a refusal and a silence are
+different facts (`D88`).
+
+**4. Press Accept.** The sentences the caller spoke while waiting are already on the screen,
+under the brief, each with the moment in the recording it was said. Nothing was shown before
+that point: during intake the call belongs to nobody, and an agent who *declines* an offer
+never reads the caller's words (`D106`).
+
+**What you are hearing, and what you are reading, are separate.** On the default
+`STT_ENGINE=scripted` the words come from `config/demo_transcript.yaml`, one line per
+utterance the detector found — so the **audio decides the timings and the number of turns**
+and the file decides what they say. That is the stage-safe path, and it is why the demo does
+not depend on a model loading in a noisy room. Set `STT_ENGINE=typhoon` (§6) and the same
+walkthrough transcribes real Thai speech for real.
+
+- **Needs set up:** §1 and §2. §6 only if you want real transcription rather than the
+  scripted lines.
+- **Needs running:** the API server. Nothing else.
+
+> ⚠️ **The script and the audio have to be sized for each other.** `D98`'s rate guard
+> refuses a turn carrying more than ~15 characters per second of the utterance it arrived
+> on, measured from real Thai — and it does not care that the text came from a file. On too
+> short an utterance every line is silently dropped and the panel is simply empty, with
+> nothing in the log to explain it. `make_demo_audio.py` computes the length from the
+> longest line in the script and warns if you force it below the floor; if you bring your
+> own recording, that is the arithmetic to do.
 
 ### The workstation dev server — *only while editing the React app*
 
@@ -623,6 +683,9 @@ The audio path is two env vars and both default to needing nothing:
 | `VAD_ENGINE` | `energy` | `energy` needs no dependencies and is also the degradation rung. `silero` is the real one (`D9`) and needs the `ml` extra. |
 | `STT_DEVICE` | `auto` | Resolves to `cuda` when a GPU is genuinely usable, `cpu` otherwise — so a box with the extra installed and no working GPU falls back instead of dying at model load. |
 | `STT_COMPUTE_TYPE` | `int8_float16` | int8 weights, fp16 compute. The default because of the measured 4.00 GiB / ~3.2 GiB free (`D95`). |
+| `BUS_DRAIN_INTERVAL_S` | `0.05` | How often the API process runs the event bus's handlers (`D105`). **Do not raise this casually**: it is on the transcript's path to the screen, where the budget is 1.5 s end to end and the model already spends 0.19 s. `0` disables it, which is what a test wants when it drains explicitly — and with it disabled the live transcript never arrives. |
+| `DEMO_AUDIO_DIR` | `tests/audio` | The only directory `POST /v1/demo/calls` will play a WAV out of (`D107`). The request sends a bare filename; this says where it may live, so the endpoint is never a way to read an arbitrary file. |
+| `DEMO_TRANSCRIPT_FILE` | `config/demo_transcript.yaml` | The lines the `scripted` engine speaks, one per endpointed utterance (`D107`). Keep them short enough for the audio they play over — `D98`'s rate guard refuses more than ~15 characters per second and does not care that the text came from a file. |
 
 
 

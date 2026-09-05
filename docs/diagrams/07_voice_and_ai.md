@@ -182,8 +182,65 @@ actually arrives.
 samples (two identical runs gave 0.087 then 0.124); whitespace WER on unsegmented Thai read
 **0.94-1.12** on a model that was working perfectly (`B18`).
 
-**What is still not in this picture, and why:** the encrypted recording to object storage
-(P7's key management), the live transcript on the workstation, and a *finished* bake-off
-table — the harness is built and the remaining rows need a CT2 conversion, a `large-v3` run,
-and NeMo for Typhoon (`D30`, still open).
+**What is still not in this picture:** the encrypted recording to object storage, which
+needs P7's key management. The bake-off table is finished (`D104`, above) and the transcript
+now reaches the agent's screen — §7.y draws that half.
+
+---
+
+## 7.y From `on_turn` to the agent's screen
+
+![the transcript reaching the screen](transcript_to_screen.svg)
+
+Everything in §7.x existed for days and **had never transcribed anything in the running
+system.** Four pieces were missing, and two of them were invisible from either end — the
+whole story is `B24`, and it is worth reading before adding a subscriber to anything.
+
+**Nothing opened a recording.** `TranscriptionService.open()` was called by its own tests
+and by nothing else in the repository. `run_offer` returned a `HoldReport` saying
+`recording=True` into the void, so no leg opened, no frame was endpointed and **no
+`transcript.turn` was ever published by a real call.** `D88` is why: a strategy takes turns,
+not frames, so `IntakeService` deliberately does not know about media — which means somebody
+*else* has to open the leg, and nobody was appointed. `D107` appoints the demo endpoint, and
+P5's telephony adapter inherits the job.
+
+**Nothing drained the bus.** `publish()` only enqueues; handlers run on `drain()`. That is
+`D15` and it is what makes a scenario replay byte-identical. But the only `drain()` in the
+live process was a background task on `POST /v1/calls/intents`, so a subscriber to
+`transcript.turn` would have been **correct, tested, and unreached**. `D105` adds a pump —
+its own driver at 0.05 s, not a line in the 1.0 s sweep, because this one is on a 1.5 s
+budget the model already spends 0.19 s of.
+
+**Nobody owns the call during intake, and that is the product.** The transcript is built
+*while the caller waits*, so when a turn is published there is no `agent_id` to send it to.
+The delivery service holds the call's turns and flushes them **on accept** — not on the
+offer, because an offer can be declined and re-matched (`D52`) and an agent who declines
+would have read the caller's words verbatim for a call they never took. `D69`'s gated
+summary on the offer card is the precedent for waiting; it is not a licence to widen.
+
+**Every push carries the whole transcript.** Not a delta. `D68`'s rule in the place it
+matters most: a client that accumulates can drop one message and render a transcript with a
+sentence missing from the *middle*, with nothing on screen to say so.
+
+**And it is not gated on assurance**, which is a decision (`D106`). `D74` gates what an
+agent may say and do; `D53`/`B5` gate the customer's *record*. This is the caller's own
+speech on the call being taken — at any level, **L0 included**, which is precisely the
+caller with no other source of context. Nothing in the panel was looked up, and that is the
+line that matters.
+
+### Two things this cost, recorded because they will recur
+
+**The order at the accept is load-bearing.** `transcription.close()` must run **before**
+`intake.on_agent_accepted()`. `finish()` transcribes the segment still open and drains the
+queue, and those turns reach `on_turn` — which passes them on only while the strategy is
+still running. Finalising first dropped every one: the last sentence the caller said as the
+agent picked up, logged and gone. `D21` says the offer window *is* the grace period; the
+order is what makes that true rather than merely intended.
+
+**One engine per process is right for a model and wrong for a script.**
+`ScriptedSttEngine` carries a cursor, so the first demo call consumed every line and the
+second rendered an empty panel — the stage-safe fallback failing in exactly the way it
+exists to prevent. Every test passed, because each placed one call. `open()` now resets an
+engine that offers `reset()`, through a capability protocol like `BatchSttEngine`'s
+(`D107`), and a test places **three** calls.
 

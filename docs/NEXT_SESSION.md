@@ -56,93 +56,75 @@ Two methodology traps that each cost a published number:
 
 ### What is NOT built, precisely
 
-**The live transcript on the agent's screen — this is the next slice.** Two pieces, not
-three, and **less is missing than a first read suggests** — I got this wrong once while
-writing this brief and checked before leaving it here:
+**The encrypted recording to object storage.** `ARCHITECTURE` §6 asks the media gateway to
+write the call to object storage with a per-recording key reference. Neither MinIO nor the
+key handling exists, and that is P7's work rather than an audio problem — writing a
+caller's audio to disk before there is a key to protect it is the one thing `D9` was
+careful to avoid. **This is the last piece of P3.** Then P4.
 
-- ✅ **The event already exists and is already published.** `ev.TranscriptTurnAdded`
-  (`domain/events.py`, `"transcript.turn"`) carries the id, seq, speaker role, text,
-  timings and confidence — and **`PassiveRecordIntake.on_turn` publishes it on the bus**
-  for every turn (`services/intake/passive.py`). `IntakeService.on_turn` hands the turn to
-  the strategy, and the strategy is what publishes. So there is nothing to add at the
-  intake end.
-
-**Corrected 2026-09-05, before writing any of it: it is FOUR pieces, and two of them
-were invisible from the intake end.** Both were found by tracing the path from a WAV file
-to a browser tab and asking, at each hop, *what calls this?* — the `B7` question. Neither
-would have failed a test, because in both cases the code is correct and unreached.
-
-0. **NOTHING OPENS A TRANSCRIPTION.** `TranscriptionService.open()` is called by
-   `tests/unit/test_transcription_service.py` and by nothing else in the repository. In
-   the running API no recording is ever opened, so no frame is ever endpointed and **no
-   `transcript.turn` is ever published from a real call** — the events the rest of this
-   brief is about do not currently exist outside tests and scenarios. `run_offer` returns
-   a `HoldReport` with `recording=True` and nothing acts on it. This is `B7`'s family
-   exactly: written, correct, tested, driven by nothing.
-
-1b. **NOTHING DRAINS THE BUS PERIODICALLY, so a subscriber would never run.**
-   `InMemoryEventBus.publish()` only enqueues; handlers run on `drain()`; and the only
-   `drain()` in the live process is a FastAPI background task fired by
-   `POST /v1/calls/intents` (`mobile.py`), plus one at shutdown. **The sweep does not
-   drain.** Measured, not read:
-
-   ```
-   published on the bus : ['intake.started', 'transcript.turn']
-   subscriber saw       : []    <- after publish, before any drain
-   subscriber saw       : []    <- after 5 sweeps
-   subscriber saw       : ['transcript.turn']    <- after an explicit drain()
-   ```
-
-   So a subscriber wired the obvious way is **correct, tested, and never runs** until some
-   unrelated app request happens to schedule a drain. Do not fix this by draining inside
-   the sweep: `agent_sweep_interval_s` is 1.0 s and the whole transcript budget is 1.5 s,
-   of which the model already spends 0.19 s. It needs its own faster driver.
-
-1. **Nothing subscribes.** `api/realtime.py`'s `AgentHub` is a *push* mechanism —
-   `send(agent_id, kind, payload)`, with per-agent sequencing and replay-on-reconnect
-   already built (`D68`, `B7`). Nothing takes `transcript.turn` off the bus and calls it.
-   That subscriber is the missing server piece, and it should use the existing hub rather
-   than a second channel.
-
-   **The design question it runs into, which is not plumbing:** during intake **the call
-   is not assigned to anybody yet** — that is the whole point, the transcript is being
-   built *before* an agent accepts. So a turn published at that moment has no `agent_id`
-   to be sent to. Two halves are needed: buffer the turns against the call, and flush them
-   to the agent on accept (the brief preview in the offer card is the precedent, `D69`),
-   then stream live once the call is assigned. **Do not invent a second delivery path for
-   the live half** — `B6` and `D68` are both about a client growing a second source of
-   truth.
-
-2. **Draw it** in `apps/workstation/`. Read `explanations/P2b_workstation_client.md`
-   first; `B6` was six faults and three of them came from not reading the `.mmd`/prose
-   sources before changing that app.
-
-Two smaller things in the same area:
+Two smaller things, both in the audio path, both well defined:
 
 - **`IntakeService._degradation()` returns `NONE` unconditionally.** That was a *wait*
-  until `D96` and is a *gap* now: `TranscriptionService` knows whether the engine failed and
-  nothing carries it back. Do not guess `stt_unavailable` — wire it.
+  until `D96` and is a *gap* now: `TranscriptionService` knows whether the engine failed
+  and nothing carries it back. Do not guess `stt_unavailable` — wire it. The screen already
+  has somewhere to say it: `emptyTranscriptReason()` in `panels.tsx` renders a different
+  sentence for `intake_declined`, `no_consent` and `stt_unavailable`, and the third is
+  currently unreachable.
 - **The decode timeout** (`D98`'s missing half) still needs `D2`'s killable worker process.
   Do not fake it with `asyncio.wait_for`: that does not kill the thread, and a guard that
   looks like one and is not is `B7`'s whole family.
 
-Then: the encrypted recording to object storage (P7 key management), and P4.
+### The live transcript LANDED on 2026-09-05, and how it went is the useful part
+
+`D105`, `D106`, `D107` and `B24`. The brief in this file said two pieces. **It was four**,
+and the two extra ones were invisible from either end:
+
+| | what was wrong | how it was found |
+|---|---|---|
+| **Nothing opened a recording** | `TranscriptionService.open()` was called by its own tests and nothing else, so the running system had **never transcribed anything** | `grep -rn "transcription.open" src/ tests/` while asking *what calls this?* |
+| **Nothing drained the bus** | handlers run on `drain()` (`D15`); the only drain in the live process was a background task on `POST /v1/calls/intents` — so any subscriber was correct, tested and unreached | a twelve-line probe: publish a turn, run five sweeps, check a spy |
+| **The scripted engine's cursor is shared** | one engine per process is right for a model and wrong for a script: the 1st demo call ate every line, the 2nd showed an empty panel | the running server, after every test passed |
+| **The accept ordering dropped the last sentence** | `on_agent_accepted` finalised the intake *before* `transcription.close()`, so the turns `finish()` produced arrived after the strategy stopped accepting them | reading the diff before committing it |
+
+**Read `B24` before adding a subscriber to anything, or before believing that a service
+with a passing suite is actually reached.** That entry is now the fourth member of the
+family that already contains `B7` (three services, no driver), `B9` (a package, no commit)
+and `B12` (a live service, a frozen argument). The check that finds all four is the same
+and it is not a test: **follow the call graph from something a user does.**
+
+### How to see it working, in one minute
+
+```bash
+uv run python scripts/make_demo_audio.py         # a fresh clone has NO audio: *.wav is gitignored
+uv run python -m readycall.entrypoints.api
+#   sign in at /workstation as A001/A002/A003, press พร้อมรับสาย, then:
+curl -X POST http://127.0.0.1:8000/v1/demo/calls -H "Content-Type: application/json" \
+  -d '{"intent_code":"motor.claim.accident","intake_keys":["1"],"audio":"demo_intake.wav","ignore_hours":true}'
+#   press Accept. Six Thai sentences, each with its moment in the recording.
+```
+
+`README.md` has the long version. On the default `scripted` engine the words come from
+`config/demo_transcript.yaml` and the **audio decides the timings and how many turns there
+are**; `STT_ENGINE=typhoon` transcribes for real through the same path.
 
 ## Where things stand right now
 
-**P0 · P1 · P1b · P2a · P2b · P2c complete. P3 complete except the recording-to-storage
-and the live transcript on the screen — `D30`'s bake-off is CLOSED (`D104`).** The system knows who
-is calling and how much to believe it, why they are calling, everything we hold about them
-assembled before the phone is answered, which agent should take it and why, the desk rings
-and a human accepts with the screen already right — the caller keys their own way to the
-right queue through a real menu hearing real (pre-rendered) Thai — and now, **once the queue
-is settled, they are offered the pre-call recording, and take it or
-refuse it or ignore it, all three reaching the same agent**.
+**P0 · P1 · P1b · P2a · P2b · P2c complete. P3 complete except the encrypted
+recording-to-storage — `D30`'s bake-off is CLOSED (`D104`) and the live transcript is on the
+screen (`D106`).** The system knows who is calling and how much to believe it, why they are
+calling, everything we hold about them assembled before the phone is answered, which agent
+should take it and why, the desk rings and a human accepts with the screen already right —
+the caller keys their own way to the right queue through a real menu hearing real
+(pre-rendered) Thai, is offered the pre-call recording and takes it or refuses it or ignores
+it, all three reaching the same agent — **and what they said while they were waiting is on
+that agent's screen the moment they press Accept**, in order, each sentence carrying the
+moment in the recording it was said.
 
-Verified **2026-09-04 (night)**: **676 tests** — 634 pass + 42 skipped without the Postgres
-container (the 42 are the database cases). `ruff check` + `ruff format --check` clean over 178 files,
-`mypy --strict` clean over 125, all scenarios replay, 62/62 diagrams current, prompt pack
-fresh (54 clips), `audit_docs.py` clean on the live files.
+Verified **2026-09-05**: **697 tests** — 655 pass + 42 skipped without the Postgres
+container (the 42 are the database cases). `ruff check` + `ruff format --check` clean over 182 files,
+`mypy --strict` clean over 126, all scenarios replay, 63/63 diagrams current, prompt pack
+fresh (54 clips), `audit_docs.py` clean on the live files. **And verified in a browser
+against a running server**, which is where the last two bugs came from.
 
 ### The four sessions of review since P2b, in one place
 
@@ -323,6 +305,21 @@ device memory (`B22`) · two engines that could not be selected by config (`B23`
 Typhoon) · and two methodology corrections that each cost a published number — rank on the
 **mean** not the median, and the **test set** alone moved the headline by 1.8x.
 
+**P3 step 4d — the transcript on the screen (`D105`–`D107`, `B24`), 2026-09-05.**
+`services/transcription/delivery.py` is `ARCHITECTURE` §14's "Agent Delivery" for
+`transcript.turn`: it **holds** a call's turns while nobody owns it — the whole of intake,
+which is the product rather than an edge case — and flushes them to whoever **accepts**,
+never to whoever was merely offered (`D52`) · every push carries the **complete** transcript
+so a dropped message cannot leave a gap (`D68`) · **not gated on assurance**, because it is
+the caller's own speech rather than anything looked up, L0 included (`D106`) ·
+`pump_once` in `api/app.py` is the bus's own driver at 0.05 s, without which no subscriber
+in the process runs at all (`D105`) · `TranscriptionService.open()` is finally **called** —
+by the demo endpoint now, by telephony at P5 — and a WAV can be played down the leg so the
+whole path runs with no phone (`D107`) · the scripted engine has lines, from config, and
+resets per recording through a capability protocol · `TranscriptPanel` draws it under the
+brief, and says *why* when it is empty · **`B24`: two services were written, correct,
+tested and called by nothing**, which is `B7`'s family with a fourth member.
+
 ## Designed but NOT built (read before touching these areas)
 
 - **`D63` — call transfer.** One filtered roster menu covering all three needs (named agent /
@@ -491,8 +488,9 @@ accuracy problem was ours and is fixed, and the problem that was underneath it i
    looks like one and is not is `B7`'s whole family.
 7. **The encrypted recording to object storage.** `ARCHITECTURE` §6 asks the gateway for it;
    it needs MinIO wired and per-recording key refs, which is P7's key management.
-8. **The live transcript on the workstation.** Turns exist and are published; nothing draws
-   them.
+8. **~~The live transcript on the workstation~~ — DONE** (`D105`–`D107`, `B24`,
+   2026-09-05). Held while the call is unassigned, flushed on accept, drawn under the
+   brief. What it uncovered is above; **read `B24`**.
 9. **P4** — analysis and brief v2+ with Claude and Typhoon compared on the golden set.
 10. **`D85` is implemented and parked.** Wire `acw_stats.py` into `expected_free_in()` when
    P6 brings real ACW data, as a **score, never a filter** (`D73`).
@@ -656,6 +654,44 @@ Facts about *this laptop* rather than the repo, so a fresh session does not redi
   and expect the first `screenshot` to time out once and succeed on retry.
 
 ## Things to be careful about (live landmines)
+
+- **`publish()` DOES NOT RUN ANYTHING** (`D15`, `D105`). The in-memory bus enqueues; the
+  handlers run on `drain()`. In the API process that is `pump_once` every
+  `BUS_DRAIN_INTERVAL_S` (0.05 s) — **and there was no such driver at all until 2026-09-05**,
+  so a subscriber was correct, tested and unreached (`B24`). If you add one: write a test
+  that drives the *driver*, not the handler. Setting `BUS_DRAIN_INTERVAL_S=0` disables it,
+  which is right for a test that drains explicitly and silently breaks the live transcript.
+- **THE SWEEP MUST NOT BECOME THE BUS DRIVER** (`D105`). It runs every 1.0 s and the whole
+  utterance-to-screen budget is 1.5 s, of which the model already spends 0.19 s. Two
+  drivers, two deadlines; a test asserts the sweep does not drain, so nobody tidies them
+  back together.
+- **CLOSE THE TRANSCRIBER BEFORE FINALISING THE INTAKE** (`B24`). `stream.finish()`
+  transcribes the segment still open and drains the queue, and those turns go to
+  `IntakeService.on_turn`, which passes them on **only while the strategy is running**.
+  Finalise first and the caller's last sentence — the one they were saying as the agent
+  picked up — is logged and dropped. `accept_offer` has the order right; keep it.
+- **THE TRANSCRIPT IS FLUSHED ON ACCEPT, NEVER ON THE OFFER** (`D106`). An offer can be
+  declined or time out and the call is re-matched (`D52`); an agent who declines must not
+  have read the caller's words verbatim for a call they never took. The offer card's gated
+  *summary* (`D69`) is a different disclosure and stays.
+- **EVERY TRANSCRIPT PUSH CARRIES THE WHOLE LIST, NEVER A DELTA** (`D106`). The client
+  REPLACES. If you make it append, one dropped message leaves a sentence missing from the
+  middle with nothing on screen to say so — `D68`'s rule in the place it matters most.
+- **ONE STT ENGINE PER PROCESS IS WRONG FOR A SCRIPT** (`D107`). `ScriptedSttEngine` carries
+  a cursor, so without `open()` resetting it the second demo call shows an empty panel — the
+  stage-safe fallback failing exactly as it exists to prevent. Every test passed while this
+  was broken because each placed **one** call. Any test about the demo path places at least
+  two.
+- **THE SCRIPTED LINES AND THE DEMO AUDIO MUST BE SIZED FOR EACH OTHER** (`D107`, `D98`).
+  The rate guard refuses more than ~15 characters per second of the utterance a turn arrived
+  on and does not care that the text came from a file, so a long Thai line on a short
+  utterance is **silently dropped** and the panel is simply empty.
+  `scripts/make_demo_audio.py` computes the length from the script; do that arithmetic if
+  you bring your own recording.
+- **A GREEN ASYNC TEST CAN BE GREEN ON SCHEDULING LUCK** (`B24`). The transcriber's worker
+  runs on the application's loop, which under `TestClient` only advances while a request is
+  in flight. `tests/unit/test_transcript_over_http.py::settle` polls with cheap requests
+  rather than sleeping. A test that passes for a reason you cannot name is not yet a test.
 
 - **THE ENGINE IS TYPHOON** (`D104`), not the CT2 build — `D103` chose CT2 and `D104`
   replaced it the same day, so a landmine list written between the two says the wrong

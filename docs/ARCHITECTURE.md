@@ -226,7 +226,9 @@ customer (if any), product, snapshot and queue.
 > into `TranscriptTurn`s; and `TranscriptionService` feeds `IntakeService.on_turn`, which
 > had been waiting for it since `D88` (`D96`), with **Typhoon ASR** chosen on measurements
 > over 20 real Thai calls (`D30` closed by `D104`). **Still not built**: the encrypted
-> recording to object storage (P7's keys), and the live transcript on the workstation.
+> recording to object storage (P7's keys). **The live transcript reaches the agent's
+> screen** since `D106`: the turns are held while nobody owns the call — which is the
+> whole of intake — and flushed to whoever accepts.
 > **Read `B14`, `B16` and `B18` before changing anything in that path.** Three guards sit
 > between the model and the agent and each exists because of something measured: Whisper
 > fed near-silence costs **8.6 s** and invents domain vocabulary (`B14`); the repetition
@@ -805,7 +807,7 @@ call already knowing who it is and what it is about:
 | Smart Routing — assigned to + why (incl. any deferral) | `matching_decisions` |
 | Next Best Action + Recommended Actions | Analysis, from a per-intent playbook |
 | AI Suggested Opening | Analysis (Thai, polite register, editable) |
-| Live transcript (intake + call) + audio player | `transcript_turns` + recording ref |
+| Live transcript (intake + call) + audio player | **BUILT for the intake half** (`D106`): `services/transcription/delivery.py` holds the turns and pushes them to `AgentHub` on accept. The agent's own leg is P6 (`D26`), and the audio player waits on the recording (P7). ⚠️ **In memory only** — `transcript_turns` still has no table (`DATA_MODEL` §6) |
 | PDPA badges (what's consented / what's masked) | `consents` |
 | **Call controls** — accept/decline, mute, hold, hangup, DTMF, transfer, device picker | The in-page softphone (§9) |
 | **Queue strip** — depth, longest wait, my status, my next-up position | Matching Engine, live |
@@ -916,7 +918,7 @@ production scale). All events carry `call_session_id`, `trace_id`, `occurred_at`
 | `call.initiated` / `call.queued` / `call.state.changed` | Orchestrator | everything |
 | `consent.recorded` | Consent | Intake, audit |
 | `intake.started` / `intake.finalized` | Intake | Analysis, Orchestrator |
-| `transcript.turn` | Transcription | Analysis, Agent Delivery, call-progress |
+| `transcript.turn` | Transcription (via the intake strategy) | **Agent Delivery** — `services/transcription/delivery.py`, built (`D106`). Analysis and call-progress are P4/P6 |
 | `analysis.brief.updated` | Analysis | Agent Delivery, Matching (fit changed) |
 | `agent.presence.changed` | Agent Delivery | Matching |
 | `matching.decided` / `matching.deferred` | Matching | Agent Delivery, Orchestrator |

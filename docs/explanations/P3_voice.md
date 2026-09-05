@@ -563,5 +563,71 @@ every *number* about it had been wrong, in a different way each time.
 - **numbers now:** 676 tests (634 pass + 42 skipped), 104 decisions, 23 bug entries,
   62 diagrams, 9 ports, 4 real STT adapters.
 
+
+**2026-09-05 — the transcript reaches the screen, and two whole services turned out to be
+running nowhere.**
+
+This is the entry that finishes P3 apart from the encrypted recording. The short version:
+the brief said the slice was two pieces, it was four, and the two extra ones are the most
+useful thing in this entry.
+
+- **`TranscriptionService.open()` was called by nothing.** Not by a route, not by the
+  orchestrator, not by the intake — only by its own test file. So the audio path, which had
+  a bake-off, a chosen engine, its own suite and a section in every architecture document,
+  **had never transcribed anything in the running system.** `run_offer` returned a
+  `HoldReport` saying `recording=True` and nobody was listening. `D88` explains how it
+  happened without anybody being careless: a strategy takes turns, not frames, so
+  `IntakeService` deliberately does not know about media — which means *somebody else* has
+  to open the leg, and the design never named who.
+- **Nothing drained the event bus.** `publish()` enqueues and handlers run on `drain()`,
+  which is `D15` and is exactly what makes a scenario replay byte-identical. In the live
+  API the only `drain()` was a background task on `POST /v1/calls/intents`. A subscriber to
+  `transcript.turn` would therefore have been **correct, green in its unit suite, and
+  unreached in production** until somebody opened the app. Measured with a twelve-line
+  probe before a line of the fix was written — five sweeps, and the handler still had not
+  run.
+- **Both are `B7`'s family, and that is now four members.** `B7` was three services with no
+  driver. `B9` was a package with no commit. `B12` was a live service fed a frozen
+  argument. `B24` is a whole subsystem with no caller. The check that finds all of them is
+  the same and it is not a test: **follow the call graph from something a user does**, not
+  from the module you happen to be working in.
+- **The design question the plumbing was hiding.** During intake **the call belongs to
+  nobody** — that is the product, not an edge case, since the whole point is that the
+  transcript is built while the caller waits. So a turn published then has no `agent_id` to
+  be sent to. The turns are held and flushed **on accept**, not on the offer: an offer can
+  be declined and re-matched (`D52`), and an agent who declines would otherwise have read
+  the caller's words verbatim for a call they never took. `D69`'s gated summary on the
+  offer card is the precedent for waiting, not a licence to widen it.
+- **Every push carries the whole transcript, never a delta** (`D106`). `D68`'s rule where
+  it matters most: a client that accumulates can drop one message and render a transcript
+  with a sentence missing from the *middle*, and nothing on screen would say so.
+- **An ordering bug caught before it shipped, in the fix itself.** `accept_offer` finalised
+  the intake *before* closing the transcriber. `stream.finish()` transcribes the segment
+  still open and drains the queue, and those turns reach `on_turn` — which passes them on
+  only while the strategy is running. Finalising first dropped every one of them: the last
+  sentence the caller said as the agent picked up, logged and gone. `D21` says the offer
+  window **is** the grace period; the order is what makes that true rather than intended.
+- **A bug only the running server could show.** The container builds one STT engine for the
+  process. `ScriptedSttEngine` carries a cursor, so the first demo call consumed every line
+  and the second showed an empty panel — the stage-safe fallback failing in exactly the way
+  it exists to prevent. **Every test passed**, because each placed a single call. There is
+  one now that places three. Same lesson as *"never test a contention rule without
+  contention"* (`B13`, `B12`, `B4`), in a new place: **one of something proves nothing
+  about the second.**
+- **And the HTTP tests were green on scheduling luck.** The transcriber's worker runs on
+  the application's loop, which under `TestClient` only advances while a request is in
+  flight — so the turns were sometimes simply not there yet, and the assertions happened to
+  run when they were. They poll with cheap requests now. A test that passes for a reason
+  you cannot name is not yet a test.
+- **The demo can be run by anyone, on anything.** `POST /v1/demo/calls` takes an `audio`
+  filename and plays that WAV down the leg the way telephony will at P5; the scripted
+  engine's lines come from `config/demo_transcript.yaml`; and `scripts/make_demo_audio.py`
+  synthesises the WAV, sizing each utterance from the longest line so `D98`'s rate guard
+  cannot silently eat the script. A fresh clone has no audio at all — every `*.wav` is
+  gitignored — so without that script the README's own walkthrough would point at a file
+  nobody has.
+- **numbers now:** 697 tests, 107 decisions, 24 bug entries, 63 diagrams, 9 ports plus two
+  capability protocols, 5 real adapters.
+
 _Earlier body text stays as written — it is a record of what was true on 2026-08-25._ Append dated entries here rather than editing the body — this file is a record
 of what was true on 2026-08-25, and the "why" above stays useful even when a number moves._

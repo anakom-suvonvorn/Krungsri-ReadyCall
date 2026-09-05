@@ -1,7 +1,7 @@
 # INTEGRATIONS
 
 _Every external thing the system touches: the port that hides it, the adapters behind it, and the config that selects one._
-_Status: **mostly design; the persistence stack and the whole audio path are real.** Last updated: 2026-09-04._
+_Status: **mostly design; the persistence stack, the whole audio path and the transcript's route to the agent's screen are real.** Last updated: 2026-09-05._
 
 > **Real as of P2c (complete):** SQLAlchemy 2.0 (async) + Alembic + `asyncpg`, against
 > Postgres 16 in `infra/docker-compose.yml`, verified on a live container — **nine tables**,
@@ -127,9 +127,21 @@ class SttEngine(Protocol):
 | **`ThonburianHfEngine`** the original | `biodatlab/whisper-th-medium-combined` via `transformers` + `torch` | **BUILT, and too slow to ship**: p95 **19.5 s median / 58.7 s worst**, 0 of 12 calls inside budget, `busy` worst 1.25 — above 1.00 the transcriber never catches up. It is the **most accurate** engine measured (CER mean 0.109 unhinted) and that did not save it. `B19` is fixed: the hint is applied via `prompt_ids`, and it makes this engine slightly *worse* (+0.010) while helping int8 a lot. |
 
 | **`TyphoonAsrEngine`** | `scb10x/typhoon-asr-realtime` — **NVIDIA NeMo FastConformer transducer**, `cc-by-4.0` | **BUILT, not installable yet.** Not a Whisper model (`D99`): no 30 s padding, genuinely streaming, and no free-running decoder to hallucinate with — which is exactly why it is worth measuring against `B14`. Needs `nemo_toolkit[asr]`, deliberately **not** in the `ml` extra. |
-| **`ScriptedSttEngine`** | Replays known turns with realistic timings | **BUILT.** Every test, all three scenarios, and the stage-safe demo path. The default (`STT_ENGINE=scripted`). |
+| **`ScriptedSttEngine`** | Replays known turns with realistic timings | **BUILT.** Every test, all three scenarios, and the stage-safe demo path. The default (`STT_ENGINE=scripted`). Its lines come from `config/demo_transcript.yaml` since `D107` — it was built with an **empty list** until then, so choosing the safe engine produced a blank transcript panel. It is also the only adapter that implements `ReplayableSttEngine`. |
 | `ThonburianDistillEngine` | `biodatlab/distill-whisper-th-large-v3` | **MEASURED AND REJECTED** (`D104`). It was already in the HF cache so it cost nothing to try, and it is worse than CT2 on every axis: CER 0.096 vs 0.087 median, `busy` worst 0.23 vs 0.11, VRAM 1942 vs ~1000 MB. A distilled *large* is still a large. Recorded so nobody spends the download again. |
 | `CloudSttEngine` | Google / Azure / Gemini | Named only. Backup with no GPU; a data-residency question in production. |
+
+### 2.0.0 Two capability protocols on `SttEngine`
+
+Neither is a requirement, and both are `runtime_checkable` Protocols checked with
+`isinstance` rather than methods on the port — because exactly one adapter implements each,
+and putting them on `SttEngine` would oblige every other adapter to grow a meaningless
+version.
+
+| Capability | Implemented by | Why it exists |
+|---|---|---|
+| **`BatchSttEngine`** (`D101`) | `ThonburianHfEngine` | Several utterances in one GPU pass. Built, measured as a **no-op on this GPU**, and kept: it is correct, costs 1 MB, changes no output, and a machine with spare capacity may benefit. Irrelevant to Typhoon, which has no 30 s window to amortise |
+| **`ReplayableSttEngine`** (`D107`) | `ScriptedSttEngine` | `reset()`, called by `TranscriptionService.open()`. **One engine instance per process is right for a model and wrong for a script**: a cursor through canned lines meant the first demo call consumed all of them and the second showed an empty panel. With two recordings genuinely overlapping the cursor is shared and the second resets the first — a demo artefact, accepted, because the alternative is loading a model per call |
 
 ### 2.0 Voice activity — the ninth port (`D96`)
 
@@ -393,7 +405,7 @@ vendor), ElevenLabs (quality, cost). Choose on a listening test of the actual pr
 
 | Port | Default adapter | Alternatives |
 |---|---|---|
-| `EventBus` | **Redis Streams** (consumer groups, replay, at-least-once) | `KafkaAdapter` for real scale; `InMemoryBus` for tests |
+| `EventBus` | **Redis Streams** (consumer groups, replay, at-least-once) | `KafkaAdapter` for real scale; `InMemoryBus` for tests **and for everything that runs today**. ⚠️ **`publish()` only enqueues; handlers run on `drain()`** (`D15`) — which is what makes a scenario replay byte-identical, and which means a live process needs something to *call* `drain()`. `api/app.py`'s `pump_once` does, every `BUS_DRAIN_INTERVAL_S` (0.05 s). Before `D105` nothing did, and a subscriber to anything but `intent.created` was correct, tested and unreached (`B24`) |
 | `BlobStorage` | **MinIO** (S3 API) in dev | `S3Adapter`, `LocalFsAdapter` (dev only, never for real recordings) |
 | `AgentDirectory` | Our `agents` tables | `LdapAdapter` / bank HR feed |
 | `Notifier` | WebSocket push to agent desktops | Email/LINE/webhook for the "desktop offline" degradation rung |

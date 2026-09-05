@@ -1,7 +1,7 @@
 # BUG_HISTORY
 
 _Solved bugs and the lessons they bought. **Search this file FIRST when debugging** — the answer may already be here._
-_Last updated: 2026-09-04._
+_Last updated: 2026-09-05._
 
 Format per entry:
 
@@ -1070,3 +1070,69 @@ to write down the env vars that turn it on._
   instructions for it**: `B17` came from checking a model id before publishing it, `B22`
   from watching a card during a run, this one from writing down two env vars and following
   them into the code.
+
+
+## B24. Two services written, correct, tested, and called by nothing
+_Found 2026-09-05 by tracing the path from a WAV file to a browser tab. Neither would ever
+have failed a test._
+
+- **Symptoms.** The audio path had a bake-off, a chosen engine, its own suite and an entry in
+  every architecture document. It had never transcribed anything in the running system, and
+  nothing said so. Separately, a `transcript.turn` subscriber written the obvious way would
+  have been green in its unit suite and silent in production.
+
+- **Root cause, and there were two.**
+  1. **`TranscriptionService.open()` was called only by its own tests.** `IntakeService`
+     deliberately does not know about media (`D88`: a strategy takes turns, not frames), so
+     *somebody else* has to open the leg when a caller consents — and nobody did. The
+     `HoldReport` said `recording=True` into the void.
+  2. **Nothing drained the event bus periodically.** `publish()` enqueues; handlers run on
+     `drain()`; the only drain in the live process was a background task on
+     `POST /v1/calls/intents`. See `D105` for the measurement.
+
+- **Investigation.** Not a debugging session — a **reading** one. The path was walked hop by
+  hop asking *what calls this?*, which is `B7`'s question, and two of the answers were
+  "nothing". `grep -rn "transcription.open" src/ tests/` was the whole investigation for the
+  first; a twelve-line probe that published a turn, ran five sweeps and checked a spy was
+  the whole investigation for the second.
+
+- **Fix.** `D107` opens and closes the recording from the call lifecycle; `D105` adds the
+  pump. Both have tests that drive the *driver* rather than the thing driven — the shape
+  `B7` established, because a test that calls the service directly proves the service and
+  says nothing about whether anything calls it.
+
+- **Verification.** A real browser against a real server: a caller consents, a WAV plays
+  down the leg, six Thai sentences appear on the agent's screen after Accept, each carrying
+  the moment in the recording it was said. Then a test that places **three** calls, because
+  the first version of the fix worked once — see below.
+
+- **A third one, found by the running server after both fixes.** The container builds one
+  STT engine per process. `ScriptedSttEngine` carries a cursor through its lines, so the
+  first demo call consumed all of them and the second showed an empty panel. **Every test
+  in the new file passed**, because each placed a single call. `D107` fixes it with a
+  capability protocol; the regression test places three and asserts they are identical.
+
+- **And a fourth, in the fix itself, caught before it shipped.** `accept_offer` finalised
+  the intake *before* closing the transcriber. `stream.finish()` transcribes the segment
+  still open and drains the queue, and those turns reach `IntakeService.on_turn` — which
+  hands them to the strategy **only while it is running**. Finalising first meant every one
+  of them arrived after the intake closed, where `PassiveRecordIntake.on_turn` correctly
+  logs and drops them: the caller's last sentence, the one they were saying as the agent
+  picked up, silently missing from the brief. `D21` says the offer window *is* the grace
+  period; the order is what makes that true rather than merely intended.
+
+- **Lessons.**
+  - **"It has tests" and "it runs" are different claims**, and this project keeps
+    confusing them. `B7` was three services with no driver, `B9` was a package with no
+    commit, `B12` was a live service fed a frozen argument. Add: `B24`, a whole subsystem
+    with no caller. The check that finds all four is the same — follow the call graph from
+    something a user does, not from the module you are working on.
+  - **A test that exercises one of something proves nothing about the second.** One call,
+    one agent, one utterance. The scripted cursor, the shared engine and the offer/decline
+    split are all invisible at n=1, and this is the same lesson as *"never test a contention
+    rule without contention"* (`B13`, `B12`, `B4`) in a new place.
+  - **A green async test can be green on scheduling luck.** The HTTP tests here passed
+    before there was anything making the transcriber's worker run — under `TestClient` the
+    application's loop only advances while a request is in flight. They now poll with cheap
+    requests until the turns exist. A test that passes for a reason you cannot name is not
+    yet a test.

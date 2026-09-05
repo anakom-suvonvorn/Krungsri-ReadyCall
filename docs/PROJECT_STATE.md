@@ -31,7 +31,7 @@ demonstrable slice, so "the demo" is the current state plus a chosen scenario (`
 
 ---
 
-## 2. Status: **P0 · P1 · P1b · P2a · P2b · P2c complete; P3 complete bar the recording and the live transcript on screen**
+## 2. Status: **P0 · P1 · P1b · P2a · P2b · P2c complete; P3 complete bar the encrypted recording**
 
 The spine runs. A full call lifecycle - arrival, IVR, consent, queue, intake, matching, the offer
 handshake, the live call, wrap-up, rating, closed - executes end to end on fake adapters with no
@@ -45,10 +45,10 @@ caller keys their way through the real menu to the right queue, is offered
 the recording and either takes it or does not, the desk rings, the brief is already there, and
 the disclosure gate moves when the agent attests.
 
-Verified on 2026-09-05: **676 tests** — 634 pass + 42 skipped without the Postgres container
+Verified on 2026-09-05: **697 tests** — 655 pass + 42 skipped without the Postgres container
 (the 42 are the database cases).
 `ruff check` and `ruff format --check` clean over **178** files, `mypy --strict`
-clean over **125** source files, 62/62 diagrams current, the prompt pack fresh, and all three
+clean over **125** source files, 63/63 diagrams current, the prompt pack fresh, and all three
 scenarios replay byte-identically. The database suites ran against a **live Postgres** on
 2026-09-02, and a restart was verified outside pytest with two real uvicorn processes.
 
@@ -117,7 +117,7 @@ FullProject/
 ├─ uv.lock  .python-version  .env.example  .gitignore
 ├─ README.md*
 ├─ docs/*                    # ← this documentation system
-│  ├─ diagrams/*           # 62 diagrams + 12 explanation pages; a quarter generated from source
+│  ├─ diagrams/*           # 63 diagrams + 12 explanation pages; a quarter generated from source
 │  └─ reading/*            # readable twins: the keypad, the restart, the workstation, the offer,
 │                          #   the audio path (which also carries the verification commands)
 ├─ config/*                  # ← the entire insurance-specific "domain pack" (D28)
@@ -314,8 +314,10 @@ no model in it) · ☑ **the VAD port + two adapters** · ☑ **the STT worker s
 (Typhoon NeMo, faster-whisper CT2, Thonburian HF) · ☑ **the bake-off harness**, with its own instruments fixed
 twice (`B14`) · ☑ **`IntakeService.on_turn` is finally fed**, and both recording timeouts are driven
 by the sweep (`B7`) · ☑ **the bake-off TABLE, and the engine chosen on it** — 20 real Thai
-calls, `D30` closed by `D104` · ☐ recording + encryption (needs P7's keys) · ☐ incremental turns
-persisted · ☐ live transcript on the workstation
+calls, `D30` closed by `D104` · ☑ **a recording is actually opened when the caller consents**
+and a WAV can be played down it with no telephony (`D107`) · ☑ **the live transcript on the
+workstation** — held while nobody owns the call, flushed on accept (`D105`, `D106`) ·
+☐ recording + encryption (needs P7's keys) · ☐ incremental turns persisted
 *(The identify step is not pending — it was designed and removed, `D84`.)*
 
 **P4 — analysis & case brief** ☐ intent taxonomy + classifier · ☐ entity extraction · ☐ rolling
@@ -392,8 +394,8 @@ performing by hand, i.e. what the next services take over (`D36`).
 | | |
 |---|---|
 | Source files | 168 Python files (`src/` 126 + `tests/` + `scripts/` + `mock/`) |
-| Tests | 676, all passing, ~115 s (137 store contract + restart across 3 backends; 56 on the prompt pack and the IVR; 40 on the hold and the intake seam; 41 on matching, 12 of them on the wait ceiling under contention; **61 on the audio path** - 10 on normalisation, 13 on endpointing, 11 on the VAD contract across both detectors, 19 on the transcription stream and 8 on the wiring) |
-| Ports defined | **9** (telephony, stt, **vad**, llm, tts, core_data, event_bus, blob_storage, agent_directory) - `vad` added by `D96` |
+| Tests | 697, all passing, ~125 s (137 store contract + restart across 3 backends; 56 on the prompt pack and the IVR; 40 on the hold and the intake seam; 41 on matching, 12 of them on the wait ceiling under contention; **61 on the audio path** - 10 on normalisation, 13 on endpointing, 11 on the VAD contract across both detectors, 19 on the transcription stream and 8 on the wiring; **21 on the transcript reaching the screen**, 13 on the delivery service and 8 driving it over HTTP) |
+| Ports defined | **9** (telephony, stt, **vad**, llm, tts, core_data, event_bus, blob_storage, agent_directory) - `vad` added by `D96`. Plus two **capability** protocols on `stt`: `BatchSttEngine` (`D101`) and `ReplayableSttEngine` (`D107`), which one adapter each implements |
 | Persisted tables | **9** + Alembic, verified on a live Postgres. Presence, the waiting pool and the live identity are deliberately **not** among them (`D78`) |
 | Adapters | 9 fakes/nulls + a caching/circuit-breaking decorator, **plus five real ones**: `SileroVad`, `EnergyVad`, `TyphoonAsrEngine`, `FasterWhisperEngine`, `ThonburianHfEngine` |
 | Spoken lines | 27 prompts + 15 flow roles -> **54 distinct clips** after dedupe (`D80`); rendered by the null engine, so a manifest rather than audio |
@@ -413,7 +415,7 @@ performing by hand, i.e. what the next services take over (`D36`).
 | **Rejected: `distill-whisper-th-large-v3`** | Free to try (already in the HF cache) and worse than CT2 on every axis: CER 0.096 vs 0.087 median, `busy` worst 0.23 vs 0.11, VRAM 1942 vs ~1000 MB. A distilled *large* is still a large |
 | **Throughput** | `busy` = model-seconds per second of audio; above 1.00 the transcriber never catches up. fp16 **0.25 median / 1.25 worst**; CT2 hinted **0.08 / 0.11**. `pad` = seconds Whisper encoded per second of call: median **2.7**, because it pads every clip to a fixed 30 s window |
 | **Real Thai latency** (`D30`) | Paced over 12 calls: p95 **4.5 s - 58.7 s** against a **1.5 s** budget, and the spread tracks throughput — rtf <= 0.31 gives 4.5-8 s, rtf >= 0.65 gives 31-59 s. Once decode is slower than speech the backlog compounds and the last utterance lands a minute late; **half these calls are in that regime.** Invisible until now because every run used `--fast` (`B20`). No segment was abandoned, so these are honest end-to-end numbers. This is `Q29` and it is what `D30`'s table now decides |
-| Diagrams | 62 (14 generated from source, 48 hand-drawn), across 12 explanation pages |
+| Diagrams | 63 (14 generated from source, 49 hand-drawn), across 12 explanation pages |
 
 ---
 
@@ -430,14 +432,23 @@ enforced by a lint check.
 
 ## 10. What comes next
 
-**The live transcript on the agent's screen** — the last piece of P3 that is not about keys.
-The turns exist, are ordered, carry timings and provenance, and are **already published** on the
-bus as `transcript.turn`; what is missing is a subscriber that forwards them to `api/realtime.py`
-and the panel that draws them. The part of it that is not plumbing: during intake the call has no
-assigned agent yet, so the turns have to be held against the call and flushed when somebody
-accepts (`D69`'s gated brief preview is the precedent). Then the **encrypted recording to object
-storage**, which is P7's key management, and then **P4** (analysis and the brief v2+, Claude vs
-Typhoon measured rather than argued).
+**The encrypted recording to object storage** — the last piece of P3, and it is P7's key
+management rather than an audio problem: `ARCHITECTURE` §6 asks the gateway to write the call
+to object storage with a per-recording key reference, and neither MinIO nor the key handling
+exists. Then **P4** (analysis and the brief v2+, Claude vs Typhoon measured rather than argued).
+
+Two smaller things in the same area, both written down rather than left to be rediscovered:
+**`IntakeService._degradation()` returns `NONE` unconditionally** even though
+`TranscriptionService` now knows whether the engine failed — a *wait* until `D96` and a *gap*
+since; and **the decode timeout** (`D98`'s missing half) still needs `D2`'s killable worker
+process, and must not be faked with `asyncio.wait_for`, which does not kill the thread.
+
+**The live transcript on the agent's screen has landed** (`D105`–`D107`, `B24`, 2026-09-05).
+Turns are held while nobody owns the call — which is the whole of intake, and is the product
+rather than an edge case — and flushed to whoever accepts. Getting there found two services
+that were written, correct, tested and **called by nothing**: `TranscriptionService.open()`,
+so the running system had never transcribed anything; and the event bus, which is drained on
+`drain()` and had no periodic driver, so any subscriber would have been unreached.
 
 **P3 step 4b — the GPU half — has landed** (`D96`, `D104`). `media/` normalises whatever
 telephony delivers, `ports/vad.py` and `services/transcription/` endpoint it, and

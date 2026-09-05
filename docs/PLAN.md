@@ -218,7 +218,8 @@ started. `explanations/P3_voice.md` covers the built half; `diagrams/12_the_menu
   Typhoon ASR — CER (never WER, `B18`), p95 utterance latency, VRAM — recorded in
   `PROJECT_STATE.md` §8 and decided in `D104` (`D30`, `INTEGRATIONS.md` §2.1).
 - ✅ `TranscriptTurn` events (`transcript.turn`, published per turn). ☐ incremental DB writes —
-  `transcript_turns` has no table and no ORM model yet. ☐ live transcript in the agent desktop.
+  `transcript_turns` has no table and no ORM model yet. ✅ live transcript in the agent
+  desktop (`D105`–`D107`) — held while the call is unassigned, flushed on accept, in memory.
 - ✅ `IntakeStrategy` seam with `PassiveRecordIntake`; `finalize(reason)`; **ring-time
   grace** (`D21`) — the accept endpoint finalises a live intake as partial, proved on a
   running server. Turns arrive through `IntakeService.on_turn`, **fed for real since
@@ -250,10 +251,12 @@ started. `explanations/P3_voice.md` covers the built half; `diagrams/12_the_menu
   2026-09-04**; and rank on the CER **mean**, because the median is unstable at this sample size
   and cost `D103` a self-correction.
 
-- 🔶 The live transcript on the agent's screen. Turns exist, are ordered, reach
-  `IntakeService.on_turn` and are **published on the bus**; nothing subscribes, so
-  `api/realtime.py` never sees one. **This is the next slice** and `NEXT_SESSION` breaks it
-  into two pieces — a subscriber and a panel.
+- ✅ The live transcript on the agent's screen. **MET 2026-09-05** (`D105`–`D107`,
+  `B24`) — and it turned out to be four pieces rather than two, because two of them were
+  invisible from either end: **nothing opened a recording** and **nothing drained the bus**,
+  so the audio path had never transcribed anything in the running system and any subscriber
+  would have been correct, tested and unreached. Verified in a browser against a running
+  server, not from a test alone.
 - 🔶 The encrypted recording to object storage — P7's key management.
 - ✅ A caller who presses 2, and a caller who consents to nothing, both still reach **the correct
   queue** with a menu-derived brief — because routing never depended on the AI (`D37`).
