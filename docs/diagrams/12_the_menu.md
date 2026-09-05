@@ -262,9 +262,15 @@ adapters, an endpointer, a transcription service and three real STT engines — 
 `D104` a chosen one, Typhoon, which meets the latency budget on every call measured.
 `IntakeService.on_turn` is fed for real, not only by the test suite and the scenario runner.
 
-What is still missing is **the last hop to the screen**: `on_turn` hands the turn to the
-intake strategy and publishes nothing, so `api/realtime.py` never sees it and the
-workstation cannot draw it. The turns exist and are ordered; nobody forwards them.
+What is still missing is **the last hop to the screen** — and it is smaller than it looks.
+The event exists and is already published: `PassiveRecordIntake.on_turn` emits
+`TranscriptTurnAdded` on the bus for every turn. **Nothing subscribes to it.** `AgentHub`
+in `api/realtime.py` is a push mechanism with per-agent sequencing already built; nobody
+takes `transcript.turn` off the bus and calls it.
+
+The part that is not plumbing: during intake the call has **no assigned agent yet**, so the
+turns have to be buffered against the call and flushed when somebody accepts (`D69`'s gated
+brief preview is the precedent), then streamed live once it is assigned.
 
 Also still missing: the encrypted recording to object storage (P7's key management), and
 `_degradation()` returning `NONE` even though `TranscriptionService` now knows whether the

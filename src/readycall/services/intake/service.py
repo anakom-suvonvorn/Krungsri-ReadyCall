@@ -262,10 +262,12 @@ class IntakeService:
         **Fed for real since `D96`** by `services/transcription/`, as well as by the tests
         and the scenario runner. It hands the turn to the strategy and stops there.
 
-        **It does not publish an event**, which is why the agent's screen has no live
-        transcript: the turns exist, are ordered, and reach the intake strategy, and
-        nothing forwards them to `api/realtime.py`. That is the seam the live-transcript
-        slice starts from — see `NEXT_SESSION`.
+        It publishes nothing itself — **the strategy does** (`PassiveRecordIntake.on_turn`
+        emits `TranscriptTurnAdded` on the bus for every turn). So the event reaches the bus
+        today; what is missing is a **subscriber** that forwards it to `api/realtime.py`,
+        which is why the agent's screen still has no live transcript. See `NEXT_SESSION` —
+        and note the part that is not plumbing: during intake the call has no assigned
+        agent yet, so the turns have to be buffered against the call and flushed on accept.
         """
         live = self._live.get(call_session_id)
         if live is not None:

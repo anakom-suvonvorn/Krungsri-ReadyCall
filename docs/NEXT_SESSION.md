@@ -56,18 +56,35 @@ Two methodology traps that each cost a published number:
 
 ### What is NOT built, precisely
 
-**The live transcript on the agent's screen — this is the next slice, and it is well
-defined.** The turns exist, are ordered, carry timings and provenance, and reach
-`IntakeService.on_turn` for real. **`on_turn` publishes nothing**, so `api/realtime.py`
-never sees a turn and the workstation cannot draw one. Three pieces, in order:
+**The live transcript on the agent's screen — this is the next slice.** Two pieces, not
+three, and **less is missing than a first read suggests** — I got this wrong once while
+writing this brief and checked before leaving it here:
 
-1. **publish an event from `on_turn`** — `services/intake/service.py`, and its docstring
-   now names this as the seam. Needs a new event type; `D26` says the speaker label is
-   structural, so it is already on the turn.
-2. **forward it per agent** in `api/realtime.py`, which already does per-agent sequencing
-   and replay-on-reconnect — the transcript should use that, not a second mechanism.
-3. **draw it** in `apps/workstation/`. Read `explanations/P2b_workstation_client.md` first;
-   `B6` was six faults that came from not reading it.
+- ✅ **The event already exists and is already published.** `ev.TranscriptTurnAdded`
+  (`domain/events.py`, `"transcript.turn"`) carries the id, seq, speaker role, text,
+  timings and confidence — and **`PassiveRecordIntake.on_turn` publishes it on the bus**
+  for every turn (`services/intake/passive.py`). `IntakeService.on_turn` hands the turn to
+  the strategy, and the strategy is what publishes. So there is nothing to add at the
+  intake end.
+
+1. **Nothing subscribes.** `api/realtime.py`'s `AgentHub` is a *push* mechanism —
+   `send(agent_id, kind, payload)`, with per-agent sequencing and replay-on-reconnect
+   already built (`D68`, `B7`). Nothing takes `transcript.turn` off the bus and calls it.
+   That subscriber is the missing server piece, and it should use the existing hub rather
+   than a second channel.
+
+   **The design question it runs into, which is not plumbing:** during intake **the call
+   is not assigned to anybody yet** — that is the whole point, the transcript is being
+   built *before* an agent accepts. So a turn published at that moment has no `agent_id`
+   to be sent to. Two halves are needed: buffer the turns against the call, and flush them
+   to the agent on accept (the brief preview in the offer card is the precedent, `D69`),
+   then stream live once the call is assigned. **Do not invent a second delivery path for
+   the live half** — `B6` and `D68` are both about a client growing a second source of
+   truth.
+
+2. **Draw it** in `apps/workstation/`. Read `explanations/P2b_workstation_client.md`
+   first; `B6` was six faults and three of them came from not reading the `.mmd`/prose
+   sources before changing that app.
 
 Two smaller things in the same area:
 
