@@ -16,7 +16,7 @@ Built for the Krungsri Universe × KMITL Hackathon (*Reimagine Insurance Brokera
 
 ## Status
 
-**P0 · P1 · P1b · P2a · P2b · P2c complete. P3 done except the audio.**
+**P0 · P1 · P1b · P2a · P2b · P2c complete. P3 done, including the audio — except the encrypted recording and the live transcript on the agent's screen.**
 
 The identity ladder, the keypad IVR, the intake offer, the context assembler, the brief builder,
 the public API, the matching engine, agent presence, the offer handshake, the React workstation and
@@ -27,9 +27,15 @@ A caller keys their way to the right queue, is offered the pre-call recording an
 refuses it or ignores it — and all three answers reach the same agent, because the menu settled the
 routing before any of it ran. They are deliberately **not** told a position in the queue: the matcher
 re-solves the whole caller × agent matrix every tick, so there is no arrival order to report
-(`docs/DECISIONS.md` `D91`). What is missing is the audio itself: no media gateway, no
-voice activity detection and no speech-to-text worker, so the transcript socket
-(`IntakeService.on_turn`) is real and nothing feeds it.
+(`docs/DECISIONS.md` `D91`).
+
+**The audio path is real** (§6). A WAV file or a phone leg is normalised, endpointed by a voice
+activity detector and transcribed by a Thai speech model into ordered `TranscriptTurn`s that reach
+`IntakeService.on_turn`. The engine was picked on measurements over 20 real Thai call-centre calls
+rather than argued about: **Typhoon ASR**, the only one that meets the 1.5 s utterance-to-turn
+budget, on **20 of 20** calls (`docs/DECISIONS.md` `D104`). What is still missing is the encrypted
+recording to object storage, which needs key management, and the live transcript on the agent's
+screen — the turns are published on the event bus and nothing draws them yet.
 
 **Everything below runs with no services, no API keys, no GPU and no database.** That is deliberate
 (`docs/DECISIONS.md` `D3`): every external dependency sits behind a port with a working fake, so you
@@ -66,7 +72,7 @@ build step — see [§2](#2-the-agent-workstation-react-bundle).
 | **Node 18+** | building the agent workstation bundle, **once** | Only for `/workstation` |
 | **Docker** | Postgres, so a shift survives a restart | Optional |
 | **mermaid-cli** | re-rendering the docs diagrams to SVG | Only if you edit diagrams |
-| **An NVIDIA GPU** | local Thai speech-to-text | Not yet — P3 step 4 |
+| **An NVIDIA GPU** | local Thai speech-to-text | Only for real STT (§6). Everything else, tests included, runs without one |
 
 Python is pinned to **3.11** (`.python-version`); `uv` fetches it for you. Nothing here needs a
 system Python.
@@ -100,11 +106,13 @@ one. See [Configuration](#configuration).
 |---|---|---|
 | `uv sync` | runtime only | the scenario runner, the matching simulator, the doc scripts |
 | `uv sync --extra web` | **+ FastAPI / uvicorn / websockets** | the API, the simulator, the workstation, **the full test suite** |
-| `uv sync --extra ml` | **+ torch (CUDA) / transformers / faster-whisper / silero-vad** | local Thai STT. ~3 GB, needs an NVIDIA GPU, needed by nothing else (§6) |
+| `uv sync --extra ml` | **+ torch (CUDA) / transformers / faster-whisper / silero-vad** | Silero voice detection and the two Whisper engines. ~3 GB, wants an NVIDIA GPU (§6) |
+| `uv sync --extra ml --extra asr` | **+ `nemo_toolkit[asr]`** | **Typhoon**, the shipped engine. Large; the CT2 fallback exists for a box where this will not install (`D103`, `D104`) |
 
 Three test files import FastAPI, so **`--extra web` is the one to use** unless you have a reason not
-to. The `ml` extra is deliberately still commented out in `pyproject.toml`: it is several gigabytes
-and nothing uses it yet.
+to. `ml` and `asr` are real extras now and both are large; neither is needed to run the system, to
+replay a scenario or to pass the suite — the audio path is dependency-free by design, which is why
+CI exercises it with no GPU at all.
 </details>
 
 ### 2. The agent workstation (React bundle)

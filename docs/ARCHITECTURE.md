@@ -1,10 +1,12 @@
 # ARCHITECTURE
 
 _How the full ReadyCall system works, end to end. Read this to understand the machine._
-_Status: **partly built**. P0–P2c are implemented, and P3 is built through the intake
-offer; the audio, the analysis passes and the telephony integration are still design.
+_Status: **partly built**. P0–P2c are implemented and P3 is built including the audio
+path, with the STT engine chosen on measurements (`D104`); the analysis passes and the
+telephony integration are still design, as are the encrypted recording and the live
+transcript on the agent's screen.
 Each section says what is real where it matters. See `PLAN.md` for the build order._
-_Last updated: 2026-09-04._
+_Last updated: 2026-09-05._
 
 ---
 
@@ -222,9 +224,9 @@ customer (if any), product, snapshot and queue.
 > delivers (both G.711 laws, 8 or 16 kHz, mono or stereo) into the 16 kHz mono float32 this
 > document promises; `ports/vad.py` plus `services/transcription/` endpoint it and turn it
 > into `TranscriptTurn`s; and `TranscriptionService` feeds `IntakeService.on_turn`, which
-> had been waiting for it since `D88` (`D96`). **Still not built**: the encrypted recording
-> to object storage (P7's keys), the live transcript on the workstation, and `D30`'s
-> measured bake-off, which needs real Thai telephone audio rather than a signal generator.
+> had been waiting for it since `D88` (`D96`), with **Typhoon ASR** chosen on measurements
+> over 20 real Thai calls (`D30` closed by `D104`). **Still not built**: the encrypted
+> recording to object storage (P7's keys), and the live transcript on the workstation.
 > **Read `B14`, `B16` and `B18` before changing anything in that path.** Three guards sit
 > between the model and the agent and each exists because of something measured: Whisper
 > fed near-silence costs **8.6 s** and invents domain vocabulary (`B14`); the repetition
@@ -233,25 +235,42 @@ customer (if any), product, snapshot and queue.
 > characters a second, measured (`D98`). They are three *different kinds* of check on
 > purpose — a failure that dodges one rarely dodges all three.
 >
-> **The measurement on real Thai speech** (`D97`, 12 calls from the 22 GB call-centre
-> dataset): Thonburian medium fp16 + Silero, **CER 0.09-0.50, median 0.29**, rtf 0.12,
-> 2.8 GiB. The first version of this number was **0.47-0.76 and wrong** — it was
-> measured through `B20`, which released a segment's audio before the model was shown
-> it, so between a third and a half of every call was silently missing. Accuracy is
-> acceptable; **latency is the open problem** — paced over 12 calls, p95 runs **4.5 s to
-> 58.7 s** against §15's 1.5 s, and it tracks throughput: once the engine is slower than
-> real time the backlog compounds for the rest of the call. Half these calls are in that
-> regime on this GPU. See §15 and `Q29`. And rank on **CER, never WER** — whitespace word error on unsegmented Thai
-> read 0.94-1.12 on a model that was working fine (`B18`).
+> **The engine, measured rather than argued** (`D104`; `D97` for the corpus). Paced over a
+> balanced 20-call set drawn from the 22 GB Thai call-centre dataset, same detector and same
+> guards throughout:
+>
+> | | Thonburian fp16 | CT2 int8 + hint | **Typhoon** |
+> |---|---|---|---|
+> | p95 utterance-end -> turn | 19.5 s median / 58.7 s worst | 1.68 s / 2.53 s | **0.19 s / 0.28 s** |
+> | inside §15's 1.5 s budget | 0 of 12 | 7 of 20 | **20 of 20** |
+> | CER mean | **0.109** | 0.128 | 0.133 |
+>
+> **Typhoon is the shipped engine and CT2 is the fallback** for a box where NeMo will not
+> install. The reason is structural and `D99` wrote it down before it was measured: a
+> transducer has **no fixed 30 s window**, so it does not pay a full encode for a
+> two-second utterance the way every Whisper variant does. It also returns **empty in
+> 149 ms** on silence where Whisper spends 8578 ms inventing Thai (`B14`) — which removes
+> `D16`'s dangerous failure mode rather than catching it downstream. Its one real weakness
+> is **spoken digits**, mitigated by architecture rather than by the model: `D44`'s keypad
+> is how a policy number actually arrives and `D20`'s ANI gives the calling number.
+>
+> **Withdrawn figures, so nobody re-derives them.** CER 0.47-0.76 was measured through
+> `B20` (our buffer released a segment's audio before the model saw it). CER median 0.161
+> was a digit-heavy test set plus `B21` (the repetition guard deleting real phone numbers);
+> the balanced set alone moved that number by 1.8x. Rank on the CER **mean**, never the
+> median, which is unstable at n=20 — and on **CER, never WER**, because whitespace word
+> error on unsegmented Thai read 0.94-1.12 on a model that was working fine (`B18`).
 >
 > **Built as of P3 step 4a, down to and including the offer.** `services/ivr/` walks the
 > real menu and hands back a queue; `services/intake/` then acknowledges the wait, makes the
 > offer, records the consent and opens an intake that **outlives the request that started
 > it** (`D21`, `D88`). The scenario runner and the demo endpoint both drive the real
-> services. What is **not** built is the audio: no media gateway, no VAD, no STT worker, no
-> recording to storage, and no live transcript on the workstation. Turns arrive through
-> `IntakeService.on_turn` and nothing calls it yet except tests and scenarios.
-> `diagrams/12_the_menu.md` draws it; `explanations/P3_voice.md` covers it at length.
+> services. `diagrams/12_the_menu.md` draws it; `explanations/P3_voice.md` covers it at
+> length. _(This paragraph continued "what is not built is the audio: no media gateway, no
+> VAD, no STT worker" for a week after step 4b landed and made every clause of it false.
+> The claim is removed rather than dated, because a reader scanning for what exists reads
+> the nearest sentence, not the heading above it — the block above is where the audio's
+> status is now kept.)_
 >
 > Two things the build changed about this section as written. A menu is **not one clip** —
 > personalised ordering makes that impossible, so it is a lead-in plus one line per option

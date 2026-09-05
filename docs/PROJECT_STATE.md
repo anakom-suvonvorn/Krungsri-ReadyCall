@@ -1,7 +1,7 @@
 # PROJECT_STATE
 
 _What this project is, what exists, what doesn't, and where everything lives._
-_Last updated: 2026-09-04._
+_Last updated: 2026-09-05._
 
 ---
 
@@ -31,7 +31,7 @@ demonstrable slice, so "the demo" is the current state plus a chosen scenario (`
 
 ---
 
-## 2. Status: **P0 · P1 · P1b · P2a · P2b · P2c complete; P3 complete bar the recording and the measured bake-off**
+## 2. Status: **P0 · P1 · P1b · P2a · P2b · P2c complete; P3 complete bar the recording and the live transcript on screen**
 
 The spine runs. A full call lifecycle - arrival, IVR, consent, queue, intake, matching, the offer
 handshake, the live call, wrap-up, rating, closed - executes end to end on fake adapters with no
@@ -45,12 +45,12 @@ caller keys their way through the real menu to the right queue, is offered
 the recording and either takes it or does not, the desk rings, the brief is already there, and
 the disclosure gate moves when the agent attests.
 
-Verified on 2026-09-02: **676 tests** — 605 pass + 42 skipped without the Postgres container
+Verified on 2026-09-05: **676 tests** — 634 pass + 42 skipped without the Postgres container
 (the 42 are the database cases).
-`ruff check` and `ruff format --check` clean over 144 files, `mypy --strict`
-clean over **106** source files, and all three scenarios replay byte-identically. The database
-suites ran against a **live Postgres**, and a restart was verified outside pytest with two real
-uvicorn processes.
+`ruff check` and `ruff format --check` clean over **178** files, `mypy --strict`
+clean over **125** source files, 62/62 diagrams current, the prompt pack fresh, and all three
+scenarios replay byte-identically. The database suites ran against a **live Postgres** on
+2026-09-02, and a restart was verified outside pytest with two real uvicorn processes.
 
 ```
 $ uv run python scripts/run_scenario.py tests/scenarios/pattheera_ipd.yaml --quiet
@@ -90,7 +90,7 @@ demonstrable slice, so the demo is simply the current state of the system with a
 | Data | Postgres 16 (two logical stores: `core` read-only, `readycall` read-write), SQLAlchemy 2.0 + Alembic |
 | State / bus | Redis 7 (presence, queues, cache) + Redis Streams as the event bus (Kafka adapter for scale) |
 | Telephony | Asterisk 20 + ARI + AudioSocket by default, behind a `TelephonyProvider` port (Twilio / LiveKit / simulated adapters). Demo trick: a softphone on a real mobile pointed at the laptop over local Wi-Fi = a genuine VoIP call with no internet |
-| STT | Thonburian Whisper (`biodatlab/whisper-th-medium-combined`) default, re-implemented streaming-first (`D9`); CTranslate2 build and **Typhoon ASR** benchmarked against it (`D30`) |
+| STT | **Typhoon ASR** (`scb10x/typhoon-asr-realtime`, a NeMo FastConformer transducer), re-implemented streaming-first (`D9`). Chosen on measurements against Thonburian Whisper fp16 and its CTranslate2 `int8_float16` build — it is the only one that meets the 1.5 s budget (`D30` closed by `D104`). The CT2 build is the documented fallback (`D103`) |
 | TTS | Pre-rendered prompt clips built from `voice_prompts.yaml` (`D24`); streaming only for future conversational intake |
 | LLM | `AnthropicAdapter` + `OpenAiCompatibleAdapter` both implemented (`D29`) — the latter covers Typhoon API, OpenAI, vLLM and Ollama by base URL. No LLM framework (`D31`) |
 | Object storage | MinIO (S3 API) for recordings |
@@ -310,12 +310,12 @@ reversing `D89`) — there is no line to have a position in ·
 ☑ the scenario runner and the demo endpoint hand both walks over — no faked IVR or intake anywhere
 ☐ prompt studio · ☐ real TTS voice (the null engine renders no audio) · ☐ post-call rating keypress ·
 ☑ **media gateway (per-leg fork)** · ☑ **VAD endpointing** (`D9`'s constants, in a machine with
-no model in it) · ☑ **the VAD port + two adapters** · ☑ **the STT worker seam + two real engines**
-(faster-whisper CT2, Thonburian HF) · ☑ **the bake-off harness**, with its own instruments fixed
+no model in it) · ☑ **the VAD port + two adapters** · ☑ **the STT worker seam + three real engines**
+(Typhoon NeMo, faster-whisper CT2, Thonburian HF) · ☑ **the bake-off harness**, with its own instruments fixed
 twice (`B14`) · ☑ **`IntakeService.on_turn` is finally fed**, and both recording timeouts are driven
-by the sweep (`B7`) · ☐ recording + encryption (needs P7's keys) · ☐ **the bake-off TABLE** - the
-harness is ready and needs real Thai audio + the Thai weights (`D30`) · ☐ incremental turns persisted
-· ☐ live transcript on the workstation
+by the sweep (`B7`) · ☑ **the bake-off TABLE, and the engine chosen on it** — 20 real Thai
+calls, `D30` closed by `D104` · ☐ recording + encryption (needs P7's keys) · ☐ incremental turns
+persisted · ☐ live transcript on the workstation
 *(The identify step is not pending — it was designed and removed, `D84`.)*
 
 **P4 — analysis & case brief** ☐ intent taxonomy + classifier · ☐ entity extraction · ☐ rolling
@@ -387,7 +387,7 @@ performing by hand, i.e. what the next services take over (`D36`).
 
 ---
 
-## 8. Real numbers (as of 2026-08-31)
+## 8. Real numbers (as of 2026-09-05)
 
 | | |
 |---|---|
@@ -395,7 +395,7 @@ performing by hand, i.e. what the next services take over (`D36`).
 | Tests | 676, all passing, ~115 s (137 store contract + restart across 3 backends; 56 on the prompt pack and the IVR; 40 on the hold and the intake seam; 41 on matching, 12 of them on the wait ceiling under contention; **61 on the audio path** - 10 on normalisation, 13 on endpointing, 11 on the VAD contract across both detectors, 19 on the transcription stream and 8 on the wiring) |
 | Ports defined | **9** (telephony, stt, **vad**, llm, tts, core_data, event_bus, blob_storage, agent_directory) - `vad` added by `D96` |
 | Persisted tables | **9** + Alembic, verified on a live Postgres. Presence, the waiting pool and the live identity are deliberately **not** among them (`D78`) |
-| Adapters | 9 fakes/nulls + a caching/circuit-breaking decorator, **plus the first three real ones**: `SileroVad`, `FasterWhisperEngine`, `ThonburianHfEngine` |
+| Adapters | 9 fakes/nulls + a caching/circuit-breaking decorator, **plus five real ones**: `SileroVad`, `EnergyVad`, `TyphoonAsrEngine`, `FasterWhisperEngine`, `ThonburianHfEngine` |
 | Spoken lines | 27 prompts + 15 flow roles -> **54 distinct clips** after dedupe (`D80`); rendered by the null engine, so a manifest rather than audio |
 | Call states | 15, transition table self-validated (the rating is an event, not a state — `D46`) |
 | Event types | 19 |
@@ -430,16 +430,22 @@ enforced by a lint check.
 
 ## 10. What comes next
 
-**P3 step 4b** — the GPU half, and the only part of the project with hardware risk: the media
-gateway with per-leg forking, encrypted recording, Silero VAD endpointing, the streaming Thai STT
-worker, and the bake-off on the RTX 3050. **The `ml` extra is still commented out in
-`pyproject.toml`**, and declaring it is step zero. Then **P4** (analysis and the brief v2+, Claude
-vs Typhoon measured rather than argued).
+**The live transcript on the agent's screen** — the last piece of P3 that is not about keys.
+The turns exist, are ordered, carry timings and provenance, and are **already published** on the
+bus as `transcript.turn`; what is missing is a subscriber that forwards them to `api/realtime.py`
+and the panel that draws them. The part of it that is not plumbing: during intake the call has no
+assigned agent yet, so the turns have to be held against the call and flushed when somebody
+accepts (`D69`'s gated brief preview is the precedent). Then the **encrypted recording to object
+storage**, which is P7's key management, and then **P4** (analysis and the brief v2+, Claude vs
+Typhoon measured rather than argued).
 
-Everything above the audio is done, and none of it needed a model or a sound card: every spoken
-line is text in one file rendered at build time, the keypad menu that routes the call is a real
-service, and so is the offer that runs after it — a caller is now offered
-the recording, and either takes it, refuses it (recorded as a refusal) or ignores it, and all
-three reach the same queue. `IntakeService.on_turn` is the socket the transcriber plugs into; it
-exists, it is tested, and nothing feeds it yet. See `explanations/P3_voice.md` for the reasoning,
+**P3 step 4b — the GPU half — has landed** (`D96`, `D104`). `media/` normalises whatever
+telephony delivers, `ports/vad.py` and `services/transcription/` endpoint it, and
+`TranscriptionService` feeds `IntakeService.on_turn` for real. The engine was chosen on 20 real
+Thai calls rather than argued about, and it is the first thing in this project to meet
+`ARCHITECTURE` §15's latency budget. Everything above the audio was already done and none of it
+needed a model or a sound card: every spoken line is text in one file rendered at build time, the
+keypad menu that routes the call is a real service, and so is the offer that runs after it — a
+caller is offered the recording, and either takes it, refuses it (recorded as a refusal) or
+ignores it, and all three reach the same queue. See `explanations/P3_voice.md` for the reasoning,
 `diagrams/12_the_menu.md` for the picture, and `NEXT_SESSION.md` for the live state.

@@ -1,7 +1,7 @@
 # PLAN
 
 _The master build plan for the full system: what gets built, in what order, and what "done" means for each phase._
-_Last updated: 2026-09-04._
+_Last updated: 2026-09-05._
 
 ---
 
@@ -214,14 +214,18 @@ started. `explanations/P3_voice.md` covers the built half; `diagrams/12_the_menu
   **The `ml` extra is still commented out in `pyproject.toml`** — declaring `torch` /
   `transformers` / `faster-whisper` / `onnxruntime` / `silero-vad` is step zero and it is the
   slow install.
-- **STT bake-off on the real hardware**: Thonburian-HF vs Thonburian-CT2 vs distilled vs Typhoon ASR —
-  WER, p95 utterance latency, VRAM — recorded in `PROJECT_STATE.md` (`D30`, `INTEGRATIONS.md` §2.1).
-- `TranscriptTurn` events + incremental DB writes; live transcript in the agent desktop.
+- ✅ **STT bake-off on the real hardware**: Thonburian-HF vs Thonburian-CT2 vs distilled vs
+  Typhoon ASR — CER (never WER, `B18`), p95 utterance latency, VRAM — recorded in
+  `PROJECT_STATE.md` §8 and decided in `D104` (`D30`, `INTEGRATIONS.md` §2.1).
+- ✅ `TranscriptTurn` events (`transcript.turn`, published per turn). ☐ incremental DB writes —
+  `transcript_turns` has no table and no ORM model yet. ☐ live transcript in the agent desktop.
 - ✅ `IntakeStrategy` seam with `PassiveRecordIntake`; `finalize(reason)`; **ring-time
   grace** (`D21`) — the accept endpoint finalises a live intake as partial, proved on a
   running server. Turns arrive through `IntakeService.on_turn`, **fed for real since
-  `D96`** by `services/transcription/`. What `on_turn` does not do is publish an event,
-  which is why the screen has no live transcript yet.
+  `D96`** by `services/transcription/`, and the strategy publishes each one on the bus as
+  `transcript.turn`. What is missing is a **subscriber**: nothing takes those events off
+  the bus and pushes them to the workstation, which is why the screen has no live
+  transcript yet.
 
 **Exit criteria**
 - ✅ Utterance end → turn visible **p95 < 1.5 s** on the RTX 3050, with the chosen engine named and
@@ -246,9 +250,10 @@ started. `explanations/P3_voice.md` covers the built half; `diagrams/12_the_menu
   2026-09-04**; and rank on the CER **mean**, because the median is unstable at this sample size
   and cost `D103` a self-correction.
 
-- 🔶 The live transcript on the agent's screen. Turns exist, are ordered and reach
-  `IntakeService.on_turn`; `on_turn` publishes no event, so `api/realtime.py` never sees one.
-  **This is the next slice** and `NEXT_SESSION` breaks it into three pieces.
+- 🔶 The live transcript on the agent's screen. Turns exist, are ordered, reach
+  `IntakeService.on_turn` and are **published on the bus**; nothing subscribes, so
+  `api/realtime.py` never sees one. **This is the next slice** and `NEXT_SESSION` breaks it
+  into two pieces — a subscriber and a panel.
 - 🔶 The encrypted recording to object storage — P7's key management.
 - ✅ A caller who presses 2, and a caller who consents to nothing, both still reach **the correct
   queue** with a menu-derived brief — because routing never depended on the AI (`D37`).

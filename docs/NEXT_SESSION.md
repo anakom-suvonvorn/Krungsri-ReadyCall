@@ -1,7 +1,7 @@
 # NEXT_SESSION
 
 _The live working state. READ THIS FIRST every session. Keep it short and current._
-_Last updated: 2026-09-04 (night)._
+_Last updated: 2026-09-05._
 
 ---
 
@@ -626,10 +626,14 @@ Facts about *this laptop* rather than the repo, so a fresh session does not redi
 
 ## Things to be careful about (live landmines)
 
-- **THE ENGINE IS THE CT2 BUILD NOW** (`D103`), and it is a **local directory** produced
-  by `scripts/convert_ct2.py`, not a Hugging Face id — inventing one was `B17`. A fresh
+- **THE ENGINE IS TYPHOON** (`D104`), not the CT2 build — `D103` chose CT2 and `D104`
+  replaced it the same day, so a landmine list written between the two says the wrong
+  thing. `STT_ENGINE=typhoon`, and it needs the `asr` extra on top of `ml`.
+- **THE FALLBACK IS THE CT2 BUILD, AND IT IS A LOCAL DIRECTORY** (`D103`) produced by
+  `scripts/convert_ct2.py`, not a Hugging Face id — inventing one was `B17`. A fresh
   clone has no `models/` (gitignored), so the conversion is a setup step. It takes about a
-  minute when the HF cache is warm and downloads ~1.6 GB when it is not.
+  minute when the HF cache is warm and downloads ~1.6 GB when it is not. Convert it even
+  when shipping Typhoon: it is what the demo falls back to if NeMo will not install.
 - **RANK ON THE CER *MEAN*, NOT THE MEDIAN** (`D103`). At n=20 the median is unstable:
   two runs of an IDENTICAL configuration moved it **0.087 -> 0.124** while the mean went
   0.128 -> 0.130, because int8 inference is not bit-reproducible and a couple of calls
