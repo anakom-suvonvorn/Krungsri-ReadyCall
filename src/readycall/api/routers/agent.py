@@ -99,6 +99,8 @@ async def demo_login(
         samesite="lax",
         max_age=int(container.settings.agent_session_ttl_s),
     )
+    # A new session at this desk, so the push sequence starts again (`B27`).
+    await container.hub.reset(agent.agent_id)
     await container.presence.sign_in(agent.agent_id, session_id=token[:8])
     return await _presence_out(container, agent.agent_id)
 
@@ -168,6 +170,14 @@ async def declare_state(
                 await container.assignments.close_unwrapped(
                     session, assignment_id=assignment.assignment_id
                 )
+
+    # **Match immediately, rather than on the next sweep** (`B27`). Pressing "พร้อมรับสาย"
+    # while somebody is already in the queue should ring this desk now; waiting for the
+    # sweep is up to a second of a caller sitting in front of an agent who is free, and
+    # the matcher costs under 50 ms. Any declaration can change the matrix - going on
+    # break can free a caller the solver had reserved for this agent - so it is not
+    # conditional on `ready`.
+    await container.dispatch.tick()
 
     out = await _presence_out(container, who.agent_id)
     await container.hub.send(who.agent_id, "presence", out.model_dump(mode="json"))
@@ -614,6 +624,13 @@ def _queues_out(container: Any, *, agent_skills: frozenset[str] = frozenset()) -
                 next_open_at=state.next_open_at,
                 waiting=len(queued),
                 longest_wait_s=max((c.total_wait_s for c in queued), default=0.0),
+                # The EARLIEST anchor is the LONGEST wait — the same caller seen from the
+                # two ends. Computed from the same list so the number and the thing the
+                # client counts from cannot end up describing different people.
+                longest_wait_since=min(
+                    (c.waiting_since for c in queued if c.waiting_since is not None),
+                    default=None,
+                ),
                 mine=spec.required_skill in agent_skills,
             )
         )
@@ -703,6 +720,7 @@ async def _snapshot(container: Any, agent_id: str) -> WorkstationSnapshot:
             ),
             urgency=str(waiting.intent_urgency) if waiting else "normal",
             waited_s=waiting.total_wait_s if waiting else 0.0,
+            waited_since=waiting.waiting_since if waiting else None,
             assurance=str(identity.assurance) if identity else "l0_anonymous",
             rationale_th=decision.rationale_th if decision else None,
             summary_th=(preview or {}).get("summary_th"),

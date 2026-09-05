@@ -70,14 +70,14 @@ update path, which is why the UI stays coherent after any click without a follow
 | `presence.intent_reason` | Which of three sentences explains a `not_ready`; whether *Save & Ready* is offered |
 | `presence.acw_since` | The anchor the ACW timer counts from |
 | `presence.long_acw` | The "running long" warning, from `acw_long_after_s` |
-| `offer` | The offer card, **including a gated preview of the brief** (`D69`) |
+| `offer` | The offer card, **including a gated preview of the brief** (`D69`) and `waited_since`, the anchor the "รอมาแล้ว" badge ticks (`B27`) |
 | `active_call_session_id` | Which call can still be acted on (`IN_CALL` or `WRAP_UP` only) |
 | `wrapup_call_session_id` | Which call is being wrapped — **outlives the record closing** (`D68`) |
 | `wrapup_saved` | Whether the record was saved (`D68`) |
 | `identity` | Assurance badge, lock state, `attestation_count`, **`attestable`** (which outcomes may be pressed, `D71`), `may_act_on_policy` and `may_see_record` (`D74`) |
 | `brief` | The whole brief panel. From L1 it carries the record; at L0 it carries nothing, and the DTO still has no field for the raw snapshot (`D74`) |
 | `captures[]` | Digits, mask, and the tiered lookup results |
-| `queues[]` | Queue depth, each flagged `mine` for this agent's skills (`D70`) |
+| `queues[]` | Queue depth, each flagged `mine` for this agent's skills (`D70`), each with `longest_wait_since` — the **anchor** the strip ticks (`B27`) |
 | `call_answered_at` | The anchor the call timer counts from |
 | `server_time` | The skew correction every timer applies — **sampled once per snapshot**, never per render (`B8`) |
 | `challenges[]` | The verification methods the dropdown renders, from `config/challenges.yaml` (`D72`) |
@@ -94,7 +94,7 @@ update path, which is why the UI stays coherent after any click without a follow
 | `skew` | `server − browser`, sampled when a snapshot arrives | nothing |
 | `reopened` | "I pressed amend" — re-locks on `attestation_count` (`D61`) | nothing |
 | `disposition`, `notes`, `followUp` | The wrap-up draft | **the typed notes** — no draft persistence exists |
-| `lastSeq`, `attempt`, `stopped` | Replay position and backoff | replays the outbox, then a snapshot lands on top |
+| `lastSeq`, `attempt`, `stopped` | Replay position and backoff | replays the outbox, then a snapshot lands on top. ⚠️ **Reset on sign-in** (`B27`): `seq` is per agent, this ref is per tab, and without the reset the second agent to use a tab discards every push below the first agent's high-water mark |
 | `tick` | Forces a re-render 4×/s so timers move | nothing |
 
 **Nothing in the second table decides what the agent may do or see.** Permission —

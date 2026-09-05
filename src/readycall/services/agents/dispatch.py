@@ -21,6 +21,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
+from datetime import timedelta
 from typing import Any, Protocol
 
 from readycall.clock import Clock
@@ -162,7 +163,16 @@ class DispatchService:
         knows when this caller was queued, and a second copy kept in step by remembering
         to update it is a second copy that will one day disagree.
         """
-        return replace(call, waiting_s=session.wait_seconds(self._clock.now()))
+        now = self._clock.now()
+        elapsed = session.wait_seconds(now)
+        return replace(
+            call,
+            waiting_s=elapsed,
+            # The anchor a screen counts from. Credit included, so the demo's "already
+            # waited 40 s" and a real 40-second wait are the same thing to the client and
+            # neither of them needs to know which it is looking at.
+            waiting_since=now - timedelta(seconds=elapsed + call.waiting_credit_s),
+        )
 
     def waiting(self) -> list[WaitingCall]:
         return [self._live(session, call) for session, call in self._waiting.values()]

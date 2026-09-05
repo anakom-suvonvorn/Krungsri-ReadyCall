@@ -90,6 +90,18 @@ export function useSocket(
   useEffect(() => {
     if (!enabled) return;
     stopped.current = false;
+    // **Start a new session at zero** (`B27`). `seq` is per AGENT on the server, and this
+    // ref is per TAB — so signing out of one agent and into another in the same tab left
+    // the high-water mark of the previous agent in place, and every one of the new
+    // agent's messages looked like a replay we had already applied. Including the offer.
+    // The card then appeared only when something *else* triggered a refresh, which is the
+    // ten-second heartbeat, on a twenty-second ring.
+    //
+    // This resets only when `enabled` flips — a fresh sign-in. A reconnect after a
+    // network drop goes through `onclose` -> backoff -> `connect()` without re-running
+    // this effect, so it keeps its position and the server still replays the gap, which
+    // is the whole point of the outbox (`D68`).
+    lastSeq.current = 0;
     connect();
     const beat = window.setInterval(() => {
       const socket = socketRef.current;

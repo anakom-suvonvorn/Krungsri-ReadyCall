@@ -241,6 +241,13 @@ class OfferOut(ApiModel):
     intent_label_th: str | None = None
     urgency: str = "normal"
     waited_s: float = 0.0
+    #: The instant the wait is measured from, so the card can **tick** it (`B27`). The
+    #: scalar above is the same number at snapshot time; this is what makes it move.
+    #: Exactly the shape `acw_since` / `acw_seconds` already use, and for the same reason
+    #: (`D68`, `B8`): a pre-computed duration can only change when a snapshot arrives, and
+    #: snapshots arrive when something happens — which, for a caller who is waiting, is
+    #: precisely never.
+    waited_since: datetime | None = None
     assurance: str = "l0_anonymous"
     #: The one-line Thai rationale from the matcher: *why this agent* (`D22`).
     rationale_th: str | None = None
@@ -400,6 +407,10 @@ class QueueOut(ApiModel):
     next_open_at: datetime | None = None
     waiting: int = 0
     longest_wait_s: float = 0.0
+    #: The anchor for the longest wait — the earliest-queued caller still in this queue.
+    #: Same reason as `OfferOut.waited_since` (`B27`): a duration sent as a number can
+    #: only change when a snapshot arrives.
+    longest_wait_since: datetime | None = None
     #: Whether the signed-in agent holds this queue's required skill, i.e. whether any of
     #: these callers could actually reach them (`D70`). The strip listed all nine queues
     #: identically, so a health agent watched motor and life fill up with no way to tell

@@ -257,7 +257,7 @@ export default function App() {
               }).then((next) => next && setSnapshot(next))
             }
           />
-          <QueueStrip queues={queues} />
+          <QueueStrip queues={queues} skewMs={skew} />
         </div>
 
         <div className="col">
@@ -434,6 +434,7 @@ export default function App() {
       <OfferCard
         offer={offer}
         busy={busy}
+        skewMs={skew}
         onAccept={() =>
           offer &&
           run(() => api.accept(offer.assignment_id)).then((next) => next && setSnapshot(next))

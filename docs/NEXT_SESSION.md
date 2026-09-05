@@ -120,7 +120,7 @@ it, all three reaching the same agent — **and what they said while they were w
 that agent's screen the moment they press Accept**, in order, each sentence carrying the
 moment in the recording it was said.
 
-Verified **2026-09-05**: **720 tests** — 678 pass + 42 skipped without the Postgres
+Verified **2026-09-05**: **723 tests** — 681 pass + 42 skipped without the Postgres
 container (the 42 are the database cases). `ruff check` + `ruff format --check` clean over 182 files,
 `mypy --strict` clean over 126, all scenarios replay, 63/63 diagrams current, prompt pack
 fresh (54 clips), `audit_docs.py` clean on the live files. **And verified in a browser
@@ -658,6 +658,21 @@ Facts about *this laptop* rather than the repo, so a fresh session does not redi
 
 ## Things to be careful about (live landmines)
 
+- **A DURATION IN A PAYLOAD NEEDS AN ANCHOR OR IT WILL NOT MOVE** (`B27`, `D68`, `B8`).
+  A number only changes when a snapshot arrives, and for a caller sitting in a queue
+  nothing ever happens to cause one. Send the *instant* alongside it — `waited_since`,
+  `longest_wait_since`, `acw_since`, `call_answered_at` — and let `useSecondTicker` +
+  `elapsedSince` count. Compute the anchor **beside** the number, in `_live()`, so the two
+  cannot end up describing different moments.
+- **`seq` IS PER AGENT; THE CLIENT'S `lastSeq` IS PER TAB** (`B27`). Signing out does not
+  unmount `useSocket`, so without a reset the second agent to use a tab silently discards
+  every push below the first agent's high-water mark — including their offer. `lastSeq`
+  resets when `enabled` flips true, and **only** then: a reconnect must keep its position
+  or the outbox replay in `D68` has nothing to replay against.
+- **IF THE UI UPDATES ON A TEN-SECOND CADENCE, IT IS THE HEARTBEAT** (`B27`).
+  `HEARTBEAT_MS = 10_000` is the only ten in the client, and `heartbeat_ack` falls through
+  `onSocketMessage` to `quietRefresh()`. Anything that appears to refresh every ten seconds
+  is really not refreshing at all — that is just the next unrelated redraw.
 - **THE HARD FILTER IS THE ONLY THING THAT KEEPS AN UNAVAILABLE AGENT FROM BEING RUNG**
   (`B25`). `hard_filter` checks `offline` / `not_ready` / `busy` and nothing else does —
   `PresenceView.offerable` is for the *screen*. Until 2026-09-05 neither of them was

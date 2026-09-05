@@ -136,16 +136,23 @@ export function OfferCard({
   onAccept,
   onDecline,
   busy,
+  skewMs = 0,
 }: {
   offer: Offer | null;
   onAccept: () => void;
   onDecline: (reason: string, stopOffering: boolean) => void;
   busy: boolean;
+  /** `server - browser`, sampled once per snapshot (`B8`). This card was the one timer
+   *  that never applied it, so on a laptop with a drifted clock the countdown was wrong
+   *  by the offset and nothing on screen pointed at the clock. */
+  skewMs?: number;
 }) {
   const now = useSecondTicker(offer !== null);
   if (!offer) return <div className="scrim hidden" />;
 
-  const left = Math.max(0, offer.timeout_s - (elapsedSince(offer.offered_at, now) ?? 0));
+  const left = Math.max(0, offer.timeout_s - (elapsedSince(offer.offered_at, now, skewMs) ?? 0));
+  // Ticked from the anchor, not read from the number (`B27`).
+  const waited = elapsedSince(offer.waited_since, now, skewMs) ?? offer.waited_s;
   // At zero the server has already timed the offer out (RONA) and a `offer_revoked` push
   // is on its way. Hiding the card immediately rather than waiting for it stops the agent
   // from pressing Accept on a call that has already gone to somebody else — the click
@@ -175,7 +182,7 @@ export function OfferCard({
           >
             {URGENCY_LABEL[offer.urgency] ?? offer.urgency}
           </span>
-          <span className="badge">รอมาแล้ว {mmss(offer.waited_s)}</span>
+          <span className="badge">รอมาแล้ว {mmss(waited)}</span>
         </div>
 
         {/* What the call is ABOUT, not only why it came here (`D69`). Server-gated: at
@@ -832,8 +839,11 @@ export function BriefPanel({ brief }: { brief: Brief }) {
  * of those numbers were theirs. `mine` comes from the server, which already owns the
  * skill-to-queue mapping the matcher uses.
  */
-export function QueueStrip({ queues }: { queues: Queue[] }) {
+export function QueueStrip({ queues, skewMs = 0 }: { queues: Queue[]; skewMs?: number }) {
   const [showAll, setShowAll] = useState(false);
+  // The strip's wait is a clock like every other one on this screen (`B27`), so it needs
+  // the same once-a-second re-render. Only while somebody is actually waiting.
+  const now = useSecondTicker(queues.some((q) => q.waiting > 0));
   const mine = queues.filter((q) => q.mine);
   const shown = showAll ? queues : mine;
   const othersWaiting = queues.filter((q) => !q.mine).reduce((n, q) => n + q.waiting, 0);
@@ -874,7 +884,8 @@ export function QueueStrip({ queues }: { queues: Queue[] }) {
             // necessarily the next caller out: matching is global and urgency-weighted
             // (`D22`), so a newer caller at an accident scene can legitimately go first.
             <span className="mono muted" title="เวลารอของคนที่รอนานที่สุดในคิวนี้">
-              {queue.waiting} รอ · รอนานสุด {mmss(queue.longest_wait_s)}
+              {queue.waiting} รอ · รอนานสุด{" "}
+              {mmss(elapsedSince(queue.longest_wait_since, now, skewMs) ?? queue.longest_wait_s)}
             </span>
           ) : (
             <span className="faint">

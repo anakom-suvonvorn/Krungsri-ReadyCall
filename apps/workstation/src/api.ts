@@ -44,6 +44,10 @@ export type Offer = {
   intent_label_th: string | null;
   urgency: string;
   waited_s: number;
+  /** The anchor the card ticks from (`B27`). `waited_s` is the same number at snapshot
+   *  time, and a snapshot only arrives when something happens — which for a caller who is
+   *  waiting is never, so the figure sat still while every other timer moved. */
+  waited_since: string | null;
   assurance: string;
   rationale_th: string | null;
   /** A preview of the brief, gated exactly as the brief is (`D69`). At L1 the name is
@@ -109,6 +113,8 @@ export type Queue = {
   next_open_at: string | null;
   waiting: number;
   longest_wait_s: number;
+  /** The anchor for the longest wait — the earliest caller still in this queue (`B27`). */
+  longest_wait_since: string | null;
   /** Whether this agent holds the queue's required skill — i.e. whether any of these
    *  callers could actually reach them. Server-computed (`D70`). */
   mine: boolean;

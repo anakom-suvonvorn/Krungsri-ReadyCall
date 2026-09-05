@@ -1234,3 +1234,89 @@ _Found in the same session, by the user noticing the number never moved._
   `waiting_s` was frozen and correctly unfroze it for the thing it was investigating. The
   question it did not ask is *who else reads this?* — and the answer was the only two
   places a person ever sees the number.
+
+
+## B27. The screen was late twice over: a duration sent as a number, and a sequence counter that outlived its session
+_Found 2026-09-05 by the user, one day after `B26`, on the page `B26` was supposed to have
+fixed. Two independent faults with the same symptom — **the workstation updating on a
+ten-second cadence** — and ten seconds is the heartbeat interval, which is the clue that
+named both._
+
+### Symptom 1: the wait moved once every ten seconds instead of every second
+
+- **Root cause.** `B26` made the server compute the wait correctly. It still sent it as a
+  **number**. A number can only change when a new snapshot arrives, and snapshots arrive
+  when *something happens* — which, for a caller who is sitting in a queue, is precisely
+  never. The only thing refreshing the page at all was the socket's `heartbeat_ack`, which
+  falls through `onSocketMessage` to `quietRefresh()` every `HEARTBEAT_MS` = 10 s.
+- **Every other timer on that screen already had the fix.** The call timer counts from
+  `call_answered_at`; the ACW timer counts from `acw_since`; both are **anchors**, both are
+  ticked client-side by `useSecondTicker` + `elapsedSince`, and both got that way in `D68`
+  and `B8`. The wait was the one duration still shipped pre-computed.
+- **Fix.** `OfferOut.waited_since` and `QueueOut.longest_wait_since`, computed in
+  `DispatchService._live()` **beside** the number they anchor so the two cannot describe
+  different instants — and for the strip, the *earliest* anchor, which is the same caller
+  as the *longest* wait seen from the other end. The scalars stay, exactly as
+  `acw_seconds` stays next to `acw_since`.
+- **And one thing found while doing it:** `OfferCard` was the only timer that never applied
+  the clock skew. On a laptop whose clock has drifted, the ring countdown was wrong by the
+  offset with nothing on screen pointing at the clock — `B8` again, in the one component
+  that had been missed.
+
+### Symptom 2: after switching agents, an offer took ten seconds to appear
+
+- **Symptom, exactly as reported:** sign in as A, press ready, place a call, decline, sign
+  out; sign in as B, press ready — and the offer arrives late, with the ring countdown
+  already down to about **10** of its 20 seconds.
+- **Root cause, and it is a scoping mismatch.** `seq` is per **agent** on the server;
+  `lastSeq` in `useSocket.ts` is a `useRef` per **tab**. Signing out does not unmount the
+  hook, so B's socket opened with A's high-water mark, sent it as `hello {last_seq: n}`,
+  and then discarded every live message at or below it:
+
+      if (message.seq <= lastSeq.current) return;
+
+  B's channel starts at 1. **So B's offer push was thrown away by B's own client**, along
+  with everything else until B's sequence climbed past A's. The card appeared when the
+  10-second heartbeat happened to trigger an unrelated refresh — which is why the countdown
+  was always around 10.
+- **Fix, two halves, and only one of them is optional.**
+  - **Client (required):** reset `lastSeq` when `enabled` flips true — a fresh sign-in.
+    A *reconnect* goes through `onclose` -> backoff -> `connect()` without re-running the
+    effect, so it keeps its position and the outbox still replays the gap, which is the
+    whole point of `D68`.
+  - **Server (correct, not sufficient):** `AgentHub.reset()` on sign-in. A sign-in is not a
+    reconnect; whatever is in that outbox belongs to a previous session at that desk, and
+    replaying it hands the new arrival offers that were resolved before they sat down.
+- **A third thing, which is not a bug but was part of the same complaint.** Pressing ready
+  with somebody already queued did not match until the next sweep — correct, but up to a
+  second of a caller waiting in front of a free agent. `POST /v1/agent/state` now ticks the
+  dispatcher, unconditionally: any declaration can change the matrix, and the matcher costs
+  under 50 ms.
+
+### Verification
+
+In a browser, in a tab that had just held A001's session:
+
+* the offer card appeared **109 ms** after the caller was placed, with no user action —
+  before the fix that push was discarded and the card waited for the heartbeat;
+* pressing ready with a caller already queued rang the desk **immediately**, countdown at
+  16 of 20 rather than ~10;
+* the wait ticked `00:41 -> 00:43` on the card and `02:24 -> 02:26` on the strip over two
+  seconds. (Those are two different callers, correctly: the strip shows the *longest* wait
+  in the queue, the card shows *this* caller's — that difference briefly looked like a
+  third bug and is not one.)
+
+### Lessons
+
+- **Ten seconds is a number, not a mystery.** Both faults presented as "the UI updates
+  every ten seconds", and `HEARTBEAT_MS = 10_000` is the only ten in the client. When a
+  symptom has a period, find the constant with that period first.
+- **A duration on a screen is a clock, and a clock needs an anchor.** `D68` and `B8`
+  established this for two timers and the pattern was never applied to the third. When you
+  add a duration to a payload, ask whether anything will make it move.
+- **A per-session counter has to be reset by the thing that starts a session.** The client
+  and the server were both right about their own scope and wrong about each other's: `seq`
+  per agent, `lastSeq` per tab, and nothing owned the transition between them.
+- **`B26` and `B27` are the same fix arriving twice**, one day apart, because the first one
+  stopped at "the server now computes the right number". Fixing a value is not the same as
+  making it visible.

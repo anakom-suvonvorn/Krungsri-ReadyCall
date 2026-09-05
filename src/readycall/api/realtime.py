@@ -86,6 +86,30 @@ class AgentHub:
                 return
             channel.connections = [c for c in channel.connections if c.socket is not socket]
 
+    async def reset(self, agent_id: str) -> None:
+        """A new sign-in starts a new sequence (`B27`).
+
+        The outbox exists so a **reconnect** can replay the gap (`D68`). A sign-in is not
+        a reconnect: whatever is in there belongs to a previous session at this desk, and
+        replaying it hands the new arrival somebody else's offers to re-read.
+
+        It is also what makes the client's own reset safe. That side has to happen — the
+        client's `lastSeq` is per tab while `seq` is per agent, so without it the second
+        agent to use a tab silently drops every message below the first agent's high-water
+        mark. Resetting both keeps the two counters describing the same thing.
+        """
+        async with self._lock:
+            channel = self._channels.get(agent_id)
+            if channel is None:
+                return
+            channel.seq = 0
+            channel.outbox.clear()
+            # Connections are deliberately left alone: the socket may already be open and
+            # is about to be told, and closing it here would make a sign-in look like a
+            # network failure to the client's backoff.
+            for connection in channel.connections:
+                connection.acked_seq = 0
+
     def is_connected(self, agent_id: str) -> bool:
         channel = self._channels.get(agent_id)
         return bool(channel and channel.connections)

@@ -56,6 +56,12 @@ class WaitingCall:
     is_vulnerable: bool = False
     #: Survives a re-match; never reset by a fit change (`QueueEntry.waiting_credit_s`).
     waiting_credit_s: float = 0.0
+    #: The instant this caller's wait is measured **from**, credit included — so a screen
+    #: can tick it once a second instead of waiting for the next snapshot (`B27`).
+    #: `total_wait_s` is the same quantity as a number at snapshot time; this is the
+    #: anchor. Both are set together in `DispatchService._live()`, deliberately, so the
+    #: number and the thing a client counts from cannot drift apart.
+    waiting_since: datetime | None = None
     #: Agents who already declined or missed this call (`D33`). A hard filter, not a
     #: penalty: without it the global solver re-picks the same best agent on the very
     #: next tick and the caller watches one desk not answer, indefinitely.

@@ -405,3 +405,92 @@ async def test_declining_with_stop_is_not_immediately_rung_again(client: Any) ->
 
     await sweep_once(client.app.state.container)
     assert me(client)["offer"] is None, "nor on the next tick"
+
+
+# --- B27: two reasons the screen was late ------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_pressing_ready_rings_the_desk_without_waiting_for_the_sweep(
+    client: Any,
+) -> None:
+    """The user's report: press ready with somebody already queued, and nothing happens.
+
+    It resolved on the next sweep, so it was never *broken* — but a caller sitting in
+    front of an agent who is free for up to a second is a second nobody has to spend, and
+    the matcher costs under 50 ms. Note there is **no `sweep_once` in this test**: that is
+    the assertion.
+    """
+    client.post("/v1/agent/demo-login", json={"agent_id": "A001"})
+    placed = place(client)
+    assert placed["offered_to"] is None, "nobody is ready yet"
+
+    client.post("/v1/agent/state", json={"agent_intent": "ready"})
+    offer = me(client)["offer"]
+    assert offer is not None, "a caller was already waiting; the desk should ring now"
+    assert offer["call_session_id"] == placed["call_session_id"]
+
+
+@pytest.mark.asyncio
+async def test_signing_in_again_starts_the_push_sequence_over(client: Any) -> None:
+    """`B27`, server half. A sign-in is not a reconnect.
+
+    The outbox exists so a **reconnect** replays the gap it missed (`D68`). Signing in is
+    a new session at that desk, and replaying the previous one hands the new arrival
+    offers that were resolved before they sat down.
+
+    ⚠️ **This is the smaller half of `B27` and it is the half Python can see.** The bug
+    the user hit is in `useSocket.ts`: `seq` is per *agent* on the server and `lastSeq` is
+    per *tab*, so signing out of A and into B in one tab left A's high-water mark in place
+    and every one of B's messages — the offer included — was discarded as a replay
+    already applied. The card then appeared only when the ten-second heartbeat triggered a
+    refresh, on a twenty-second ring. That fix is one line of TypeScript and **no test in
+    this suite covers it**; it was verified in a browser instead, and this note is here so
+    nobody reads the green tick as coverage.
+    """
+    hub = client.app.state.container.hub
+
+    client.post("/v1/agent/demo-login", json={"agent_id": "A001"})
+    client.post("/v1/agent/state", json={"agent_intent": "ready"})
+    place(client)
+    offer = me(client)["offer"]
+    assert offer is not None
+    client.post(f"/v1/agent/offers/{offer['assignment_id']}/decline", json={"reason": "busy"})
+    assert hub.pending_for("A001"), "the channel should have climbed above zero"
+    client.post("/v1/agent/logout")
+
+    client.post("/v1/agent/demo-login", json={"agent_id": "A001"})
+    assert hub.pending_for("A001") == [], (
+        "a fresh session was handed the previous session's outbox to replay"
+    )
+    client.post("/v1/agent/state", json={"agent_intent": "ready"})
+    messages = hub.pending_for("A001")
+    assert messages and messages[0]["seq"] == 1, (
+        f"the new session starts at seq {messages[0]['seq'] if messages else None}, not 1"
+    )
+
+
+@pytest.mark.asyncio
+async def test_the_wait_is_sent_as_an_anchor_not_only_as_a_number(client: Any) -> None:
+    """A duration sent as a scalar can only change when a snapshot arrives (`B27`).
+
+    Which, for a caller who is simply waiting, is never — so the figure sat still while
+    the call timer and the ACW timer beside it ticked. Same fix those two already had
+    (`D68`, `B8`): send the instant, let the client count.
+    """
+    client.post("/v1/agent/demo-login", json={"agent_id": "A001"})
+    client.post("/v1/agent/state", json={"agent_intent": "ready"})
+    place(client, waited_s=40)
+
+    offer = me(client)["offer"]
+    assert offer["waited_since"] is not None
+    started = datetime.fromisoformat(offer["waited_since"])
+    # 40 seconds of credit means the anchor sits 40 seconds in the past, so the client
+    # counting from it lands on the same number the server would have sent.
+    assert (NOW - started).total_seconds() == pytest.approx(40.0, abs=1.0)
+
+    queue = next(q for q in me(client)["queues"] if q["queue_id"] == "q_motor_claim")
+    assert queue["longest_wait_since"] is not None
+    assert queue["longest_wait_since"] == offer["waited_since"], (
+        "one caller, so the strip and the card must be counting from the same instant"
+    )
