@@ -45,7 +45,7 @@ caller keys their way through the real menu to the right queue, is offered
 the recording and either takes it or does not, the desk rings, the brief is already there, and
 the disclosure gate moves when the agent attests.
 
-Verified on 2026-09-05: **717 tests** — 675 pass + 42 skipped without the Postgres container
+Verified on 2026-09-05: **720 tests** — 678 pass + 42 skipped without the Postgres container
 (the 42 are the database cases).
 `ruff check` and `ruff format --check` clean over **178** files, `mypy --strict`
 clean over **125** source files, 63/63 diagrams current, the prompt pack fresh, and all three
@@ -394,7 +394,7 @@ performing by hand, i.e. what the next services take over (`D36`).
 | | |
 |---|---|
 | Source files | 168 Python files (`src/` 126 + `tests/` + `scripts/` + `mock/`) |
-| Tests | 717, all passing, ~125 s (**20 on agent availability and the wait on screen**, `B25`/`B26`; 137 store contract + restart across 3 backends; 56 on the prompt pack and the IVR; 40 on the hold and the intake seam; 41 on matching, 12 of them on the wait ceiling under contention; **61 on the audio path** - 10 on normalisation, 13 on endpointing, 11 on the VAD contract across both detectors, 19 on the transcription stream and 8 on the wiring; **21 on the transcript reaching the screen**, 13 on the delivery service and 8 driving it over HTTP) |
+| Tests | 720, all passing, ~125 s (**20 on agent availability and the wait on screen**, `B25`/`B26`; 137 store contract + restart across 3 backends; 56 on the prompt pack and the IVR; 40 on the hold and the intake seam; 41 on matching, 12 of them on the wait ceiling under contention; **61 on the audio path** - 10 on normalisation, 13 on endpointing, 11 on the VAD contract across both detectors, 19 on the transcription stream and 8 on the wiring; **21 on the transcript reaching the screen**, 13 on the delivery service and 8 driving it over HTTP) |
 | Ports defined | **9** (telephony, stt, **vad**, llm, tts, core_data, event_bus, blob_storage, agent_directory) - `vad` added by `D96`. Plus two **capability** protocols on `stt`: `BatchSttEngine` (`D101`) and `ReplayableSttEngine` (`D107`), which one adapter each implements |
 | Persisted tables | **9** + Alembic, verified on a live Postgres. Presence, the waiting pool and the live identity are deliberately **not** among them (`D78`) |
 | Adapters | 9 fakes/nulls + a caching/circuit-breaking decorator, **plus five real ones**: `SileroVad`, `EnergyVad`, `TyphoonAsrEngine`, `FasterWhisperEngine`, `ThonburianHfEngine` |

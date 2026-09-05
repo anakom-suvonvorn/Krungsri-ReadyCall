@@ -120,7 +120,7 @@ it, all three reaching the same agent — **and what they said while they were w
 that agent's screen the moment they press Accept**, in order, each sentence carrying the
 moment in the recording it was said.
 
-Verified **2026-09-05**: **717 tests** — 675 pass + 42 skipped without the Postgres
+Verified **2026-09-05**: **720 tests** — 678 pass + 42 skipped without the Postgres
 container (the 42 are the database cases). `ruff check` + `ruff format --check` clean over 182 files,
 `mypy --strict` clean over 126, all scenarios replay, 63/63 diagrams current, prompt pack
 fresh (54 clips), `audit_docs.py` clean on the live files. **And verified in a browser
@@ -676,6 +676,13 @@ Facts about *this laptop* rather than the repo, so a fresh session does not redi
   through `DispatchService.waiting()` / `waiting_call()`, which derive the live wait from
   `call_sessions` (`B26`, `D78`). Never write it back — that creates the second copy the
   derivation exists to avoid.
+- **THERE IS A FLOOR-LEVEL STRESS SUITE NOW — USE IT** (`tests/integration/test_floor_
+  under_load.py`). Seeded random walks over the real HTTP API with several agents and
+  several callers, asserting **invariants** after every step rather than outcomes: nobody
+  unavailable is rung, no caller rings two desks, no desk holds two callers, nobody is
+  re-offered a call they declined, no wait goes backwards. Verified to catch `B25` by
+  disabling the fix. **Add a scenario here whenever a bug is found by clicking** — that is
+  the class of fault the rest of the suite cannot see, and it is now two for two.
 - **A CALLER EVERY QUALIFIED AGENT DECLINED IS STUCK FOREVER** (`Q31`, reported as
   `ALL_DECLINED` since `D108`). `D52`'s exclusion has no expiry and `D93`'s wait-ceiling
   rescue picks from *qualified* agents, all of whom are excluded — so nothing rescues them.
