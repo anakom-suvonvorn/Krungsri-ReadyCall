@@ -157,6 +157,25 @@ export type PendingWrapup = {
   assurance: string;
 };
 
+/** One utterance of the live transcript (`D106`).
+ *
+ *  Deliberately NOT gated on assurance: this is the caller's own speech on the call being
+ *  taken, not anything looked up about them, and an anonymous caller at L0 is exactly the
+ *  case with no other source of context. What is gated is the customer *record* — see
+ *  `Brief`, where the fields simply are not present until the level allows them. */
+export type TranscriptTurn = {
+  turn_id: string;
+  seq: number;
+  /** From the leg the audio was forked from, never from a diarisation model (`D26`). */
+  speaker_role: string;
+  text: string;
+  /** Milliseconds from the start of the recording. NOT a wall clock — do not apply the
+   *  skew correction to these; they are offsets within the audio, not timestamps. */
+  t_start_ms: number;
+  t_end_ms: number;
+  asr_confidence: number | null;
+};
+
 export type Snapshot = {
   presence: Presence;
   offer: Offer | null;
@@ -182,6 +201,13 @@ export type Snapshot = {
   /** Calls left without a wrap-up, oldest first (`D87`). The agent is free to walk away
    *  mid-form; this is what stops that meaning the note is lost. */
   pending_wrapups: PendingWrapup[];
+  /** The live transcript of the call being handled or wrapped up, oldest first (`D106`).
+   *
+   *  Also pushed on the socket as `transcript`, and **every push carries the whole list**
+   *  rather than the new turn — so this is replaced, never appended to. That is the point:
+   *  a client that accumulates can lose a message and show a transcript with a sentence
+   *  silently missing from the middle, which is `D68`'s rule in the place it matters most. */
+  transcript: TranscriptTurn[];
 };
 
 export class ApiError extends Error {

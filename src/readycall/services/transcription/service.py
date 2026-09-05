@@ -28,7 +28,7 @@ from readycall.domain.models import TranscriptTurn
 from readycall.logging import get_logger
 from readycall.media.audio import AudioFormat
 from readycall.media.gateway import MediaGateway
-from readycall.ports.stt import SttEngine, SttHint
+from readycall.ports.stt import ReplayableSttEngine, SttEngine, SttHint
 from readycall.ports.vad import VoiceActivityDetector
 from readycall.services.intake.service import IntakeService
 from readycall.services.transcription.stream import TranscriptionStream
@@ -83,6 +83,14 @@ class TranscriptionService:
         """The caller pressed 1 and a recording is now running."""
         if call_session_id in self._live:
             return
+        # A scripted engine carries a cursor through its lines, so a new recording has to
+        # start at the top of the script (`D107`). Real engines are stateless per utterance
+        # and do not implement this — which is why it is a capability check rather than a
+        # method on the port. Found on a running server: the FIRST demo call transcribed
+        # and every one after it showed an empty panel, because one engine instance per
+        # process is correct for a model and wrong for a script.
+        if isinstance(self._stt, ReplayableSttEngine):
+            self._stt.reset()
         self.gateway.open_leg(call_session_id, speaker_role=speaker_role, fmt=fmt)
 
         async def sink(turn: TranscriptTurn) -> None:

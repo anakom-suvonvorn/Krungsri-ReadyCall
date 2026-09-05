@@ -19,7 +19,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, api } from "./api";
-import type { Capture, Snapshot } from "./api";
+import type { Capture, Snapshot, TranscriptTurn } from "./api";
 import { useSocket } from "./useSocket";
 import type { SocketMessage } from "./useSocket";
 import {
@@ -31,6 +31,7 @@ import {
   OfferCard,
   PresencePanel,
   QueueStrip,
+  TranscriptPanel,
   WrapupPanel,
   elapsedSince,
   mmss,
@@ -114,6 +115,27 @@ export default function App() {
 
   const onSocketMessage = useCallback(
     (message: SocketMessage) => {
+      if (message.type === "transcript") {
+        // Patched in place, like `capture` and for the same reason: turns arrive while the
+        // agent is reading, and a full `GET /me` per utterance is both wasteful and jumpy.
+        //
+        // **Replaced, never appended.** The server sends the complete transcript every
+        // time (`D106`), so there is nothing to merge — and merging is exactly how a
+        // client ends up showing a transcript with a sentence missing from the middle
+        // after one dropped message. The payload also names its call, so a push that
+        // arrives as the agent moves between calls cannot paint the wrong one.
+        const incoming = message.payload as unknown as {
+          call_session_id: string;
+          turns: TranscriptTurn[];
+        };
+        setSnapshot((prior) => {
+          if (prior === null) return prior;
+          const current = prior.active_call_session_id ?? prior.wrapup_call_session_id;
+          if (current !== null && current !== incoming.call_session_id) return prior;
+          return { ...prior, transcript: incoming.turns };
+        });
+        return;
+      }
       if (message.type === "capture") {
         // Patch just this capture rather than re-reading everything: keystrokes arrive
         // fast, and a full snapshot per digit is both wasteful and jumpy.
@@ -240,6 +262,14 @@ export default function App() {
 
         <div className="col">
           <BriefPanel brief={brief} />
+          {/* Directly under the brief, because it is the evidence for it: the summary
+              above is derived from the sentences below, and an agent who doubts a line in
+              the brief should not have to go looking for what the caller actually said. */}
+          <TranscriptPanel
+            turns={snapshot.transcript}
+            hasCall={callId !== null || snapshot.wrapup_call_session_id !== null}
+            degraded={brief?.degraded}
+          />
           {/* Keyed on the WRAPPING call, not the active one. Saving closes the record, so
               `active_call_session_id` drops to null at that instant — which used to unmount
               this panel and take the "saved" confirmation with it (`D68`). */}

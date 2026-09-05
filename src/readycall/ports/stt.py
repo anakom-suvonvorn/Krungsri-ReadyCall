@@ -125,3 +125,30 @@ class BatchSttEngine(Protocol):
     ) -> list[SttResult]:
         """Transcribe several VAD-delimited utterances together, in input order."""
         ...
+
+
+@runtime_checkable
+class ReplayableSttEngine(Protocol):
+    """An engine whose output depends on how many times it has been asked (`D107`).
+
+    A capability, like `BatchSttEngine`, and for the same reason: exactly one adapter has
+    it and putting `reset()` on `SttEngine` would oblige every real engine to grow a
+    meaningless no-op.
+
+    **Only `ScriptedSttEngine` implements this, and the reason is a bug that only a
+    running server could show.** A real engine is stateless per utterance, so one instance
+    per process is correct and that is how the container builds it. A scripted one carries
+    a cursor through its lines — so the second call of a demo found the script exhausted
+    and showed an empty transcript panel, on a path whose entire job is to be the reliable
+    one when we would rather not bet on a GPU in a noisy room.
+
+    `TranscriptionService.open()` calls this when the engine offers it, so each recording
+    starts at the top of the script. **With two recordings genuinely overlapping the cursor
+    is shared and the second resets the first**, which is a demo artefact rather than a
+    correctness problem — accepted deliberately, because the alternative is per-call engine
+    instances, and that would mean loading a real model per call.
+    """
+
+    def reset(self) -> None:
+        """Start the script again from the beginning."""
+        ...

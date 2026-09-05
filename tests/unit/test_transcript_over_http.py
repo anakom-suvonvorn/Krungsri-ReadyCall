@@ -123,6 +123,30 @@ def me(client: Any) -> dict[str, Any]:
     return response.json()  # type: ignore[no-any-return]
 
 
+async def settle(client: Any, *, call_id: str | None = None, tries: int = 20) -> None:
+    """Let the transcriber catch up, then run the bus.
+
+    **Not a `sleep`, and the distinction matters.** `TranscriptionStream` never blocks
+    ingestion on the model (`D12`), so `push()` queues a segment and a background worker
+    transcribes it — on the *application's* event loop, which under `TestClient` only
+    advances while a request is in flight. So this makes cheap requests until the turns
+    appear rather than waiting on a clock: it is the same thing a real process does by
+    simply continuing to run, and it fails fast instead of being slow when it passes.
+
+    The first version of these tests had no such step and passed anyway, on scheduling
+    luck. That is worse than failing — it is a green test asserting something the code did
+    not guarantee.
+    """
+    delivery = container(client).transcript_delivery
+    for _ in range(tries):
+        me(client)  # gives the app loop a slice
+        await pump_once(container(client))
+        waiting_on = [call_id] if call_id else list(delivery.live_call_ids())
+        if waiting_on and all(delivery.turns_for(one) for one in waiting_on):
+            return
+    await pump_once(container(client))
+
+
 # --- the chain --------------------------------------------------------------------------
 
 
@@ -139,7 +163,7 @@ async def test_a_recorded_call_puts_the_callers_words_on_the_agents_screen(
     # What proves the audio path ran is the delivery service holding turns.
     assert placed["intake"]["turn_count"] == 0
 
-    await pump_once(container(client))
+    await settle(client)
     held = container(client).transcript_delivery.turns_for(call_id)
     assert held, (
         "the audio path produced no turns - nothing opened the recording, the detector "
@@ -168,25 +192,29 @@ async def test_a_recorded_call_puts_the_callers_words_on_the_agents_screen(
 
 
 @pytest.mark.asyncio
-async def test_the_accept_response_is_early_and_the_socket_catches_up(client: Any) -> None:
-    """A known, deliberate consequence of `D105` rather than a defect.
+async def test_the_accept_response_already_carries_the_transcript(client: Any) -> None:
+    """REST and the socket read the same list, so neither waits for the other (`D106`).
 
-    The bus is drained by the pump, not on the request path — putting a `drain()` inside
-    the accept handler would run every subscriber in the process before the agent's screen
-    could paint, which is what `D6` moved OFF the request path in the first place. So the
-    accept response can carry an empty transcript and the `transcript` push fills it
-    within one `bus_drain_interval_s` (0.05 s by default), well inside `ARCHITECTURE`
-    §15's 1 s for match-to-screen. Asserted here so that if it ever changes, it changes on
-    purpose.
+    Worth pinning down, because the two could easily have diverged. The snapshot builds
+    `transcript` from the delivery service directly rather than from anything the socket
+    did, so an agent whose socket is down still sees the transcript on a plain page load —
+    which is what `D32` means by the tab being allowed to be flaky.
+
+    The one thing that genuinely arrives late is the **tail**: `transcription.close()` runs
+    inside this request and the turns it flushes are published to a bus that is drained by
+    the pump, not on the request path (`D105`, and `D6`'s rule about not doing work there).
+    They land within one `bus_drain_interval_s` — 0.05 s by default, against
+    `ARCHITECTURE` §15's 1 s for match-to-screen.
     """
     sign_in(client)
     place_recorded_call(client)
+    await settle(client)
     offer = me(client)["offer"]
     accepted = client.post(f"/v1/agent/offers/{offer['assignment_id']}/accept").json()
-    assert accepted["transcript"] == []
+    assert accepted["transcript"], "a page load must not depend on a socket push"
 
     await pump_once(container(client))
-    assert me(client)["transcript"], "one pump later it is there"
+    assert len(me(client)["transcript"]) >= len(accepted["transcript"])
 
 
 @pytest.mark.asyncio
@@ -195,6 +223,7 @@ async def test_the_transcript_survives_a_refresh_and_the_hang_up(client: Any) ->
     `active_call_session_id` goes null the moment the record is saved (`D68`)."""
     sign_in(client)
     placed = place_recorded_call(client)
+    await settle(client)
     offer = me(client)["offer"]
     client.post(f"/v1/agent/offers/{offer['assignment_id']}/accept")
     await pump_once(container(client))
@@ -223,6 +252,36 @@ async def test_a_declined_recording_leaves_no_transcript(client: Any) -> None:
     offer = me(client)["offer"]
     accepted = client.post(f"/v1/agent/offers/{offer['assignment_id']}/accept").json()
     assert accepted["transcript"] == []
+
+
+@pytest.mark.asyncio
+async def test_the_SECOND_call_of_a_demo_also_has_a_transcript(client: Any) -> None:
+    """The one thing only a running server showed (`D107`).
+
+    The container builds **one** STT engine for the process, which is right for a model
+    and wrong for a script: `ScriptedSttEngine` carries a cursor through its lines, so the
+    first demo call consumed all of them and the second — and every one after it — found
+    the script exhausted and rendered an empty panel. On stage that is the stage-safe
+    fallback failing in exactly the way it exists to prevent.
+
+    **It passed every other test in this file**, because each of those places one call.
+    Deliberately asserted against the delivery service rather than through an accept: what
+    is being checked is that the audio path produces turns for the third caller, and
+    dragging an agent through two lots of after-call work to find that out would make the
+    test about something else.
+    """
+    sign_in(client)
+    per_call: list[list[str]] = []
+    for _ in range(3):
+        placed = place_recorded_call(client)
+        await settle(client, call_id=placed["call_session_id"])
+        held = container(client).transcript_delivery.turns_for(placed["call_session_id"])
+        per_call.append([t["text"] for t in held])
+
+    assert all(per_call), f"a later call had no transcript at all: {per_call}"
+    assert per_call[0] == per_call[1] == per_call[2], (
+        "each recording must start at the top of the script"
+    )
 
 
 # --- the demo audio door ----------------------------------------------------------------

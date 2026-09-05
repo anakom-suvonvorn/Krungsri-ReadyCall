@@ -655,3 +655,41 @@ button.on:disabled {
 .panel.late {
   border-color: rgba(251, 191, 36, 0.45);
 }
+
+/* --- the live transcript (D106) -------------------------------------------
+   Bounded and scrollable rather than growing: it sits under the brief, and a panel that
+   lengthens with every utterance would push the wrap-up form and the backlog off the
+   screen mid-call. `max-height` is in `rem` so it scales with the agent's own font size —
+   a contact-centre desk is often running at 125%. */
+.transcript {
+  max-height: 18rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-right: 4px;
+}
+.transcript .turn {
+  display: grid;
+  grid-template-columns: 46px 1fr;
+  gap: 10px;
+  align-items: baseline;
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(42, 53, 72, 0.6);
+}
+.transcript .turn:last-of-type {
+  border-bottom: none;
+}
+.transcript .at {
+  color: var(--ink-faint);
+  font-size: 12px;
+  /* Fixed digit width, so the timestamps line up into a column the eye can skip down
+     rather than a ragged edge that has to be read. */
+  font-variant-numeric: tabular-nums;
+}
+.transcript .said {
+  /* Thai has no inter-word spaces (`B16`), so the browser can only break at a very few
+     places and a long utterance would otherwise stretch the panel sideways. */
+  overflow-wrap: anywhere;
+  line-height: 1.55;
+}

@@ -12,7 +12,7 @@
  *    unusable — refusing the click silently reads as a broken button.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   Brief,
   Capture,
@@ -22,6 +22,7 @@ import type {
   PendingWrapup,
   Presence,
   Queue,
+  TranscriptTurn,
 } from "./api";
 
 const INTENT_LABEL: Record<string, string> = {
@@ -1119,4 +1120,99 @@ export function WrapupPanel({
       </div>
     </div>
   );
+}
+
+/**
+ * The live transcript of the call (`D106`).
+ *
+ * What the pitch is actually about: by the time the agent presses Accept, the caller has
+ * already explained the problem and it is on screen, in their own words, with the moment
+ * in the recording each sentence was said.
+ *
+ * Three things it deliberately does not do:
+ *
+ * * **It does not gate on assurance.** This is the caller's own speech on the call being
+ *   taken, not a lookup, and an anonymous caller at L0 is precisely the case with no other
+ *   source of context. `D74` gates what may be said and done; `D53` gates the record. This
+ *   is neither.
+ * * **It does not hide a low-confidence turn.** A dropped sentence leaves a silent gap
+ *   that reads as the caller having said nothing, which is a worse lie than a hedged line
+ *   (`D16`). Low confidence is shown as a mark on the turn instead.
+ * * **It does not accumulate.** `snapshot.transcript` is replaced wholesale on every push,
+ *   so there is no local list here that could drift from the server's.
+ */
+export function TranscriptPanel({
+  turns,
+  hasCall,
+  degraded,
+}: {
+  turns: TranscriptTurn[];
+  hasCall: boolean;
+  degraded?: string;
+}) {
+  const endRef = useRef<HTMLDivElement | null>(null);
+  const [pinned, setPinned] = useState(true);
+
+  useEffect(() => {
+    // Follow the newest line, but only while the agent is already at the bottom. Yanking
+    // the view back down while somebody is re-reading what was said two minutes ago is
+    // the single most irritating thing a live log can do.
+    if (pinned) endRef.current?.scrollIntoView({ block: "nearest" });
+  }, [turns.length, pinned]);
+
+  return (
+    <div className="panel">
+      <h2>
+        บทสนทนาก่อนรับสาย
+        {turns.length > 0 && <span className="faint"> · {turns.length} ประโยค</span>}
+      </h2>
+      {turns.length === 0 ? (
+        <p className="faint">{emptyTranscriptReason(hasCall, degraded)}</p>
+      ) : (
+        <div
+          className="transcript"
+          onScroll={(event) => {
+            const el = event.currentTarget;
+            setPinned(el.scrollHeight - el.scrollTop - el.clientHeight < 24);
+          }}
+        >
+          {turns.map((turn) => (
+            <div className="turn" key={turn.turn_id}>
+              <span className="at mono">{mmss(Math.floor(turn.t_start_ms / 1000))}</span>
+              <span className="said">
+                {turn.text}
+                {turn.asr_confidence !== null && turn.asr_confidence < 0.6 && (
+                  <span className="faint" title="ระบบถอดความไม่มั่นใจในประโยคนี้">
+                    {" "}
+                    · ไม่ชัด
+                  </span>
+                )}
+              </span>
+            </div>
+          ))}
+          <div ref={endRef} />
+        </div>
+      )}
+      {turns.length > 0 && (
+        <div className="hint">
+          ถอดความอัตโนมัติ — ใช้เป็นบริบท ไม่ใช่คำยืนยัน ตัวเลขให้ยืนยันกับลูกค้าอีกครั้ง
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Why the panel is empty, which is never nothing (`D88`).
+ *
+ * "They declined", "we never asked" and "the transcriber was down" are three different
+ * facts and an agent looking at a thin brief is owed which one it is. The server already
+ * distinguishes them on the brief's `degraded`; this just says it in Thai.
+ */
+function emptyTranscriptReason(hasCall: boolean, degraded?: string): string {
+  if (!hasCall) return "ยังไม่มีสายที่กำลังสนทนา";
+  if (degraded === "intake_declined") return "ลูกค้าไม่ประสงค์ให้บันทึกเสียง";
+  if (degraded === "no_consent") return "ไม่ได้ขอความยินยอมบันทึกเสียงในสายนี้";
+  if (degraded === "stt_unavailable") return "ระบบถอดความไม่พร้อมใช้งานในสายนี้";
+  return "ลูกค้าไม่ได้พูดอะไรระหว่างรอสาย";
 }
