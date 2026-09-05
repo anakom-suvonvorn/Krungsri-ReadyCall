@@ -16,8 +16,9 @@ they said is on the agent's screen the moment Accept is pressed** (2026-09-05), 
 audio is in object storage encrypted** with a key ref and a retention date (2026-09-06,
 `D110`) — or nowhere at all, if they declined.
 
-**The next slice is P4**, analysis and the brief v2+, with two small well-defined things in
-the audio path first and `Q31` needing two answers from the user. See "What to do next".
+**The next slice is P4**, analysis and the brief v2+. Everything that was queued in front
+of it is done: the encrypted recording (`D110`), the degradation reporting and the decode
+timeout (`D111`, `D112`), and `Q31`'s circle-back (`D113`).
 
 ### The engine, in one table
 
@@ -51,18 +52,13 @@ median** (unstable at n=20), and **the test set moved the headline by 1.8x**.
 
 ### What is NOT built, precisely
 
-1. **A caller every qualified agent declined waits forever** (`Q31`). Reported honestly as
-   `ALL_DECLINED` since `D108`, but nothing rescues them — `D52`'s exclusion has no expiry
-   and `D93`'s wait-ceiling rescue picks from qualified agents, all of whom are excluded.
-   **The design for circling back is written out in `Q31` and needs two decisions from the
-   user before building.**
-2. **Persisted transcript turns.** `transcript_turns` has no table (`DATA_MODEL` §6), so a
+1. **Persisted transcript turns.** `transcript_turns` has no table (`DATA_MODEL` §6), so a
    restart loses an in-flight transcript. ⚠️ **The recording it belongs beside now exists**
    (`D110`), so the pattern to copy is `services/recording/store.py` plus
    `db/models/media.py` — an hour's work, not a design problem.
-3. **P7's real key management.** `LocalKeyRing` holds the master in the process
+2. **P7's real key management.** `LocalKeyRing` holds the master in the process
    environment. The port exists so a vault is a second adapter, and nothing else changes.
-4. **A player on the agent's screen.** The recording exists and decrypts; nothing offers it
+3. **A player on the agent's screen.** The recording exists and decrypts; nothing offers it
    to the agent. That is now a UI job rather than a storage one.
 
 ### How to see the whole thing working, in one minute
@@ -103,7 +99,7 @@ moment in the recording it was said — **and if they consented, their audio is 
 storage encrypted, with the key ref and the retention date on an `audio_recordings` row.**
 If they declined, it is nowhere.
 
-Verified **2026-09-06**: **790 tests** — 778 pass + 12 skipped with Postgres and MinIO both
+Verified **2026-09-06**: **797 tests** — 785 pass + 12 skipped with Postgres and MinIO both
 up. `ruff check` + `ruff format --check` clean over 199 files, `mypy --strict` clean over
 143, all scenarios replay, 64/64 diagrams current, prompt pack fresh (54 clips),
 `audit_docs.py` clean on the live files. **And verified against a running server with a
@@ -366,18 +362,11 @@ no orphaned child after the parent was hard-killed.
 
 ## What to do next (in order)
 
-_Rewritten 2026-09-06, after `D110`, `D111` and `D112`. The encrypted recording, the
-degradation reporting and the decode timeout are all done and recorded; they are not work.
-**`Q31` is now the top item and it is blocked on two answers from the user.**_
+_Rewritten 2026-09-06, after `D110`–`D113`. The encrypted recording, the degradation
+reporting, the decode timeout and `Q31`'s circle-back are all done and recorded; they are
+not work. **P4 is now the top item and nothing is blocking it.**_
 
-**1. `Q31` — a caller everyone declined waits forever.** Reported honestly since `D108`,
-and still stuck: `D52`'s exclusion has no expiry and `D93`'s rescue only picks from
-qualified agents, all of whom are excluded. The design for circling back is written out in
-`Q31` and is ready to build — **but it needs two answers from the user first**: does a RONA
-timeout count as a decline for exhaustion, and is there a round cap before voicemail
-(`D25`). Ask; do not guess.
-
-**2. P4 — analysis and the brief v2+.** The largest remaining phase and the one the pitch
+**1. P4 — analysis and the brief v2+.** The largest remaining phase and the one the pitch
 leans on hardest. Intent classification, entity extraction, a rolling summary, brief
 versioning, confidence calibration, the suggested opening. Three things already point at
 it: `OfferOut.summary_th` is rendered on the offer card today from the rule-based builder
@@ -388,14 +377,14 @@ caller speaking health data into a recording nobody consented to hold *as such* 
 decided **before** an entity extractor exists, because that is the first code that can
 breach it.
 
-**3. Persisted `transcript_turns`** (`DATA_MODEL` §6). A restart currently loses an
+**2. Persisted `transcript_turns`** (`DATA_MODEL` §6). A restart currently loses an
 in-flight transcript. ⚠️ **This is now an hour rather than a design problem**: `D110` built
 the pattern next door — `services/recording/store.py` for the protocol plus in-memory
 implementation, `db/models/media.py` for the row, `db/stores.py` for the Postgres half, and
 a block in `tests/contracts/test_workstation_stores.py` that runs it on all three backends.
 Copy that shape.
 
-**4. Then, roughly in this order:** P5 real telephony, which is what replaces
+**3. Then, roughly in this order:** P5 real telephony, which is what replaces
 `POST /v1/demo/calls` and `D107`'s WAV player — and which is also what turns
 `RecordingService` on for the *live* leg (`D26`, P6) · `D85`'s `acw_stats` into
 `expected_free_in()` as a **score, never a filter** (`D73`) · the matcher inputs still fed
@@ -463,7 +452,6 @@ GPU should own the demo machine. Typhoon uses 1068 MB, so P4's model is the ques
 
 | # | Question | Current default |
 |---|---|---|
-| **Q31** | **A caller every qualified agent has declined waits FOREVER, and nothing rescues them.** `D52`'s exclusion is a hard filter with no expiry, so once the pool is exhausted the matcher reports `ALL_DECLINED` (`D108`) every tick until somebody new signs in. Not even the wait ceiling saves them — `D93`'s rescue picks from qualified agents, and they are all excluded. The user is right that it has to circle back. **The design, ready to build:** when a caller's exclusions cover every agent who would otherwise qualify, clear them, increment a `round` counter on the call, and re-solve. The offer card carries the round — *"สายนี้ถูกส่งต่อครบทุกคนแล้วและวนกลับมาอีกครั้ง"* — because an agent seeing the same call twice with no explanation concludes the system is broken, and naming it is also the point: it is the sentence that makes somebody take it. Two sub-decisions to settle: does a **RONA** timeout count the same as a deliberate decline for exhaustion (leaning **yes** — the caller cannot tell the difference), and is there a **round cap** after which the call goes to voicemail (`D25`) rather than looping forever (leaning **yes, 2 rounds**). ⚠️ `D52`'s exclusion was written to stop the solver re-picking the same agent *on the very next tick*; nothing in it argues for permanence, so this extends it rather than reversing it. | **Not built.** Currently a caller in this state is stuck |
 | **Q32** | **Should there be a "decline and show me a different caller" button?** The user proposed it and then talked themselves out of it, and they were right to. Two reasons. **It already exists implicitly:** declining re-solves the matrix immediately, and the caller you get next is the best remaining match *for you* — fit is scored per call×agent, so it is not "a worse call", it is the best of what is left. **And the explicit version is harmful:** a button that lets an agent skip a caller and keep their place is cherry-picking, which is the well-known contact-centre pathology the Hungarian solver exists to prevent — the hard cases would circulate while the easy ones got taken, and `matching_decisions` would record it as the system's choice rather than as a person's. `D109`'s *decline + pause* covers the legitimate need underneath the idea ("not now"), and costs the agent their place in the rotation, which is what makes it honest. | **Decided: not building it.** `D109` covers the real need |
 | **Q33** | **Ring every qualified agent at once and give the call to whoever answers first?** The user's "random idea", and it is a real pattern — it is what a room full of desk phones does. Worth keeping because it is a genuine **degradation rung**: if nothing has been accepted after N seconds, broadcasting beats a caller waiting. As the *primary* mechanism it deletes everything the matcher buys — fit, continuity, load balance, the anti-starvation ceiling — and replaces them with *who clicked fastest*, which systematically rewards the least busy rather than the best suited and gives N-1 agents an interruption for every call. `AgentHub.broadcast()` already exists, so the mechanism is cheap; the policy is what needs deciding. **Revisit after P5**, when there is real telephony to measure a real accept latency against. | **Parked.** Not for the hackathon build |
 | Q7 | Intent taxonomy + menu wording | **User: leave as-is, revisit during the hackathon.** |
@@ -489,7 +477,11 @@ GPU should own the demo machine. Typhoon uses 1068 MB, so P4's model is the ques
 | **Q24** | **A health-line caller speaks health data into a recording nobody consented to hold as such.** `D14` makes `health_data` a separate scope; the offer grants only `recording` and `ai_processing` (`D88`). Three options: a third keypress (honest, and it lengthens the longest prompt in the system on the line where callers are most distressed); name the scope in the offer's wording on health lines (one keypress, three scopes); or gate the *extraction* at P4 so health entities are never pulled without it. **Leaning: the second plus the third.** Decide before P4 writes an entity extractor — that is the first code that can breach it. | Not asked for |
 | **Q23** | **Personalised menus renumber, and a human on a real keypad has no `ScriptedChoices`.** Every automated caller presses canonical keys and is translated (`D81`), so nothing in the suite or the demo endpoint can get this wrong. But at P5 a person reading a rehearsal script off paper will press what the script says, and for a recognised persona the numbers may have moved. Either rehearse with the persona that will actually be used, or set `personalisation.enabled: false` for the demo. | Enabled; decide before the day |
 
-Resolved: **`Q29` the latency and `Q30` the test set** (both `D104`, and `Q30` is the one that moved the number) · **`Q28` one headline plus one diagnostic** · **`Q32` no cherry-picking button, `Q33` ring-all parked** (2026-09-05) · **`Q25` — the wait ceiling is now per urgency tier (`D94`)**, so an emergency reaches its guarantee at 60 s while a routine caller is still 120 s from theirs; when both are past their own, the more urgent goes first · rating is an event (`D46`) · single project (`D34`) · Asterisk · RTX 3050 · Claude
+Resolved: **`Q31` — the caller everyone declined now goes round again (`D113`)**, with
+the cap as config defaulting to *no cap* (the user's call: a cut-off caller has to start
+again from the menu, a holding caller can hang up whenever they choose), RONA counting as a
+decline, and the card saying both *"round N"* and *"you are the only agent who can take
+this"* · **`Q29` the latency and `Q30` the test set** (both `D104`, and `Q30` is the one that moved the number) · **`Q28` one headline plus one diagnostic** · **`Q32` no cherry-picking button, `Q33` ring-all parked** (2026-09-05) · **`Q25` — the wait ceiling is now per urgency tier (`D94`)**, so an emergency reaches its guarantee at 60 s while a routine caller is still 120 s from theirs; when both are past their own, the more urgent goes first · rating is an event (`D46`) · single project (`D34`) · Asterisk · RTX 3050 · Claude
 + Typhoon compared · React workstation with the softphone in it · web customer simulator ·
 menu-first flow (`D37`).
 
@@ -674,10 +666,25 @@ Facts about *this laptop* rather than the repo, so a fresh session does not redi
   re-offered a call they declined, no wait goes backwards. Verified to catch `B25` by
   disabling the fix. **Add a scenario here whenever a bug is found by clicking** — that is
   the class of fault the rest of the suite cannot see, and it is now two for two.
-- **A CALLER EVERY QUALIFIED AGENT DECLINED IS STUCK FOREVER** (`Q31`, reported as
-  `ALL_DECLINED` since `D108`). `D52`'s exclusion has no expiry and `D93`'s wait-ceiling
-  rescue picks from *qualified* agents, all of whom are excluded — so nothing rescues them.
-  The design for circling back is written down in `Q31` and is **not built**.
+- **`D52`'s EXCLUSION IS CLEARED WHEN EVERY QUALIFIED AGENT HAS DECLINED** (`D113`). The
+  caller goes round again, on the next tick, with a round counter on the offer card. So
+  `excluded_agents()` is **not** a permanent record of who turned this caller down — it is
+  who has turned them down *in this round*. The stress suite's invariant still reads
+  "nobody currently excluded is holding an offer", which is still true; what is no longer
+  true is "nobody is ever rung twice about one call", which it never said.
+- **`max_offer_rounds: 0` MEANS FOREVER, AND THAT IS THE SHIPPED DEFAULT** (`D113`). It is
+  in `matching_weights.yaml`, not `Settings` (`Q26`). The user's reasoning, which is
+  business logic rather than an engineering property: a caller who is cut off has to start
+  again from the menu, while a caller still holding can hang up whenever they choose. If a
+  cap is ever set and fires, it deliberately does **not** move the call to `VOICEMAIL` —
+  `D25`'s path is P6 and does not exist, and a state nothing handles is `B7`'s shape.
+- **THE OFFER CARD NEVER SAYS HOW MANY OTHER AGENTS COULD TAKE THE CALL** (`D113`), only
+  whether this agent is the **last** one. "Three others could take this" is a
+  diffusion-of-responsibility prompt on a card whose other button is decline, and it is not
+  actionable. Show a fact when it increases responsibility, never when it diffuses it.
+- **`sole_candidate` IS COUNTED FROM THE DECISION'S OWN CANDIDATES** (`D113`), where
+  `hard_filter_failed is None` means the agent passed **the same filter the matcher used**.
+  Never compute availability a second way — that is precisely how `B25` happened.
 
 - **`publish()` DOES NOT RUN ANYTHING** (`D15`, `D105`). The in-memory bus enqueues; the
   handlers run on `drain()`. In the API process that is `pump_once` every

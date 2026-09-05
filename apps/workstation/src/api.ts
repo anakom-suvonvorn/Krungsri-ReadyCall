@@ -50,6 +50,13 @@ export type Offer = {
   waited_since: string | null;
   assurance: string;
   rationale_th: string | null;
+  /** Which time round the floor this caller is on (`D113`). 1 on virtually every call;
+   *  above 1 means every qualified agent has already turned them down. */
+  offer_round: number;
+  /** True when this agent is the ONLY one who could take this call right now (`D113`).
+   *  A boolean rather than a count on purpose: "three others could take this" is a
+   *  diffusion-of-responsibility prompt on a card whose other button is decline. */
+  sole_candidate: boolean;
   /** A preview of the brief, gated exactly as the brief is (`D69`). At L1 the name is
    *  null and only the reason for the call survives — there is nothing here to leak. */
   summary_th: string | null;

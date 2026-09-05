@@ -207,6 +207,28 @@ export function OfferCard({
           </div>
         )}
 
+        {/* The caller has been round the whole floor and come back (`D113`). Said
+            plainly, with the count, because an agent seeing the same call twice with no
+            explanation concludes the system is broken — and because naming it is the
+            sentence that makes somebody take it. */}
+        {offer.offer_round > 1 && (
+          <div className="rationale" style={{ borderLeftColor: "var(--warn)" }}>
+            <div>
+              สายนี้ถูกส่งต่อครบทุกคนแล้ว และวนกลับมาอีกครั้ง (รอบที่ {offer.offer_round})
+            </div>
+          </div>
+        )}
+
+        {/* And when there is nobody else, say so (`D113`). NOT a count of how many others
+            could take it: that reads as "somebody else will" on a card whose other button
+            is decline. This one is the opposite, and it is the fact the agent cannot work
+            out for themselves — if they decline, it comes straight back to them. */}
+        {offer.sole_candidate && (
+          <div className="rationale" style={{ borderLeftColor: "var(--warn)" }}>
+            <div>ขณะนี้คุณเป็นเจ้าหน้าที่คนเดียวที่รับสายนี้ได้</div>
+          </div>
+        )}
+
         <div className="row" style={{ marginTop: 14 }}>
           <button className="primary" onClick={onAccept} disabled={busy}>
             รับสาย (Accept)

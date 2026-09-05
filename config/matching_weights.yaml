@@ -55,6 +55,21 @@ hard_filters:
 
 # --- guard rails ------------------------------------------------------------------------
 guards:
+  # WHEN EVERY QUALIFIED AGENT HAS DECLINED (`D113`, closing `Q31`).
+  #
+  # `D52` excludes an agent who declined, so a caller the whole floor has turned down had
+  # no candidates left and waited forever - and `D93`'s wait-ceiling rescue could not help,
+  # because it picks from qualified agents and every one of them was excluded. The
+  # exclusions are cleared and the caller goes round again.
+  #
+  # **0 means no cap: keep circling.** That is the default, and it is a business decision
+  # rather than a technical one, which is why it is a number in a file. The argument for
+  # it: a caller who is cut off has to start again from the menu and may not; a caller who
+  # is still holding can hang up whenever they choose, and that choice is theirs. Set it
+  # to 2 or 3 if the operation would rather hand a long-waiting caller to voicemail
+  # (`D25`) than keep them on the line.
+  max_offer_rounds: 0
+
   # Past this wait, drop to ANY qualified agent regardless of fit. A perfect match nobody
   # is available for is worth less than a good one who is.
   #

@@ -188,7 +188,10 @@ async def check_invariants(floor: Floor, *, seen_waits: dict[str, float]) -> Non
                 f"{who.agent_intent} - they were rung when they could not take a call"
             )
 
-    # `D52`: a missed or declined offer excludes that agent for the life of the call.
+    # `D52`: a missed or declined offer excludes that agent — and `D113` clears the whole
+    # set when everyone has declined, so the invariant is still exactly "nobody currently
+    # excluded is holding an offer". It is not "nobody is ever rung twice about one call":
+    # after a full round the caller comes back round on purpose.
     for call_session_id, agents in open_by_call.items():
         excluded = container.assignments.excluded_agents(call_session_id)
         assert not set(agents) & set(excluded), (
@@ -336,3 +339,38 @@ async def test_the_floor_emptying_mid_call_strands_nobody(app: Any, clock: Manua
         "the first agent back must be rung; the callers have been waiting 90 seconds"
     )
     assert all(call in {*calls} for call in still_waiting)
+
+
+async def test_a_caller_the_whole_floor_declines_comes_back_round(
+    app: Any, clock: ManualClock
+) -> None:
+    """`Q31`, under load: a caller everyone turns down must not be stuck (`D113`).
+
+    The bug this covers had no exception and no failing test — the caller simply waited
+    for the life of the shift while the queue showed them as being handled. This is the
+    scenario the landmine list asks for whenever a fault is found by reasoning about the
+    system rather than by a test, which is where `Q31` came from.
+    """
+    rng = random.Random(31)
+    floor = Floor(app, MOTOR)
+    seen_waits: dict[str, float] = {}
+    for agent_id in MOTOR:
+        floor.declare(agent_id, "ready")
+
+    call_id = floor.place("motor", rng)
+    container = floor.container
+
+    for _ in range(len(MOTOR) * 3):
+        await sweep_once(container)
+        await check_invariants(floor, seen_waits=seen_waits)
+        assignment = container.assignments.open_offer_for(call_id)
+        if assignment is None:
+            continue
+        floor.decline(assignment.agent_id, assignment.assignment_id)
+
+    assert container.assignments.rounds_for(call_id) > 1, (
+        "the caller was declined by everyone repeatedly and never went round again"
+    )
+    assert call_id in {c.call_session_id for c in container.dispatch.waiting()}, (
+        "and they are still in the pool, not silently dropped"
+    )

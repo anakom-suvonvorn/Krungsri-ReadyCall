@@ -97,6 +97,9 @@ class _CallOffers:
 
     excluded_agent_ids: set[str] = field(default_factory=set)
     attempts: int = 0
+    #: Which time round the floor this caller is on (`D113`). 1 until every qualified
+    #: agent has turned them down and the exclusions are cleared.
+    rounds: int = 1
 
 
 class AssignmentService:
@@ -170,6 +173,34 @@ class AssignmentService:
         """
         record = self._history.get(call_session_id)
         return tuple(sorted(record.excluded_agent_ids)) if record else ()
+
+    def rounds_for(self, call_session_id: str) -> int:
+        """Which time round the floor this caller is on. 1 for almost every call."""
+        record = self._history.get(call_session_id)
+        return record.rounds if record else 1
+
+    def start_new_round(self, call_session_id: str) -> int:
+        """Forget who has declined, so the caller can be offered round again (`D113`).
+
+        `D52`'s exclusion exists to stop the solver re-picking the agent who *just*
+        declined on the very next tick. Nothing in it argues for permanence — and
+        permanence is what stranded a caller once every qualified agent had said no, with
+        `D93`'s wait-ceiling rescue unable to help because it picks from qualified agents
+        and they were all excluded (`Q31`).
+
+        Clearing rather than expiring per agent: the caller is exhausted as a *set*, and
+        an agent-by-agent timer would re-offer to the person who declined ten seconds ago
+        while somebody who declined ten minutes ago stayed excluded.
+        """
+        record = self._history.setdefault(call_session_id, _CallOffers())
+        record.excluded_agent_ids.clear()
+        record.rounds += 1
+        log.info(
+            "offer exclusions cleared - the caller goes round again",
+            call_session_id=call_session_id,
+            round=record.rounds,
+        )
+        return record.rounds
 
     # --- the handshake -------------------------------------------------------------------
 

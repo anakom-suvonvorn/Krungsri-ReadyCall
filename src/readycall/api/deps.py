@@ -361,9 +361,10 @@ class Container:
             ),
             store=self.storage.assignments,
         )
+        weights = MatchingWeights.load(settings.config_dir / "matching_weights.yaml")
         self.matching = MatchingEngine(
             directory=self.agents,
-            weights=MatchingWeights.load(settings.config_dir / "matching_weights.yaml"),
+            weights=weights,
             clock=self.clock,
         )
         self.dispatch = DispatchService(
@@ -374,6 +375,10 @@ class Container:
             clock=self.clock,
             offer_timeout_s=settings.offer_timeout_s,
             decisions=self.storage.decisions,
+            # From the weights file, not from `Settings` (`D113`) — the matcher's own
+            # config is where every other guard lives, and `Q26` is what happens to an
+            # env var nothing reads.
+            max_offer_rounds=weights.max_offer_rounds,
         )
         self.identity = IdentityResolver(
             core=self.core,

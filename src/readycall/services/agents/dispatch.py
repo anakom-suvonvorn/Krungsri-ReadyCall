@@ -102,6 +102,7 @@ class DispatchService:
         clock: Clock,
         offer_timeout_s: float = 20.0,
         decisions: MatchingDecisionStore | None = None,
+        max_offer_rounds: int = 0,
     ) -> None:
         self._engine = engine
         self._assignments = assignments
@@ -110,6 +111,12 @@ class DispatchService:
         self._clock = clock
         self._offer_timeout_s = offer_timeout_s
         self._decisions = decisions
+        #: How many times a caller may go round the whole floor (`D113`). **0 is no cap**,
+        #: which is the default and the shipped configuration: a caller who is cut off has
+        #: to start again from the menu, while a caller still holding can hang up whenever
+        #: they choose. Read from `matching_weights.yaml`, not from `Settings` — `Q26` is
+        #: what an env var the code never reads turns into.
+        self._max_offer_rounds = max_offer_rounds
         #: The pool. **Not a table** (`D78`): it is rebuilt from `call_sessions` in
         #: `queued`/`matched`, because a second copy of "who is waiting" is a second thing
         #: that can disagree with the call's own state.
@@ -232,6 +239,8 @@ class DispatchService:
 
             if decision.chosen_agent_id is None or decision.kind is MatchKind.DEFER:
                 unplaced[decision.call_session_id] = str(decision.kind)
+                if decision.kind is MatchKind.ALL_DECLINED:
+                    self._circle_back(decision.call_session_id)
                 continue
 
             assignment = await self._assignments.offer(
@@ -251,12 +260,45 @@ class DispatchService:
                     "offered_at": assignment.offered_at.isoformat(),
                     "queue_id": session.queue_id,
                     "rationale_th": decision.rationale_th,
+                    # `D113`. Both are facts about *this* offer that the agent cannot
+                    # work out from the card, and both change what declining means.
+                    "offer_round": self._assignments.rounds_for(session.call_session_id),
+                    "sole_candidate": sole_candidate(decision),
                 },
             )
 
         if unplaced:
             log.info("dispatch left callers waiting", count=len(unplaced), reasons=unplaced)
         return DispatchResult(offered=offered, decisions=decisions, unplaced=unplaced)
+
+    def _circle_back(self, call_session_id: str) -> None:
+        """Every qualified agent has declined. Clear the exclusions and try again (`D113`).
+
+        Done here rather than inside the matcher because it is a policy about *offers*,
+        and `AssignmentService` owns those. The matcher's job was to report the situation
+        honestly, which `D108` made it do; acting on the report is this service's.
+
+        **The re-offer happens on the NEXT tick, not this one.** A second solve inside the
+        same tick would buy about a second for a caller who has already been round a whole
+        floor, at the cost of two decision records for one moment — and the record of the
+        exhausted round is the one a supervisor needs to be able to read cleanly.
+        """
+        rounds = self._assignments.rounds_for(call_session_id)
+        cap = self._max_offer_rounds
+        if cap and rounds >= cap:
+            # Deliberately NOT a state change. `D25`'s voicemail path — record a message,
+            # create a briefed callback — is P6 and does not exist, and moving the call to
+            # `VOICEMAIL` would strand it in a state nothing handles, which is the
+            # half-built guard `B7` keeps teaching. It stays reported as `ALL_DECLINED`,
+            # which is true, and a supervisor sees a caller nothing will resolve.
+            log.warning(
+                "caller has been round the floor the maximum number of times",
+                call_session_id=call_session_id,
+                rounds=rounds,
+                max_offer_rounds=cap,
+            )
+            return
+        self._assignments.start_new_round(call_session_id)
 
     async def expire_offers(self) -> list[str]:
         """RONA sweep: resolve offers whose timeout has passed (`D33`).
@@ -283,7 +325,27 @@ class DispatchService:
         return timed_out
 
 
-__all__ = ["AgentNotifier", "DispatchResult", "DispatchService"]
+def sole_candidate(decision: MatchingDecision) -> bool:
+    """Is the chosen agent the ONLY one who could take this call right now (`D113`)?
+
+    Counted from the decision's own candidates, where `hard_filter_failed is None` means
+    the agent passed **the same filter the matcher used** — not a second computation of
+    availability, which is how `B25` happened: `PresenceView.offerable` and
+    `AgentPresence.is_available()` both answered a question the matcher never asked.
+
+    Note what "could take this call" includes: an agent who declined earlier in this round
+    is excluded (`D52`) and so does not count. That is the truthful reading for the agent
+    holding the card — if they decline, it comes back to them.
+    """
+    return sum(1 for c in decision.candidates if c.fit.hard_filter_failed is None) == 1
+
+
+__all__ = [
+    "AgentNotifier",
+    "DispatchResult",
+    "DispatchService",
+    "sole_candidate",
+]
 
 
 __all__ = [

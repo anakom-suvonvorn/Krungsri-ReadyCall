@@ -321,23 +321,169 @@ async def test_a_caller_everyone_declined_says_so_instead_of_blaming_the_roster(
     call_id = placed["call_session_id"]
     container = client.app.state.container
 
-    for _ in range(6):  # more rounds than there are motor agents
-        await sweep_once(container)
-        assignment = container.assignments.open_offer_for(call_id)
-        if assignment is None:
-            break
-        session = await container.calls.get(call_id)
-        await container.assignments.decline(
-            session, assignment_id=assignment.assignment_id, reason="busy"
-        )
+    # Exactly one pass of the floor. Going further would trip `D113`'s circle-back, which
+    # clears the exclusions and starts round two — correct, and a different assertion.
+    await _decline_the_whole_floor(container, call_id)
 
-    await sweep_once(container)
+    # No further sweep: the helper's last one IS the exhausted tick, and the next one is
+    # where `D113` clears the exclusions and offers them round again.
     decision = container.dispatch.last_decision_for(call_id)
     assert decision is not None
     assert decision.kind is MatchKind.ALL_DECLINED, (
         f"every qualified agent declined; got {decision.kind} - {decision.rationale_th}"
     )
     assert "ปฏิเสธ" in (decision.rationale_th or "")
+
+
+async def _decline_the_whole_floor(container: Any, call_id: str, *, limit: int = 12) -> int:
+    """Decline every offer until nobody qualified is left. Returns how many declined.
+
+    Stops at the first tick that produces no offer, which is exhaustion — and does not
+    sweep again afterwards, because the next sweep is where `D113` sends them round.
+    """
+    for declined in range(limit):
+        await sweep_once(container)
+        assignment = container.assignments.open_offer_for(call_id)
+        if assignment is None:
+            return declined
+        session = await container.calls.get(call_id)
+        await container.assignments.decline(
+            session, assignment_id=assignment.assignment_id, reason="busy"
+        )
+    raise AssertionError("the floor never ran out of agents to decline")
+
+
+# --- D113: the caller everyone declined goes round again ----------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_caller_everyone_declined_is_offered_round_again(client: Any) -> None:
+    """`Q31`, closed. The bug this fixes had no error and no failing test: the caller
+    simply waited, for the life of the shift, while the queue showed them as handled.
+
+    `D52`'s exclusion has no expiry, so once every qualified agent had said no there were
+    no candidates left — and `D93`'s wait-ceiling rescue could not help either, because it
+    picks from *qualified* agents and every one of them was excluded.
+    """
+    for agent_id in ("A001", "A002", "A003", "A015"):
+        client.post("/v1/agent/demo-login", json={"agent_id": agent_id})
+        client.post("/v1/agent/state", json={"agent_intent": "ready"})
+
+    placed = place(client)
+    call_id = placed["call_session_id"]
+    container = client.app.state.container
+
+    declined = await _decline_the_whole_floor(container, call_id)
+    assert declined >= 2, "the fixture needs more than one agent for this to mean anything"
+    assert container.dispatch.last_decision_for(call_id).kind is MatchKind.ALL_DECLINED
+
+    await sweep_once(container)
+
+    assert container.assignments.open_offer_for(call_id) is not None, (
+        "the caller must be offered again rather than waiting forever"
+    )
+    assert container.assignments.rounds_for(call_id) == 2
+
+
+@pytest.mark.asyncio
+async def test_the_offer_card_says_the_call_has_been_round_the_floor(client: Any) -> None:
+    """An agent seeing the same call twice with no explanation concludes the system is
+    broken. Naming it is also the point — it is the sentence that makes somebody take it."""
+    for agent_id in ("A001", "A002", "A003", "A015"):
+        client.post("/v1/agent/demo-login", json={"agent_id": agent_id})
+        client.post("/v1/agent/state", json={"agent_intent": "ready"})
+
+    placed = place(client)
+    call_id = placed["call_session_id"]
+    container = client.app.state.container
+    await _decline_the_whole_floor(container, call_id)
+    await sweep_once(container)
+
+    assignment = container.assignments.open_offer_for(call_id)
+    assert assignment is not None
+    client.post("/v1/agent/demo-login", json={"agent_id": assignment.agent_id})
+    offer = me(client)["offer"]
+
+    assert offer["offer_round"] == 2
+    assert offer["assignment_id"] == assignment.assignment_id
+
+
+@pytest.mark.asyncio
+async def test_an_ordinary_call_is_round_one_and_says_nothing_about_it(client: Any) -> None:
+    """The card must stay quiet on the 99% case, or the warning stops meaning anything."""
+    client.post("/v1/agent/demo-login", json={"agent_id": "A001"})
+    client.post("/v1/agent/state", json={"agent_intent": "ready"})
+    place(client)
+    await sweep_once(client.app.state.container)
+
+    assert me(client)["offer"]["offer_round"] == 1
+
+
+@pytest.mark.asyncio
+async def test_the_last_agent_on_the_floor_is_told_they_are_the_last(client: Any) -> None:
+    """`D113`'s second sentence, and the one the user asked for.
+
+    With one qualified agent signed in, declining sends the caller round the floor and
+    straight back to the same desk. Telling them that is the difference between "I will
+    pass this on" and "there is nobody to pass it to".
+    """
+    client.post("/v1/agent/demo-login", json={"agent_id": "A001"})
+    client.post("/v1/agent/state", json={"agent_intent": "ready"})
+    place(client)
+    await sweep_once(client.app.state.container)
+
+    assert me(client)["offer"]["sole_candidate"] is True
+
+
+@pytest.mark.asyncio
+async def test_with_a_full_floor_nobody_is_told_they_are_the_last(client: Any) -> None:
+    """The half that stops it lying, and the reason it is a boolean rather than a count.
+
+    Saying "3 others could take this" on a card whose other button is *decline* is a
+    diffusion-of-responsibility prompt. Saying nothing is the correct default; the message
+    exists only for the case where declining has a consequence the agent cannot see.
+    """
+    for agent_id in ("A001", "A002", "A003"):
+        client.post("/v1/agent/demo-login", json={"agent_id": agent_id})
+        client.post("/v1/agent/state", json={"agent_intent": "ready"})
+    placed = place(client)
+    container = client.app.state.container
+    await sweep_once(container)
+
+    # Find who was rung WITHOUT signing anyone in again: `demo-login` resets presence to
+    # `not_ready` (signing in is not saying you are ready), so polling every agent in turn
+    # would empty the floor and make this test prove its own premise false.
+    assignment = container.assignments.open_offer_for(placed["call_session_id"])
+    assert assignment is not None, "somebody should have been offered the call"
+    client.post("/v1/agent/demo-login", json={"agent_id": assignment.agent_id})
+
+    assert me(client)["offer"]["sole_candidate"] is False
+
+
+@pytest.mark.asyncio
+async def test_a_round_cap_stops_the_circling_when_one_is_configured(client: Any) -> None:
+    """0 means forever and is the shipped default (`D113`); a positive cap is honoured.
+
+    Deliberately NOT a state change when it fires: `D25`'s voicemail path is P6 and does
+    not exist, and moving the call to `VOICEMAIL` would strand it in a state nothing
+    handles — the half-built guard `B7` keeps teaching.
+    """
+    container = client.app.state.container
+    container.dispatch._max_offer_rounds = 2
+    for agent_id in ("A001", "A002", "A003", "A015"):
+        client.post("/v1/agent/demo-login", json={"agent_id": agent_id})
+        client.post("/v1/agent/state", json={"agent_intent": "ready"})
+
+    placed = place(client)
+    call_id = placed["call_session_id"]
+
+    await _decline_the_whole_floor(container, call_id)  # round 1
+    await _decline_the_whole_floor(container, call_id)  # round 2
+    await sweep_once(container)
+
+    assert container.assignments.rounds_for(call_id) == 2, "the cap stops a third round"
+    assert container.assignments.open_offer_for(call_id) is None
+    assert container.dispatch.last_decision_for(call_id).kind is MatchKind.ALL_DECLINED
 
 
 # --- D109: decline, and stop being rung ---------------------------------------------------

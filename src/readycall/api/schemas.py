@@ -251,6 +251,19 @@ class OfferOut(ApiModel):
     assurance: str = "l0_anonymous"
     #: The one-line Thai rationale from the matcher: *why this agent* (`D22`).
     rationale_th: str | None = None
+    #: Which time round the floor this caller is on (`D113`). 1 on virtually every call.
+    #: Above 1 means every qualified agent has already turned them down and the exclusions
+    #: were cleared — an agent seeing the same call twice with no explanation concludes the
+    #: system is broken, and naming it is also the point: it is the sentence that makes
+    #: somebody take it.
+    offer_round: int = 1
+    #: True when this agent is the **only** one who could take this call right now
+    #: (`D113`). Deliberately a boolean rather than a count of available agents: "three
+    #: others could take this" is a diffusion-of-responsibility prompt on a card whose
+    #: other button is *decline*, and it is not actionable. "You are the only one" is
+    #: both — it tells the agent the consequence of declining, which is the one thing
+    #: they cannot otherwise know.
+    sole_candidate: bool = False
     #: A **preview of the brief, gated exactly like the brief itself** (`D69`).
     #:
     #: The offer card used to carry only routing metadata — queue, urgency, wait, the

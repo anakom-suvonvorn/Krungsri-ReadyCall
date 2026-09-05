@@ -38,6 +38,15 @@ and **availability** (`offline`, `not_ready`, `busy`, `at_capacity`), and which 
 is what decides the caller's unplaced reason — see `D108`, which is why there are four of
 those rather than two.
 
+Three of those four resolve by waiting. The fourth, **everyone declined**, does not — and
+until `D113` it meant the caller waited for the life of the shift while the queue showed
+them as being handled, because `D52`'s exclusion had no expiry and `D93`'s wait-ceiling
+rescue picks from qualified agents who were all excluded. The exclusions are cleared now
+and the caller goes round again, with the round on the offer card. Whether there is a cap
+is `guards.max_offer_rounds` in `matching_weights.yaml`, and **0 — keep circling — is what
+ships**: a caller who is cut off has to start again from the menu, while a caller still
+holding can hang up whenever they choose.
+
 **Fit** answers "how good is this agent *for this call*": skill match and proficiency,
 continuity (did they handle this customer before?), historical performance on this intent,
 minus a penalty for current load.

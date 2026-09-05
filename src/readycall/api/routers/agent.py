@@ -50,6 +50,7 @@ from readycall.domain.enums import AgentIntent, CallState, OfferOutcome
 from readycall.domain.models import Assignment, CallWrapup
 from readycall.errors import PermanentError
 from readycall.logging import get_logger
+from readycall.services.agents.dispatch import sole_candidate
 from readycall.services.capture.keypad import Capture
 from readycall.services.identity.attestation import AttestationOutcome
 
@@ -728,6 +729,8 @@ async def _snapshot(container: Any, agent_id: str) -> WorkstationSnapshot:
             waited_since=waiting.waiting_since if waiting else None,
             assurance=str(identity.assurance) if identity else "l0_anonymous",
             rationale_th=decision.rationale_th if decision else None,
+            offer_round=container.assignments.rounds_for(open_offer.call_session_id),
+            sole_candidate=sole_candidate(decision) if decision else False,
             summary_th=(preview or {}).get("summary_th"),
             customer_name_th=preview_customer.get("display_name_th"),
             first_action_th=preview_actions[0] if preview_actions else None,

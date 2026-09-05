@@ -70,7 +70,7 @@ update path, which is why the UI stays coherent after any click without a follow
 | `presence.intent_reason` | Which of three sentences explains a `not_ready`; whether *Save & Ready* is offered |
 | `presence.acw_since` | The anchor the ACW timer counts from |
 | `presence.long_acw` | The "running long" warning, from `acw_long_after_s` |
-| `offer` | The offer card, **including a gated preview of the brief** (`D69`) and `waited_since`, the anchor the "รอมาแล้ว" badge ticks (`B27`) |
+| `offer` | The offer card, **including a gated preview of the brief** (`D69`), `waited_since` — the anchor the "รอมาแล้ว" badge ticks (`B27`) — and, since `D113`, `offer_round` and `sole_candidate`: which time round the floor this caller is on, and whether declining sends them straight back to this same desk |
 | `active_call_session_id` | Which call can still be acted on (`IN_CALL` or `WRAP_UP` only) |
 | `wrapup_call_session_id` | Which call is being wrapped — **outlives the record closing** (`D68`) |
 | `wrapup_saved` | Whether the record was saved (`D68`) |
@@ -237,6 +237,20 @@ Worth stating as plainly as the faults:
 ---
 
 ## Changes since this was written
+
+### 2026-09-06 — `D113`, two more sentences on the offer card
+
+`offer_round` and `sole_candidate` join the payload. Both are **server decisions**, which
+is this document's own rule: the workstation renders permissions and facts, it never
+computes them. `sole_candidate` in particular is counted from the matcher's own candidate
+list, where `hard_filter_failed is None` means the agent passed exactly the filter the
+matcher used — computing availability a second way in the client is how `B25` happened on
+the server.
+
+The card deliberately does **not** show how many other agents could take the call. See
+`D113`: on a card whose other button is *decline*, a count of alternatives is a
+diffusion-of-responsibility prompt, and it is not actionable. "You are the only one" is
+both.
 
 _Append here rather than editing above._
 

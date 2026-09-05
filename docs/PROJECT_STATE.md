@@ -47,7 +47,7 @@ the disclosure gate moves when the agent attests. **What they said while waiting
 screen** (`D106`), and if they consented, **their audio is in object storage encrypted**
 (`D110`) with a key ref and a retention date. If they declined, it is nowhere.
 
-Verified on 2026-09-06: **790 tests** — 778 pass + 12 skipped with Postgres and MinIO both
+Verified on 2026-09-06: **797 tests** — 785 pass + 12 skipped with Postgres and MinIO both
 up (the 12 are foreign-key cases the in-memory backend cannot have, and the `ml`-extra ones).
 Without those containers the count of skips rises and nothing fails.
 `ruff check` and `ruff format --check` clean over **199** files, `mypy --strict`
@@ -285,7 +285,10 @@ agents who had never pressed ready · ☑ fit + urgency scoring with full breakd
 ☑ **Hungarian solver, ours** (`D49`) + greedy for comparison · ☑ guard rails: wait ceiling,
 anti-hot-spot, guarded deferral · ☑ persisted rationale on every decision incl.
 non-assignments · ☑ unplaced callers say **which of four** reasons applies — contention,
-staffing, everyone-declined, roster gap (`D50`, `D108`, `B4`) · ☑ matching simulator with
+staffing, everyone-declined, roster gap (`D50`, `D108`, `B4`) · ☑ **and the
+everyone-declined one is now acted on** (`D113`): the exclusions are cleared, the caller
+goes round again, and the offer card says which round it is and whether this agent is the
+last one who could take it · ☑ matching simulator with
 `--compare` · ☑ **a floor-level stress suite** driving the real API with several agents and
 callers at once, asserting invariants (`tests/integration/test_floor_under_load.py`)
 
@@ -414,7 +417,7 @@ performing by hand, i.e. what the next services take over (`D36`).
 | | |
 |---|---|
 | Source files | 201 Python files (`src/` 141 + `tests/` + `scripts/` + `mock/`) |
-| Tests | **790**, all passing, ~115 s with every backend up (**13 on the loss reporting and the killable STT worker**, `D111`/`D112` - the timeout one asserts the child PROCESS is gone, not that an exception was raised; **54 on the recording and the blob port**, `D110`: 15 on the service, 27 on the store contract across memory/localfs/MinIO, 12 on `audio_recordings` across memory/SQLite/Postgres; **20 on agent availability and the wait on screen**, `B25`/`B26`; 149 store contract + restart across 3 backends; 56 on the prompt pack and the IVR; 40 on the hold and the intake seam; 41 on matching, 12 of them on the wait ceiling under contention; **61 on the audio path**; **21 on the transcript reaching the screen**) |
+| Tests | **797**, all passing, ~120 s with every backend up (**6 on `Q31`'s circle-back and the offer card's two new sentences**, `D113`; **13 on the loss reporting and the killable STT worker**, `D111`/`D112` - the timeout one asserts the child PROCESS is gone, not that an exception was raised; **54 on the recording and the blob port**, `D110`: 15 on the service, 27 on the store contract across memory/localfs/MinIO, 12 on `audio_recordings` across memory/SQLite/Postgres; **20 on agent availability and the wait on screen**, `B25`/`B26`; 149 store contract + restart across 3 backends; 56 on the prompt pack and the IVR; 40 on the hold and the intake seam; 41 on matching, 12 of them on the wait ceiling under contention; **61 on the audio path**; **21 on the transcript reaching the screen**) |
 | Ports defined | **10** (telephony, stt, **vad**, llm, tts, core_data, event_bus, blob_storage, agent_directory, **keyring**) - `vad` added by `D96`, `keyring` by `D110`. Plus three **capability** protocols, one adapter each: `BatchSttEngine` (`D101`), `ReplayableSttEngine` (`D107`) and `ProvisionableBlobStorage` (`D110`) |
 | Process entrypoints | **2** of `D2`'s four: `api.py` and `stt.py` (`D112`). `worker.py` and `media.py` are still one process with the API |
 | Persisted tables | **10** + Alembic, verified on a live Postgres - `audio_recordings` added by `D110`. Presence, the waiting pool and the live identity are deliberately **not** among them (`D78`), and neither are transcript turns, which is a gap rather than a design (`DATA_MODEL` §6) |

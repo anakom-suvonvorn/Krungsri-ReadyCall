@@ -3544,14 +3544,15 @@ _Forced by `B25`. Extends `D50`, which split one outcome into two for the same r
   |---|---|---|
   | `ALL_QUALIFIED_BUSY` | qualified, available people exist; this caller lost the matrix on this tick | nothing — it resolves in about a second |
   | **`NO_AGENT_AVAILABLE`** | people with the skill are signed in and none can take a call: break, ACW, already ringing | ask somebody. Waiting helps |
-  | **`ALL_DECLINED`** | everyone who could take it has already been offered it and said no | **nothing helps.** See `Q31` |
+  | **`ALL_DECLINED`** | everyone who could take it has already been offered it and said no | since `D113`: the exclusions are cleared and the caller goes round again on the next tick. Before that, nothing helped |
   | `NO_QUALIFIED_AGENT` | nobody with the skill is here at all | roster problem; waiting cannot fix it |
 
 - **`ALL_DECLINED` is the one worth pausing on.** The other three resolve with time; this
   one does not, because `D52`'s exclusion is permanent for the life of the call. It used to
   be indistinguishable from an empty roster, so a supervisor looking at a stuck caller was
   told the wrong thing about a floor of idle agents. **Naming it does not fix it** —
-  whether the exclusion should ever be lifted is a policy question and is `Q31`.
+  whether the exclusion should ever be lifted is a policy question, and it was `Q31` —
+  **closed by `D113`**, which clears the set and sends the caller round again.
 - **Why the counts are computed the way they are.** `already_offered` is checked *first* in
   `hard_filter`, deliberately (`D50`), so an excluded agent's other reasons are invisible.
   That is right for this caller — "they already turned you down" beats "and they are also
@@ -3845,3 +3846,109 @@ is for the configuration that has a real model in it.
 
 Killing the parent leaves **no orphan**: the child's stdin closes, its blocking read returns
 EOF, and it exits on its own. Verified by hard-killing the API and looking for the process.
+
+## D113. A caller the whole floor declined goes round again, and the card says so
+_Closes `Q31`, which had been open since `D108` named the problem. The three sub-decisions
+were the user's; the reasoning for each is theirs and is recorded here because it is the
+part that will still matter when the code has changed._
+
+- **Problem.** `D52` excludes an agent who declined or missed an offer, for the life of the
+  call. That is right for the *next tick* — without it the solver re-picks the person who
+  just said no — but nothing in it argued for permanence, and permanence stranded people.
+  Once every qualified agent had declined there were no candidates left, and **`D93`'s
+  wait-ceiling rescue could not help either**, because it picks from qualified agents and
+  every one of them was excluded. `D108` made the situation *legible* (`ALL_DECLINED`);
+  it said plainly that naming it does not fix it.
+
+  The bug had no exception and no failing test. The caller simply waited, for the life of
+  the shift, while the queue showed them as being handled.
+
+- **Decision.** When a tick reports `ALL_DECLINED`, clear the exclusions, increment a round
+  counter, and let the next tick offer them again.
+
+### Clearing the set, not expiring per agent
+
+A caller is exhausted as a **set**. An agent-by-agent timer would re-offer to the person
+who declined ten seconds ago while somebody who declined ten minutes ago stayed excluded —
+arbitrary, and it would make the order of a second round depend on the timing of the
+first rather than on fit.
+
+### It happens on the NEXT tick, not the same one
+
+A second solve inside the same tick would buy about a second for a caller who has already
+been round a whole floor, at the cost of two decision records for one moment. The record
+of the exhausted round is exactly the one a supervisor needs to read cleanly.
+
+### RONA counts as a decline — the user's call, and the reasoning is theirs
+
+*"The caller cannot tell the difference."* And the failure mode of the other reading is
+worse than it looks: if a missed offer did **not** count toward exhaustion, one agent who
+walked away from their desk would keep the pool looking un-exhausted forever, and the
+caller would never get a second round at all. The state log still tells the two apart —
+`rona_missed_offer` versus `declined_and_stopped`, `set_by="platform"` versus `"agent"`
+(`D109`) — so the distinction survives where it means something.
+
+### The cap is config, and the default is NO CAP
+
+`guards.max_offer_rounds`, in `matching_weights.yaml`. **0 means keep circling**, and that
+is what ships. This was the user's decision and the argument is worth keeping verbatim
+enough to survive:
+
+> *a caller who is cut off has to start again from the menu; a caller who is still holding
+> can hang up whenever they choose, and that choice is theirs.* "Waited an hour and reached
+> an agent" is a better outcome than "waited thirty minutes and was dropped" — and a
+> patient customer who genuinely needed the line should not be cut off on their behalf.
+
+They also asked that it be a knob rather than a rule, precisely because it is **business
+logic** rather than an engineering property: an operation that would rather hand a
+long-waiting caller to voicemail sets it to 2 or 3, and nothing else changes. It lives in
+the weights file rather than in `Settings` for `Q26`'s reason — the matcher reads that
+file, and an env var the code never consults is worse than no env var.
+
+**When a cap does fire it is deliberately NOT a state change.** `D25`'s voicemail path —
+record a message, create a briefed callback — is P6 and does not exist, so moving the call
+to `VOICEMAIL` would strand it in a state nothing handles: the half-built guard `B7` keeps
+teaching. The caller stays reported as `ALL_DECLINED`, which is true, and a supervisor sees
+somebody nothing will resolve.
+
+### The card says two things, and the second one is the interesting one
+
+**"สายนี้ถูกส่งต่อครบทุกคนแล้ว และวนกลับมาอีกครั้ง (รอบที่ N)"** — with the count, at the
+user's request. An agent seeing the same call twice with no explanation concludes the
+system is broken; and naming it is also the point, because it is the sentence that makes
+somebody take it.
+
+**"ขณะนี้คุณเป็นเจ้าหน้าที่คนเดียวที่รับสายนี้ได้"** — shown only when this agent is the
+only one who could take the call. The user raised this and then raised the obvious
+generalisation — *always* show how many agents can take it — and then talked themselves
+out of it, correctly. It is not shown, for three reasons:
+
+1. **"Three others could take this" is a diffusion-of-responsibility prompt**, on a card
+   whose other button is *decline*. The user got there first: *"it might be encouraging
+   the agent to reject it."*
+2. **It is not actionable.** The agent can do nothing with "3". It is information about
+   the system, not about this caller.
+3. **The asymmetry is the design.** Show the fact when it *increases* responsibility, never
+   when it diffuses it. "You are the only one" is the one thing an agent cannot work out
+   from the card, and it is the truthful answer to what declining will do — the call comes
+   straight back to them.
+
+**It is counted from the decision's own candidates**, where `hard_filter_failed is None`
+means the agent passed **the same filter the matcher used**. Not a second computation of
+availability: that is exactly how `B25` happened, with `PresenceView.offerable` and
+`AgentPresence.is_available()` both answering a question the matcher never asked. And note
+what it includes — an agent who declined earlier *in this round* is excluded and does not
+count, which is the truthful reading for the person holding the card.
+
+### Verified
+
+On a running server, as the only motor agent: decline, and the offer comes back with
+`offer_round: 2` and `sole_candidate: true`. In a browser, both Thai sentences render on
+the card. Under load, `tests/integration/test_floor_under_load.py` declines every offer for
+one caller across a whole floor repeatedly and asserts they are still in the pool and have
+gone round more than once.
+
+⚠️ **The stress suite's `D52` invariant still reads "nobody currently excluded is holding an
+offer", and that is still true** — the set is cleared, so a re-offered agent is no longer in
+it. What is no longer true is "nobody is ever rung twice about one call", which the
+invariant never said.

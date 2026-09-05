@@ -57,6 +57,12 @@ class MatchingWeights:
     defer_max_hold_s: float
     defer_min_fit_gap: float
     defer_never_above_urgency: Urgency
+    #: How many times a caller may be sent round the whole floor before the system stops
+    #: re-offering them (`D113`, closing `Q31`). **0 means no cap — keep circling**, and
+    #: that is the default, deliberately: a caller who is cut off has to start again from
+    #: the menu, while a caller who is still holding can hang up whenever they choose.
+    #: Business logic, so it lives in config rather than in a decision about behaviour.
+    max_offer_rounds: int
     hot_spot_window_calls: int
     hot_spot_max_share: float
 
@@ -115,6 +121,7 @@ class MatchingWeights:
             defer_max_hold_s=float(guards.get("defer_max_hold_s", 25)),
             defer_min_fit_gap=float(guards.get("defer_min_fit_gap", 0.25)),
             defer_never_above_urgency=Urgency(guards.get("defer_never_above_urgency", "high")),
+            max_offer_rounds=int(guards.get("max_offer_rounds", 0)),
             hot_spot_window_calls=int(guards.get("hot_spot_window_calls", 20)),
             hot_spot_max_share=float(guards.get("hot_spot_max_share", 0.35)),
         )
@@ -169,6 +176,11 @@ class MatchingWeights:
                     f"{self.ceiling_for(higher)}s but the less urgent '{lower.value}' waits "
                     f"only {self.ceiling_for(lower)}s - ceilings must not rise with urgency"
                 )
+        if self.max_offer_rounds < 0:
+            raise ConfigError(
+                "guards.max_offer_rounds must be 0 (no cap, keep circling) or a positive "
+                "number of rounds - a negative cap would stop a caller being offered at all"
+            )
         if self.urgency_max < self.urgency_min:
             raise ConfigError("urgency max_multiplier is below min_multiplier")
         if self.urgency_min < 1.0:
