@@ -964,6 +964,7 @@ budget degrades (§16) rather than delaying.
 |---|---|
 | No app / no intent (cold call) | Keypad menu routes it (`D37`); ANI gives probable identity; brief built from menu + context at the assurance level reached |
 | Caller presses 2 (no recording) | Menu-derived brief (line + reason are still known); agent screen says intake was declined |
+| STT engine fails or a decode runs away | **BUILT** (`D111`, `D112`). The utterance is lost, counted, and reported: an intake with a failure and *no* turns renders `stt_unavailable` on the screen. With `STT_WORKER=subprocess` a runaway decode is **killed** on `STT_DECODE_TIMEOUT_S` rather than holding the transcriber — the preventer `D98` designed and refused to fake |
 | No consent | Same as above; nothing is analysed |
 | STT down / low confidence | Recording kept + context brief; transcript marked unavailable; agent gets audio playback |
 | **VAD unavailable** (Silero fails to load) | `EnergyVad` needs no dependencies and endpoints slightly worse. There is no rung below this, which is the point of it existing (`D96`) |

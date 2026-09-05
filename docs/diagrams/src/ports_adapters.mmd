@@ -27,6 +27,8 @@ flowchart LR
     P_stt --> A_stt_scripted["scripted.py"]:::adapter
     P_stt --> A_stt_thonburian_hf["thonburian_hf.py"]:::adapter
     P_stt --> A_stt_typhoon_asr["typhoon_asr.py"]:::adapter
+    P_stt --> A_stt_wire["wire.py"]:::adapter
+    P_stt --> A_stt_worker["worker.py"]:::adapter
     logic --> P_telephony["ports/telephony.py"]:::port
     P_telephony --> A_telephony_simulated["simulated.py"]:::adapter
     logic --> P_tts["ports/tts.py"]:::port

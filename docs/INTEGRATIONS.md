@@ -522,6 +522,8 @@ of the real system.
 | `STT_MODEL` | `biodatlab/whisper-th-medium-combined` | For `thonburian_ct2` this must be a **local converted directory** (`scripts/convert_ct2.py`), not an HF id (`B17`) |
 | `STT_DEVICE` | `auto` | Resolves to `cuda` when a GPU is genuinely usable, `cpu` otherwise — resolved in `build_stt`, so importing config never imports torch |
 | `STT_COMPUTE_TYPE` | `int8_float16` | int8 weights, fp16 compute. The default because of the measured 4.00 GiB / ~3.2 GiB free (`D95`) |
+| `STT_WORKER` | `inline` | `subprocess` runs the engine in a child process so a runaway decode can be **killed** (`D112`). `inline` is what every test, scenario and the stage demo use |
+| `STT_DECODE_TIMEOUT_S` | `8.0` | The deadline one utterance gets, enforced only under `subprocess`. 8 s because that is what `B14` measured a *single second of near-silence* costing on this GPU — the guard is for the pathological case, not for a slow model. The model **load** is outside it (`startup_timeout_s`, 180 s) |
 
 **The recording, added at `D110`.** Also defaults to needing nothing installed:
 
@@ -546,6 +548,8 @@ STT_ENGINE=thonburian_hf              # thonburian_hf | thonburian_ct2 | distill
 STT_MODEL=biodatlab/whisper-th-medium-combined
 STT_DEVICE=auto                       # cuda | cpu | auto
 STT_COMPUTE_TYPE=int8_float16         # ct2 only
+STT_WORKER=inline                     # inline | subprocess   (D112)
+STT_DECODE_TIMEOUT_S=8.0
 LLM_PROVIDER=anthropic                # anthropic | openai_compatible | gemini | rulebased
 LLM_MODEL=claude-sonnet-5
 LLM_BASE_URL=                         # set for openai_compatible (Typhoon API, OpenAI, vLLM, Ollama)

@@ -3718,3 +3718,130 @@ Not the live call — `D26`'s agent leg is P6. Not the transcript, which still h
 (`DATA_MODEL` §6). Not a player on the agent's screen. And **not P7's real key
 management**: `LocalKeyRing` holds the master in the process environment, so anyone who
 can read that environment can read the recordings, and it says so in its own docstring.
+
+## D111. An engine failure reaches the agent's screen, instead of only the log
+_The smaller half of `NEXT_SESSION`'s "two small things in the audio path", and it had been
+a **gap** rather than a wait since `D96`._
+
+- **Problem.** `IntakeService._degradation()` returned `DegradationReason.NONE`
+  unconditionally. Its docstring was honest about why — an intake with no turns can mean
+  the caller said nothing or that the transcriber was down, and only a layer that can see
+  the transcriber knows which — but that layer had existed since `D96` and nothing carried
+  the knowledge back to it. Meanwhile `emptyTranscriptReason()` in `panels.tsx` has
+  rendered a sentence for `stt_unavailable` since `D106`, and **no code path could reach
+  it**. `TranscriptionStream._consume` swallowed engine failures (correctly — `D12`) and
+  the fact died in the log.
+- **Decision.** A second sink on the stream, `LossSink`, called with **how many utterances
+  an engine failure just cost**. `TranscriptionService` forwards it to
+  `IntakeService.on_transcription_lost`, which counts it on the live hold.
+  `_degradation()` then answers for real.
+
+### The rule is narrow on purpose
+
+`stt_unavailable` is claimed only when the engine failed **and** nothing at all was
+transcribed. That is exactly the case the screen has a sentence for: an empty panel whose
+emptiness is ours rather than the caller's.
+
+A call where five of six sentences arrived is *thinner*, and saying *"the transcription
+system was unavailable on this call"* about it would be a bigger claim than the evidence
+supports. It is logged loudly and the brief does not lie about it. If that partial case
+ever needs to reach the screen it wants its **own** `DegradationReason`, not this one
+stretched — the same argument `D50` and `D108` made about conflating unplaced reasons.
+
+### The stream reports; it does not conclude
+
+`TranscriptionStream` cannot tell a silent caller from a dead engine — it only ever sees
+what it dispatched. So it counts and hands the count up. Putting the judgement in the
+stream would have been the version that guesses, which is what the original docstring
+refused to do.
+
+### Two tests, and the second is the one that stops it over-reporting
+
+A broken engine must produce `stt_unavailable`; **a quiet caller must not**. Most callers
+who accept the recording and then wait in silence produce no turns at all, so a rule that
+looked only at "the transcript is empty" would put a system failure on the agent's screen
+about every one of them.
+
+⚠️ The fake for the broken engine originally defined `transcribe` — a method the port does
+not have — so the stream failed with an `AttributeError` and the test passed for a reason
+that had nothing to do with a broken model. It is `transcribe_utterance` now, and the test
+asserts the engine was **actually asked**.
+
+## D112. The decode timeout, and the process that makes it real
+_`D98` designed this guard and then refused to build it. This builds it, three phases
+later, exactly where `D2` said the worker would go._
+
+- **Problem, in `D98`'s own words:** the character-rate guard *"is a detector, not a
+  preventer. By the time the rate is known the eight seconds (`B14`) have already been
+  spent. **The preventer is a decode timeout, and it cannot be built yet:**
+  `asyncio.wait_for` around `to_thread` does not kill the thread, so a runaway decode has
+  to be killed with the process."* That was correct, and it is why nothing was
+  half-built — a guard that looks like one and is not is `B7`'s entire family.
+- **Decision.** `entrypoints/stt.py` is the worker `D2` planned; `SubprocessSttEngine` is
+  the parent side, and it is **an adapter implementing `SttEngine`**. It wraps whichever
+  engine `build_stt` would have made, is selected by `STT_WORKER=subprocess`, and nothing
+  above it can tell — which is the ports-and-adapters point (`D3`) and the only reason
+  this could be added after the fact at all.
+
+### What happens on a timeout, exactly
+
+The child is **killed**, a `TransientError` is raised, and `TranscriptionStream._consume`
+catches it the way it catches any engine failure — so the utterance is lost, counted, and
+since `D111` the reason the brief is thin reaches the agent's screen. The next utterance
+respawns the worker and pays the model load once.
+
+That is the trade: **one lost sentence and a reload**, against a decode that would
+otherwise hold the single consumer for as long as it liked while every later utterance
+queued behind it — `B20`'s compounding backlog, from the other end.
+
+### The deadline covers the SEND as well as the reply
+
+A wedged worker stops reading as well as answering. Whether that blocks the parent depends
+on the OS pipe buffer, the utterance length, and how much the child consumed before it
+wedged — none of which this code controls. It was seen to hang once during development, on
+an utterance around 80 KB, and **it does not reproduce reliably**; that is the argument
+rather than a counter-argument. A deadline that covers half an exchange is not a deadline,
+and the half it leaves out is the half whose behaviour is platform-dependent.
+
+### The model load is deliberately outside the deadline
+
+`_ensure()` has its own generous bound (`startup_timeout_s`, 180 s) because a cold Typhoon
+load is not a runaway decode and must not be killed as one. `STT_DECODE_TIMEOUT_S` is 8.0,
+which is what `B14` measured a **single second of near-silence** costing on this GPU: the
+guard is for the pathological case, not for a slow model. And `api/app.py` now warms the
+engine at startup, in the background — the reason `SttEngine.warmup` exists at all, and
+in the background because a 20-second startup would make a restart look like a hang.
+
+### Two things the protocol had to get right
+
+**stdout is frames and nothing else.** `readycall.logging` already writes to stderr — a
+happy accident this design depends on — and the child additionally rebinds `sys.stdout` to
+stderr before building the engine, because model libraries print and a stray `print` inside
+a transformers import would corrupt the stream in a way that looks like a protocol bug.
+
+**The child reads with BLOCKING I/O in a thread.** The first version used
+`loop.connect_read_pipe(..., sys.stdin)` and died on Windows with
+`OSError: [WinError 6] The handle is invalid` under the Proactor loop — a worker that would
+have passed on Linux CI and failed on the demo laptop. Blocking reads are also simply right
+here: the process answers one utterance at a time, so its event loop has nothing else to do
+while it waits.
+
+### What it deliberately does not do
+
+**No `transcribe_batch`.** `BatchSttEngine` is a capability (`D101`) and this does not offer
+it, so the stream falls back to a plain loop. That costs nothing measurable — `D101`
+measured batching as a **no-op on this GPU** — and adding it would mean a partial batch
+dying on one utterance's deadline, a worse trade than the one it buys.
+
+**One request at a time.** The transcriber has a single consumer by design (`B20`), and a
+worker that interleaved requests could not be killed on a deadline without taking somebody
+else's utterance with it.
+
+**`inline` stays the default.** Every test, every scenario and the stage demo run in-process
+on the scripted engine, where a subprocess would buy nothing and cost a spawn. The timeout
+is for the configuration that has a real model in it.
+
+### A property worth knowing
+
+Killing the parent leaves **no orphan**: the child's stdin closes, its blocking read returns
+EOF, and it exits on its own. Verified by hard-killing the API and looking for the process.

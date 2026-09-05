@@ -47,11 +47,11 @@ the disclosure gate moves when the agent attests. **What they said while waiting
 screen** (`D106`), and if they consented, **their audio is in object storage encrypted**
 (`D110`) with a key ref and a retention date. If they declined, it is nowhere.
 
-Verified on 2026-09-06: **777 tests** — 765 pass + 12 skipped with Postgres and MinIO both
+Verified on 2026-09-06: **790 tests** — 778 pass + 12 skipped with Postgres and MinIO both
 up (the 12 are foreign-key cases the in-memory backend cannot have, and the `ml`-extra ones).
 Without those containers the count of skips rises and nothing fails.
-`ruff check` and `ruff format --check` clean over **196** files, `mypy --strict`
-clean over **140** source files, 64/64 diagrams current, the prompt pack fresh, and all three
+`ruff check` and `ruff format --check` clean over **199** files, `mypy --strict`
+clean over **143** source files, 64/64 diagrams current, the prompt pack fresh, and all three
 scenarios replay byte-identically. The database suites ran against a **live Postgres** on
 2026-09-02, and a restart was verified outside pytest with two real uvicorn processes.
 
@@ -155,6 +155,8 @@ FullProject/
 │  ├─ adapters/*
 │  │  ├─ telephony/  asterisk_ari.py  twilio.py  livekit.py  simulated.py
 │  │  ├─ stt/*       thonburian_hf.py*  faster_whisper.py*  scripted.py*  cloud.py
+│  │  │               typhoon_asr.py*   # D104. The shipped engine
+│  │  │               worker.py*  wire.py*   # D112. The engine in its own process
 │  │  ├─ vad/*       energy.py*  silero.py*   # the 9th port (D96)
 │  │  │               # stt/: + typhoon_asr.py* - NeMo, not Whisper (D99)
 │  │  ├─ llm/        anthropic.py  openai_compatible.py  gemini.py  rulebased.py
@@ -205,6 +207,9 @@ FullProject/
 │  │  ├─ sources.py*         #   replay a WAV as if it were a phone line
 │  │  └─ audiosocket.py  ws_media.py   # P5. NOT THERE
 │  │                        # (the recorder is services/recording/, not here - D110)
+│  ├─ entrypoints/*          # D2. One codebase, several processes
+│  │  ├─ api.py*             #   the HTTP server and both front-ends
+│  │  └─ stt.py*             #   D112. The STT worker - it exists to be KILLABLE
 │  ├─ api/*
 │  │  ├─ app.py*  deps.py*  security.py*  realtime.py*   # realtime = the agent hub
 │  │  ├─ routers/  mobile.py*  agent.py*  demo.py*  health.py*  telephony_webhooks.py  admin.py
@@ -408,9 +413,10 @@ performing by hand, i.e. what the next services take over (`D36`).
 
 | | |
 |---|---|
-| Source files | 197 Python files (`src/` 138 + `tests/` + `scripts/` + `mock/`) |
-| Tests | **777**, all passing, ~100 s with every backend up (**54 on the recording and the blob port**, `D110`: 15 on the service, 27 on the store contract across memory/localfs/MinIO, 12 on `audio_recordings` across memory/SQLite/Postgres; **20 on agent availability and the wait on screen**, `B25`/`B26`; 149 store contract + restart across 3 backends; 56 on the prompt pack and the IVR; 40 on the hold and the intake seam; 41 on matching, 12 of them on the wait ceiling under contention; **61 on the audio path**; **21 on the transcript reaching the screen**) |
+| Source files | 201 Python files (`src/` 141 + `tests/` + `scripts/` + `mock/`) |
+| Tests | **790**, all passing, ~115 s with every backend up (**13 on the loss reporting and the killable STT worker**, `D111`/`D112` - the timeout one asserts the child PROCESS is gone, not that an exception was raised; **54 on the recording and the blob port**, `D110`: 15 on the service, 27 on the store contract across memory/localfs/MinIO, 12 on `audio_recordings` across memory/SQLite/Postgres; **20 on agent availability and the wait on screen**, `B25`/`B26`; 149 store contract + restart across 3 backends; 56 on the prompt pack and the IVR; 40 on the hold and the intake seam; 41 on matching, 12 of them on the wait ceiling under contention; **61 on the audio path**; **21 on the transcript reaching the screen**) |
 | Ports defined | **10** (telephony, stt, **vad**, llm, tts, core_data, event_bus, blob_storage, agent_directory, **keyring**) - `vad` added by `D96`, `keyring` by `D110`. Plus three **capability** protocols, one adapter each: `BatchSttEngine` (`D101`), `ReplayableSttEngine` (`D107`) and `ProvisionableBlobStorage` (`D110`) |
+| Process entrypoints | **2** of `D2`'s four: `api.py` and `stt.py` (`D112`). `worker.py` and `media.py` are still one process with the API |
 | Persisted tables | **10** + Alembic, verified on a live Postgres - `audio_recordings` added by `D110`. Presence, the waiting pool and the live identity are deliberately **not** among them (`D78`), and neither are transcript turns, which is a gap rather than a design (`DATA_MODEL` §6) |
 | Adapters | 9 fakes/nulls + two decorators (`CachingCoreDataProvider`, `EncryptingBlobStorage`), **plus seven real ones**: `SileroVad`, `EnergyVad`, `TyphoonAsrEngine`, `FasterWhisperEngine`, `ThonburianHfEngine`, `LocalFsBlobStorage`, `S3BlobStorage` |
 | Spoken lines | 27 prompts + 15 flow roles -> **54 distinct clips** after dedupe (`D80`); rendered by the null engine, so a manifest rather than audio |

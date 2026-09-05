@@ -14,6 +14,7 @@ while the customer is still lifting the phone to their ear.
 
 from __future__ import annotations
 
+import os
 from collections.abc import Callable
 from datetime import timedelta
 from typing import Annotated, Any
@@ -49,6 +50,7 @@ from readycall.config import (
     CoreDataProviderName,
     Settings,
     SttEngineName,
+    SttWorkerMode,
     VadEngineName,
 )
 from readycall.db.storage import Storage, build_storage
@@ -147,7 +149,21 @@ def build_stt(settings: Settings) -> SttEngine:
     `scripted` is the default and stays the default: every test, all three scenarios and
     the stage-safe demo path run on it, and nothing in the system above this line can tell
     which one it got (`D9`).
+
+    **`STT_WORKER=subprocess` wraps whichever engine was chosen** in a child process, so a
+    runaway decode can be killed on a deadline (`D112`, `D98`). The wrapping happens here
+    rather than in the caller for the same reason the encryption wrapper happens in
+    `build_blob_storage` (`D110`): a decorator that only applies when somebody remembers
+    to apply it is not a guarantee.
     """
+    if settings.stt_worker is SttWorkerMode.SUBPROCESS and not _in_stt_worker():
+        from readycall.adapters.stt.worker import SubprocessSttEngine
+
+        # The child is told to run INLINE, or it would spawn a worker of its own, forever.
+        # Passed through the environment rather than an argument because the child builds
+        # its own `Settings` from exactly that.
+        env = {**os.environ, "STT_WORKER": SttWorkerMode.INLINE.value}
+        return SubprocessSttEngine(timeout_s=settings.stt_decode_timeout_s, env=env)
     name = settings.stt_engine
     device = settings.stt_device
     if device == "auto":
@@ -191,6 +207,16 @@ def build_stt(settings: Settings) -> SttEngine:
     # own docstring calls it "the stage-safe demo path" produced a transcript with nothing
     # in it — a fallback that looks like the system working and finding nothing to say.
     return ScriptedSttEngine(load_scripted_turns(settings.demo_transcript_file))
+
+
+def _in_stt_worker() -> bool:
+    """True inside `entrypoints/stt.py`, which must never wrap itself.
+
+    Belt and braces beside the env var the parent sets: a child that spawned a child would
+    fork model loads until the machine gave up, and the symptom would be a demo laptop
+    quietly filling its VRAM.
+    """
+    return os.environ.get("READYCALL_STT_WORKER_CHILD") == "1"
 
 
 def build_core_data(settings: Settings, clock: Clock) -> CoreDataProvider:

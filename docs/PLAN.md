@@ -219,7 +219,9 @@ which is P6 (`D26`).
 - Consent gate (IVR keypress + in-app toggle) writing `consents` before a single frame is analysed.
 - `transcription/`: rolling buffer, Silero VAD endpointing (threshold 0.65 / 500 ms / 100 ms +
   120 ms·60 ms padding, per `D9`), utterance dispatch, repetition guard.
-- `stt_worker`: long-lived, model loaded once, GPU-pinned, batched, health-checked.
+- ✅ `stt_worker`: long-lived, model loaded once (`D112`). ☐ GPU-pinned and health-checked;
+  **deliberately not batched** behind the worker (`D101` measured batching as a no-op on this
+  GPU, and a partial batch dying on one utterance's deadline is a worse trade).
   **The `ml` extra is still commented out in `pyproject.toml`** — declaring `torch` /
   `transformers` / `faster-whisper` / `onnxruntime` / `silero-vad` is step zero and it is the
   slow install.
@@ -281,9 +283,11 @@ which is P6 (`D26`).
 - ✅ A caller on the general hotline with an unrecognised number reaches the right specialist purely by
   keypad. That is the floor, and it must be at least as good as an ordinary call centre.
   *(`anonymous_declined` replays it: keys 2/4 → `q_health_policy`, no identity, no consent.)*
-- 🔶 Killing the STT worker mid-call degrades to recording-only; the call is unaffected. The
-  swallow-and-log path exists in `TranscriptionStream._consume` (`D12`) and is asserted by test;
-  killing a *real* worker mid-call waits on the worker being a separate process (P5).
+- ✅ Killing the STT worker mid-call degrades to recording-only; the call is unaffected.
+  **MET 2026-09-06** (`D112`): the worker *is* a separate process now, `STT_WORKER=subprocess`
+  puts it there, and `tests/unit/test_stt_worker.py` kills one mid-utterance and asserts the
+  process is **gone** rather than that an exception was raised. The loss is then reported
+  rather than only logged (`D111`), so the agent's screen says why the panel is empty.
 - ✅ No audio ever written to local disk unencrypted. Analysis is still per-utterance and in
   memory (`D9`), and the one thing that now *is* written goes through
   `EncryptingBlobStorage` — the only way `build_blob_storage` hands a store out, which is

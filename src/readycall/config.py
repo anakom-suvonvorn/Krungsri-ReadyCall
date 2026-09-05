@@ -35,6 +35,17 @@ class SttEngineName(StrEnum):
     CLOUD = "cloud"
 
 
+class SttWorkerMode(StrEnum):
+    """Whether the STT engine shares this process (`D112`).
+
+    `inline` is right for a scripted engine and for every test; `subprocess` is what a
+    decode timeout requires, because a deadline you cannot enforce is not a deadline.
+    """
+
+    INLINE = "inline"
+    SUBPROCESS = "subprocess"
+
+
 class VadEngineName(StrEnum):
     """Which voice detector runs. `energy` needs nothing and is the CI/degraded path."""
 
@@ -137,6 +148,15 @@ class Settings(BaseSettings):
     #: int8 weights, fp16 compute. The default because of what `D95` measured: 4.00 GiB
     #: total and ~3.2 GiB free, against a medium checkpoint that wants most of it.
     stt_compute_type: str = "int8_float16"
+    #: Where the STT engine runs (`D112`). `inline` is the default and is what every
+    #: test, scenario and demo uses. `subprocess` puts it in a child process so a runaway
+    #: decode can be KILLED — the preventer `D98` designed and refused to fake, because
+    #: `asyncio.wait_for` around `to_thread` does not kill the thread.
+    stt_worker: SttWorkerMode = SttWorkerMode.INLINE
+    #: The deadline one utterance gets, enforced only when `STT_WORKER=subprocess`.
+    #: 8.0 s because that is what `B14` measured a *single* second of near-silence
+    #: costing on this GPU: the guard is for the pathological case, not for a slow model.
+    stt_decode_timeout_s: float = 8.0
     llm_provider: LlmProviderName = LlmProviderName.RULEBASED
     llm_model: str = "claude-sonnet-5"
     llm_base_url: str | None = None

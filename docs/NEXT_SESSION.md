@@ -51,26 +51,18 @@ median** (unstable at n=20), and **the test set moved the headline by 1.8x**.
 
 ### What is NOT built, precisely
 
-1. **`IntakeService._degradation()` returns `NONE` unconditionally.** A *wait* until `D96`
-   and a *gap* since: `TranscriptionService` knows whether the engine failed and nothing
-   carries it back. The screen is already ready for it — `emptyTranscriptReason()` in
-   `panels.tsx` renders a different sentence for `stt_unavailable` and that branch is
-   currently unreachable.
-2. **The decode timeout** (`D98`'s missing half) needs `D2`'s killable worker process. Do
-   not fake it with `asyncio.wait_for`: it does not kill the thread, and a guard that looks
-   like one and is not is `B7`'s whole family.
-3. **A caller every qualified agent declined waits forever** (`Q31`). Reported honestly as
+1. **A caller every qualified agent declined waits forever** (`Q31`). Reported honestly as
    `ALL_DECLINED` since `D108`, but nothing rescues them — `D52`'s exclusion has no expiry
    and `D93`'s wait-ceiling rescue picks from qualified agents, all of whom are excluded.
    **The design for circling back is written out in `Q31` and needs two decisions from the
    user before building.**
-4. **Persisted transcript turns.** `transcript_turns` has no table (`DATA_MODEL` §6), so a
+2. **Persisted transcript turns.** `transcript_turns` has no table (`DATA_MODEL` §6), so a
    restart loses an in-flight transcript. ⚠️ **The recording it belongs beside now exists**
    (`D110`), so the pattern to copy is `services/recording/store.py` plus
    `db/models/media.py` — an hour's work, not a design problem.
-5. **P7's real key management.** `LocalKeyRing` holds the master in the process
+3. **P7's real key management.** `LocalKeyRing` holds the master in the process
    environment. The port exists so a vault is a second adapter, and nothing else changes.
-6. **A player on the agent's screen.** The recording exists and decrypts; nothing offers it
+4. **A player on the agent's screen.** The recording exists and decrypts; nothing offers it
    to the agent. That is now a UI job rather than a storage one.
 
 ### How to see the whole thing working, in one minute
@@ -111,9 +103,9 @@ moment in the recording it was said — **and if they consented, their audio is 
 storage encrypted, with the key ref and the retention date on an `audio_recordings` row.**
 If they declined, it is nowhere.
 
-Verified **2026-09-06**: **777 tests** — 765 pass + 12 skipped with Postgres and MinIO both
-up. `ruff check` + `ruff format --check` clean over 196 files, `mypy --strict` clean over
-140, all scenarios replay, 64/64 diagrams current, prompt pack fresh (54 clips),
+Verified **2026-09-06**: **790 tests** — 778 pass + 12 skipped with Postgres and MinIO both
+up. `ruff check` + `ruff format --check` clean over 199 files, `mypy --strict` clean over
+143, all scenarios replay, 64/64 diagrams current, prompt pack fresh (54 clips),
 `audit_docs.py` clean on the live files. **And verified against a running server with a
 real MinIO container**: the bucket holds `RCE1`-framed ciphertext, the right master key
 returns the original 622,124-byte WAV, a wrong one refuses, and the caller who pressed 2
@@ -347,6 +339,20 @@ the first one's sinks — `B24`'s shape, caught by two tests that fail without t
 `scripts/purge_recordings.py` is `D14`'s erasure job, object before row, refusing to run
 against `memory` · verified against a real MinIO container, not from tests alone.
 
+**P3 step 4f — the two audio-path gaps (`D111`, `D112`), 2026-09-06.**
+`IntakeService._degradation()` answers for real: `TranscriptionStream` reports every
+utterance an engine failure cost, `TranscriptionService` forwards it, and an intake with a
+failure and **no** turns renders `stt_unavailable` — the sentence `panels.tsx` has had
+since `D106` and nothing could reach · the rule is narrow on purpose, because most callers
+who take the recording and then wait quietly produce no turns and must not be told the
+system failed · **`entrypoints/stt.py` is `D2`'s worker**, and `SubprocessSttEngine` is the
+adapter that owns it: `STT_WORKER=subprocess` puts the engine in a child process so a
+runaway decode can be **killed** on `STT_DECODE_TIMEOUT_S`, which is the preventer `D98`
+designed and refused to fake · the deadline covers the send as well as the reply · the
+model load is outside it, and the engine is warmed at startup · verified on a running
+server: six Thai sentences transcribed across a process boundary and onto the screen, and
+no orphaned child after the parent was hard-killed.
+
 ## Designed but NOT built (read before touching these areas)
 
 - **`D63` — call transfer.** One filtered roster menu covering all three needs (named agent /
@@ -360,26 +366,18 @@ against `memory` · verified against a real MinIO container, not from tests alon
 
 ## What to do next (in order)
 
-_Rewritten 2026-09-06, after `D110`. The old step 1 — the encrypted recording — is done and
-recorded; it is not work. Everything the version before that listed is done too._
+_Rewritten 2026-09-06, after `D110`, `D111` and `D112`. The encrypted recording, the
+degradation reporting and the decode timeout are all done and recorded; they are not work.
+**`Q31` is now the top item and it is blocked on two answers from the user.**_
 
-**1. Two small things in the audio path, both well defined and both a session's work.**
-- **`IntakeService._degradation()` returns `NONE` unconditionally.** `TranscriptionService`
-  knows whether the engine failed; nothing carries it back. The screen is already waiting
-  for it: `emptyTranscriptReason()` in `panels.tsx` renders a sentence for
-  `stt_unavailable` that nothing can currently reach.
-- **The decode timeout** (`D98`'s missing half) needs `D2`'s killable worker. Do not fake
-  it with `asyncio.wait_for`: it does not kill the thread, and a guard that looks like one
-  and is not is `B7`'s whole family.
-
-**2. `Q31` — a caller everyone declined waits forever.** Reported honestly since `D108`,
+**1. `Q31` — a caller everyone declined waits forever.** Reported honestly since `D108`,
 and still stuck: `D52`'s exclusion has no expiry and `D93`'s rescue only picks from
 qualified agents, all of whom are excluded. The design for circling back is written out in
 `Q31` and is ready to build — **but it needs two answers from the user first**: does a RONA
 timeout count as a decline for exhaustion, and is there a round cap before voicemail
 (`D25`). Ask; do not guess.
 
-**3. P4 — analysis and the brief v2+.** The largest remaining phase and the one the pitch
+**2. P4 — analysis and the brief v2+.** The largest remaining phase and the one the pitch
 leans on hardest. Intent classification, entity extraction, a rolling summary, brief
 versioning, confidence calibration, the suggested opening. Three things already point at
 it: `OfferOut.summary_th` is rendered on the offer card today from the rule-based builder
@@ -390,14 +388,14 @@ caller speaking health data into a recording nobody consented to hold *as such* 
 decided **before** an entity extractor exists, because that is the first code that can
 breach it.
 
-**4. Persisted `transcript_turns`** (`DATA_MODEL` §6). A restart currently loses an
+**3. Persisted `transcript_turns`** (`DATA_MODEL` §6). A restart currently loses an
 in-flight transcript. ⚠️ **This is now an hour rather than a design problem**: `D110` built
 the pattern next door — `services/recording/store.py` for the protocol plus in-memory
 implementation, `db/models/media.py` for the row, `db/stores.py` for the Postgres half, and
 a block in `tests/contracts/test_workstation_stores.py` that runs it on all three backends.
 Copy that shape.
 
-**5. Then, roughly in this order:** P5 real telephony, which is what replaces
+**4. Then, roughly in this order:** P5 real telephony, which is what replaces
 `POST /v1/demo/calls` and `D107`'s WAV player — and which is also what turns
 `RecordingService` on for the *live* leg (`D26`, P6) · `D85`'s `acw_stats` into
 `expected_free_in()` as a **score, never a filter** (`D73`) · the matcher inputs still fed
@@ -547,6 +545,48 @@ Facts about *this laptop* rather than the repo, so a fresh session does not redi
 
 ## Things to be careful about (live landmines)
 
+- **`stt_unavailable` MEANS "THE ENGINE FAILED **AND** NOTHING WAS TRANSCRIBED"** (`D111`).
+  Not "the transcript is empty" — most callers who take the recording and then wait quietly
+  produce no turns at all, and a rule that looked only at emptiness would put a system
+  failure on the agent's screen about every one of them. A *partly* lost transcript is
+  logged loudly and reported as `NONE`; if it ever needs to reach the screen it wants its
+  own `DegradationReason`, not this one stretched (`D50`/`D108`'s argument again).
+- **THE STREAM REPORTS A LOSS; IT DOES NOT CONCLUDE ONE** (`D111`).
+  `TranscriptionStream` only ever sees what it dispatched, so it cannot tell a silent
+  caller from a dead engine. It counts and hands the count up through `on_transcription_
+  lost`. Putting the judgement in the stream is the version that guesses.
+- **A FAKE ENGINE MUST IMPLEMENT `transcribe_utterance`, NOT `transcribe`** (`D111`). The
+  first broken-engine fake had the wrong method name, so the stream failed with an
+  `AttributeError` and the test passed for a reason that had nothing to do with a broken
+  model. The test asserts the engine was actually **asked** now.
+- **`STT_WORKER=subprocess` IS THE ONLY WAY THE DECODE TIMEOUT IS REAL** (`D112`, `D98`).
+  Under `inline` — the default, and what every test and the stage demo run —
+  `STT_DECODE_TIMEOUT_S` does nothing at all, because there is nothing to kill. That is not
+  a bug and it is not a fallback to add later: `asyncio.wait_for` around `to_thread` does
+  not kill the thread, and a guard that looks like one and is not is `B7`'s whole family.
+- **THE DEADLINE COVERS THE SEND, NOT JUST THE REPLY** (`D112`). A wedged worker stops
+  reading as well as answering, and whether `drain()` then blocks depends on the OS pipe
+  buffer, the utterance length and how much the child consumed first. It was seen to hang
+  once on an ~80 KB utterance and **does not reproduce reliably** — which is the argument
+  for the deadline covering it, not against. Do not "simplify" the exchange back into two
+  separate awaits.
+- **THE MODEL LOAD IS DELIBERATELY OUTSIDE THE DEADLINE** (`D112`). `_ensure()` has its own
+  180 s bound, because a cold Typhoon load is not a runaway decode and killing it as one
+  would make the worker unable to start at all. `api/app.py` warms the engine at startup,
+  in the background, for the same reason `SttEngine.warmup` exists.
+- **THE STT WORKER'S stdout IS THE PROTOCOL** (`D112`). `readycall.logging` writes to
+  stderr — a happy accident this design depends on — and the child rebinds `sys.stdout` to
+  stderr before building the engine, because model libraries print. A stray `print` in a
+  transformers import corrupts the stream and looks like a protocol bug.
+- **THE CHILD READS WITH BLOCKING I/O IN A THREAD, AND THAT IS NOT A STYLE CHOICE**
+  (`D112`). `loop.connect_read_pipe(..., sys.stdin)` raises
+  `OSError: [WinError 6] The handle is invalid` under the Proactor loop, which is the
+  Windows default — so the async version would have passed on Linux CI and failed on the
+  demo laptop. Caught by the round-trip test, not by review.
+- **A SMALL TEST PAYLOAD TESTS THE BUFFER, NOT THE PROTOCOL** (`D112`). 8 KB of samples
+  fits in a pipe buffer, so every send completes instantly and the wedged-worker path is
+  never exercised. `tests/unit/test_stt_worker.py` uses 160 KB — 2.5 s of 16 kHz audio,
+  an entirely ordinary Thai sentence.
 - **`build_blob_storage` IS THE ONLY PLACE A STORE MAY BE CONSTRUCTED** (`D110`). It always
   wraps the backend in `EncryptingBlobStorage`, and that wrapper is the entire reason
   `localfs` is allowed at all — the in-memory store's docstring used to refuse a local one

@@ -97,6 +97,19 @@ async def sweep_once(container: Container) -> None:
         log.exception("sweep failed")
 
 
+async def _warm_stt(container: Container) -> None:
+    """Warm the engine, and never let a failure here stop the API starting.
+
+    A model that will not load is a degraded system (`D12`), not a dead one: the call
+    still routes, the menu still speaks, and the brief is the menu-derived one. Raising
+    out of `lifespan` would turn that into a call centre that does not answer.
+    """
+    try:
+        await container.stt.warmup()
+    except Exception:
+        log.exception("stt warmup failed - transcription will degrade, calls will not")
+
+
 async def _sweep_forever(container: Container, interval_s: float) -> None:
     while True:
         await asyncio.sleep(interval_s)
@@ -164,6 +177,12 @@ def create_app(
                 await container.blob.inner.ensure_bucket()
             except Exception:
                 log.exception("object storage is not ready - recordings will retry")
+        # Load the model before the first caller needs it — the reason
+        # `SttEngine.warmup` exists ("a 5-20 second model load can never sit in the call
+        # path"). In the BACKGROUND, because a 20-second startup would make a restart
+        # look like a hang, and because `D12` means an early call degrades rather than
+        # waits. On the default scripted engine this returns immediately.
+        warmup = asyncio.create_task(_warm_stt(container))
         sweeper = (
             asyncio.create_task(_sweep_forever(container, settings.agent_sweep_interval_s))
             if settings.agent_sweep_interval_s > 0
@@ -186,7 +205,7 @@ def create_app(
             restored=restored,
         )
         yield
-        for task in (sweeper, pump):
+        for task in (sweeper, pump, warmup):
             if task is not None:
                 task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
