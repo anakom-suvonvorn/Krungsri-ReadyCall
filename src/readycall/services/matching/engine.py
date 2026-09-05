@@ -39,6 +39,7 @@ from readycall.logging import get_logger
 from readycall.ports.agent_directory import AgentDirectory
 from readycall.services.matching import solver
 from readycall.services.matching.scoring import (
+    AVAILABILITY_FILTERS,
     WaitingCall,
     hard_filter,
     rationale_th,
@@ -65,6 +66,45 @@ class MatchingEngine:
         self._solver_name = solver_name
         #: Rolling window of recent assignments, for the anti-hot-spot check.
         self._recent: deque[str] = deque(maxlen=weights.hot_spot_window_calls)
+
+    @staticmethod
+    def _unplaced_reason(qualified: int, capable: int, declined: int) -> tuple[MatchKind, str]:
+        """Three opposite messages to whoever is watching the queue (`D50`, `D108`).
+
+        * **contention** — qualified, available people exist and this caller lost the
+          matrix on this tick. Resolves by itself in about a second.
+        * **staffing** — people with the skill are signed in and none can take a call:
+          on a break, in after-call work, already holding an offer. Somebody can be asked.
+        * **exhausted** — everyone who could have taken it has already turned it down.
+          `D52`'s exclusion is permanent, so this is the one that does NOT resolve by
+          waiting; the caller needs a policy to rescue them (`Q31`).
+        * **roster** — nobody with the skill is here at all. Waiting cannot fix it.
+
+        The middle one did not exist until availability became a hard filter (`B25`), and
+        without it that fix would have reported a floor full of agents on lunch as *"no
+        agent with the skill is online"*.
+        """
+        if qualified:
+            return (
+                MatchKind.ALL_QUALIFIED_BUSY,
+                f"เจ้าหน้าที่ที่ตรงทักษะ {qualified} คนกำลังรับสายอื่นอยู่",
+            )
+        if capable:
+            return (
+                MatchKind.NO_AGENT_AVAILABLE,
+                f"มีเจ้าหน้าที่ที่ตรงทักษะ {capable} คน แต่ยังไม่พร้อมรับสายในขณะนี้",
+            )
+        if declined:
+            # The one that does not fix itself. Said plainly so it is visible on a
+            # supervisor's screen instead of hiding inside "nobody has the skill".
+            return (
+                MatchKind.ALL_DECLINED,
+                f"เจ้าหน้าที่ที่ตรงทักษะทั้ง {declined} คนปฏิเสธหรือไม่รับสายนี้แล้ว",
+            )
+        return (
+            MatchKind.NO_QUALIFIED_AGENT,
+            "ไม่มีเจ้าหน้าที่ที่มีทักษะ/ภาษาที่ตรงออนไลน์อยู่",
+        )
 
     async def match(
         self,
@@ -141,23 +181,29 @@ class MatchingEngine:
                 # the skill is available" - which was simply false whenever a qualified
                 # agent existed and had merely been won by a higher-scoring call.
                 qualified = sum(1 for j in range(len(agents)) if breakdowns[index][j][2] is None)
+                # `D108` splits the old "nobody qualified" in two. Someone who has the
+                # skill but is on a break is not a roster problem, and telling a
+                # supervisor there is nobody with the skill when four such people are
+                # signed in is the exact conflation `D50` was written to stop.
+                capable = sum(
+                    1 for j in range(len(agents)) if breakdowns[index][j][2] in AVAILABILITY_FILTERS
+                )
+                # `already_offered` is checked before every other filter, so an excluded
+                # agent's other reasons are invisible here - which is right for this
+                # caller, and is why this is counted separately rather than folded in.
+                declined = sum(
+                    1 for j in range(len(agents)) if breakdowns[index][j][2] == "already_offered"
+                )
+                kind, rationale = self._unplaced_reason(qualified, capable, declined)
                 decisions.append(
                     MatchingDecision(
                         decision_id=ids.decision_id(),
                         call_session_id=call.call_session_id,
                         at=now,
-                        kind=(
-                            MatchKind.ALL_QUALIFIED_BUSY
-                            if qualified
-                            else MatchKind.NO_QUALIFIED_AGENT
-                        ),
+                        kind=kind,
                         candidates=candidates,
                         urgency=urgency,
-                        rationale_th=(
-                            f"เจ้าหน้าที่ที่ตรงทักษะ {qualified} คนกำลังรับสายอื่นอยู่"
-                            if qualified
-                            else "ไม่มีเจ้าหน้าที่ที่มีทักษะ/ภาษาที่ตรงออนไลน์อยู่"
-                        ),
+                        rationale_th=rationale,
                         weights_version=self._weights.version,
                         solver=self._solver_name,
                         decide_ms=watch.elapsed_ms(),

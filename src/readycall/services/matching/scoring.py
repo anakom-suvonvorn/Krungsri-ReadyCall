@@ -23,7 +23,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from readycall.domain.enums import CefrLevel, Language, Urgency
+from readycall.domain.enums import AgentSystemState, CefrLevel, Language, Urgency
 from readycall.domain.models import (
     Agent,
     AgentPresence,
@@ -66,6 +66,12 @@ class WaitingCall:
         return self.waiting_s + self.waiting_credit_s
 
 
+#: Hard-filter names that mean "this person could take this call, but not right now"
+#: (`D108`). Distinct from the capability filters (`skill`, `language`) and from
+#: `already_offered`, which is about this caller rather than about the agent.
+AVAILABILITY_FILTERS = frozenset({"offline", "not_ready", "busy", "at_capacity"})
+
+
 def hard_filter(
     call: WaitingCall,
     agent: Agent,
@@ -88,6 +94,32 @@ def hard_filter(
             # handle a complex claim in English, and pretending otherwise produces a worse
             # call than a longer wait.
             return "language"
+
+    # --- can this person take a call RIGHT NOW (`D108`, `B25`) ------------------------
+    #
+    # None of this was checked until 2026-09-05, and `AgentPresence.is_available()` - the
+    # method that says exactly this - was called by nothing. The matcher would hand a
+    # caller to an agent who had never pressed "ready", who was on lunch, or who had
+    # signed out and closed the tab. A signed-out agent then held the offer for its full
+    # RONA timeout, so on a small floor every caller waited 20 seconds per ghost before
+    # reaching anybody real.
+    #
+    # Three separate reasons rather than one, for `D50`'s reason: "they are offline",
+    # "they have not asked for calls" and "they are mid-something" are different
+    # conversations for whoever is looking at the queue.
+    if presence.system_state is AgentSystemState.OFFLINE:
+        return "offline"
+
+    if not presence.accepts_new_callers:
+        # NOT_READY, BREAK, LUNCH, TRAINING, ADMIN - and also LAST_CALL and DRAINING,
+        # which mean "finish what I have, give me nothing new" (`D33`, `D59`).
+        return "not_ready"
+
+    if presence.system_state is not AgentSystemState.AVAILABLE:
+        # ON_CALL, AFTER_CALL_WORK, or OFFERING - already holding an offer. That last one
+        # matters more than it looks: without it one desk collects every waiting caller
+        # in a single tick and none of them reaches anybody else until each times out.
+        return "busy"
 
     if weights.respect_max_concurrent and presence.current_load >= agent.max_concurrent:
         return "at_capacity"

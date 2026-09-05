@@ -255,6 +255,21 @@ class MatchKind(StrEnum):
     # CAPACITY problem - this caller is next as soon as one of them frees up.
     NO_QUALIFIED_AGENT = "no_qualified_agent"
     ALL_QUALIFIED_BUSY = "all_qualified_busy"
+    # And a THIRD, added by `D108` when availability finally became a hard filter (`B25`).
+    # Qualified people exist and none of them can take a call right now - they are on a
+    # break, in after-call work, signed out, or already holding an offer. That is a
+    # STAFFING problem: waiting helps, and unlike the roster case there is somebody to
+    # ask. Without this kind the fix would have reported a floor full of agents on lunch
+    # as "nobody has the skill", which is exactly the conflation `D50` exists to prevent.
+    NO_AGENT_AVAILABLE = "no_agent_available"
+    # A fourth, and the bleakest: everyone who could have taken this call has already been
+    # offered it and said no (or let it ring out). `D52`'s exclusion is permanent, so
+    # unlike the three above this one does NOT resolve by waiting - the caller is stuck
+    # and nothing on the floor changing will free them. It read as `NO_QUALIFIED_AGENT`
+    # until `D108`, which told a supervisor the roster was empty while four qualified
+    # people sat idle. See `Q31`: whether the exclusion should ever be lifted is a policy
+    # question and is deliberately still open.
+    ALL_DECLINED = "all_declined"
 
 
 class BriefKind(StrEnum):

@@ -147,13 +147,30 @@ class DispatchService:
     def release(self, call_session_id: str) -> None:
         self._waiting.pop(call_session_id, None)
 
+    def _live(self, session: CallSession, call: WaitingCall) -> WaitingCall:
+        """The pool's entry with its wait brought up to now (`B26`).
+
+        **Stored `waiting_s` is the admit-time value and never moves.** `tick()` has
+        recomputed it since `B12`, but only into the list it hands the matcher — the copy
+        in `_waiting` stays at whatever `admit()` was given. So everything that *reads*
+        the pool for a screen (the offer card's "รอมาแล้ว", the queue strip's "รอนานสุด")
+        showed a number frozen at the moment the caller arrived, while the matcher was
+        scoring them on the real one. Two answers to "how long has this person waited",
+        and the one the human could see was the wrong one.
+
+        Derived here rather than written back, for `D78`'s reason: `call_sessions` already
+        knows when this caller was queued, and a second copy kept in step by remembering
+        to update it is a second copy that will one day disagree.
+        """
+        return replace(call, waiting_s=session.wait_seconds(self._clock.now()))
+
     def waiting(self) -> list[WaitingCall]:
-        return [call for _, call in self._waiting.values()]
+        return [self._live(session, call) for session, call in self._waiting.values()]
 
     def waiting_call(self, call_session_id: str) -> WaitingCall | None:
         """The pool's view of one caller — urgency and accrued wait, for the offer card."""
         entry = self._waiting.get(call_session_id)
-        return entry[1] if entry else None
+        return self._live(entry[0], entry[1]) if entry else None
 
     def last_decision_for(self, call_session_id: str) -> MatchingDecision | None:
         return self._last_decision.get(call_session_id)
@@ -170,7 +187,6 @@ class DispatchService:
         if not offerable:
             return DispatchResult(offered=[], decisions=[], unplaced={})
 
-        now = self._clock.now()
         calls = [
             # Rebuilt each tick so an agent who has since declined is excluded (`D52`),
             # **and so the caller's accrued wait is current** (`B12`). `replace` rather
@@ -183,8 +199,7 @@ class DispatchService:
             # to any-qualified-agent. The whole of `D22`'s anti-starvation was written,
             # correct, and driven by nothing.
             replace(
-                self._waiting[call_session_id][1],
-                waiting_s=self._waiting[call_session_id][0].wait_seconds(now),
+                self._live(*self._waiting[call_session_id]),
                 excluded_agent_ids=self._assignments.excluded_agents(call_session_id),
             )
             for call_session_id in offerable
