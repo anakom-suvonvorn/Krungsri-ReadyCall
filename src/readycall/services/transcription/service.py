@@ -45,6 +45,9 @@ class _Live:
     opened_ms: float
     last_turn_ms: float
     turns: int = 0
+    #: Utterances the engine failed on. Kept here as well as on the stream so the count
+    #: survives `close()` for a log line that names both halves.
+    lost: int = 0
     speaker_role: SpeakerRole = SpeakerRole.CUSTOMER
     fired: set[str] = field(default_factory=set)
 
@@ -100,6 +103,19 @@ class TranscriptionService:
                 live.turns += 1
             await self._intake.on_turn(call_session_id, turn)
 
+        async def lost(count: int) -> None:
+            """The engine failed on `count` utterances (`D111`).
+
+            Reported rather than concluded from: an empty transcript can mean the caller
+            said nothing or that the model was down, and `IntakeService` is the layer that
+            can see both. Until this existed `_degradation()` returned `NONE`
+            unconditionally and the screen's `stt_unavailable` sentence was unreachable.
+            """
+            live = self._live.get(call_session_id)
+            if live is not None:
+                live.lost += count
+            await self._intake.on_transcription_lost(call_session_id, count)
+
         vad: VoiceActivityDetector = self._vad_factory()  # type: ignore[operator]
         stream = TranscriptionStream(
             call_session_id=call_session_id,
@@ -107,6 +123,7 @@ class TranscriptionService:
             stt=self._stt,
             clock=self._clock,
             on_turn=sink,
+            on_lost=lost,
             speaker_role=speaker_role,
             hint=self._hint,
         )
@@ -137,7 +154,12 @@ class TranscriptionService:
             return
         await live.stream.finish()
         await self.gateway.close_leg(call_session_id, speaker_role=live.speaker_role)
-        log.info("transcription closed", call_session_id=call_session_id, turns=live.turns)
+        log.info(
+            "transcription closed",
+            call_session_id=call_session_id,
+            turns=live.turns,
+            lost=live.lost,
+        )
 
     async def check_timeouts(self) -> list[str]:
         """Silence and max duration, driven by the sweep because nothing else can (`B7`).

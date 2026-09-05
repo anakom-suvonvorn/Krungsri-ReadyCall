@@ -12,6 +12,7 @@ extra installed is a wiring test nobody runs.
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 
 from readycall.adapters.stt.scripted import ScriptedSttEngine, ScriptedTurn
 from readycall.adapters.vad.energy import EnergyVad
@@ -19,6 +20,7 @@ from readycall.clock import ManualClock
 from readycall.config import Settings
 from readycall.domain.models import TranscriptTurn
 from readycall.media.audio import AudioFormat, Encoding
+from readycall.ports.stt import AudioFrame, EngineInfo, SttHint, SttResult
 from readycall.services.transcription.service import TranscriptionService
 
 RATE = 16000
@@ -194,3 +196,116 @@ async def test_pushing_to_a_call_with_no_open_leg_is_ignored() -> None:
     service = build(intake, ManualClock(), [])
     await service.push("never_opened", speech_packet())
     assert intake.turns == []
+
+
+# --- when the engine fails (D111) ---------------------------------------------------------
+
+
+class BrokenSttEngine:
+    """An engine that raises on every utterance. What a dead model looks like from here.
+
+    ⚠️ The method name is load-bearing. The first version of this fake defined
+    `transcribe`, which the port does not have — so the stream failed with an
+    `AttributeError` and the test passed for a reason that had nothing to do with a
+    broken model. It is `transcribe_utterance`, and it raises from inside.
+    """
+
+    def __init__(self) -> None:
+        self.attempts = 0
+
+    @property
+    def info(self) -> EngineInfo:
+        return EngineInfo(name="broken", version="0", model="none", device="cpu")
+
+    async def transcribe_utterance(
+        self, frames: Sequence[AudioFrame], *, hint: SttHint | None = None
+    ) -> SttResult:
+        self.attempts += 1
+        raise RuntimeError("model is not loaded")
+
+    async def warmup(self) -> None:
+        return None
+
+    async def close(self) -> None:
+        return None
+
+
+class LossCountingIntake(RecordingIntake):
+    """`RecordingIntake` plus the entry point `D111` added."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.lost = 0
+
+    async def on_transcription_lost(self, call_session_id: str, count: int) -> None:
+        self.lost += count
+
+
+async def _one_utterance(service: TranscriptionService, call: str) -> None:
+    await service.open(call, fmt=AudioFormat(encoding=Encoding.PCM16, sample_rate=RATE))
+    for _ in range(60):
+        await service.push(call, speech_packet())
+    for _ in range(40):
+        await service.push(call, silent_packet())
+    await service.close(call)
+
+
+async def test_an_engine_failure_is_reported_rather_than_only_swallowed() -> None:
+    """`D12` says the call survives a broken model — it always did. `D111` says somebody
+    upstream has to be able to SAY so, because an empty transcript panel means two very
+    different things and only a layer that sees the transcriber can tell them apart."""
+    intake = LossCountingIntake()
+    service = TranscriptionService(
+        intake=intake,  # type: ignore[arg-type]
+        vad_factory=EnergyVad,
+        stt=BrokenSttEngine(),
+        clock=ManualClock(),
+        settings=Settings(),
+    )
+
+    engine = service._stt
+    await _one_utterance(service, "call_broken")
+
+    assert isinstance(engine, BrokenSttEngine) and engine.attempts >= 1, (
+        "the engine must actually have been asked - an earlier version of this fake had "
+        "the wrong method name and the test passed on an AttributeError instead"
+    )
+    assert intake.turns == [], "a broken engine produces no turns"
+    assert intake.lost >= 1, "and the loss has to reach the intake, not just the log"
+
+
+async def test_a_quiet_caller_reports_no_loss_at_all() -> None:
+    """The other half of the same claim, and the one that stops it over-reporting.
+
+    Silence must look nothing like a failure: if it did, every caller who said nothing
+    while waiting would have "the transcription system was unavailable" put on the
+    agent's screen about them.
+    """
+    intake = LossCountingIntake()
+    service = TranscriptionService(
+        intake=intake,  # type: ignore[arg-type]
+        vad_factory=EnergyVad,
+        stt=BrokenSttEngine(),
+        clock=ManualClock(),
+        settings=Settings(),
+    )
+
+    await service.open("call_quiet", fmt=AudioFormat(encoding=Encoding.PCM16, sample_rate=RATE))
+    for _ in range(100):
+        await service.push("call_quiet", silent_packet())
+    await service.close("call_quiet")
+
+    assert intake.turns == []
+    assert intake.lost == 0, "nothing was dispatched, so nothing was lost"
+
+
+async def test_a_healthy_engine_reports_no_loss() -> None:
+    intake = LossCountingIntake()
+    service = build(
+        intake, ManualClock(), [ScriptedTurn(text="รถผมชนครับ", t_start_ms=0, t_end_ms=900)]
+    )
+
+    await _one_utterance(service, "call_ok")
+
+    assert [t.text for t in intake.turns] == ["รถผมชนครับ"]
+    assert intake.lost == 0

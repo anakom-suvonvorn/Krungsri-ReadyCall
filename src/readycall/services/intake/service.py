@@ -77,6 +77,10 @@ class _LiveHold:
     #: rather than on wall-clock arithmetic across a clock correction (`B8`).
     queued_at_ms: float = 0.0
     reoffered: bool = False
+    #: Utterances the STT engine failed on, reported by `TranscriptionService` (`D111`).
+    #: The only evidence this layer has that an empty transcript means the engine was
+    #: down rather than that the caller was silent.
+    lost_utterances: int = 0
 
 
 class IntakeService:
@@ -218,18 +222,31 @@ class IntakeService:
     def _degradation(self, live: _LiveHold) -> DegradationReason:
         """Why the brief will be thinner than it could have been, if it will be.
 
-        Deliberately not decided inside the strategy: an intake with no turns can mean
-        the caller said nothing or that the transcriber was down, and only a layer that
-        can see the transcriber knows which.
+        Deliberately not decided inside the strategy: an intake with no turns can mean the
+        caller said nothing or that the transcriber was down, and only a layer that can see
+        the transcriber knows which. That layer is this one, and since `D111` it is
+        actually told — `TranscriptionService` reports every utterance the engine failed on
+        through `on_transcription_lost`.
 
-        **That layer now exists** (`D96`, `services/transcription/service.py`) and this
-        still returns `NONE`, which is now a gap rather than a wait: `TranscriptionService`
-        knows whether the engine failed, and nothing carries that knowledge back here. See
-        `NEXT_SESSION` — it is a small, well-defined piece of the live-transcript slice, and
-        until it is wired, guessing `stt_unavailable` would put a claim on the agent's
-        screen that nothing has checked.
+        **The rule is narrow on purpose.** `stt_unavailable` is claimed only when the
+        engine failed AND nothing at all was transcribed, because that is exactly the case
+        the agent's screen has a sentence for: an empty panel whose emptiness is ours
+        rather than the caller's. A call where five of six sentences arrived is *thinner*,
+        and saying "the transcription system was unavailable on this call" about it would
+        be a bigger claim than the evidence supports — so it is logged loudly and the
+        brief does not lie about it. If that partial case ever needs to reach the screen
+        it wants its own `DegradationReason`, not this one stretched.
         """
-        _ = live
+        if live.lost_utterances == 0:
+            return DegradationReason.NONE
+        if not live.strategy.turns:
+            return DegradationReason.STT_UNAVAILABLE
+        log.warning(
+            "transcript is incomplete but not empty - the brief is thinner than it looks",
+            call_session_id=live.session.call_session_id,
+            turns=len(live.strategy.turns),
+            lost=live.lost_utterances,
+        )
         return DegradationReason.NONE
 
     # --- the endings that arrive from somewhere else ----------------------------------
@@ -263,15 +280,26 @@ class IntakeService:
         and the scenario runner. It hands the turn to the strategy and stops there.
 
         It publishes nothing itself — **the strategy does** (`PassiveRecordIntake.on_turn`
-        emits `TranscriptTurnAdded` on the bus for every turn). So the event reaches the bus
-        today; what is missing is a **subscriber** that forwards it to `api/realtime.py`,
-        which is why the agent's screen still has no live transcript. See `NEXT_SESSION` —
-        and note the part that is not plumbing: during intake the call has no assigned
-        agent yet, so the turns have to be buffered against the call and flushed on accept.
+        emits `TranscriptTurnAdded` on the bus for every turn), and since `D106`
+        `TranscriptDeliveryService` takes it off the bus and pushes it to the agent who
+        accepts. During intake the call belongs to nobody, so the turns are held against
+        the call until somebody does.
         """
         live = self._live.get(call_session_id)
         if live is not None:
             await live.strategy.on_turn(turn)
+
+    async def on_transcription_lost(self, call_session_id: str, count: int) -> None:
+        """The STT engine failed on `count` utterances of this call (`D111`).
+
+        Counted rather than acted on. `D12` means the call is never blocked on any of
+        this, so a failure costs sentences and nothing else — but the *reason* the brief
+        is thin has to reach the agent, and `_degradation()` is the only place that can
+        tell a dead engine from a quiet caller.
+        """
+        live = self._live.get(call_session_id)
+        if live is not None:
+            live.lost_utterances += count
 
     # --- things that happen because time passed (`B7`) ---------------------------------
 

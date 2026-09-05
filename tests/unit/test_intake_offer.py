@@ -482,6 +482,72 @@ class TestTheServiceEndToEnd:
         assert report.degraded is DegradationReason.NO_CONSENT
         assert session.consents == ()
 
+    async def test_an_empty_transcript_after_an_engine_failure_says_so(
+        self, service: IntakeService, orchestrator: CallOrchestrator
+    ) -> None:
+        """`D111`. The screen has had a sentence for this since `D106` and nothing could
+        reach it: `_degradation()` returned `NONE` unconditionally, so a caller whose
+        model was down looked exactly like a caller who said nothing.
+        """
+        session = await self._queued(orchestrator)
+        await service.run_offer(session, caller=ScriptedChoices(["1"]))
+        await service.on_transcription_lost(session.call_session_id, 3)
+
+        report = await service.on_agent_accepted(session.call_session_id)
+
+        assert report is not None and report.result is not None
+        assert report.result.turns == ()
+        assert report.result.degraded is DegradationReason.STT_UNAVAILABLE
+
+    async def test_a_caller_who_simply_said_nothing_is_not_blamed_on_the_engine(
+        self, service: IntakeService, orchestrator: CallOrchestrator
+    ) -> None:
+        """The half that stops the claim over-reporting, and it is the common case.
+
+        Most callers who take the recording and then wait quietly produce no turns. If
+        that read as `stt_unavailable` the agent would be told the system failed on every
+        one of them.
+        """
+        session = await self._queued(orchestrator)
+        await service.run_offer(session, caller=ScriptedChoices(["1"]))
+
+        report = await service.on_agent_accepted(session.call_session_id)
+
+        assert report is not None and report.result is not None
+        assert report.result.turns == ()
+        assert report.result.degraded is DegradationReason.NONE
+
+    async def test_a_partly_lost_transcript_does_not_claim_the_engine_was_unavailable(
+        self, service: IntakeService, orchestrator: CallOrchestrator
+    ) -> None:
+        """A bigger claim than the evidence supports (`D111`).
+
+        Five sentences arrived and one did not: the brief is thinner, and saying "the
+        transcription system was unavailable on this call" about it would be false. It is
+        logged loudly instead. If that case ever needs to reach the screen it wants its
+        own `DegradationReason`, not this one stretched.
+        """
+        session = await self._queued(orchestrator)
+        await service.run_offer(session, caller=ScriptedChoices(["1"]))
+        await service.on_turn(
+            session.call_session_id,
+            _turn(session.call_session_id, 1, "รถผมชนที่พระราม 9 ครับ"),
+        )
+        await service.on_transcription_lost(session.call_session_id, 1)
+
+        report = await service.on_agent_accepted(session.call_session_id)
+
+        assert report is not None and report.result is not None
+        assert len(report.result.turns) == 1
+        assert report.result.degraded is DegradationReason.NONE
+
+    async def test_a_loss_reported_for_an_unknown_call_is_ignored(
+        self, service: IntakeService
+    ) -> None:
+        """The transcriber and the intake close on different requests and genuinely race
+        (`D21`). A late report must not raise inside a live call (`D12`)."""
+        await service.on_transcription_lost("no_such_call", 2)
+
     async def test_the_recording_outlives_the_call_that_started_it(
         self, service: IntakeService, orchestrator: CallOrchestrator
     ) -> None:

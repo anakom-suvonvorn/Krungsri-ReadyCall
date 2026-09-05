@@ -46,6 +46,10 @@ from readycall.services.transcription.endpointer import (
 log = get_logger(__name__)
 
 TurnSink = Callable[[TranscriptTurn], Awaitable[None]]
+#: How many utterances an engine failure just cost. Not an error channel — the call is
+#: unaffected either way (`D12`) — but the only evidence anybody upstream has that an
+#: empty transcript panel means "the engine failed" rather than "nobody spoke" (`D111`).
+LossSink = Callable[[int], Awaitable[None]]
 
 #: How far the transcriber may fall behind the live audio before the oldest queued
 #: segment's audio is released anyway (`B20`). Two minutes is far past any recoverable
@@ -308,6 +312,7 @@ class TranscriptionStream:
         stt: SttEngine,
         clock: Clock,
         on_turn: TurnSink,
+        on_lost: LossSink | None = None,
         speaker_role: SpeakerRole = SpeakerRole.CUSTOMER,
         settings: EndpointSettings | None = None,
         hint: SttHint | None = None,
@@ -319,6 +324,11 @@ class TranscriptionStream:
         self._stt = stt
         self._clock = clock
         self._on_turn = on_turn
+        #: Told how many utterances an engine failure cost, so somebody above can say
+        #: WHY a transcript is thin (`D111`). The stream itself may not decide that: it
+        #: cannot tell a silent caller from a dead engine, and only a layer that sees
+        #: both can. It reports; it does not conclude.
+        self._on_lost = on_lost
         self._speaker_role = speaker_role
         self._hint = hint
         self._min_rms = min_segment_rms
@@ -348,6 +358,9 @@ class TranscriptionStream:
         self._worker: asyncio.Task[None] | None = None
         self._seq = 0
         self._closed = False
+        #: How many utterances the engine failed on. Public because it is a *fact about
+        #: this call* that outlives the stream — the driver reads it at close.
+        self.lost_utterances = 0
 
     @property
     def running(self) -> bool:
@@ -483,7 +496,7 @@ class TranscriptionStream:
                 batch.append(nxt)
             try:
                 await self._transcribe_batch(batch)
-            except Exception:  # pragma: no cover - one bad utterance must not end the call
+            except Exception:
                 # `D12`: nothing here may delay or drop a call. A segment that fails to
                 # transcribe costs one sentence of the brief, and the call is unaffected.
                 log.exception(
@@ -492,6 +505,20 @@ class TranscriptionStream:
                     t_start_ms=batch[0].t_start_ms,
                     segments=len(batch),
                 )
+                # But it is not invisible any more (`D111`). Swallowing kept the call
+                # alive and also kept the *reason* the brief is thin from ever reaching
+                # the agent's screen, where `emptyTranscriptReason()` has had a sentence
+                # waiting for it. Reported per SEGMENT, because that is the unit the
+                # caller would recognise: a lost sentence.
+                self.lost_utterances += len(batch)
+                if self._on_lost is not None:
+                    try:
+                        await self._on_lost(len(batch))
+                    except Exception:  # pragma: no cover - a reporter must never matter
+                        log.exception(
+                            "loss reporting failed",
+                            call_session_id=self._call_session_id,
+                        )
             finally:
                 # Release each segment's claim on the buffer whatever happened to it,
                 # including a failure — a claim that outlives its segment pins the audio
@@ -647,6 +674,7 @@ class TranscriptionStream:
 
 __all__ = [
     "MAX_CHARS_PER_SECOND",
+    "LossSink",
     "TranscriptionStream",
     "TurnSink",
     "echoes_the_prompt",
