@@ -1,6 +1,6 @@
 # Diagrams — the whole system, visually
 
-_Last updated: 2026-08-26._
+_Last updated: 2026-09-06._
 
 **63 diagrams** covering every part of Krungsri ReadyCall. Written to be read in order the
 first time, and dipped into afterwards.
@@ -64,6 +64,11 @@ could SEE, which `D74` overturned, and `identity_promotion` still said a verifie
 stayed locked, which `D65` overturned. Others had simply been overtaken — `real_vs_fake`
 listed five things as unbuilt that had shipped, `decision_map` counted 43 decisions when there
 were 81, and `test_layers` was three phases behind on the suite size. All are corrected.
+
+`decision_map` drifted the same way again and was extended on 2026-09-06: it stopped at `D81`
+while `DECISIONS.md` had reached `D109`. Extending a mindmap is a redraw rather than an edit,
+which is exactly why it lags — so the rule is now written into its own banner: a reversed
+decision gets a leaf naming what replaced it, in the commit that reverses it.
 
 The lesson for anyone editing these: **the banner is a claim.** If you change a decision,
 `grep` the banner lines for its number — `grep -n "D74" src/*.mmd` — and fix every diagram

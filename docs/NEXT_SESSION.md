@@ -1,7 +1,7 @@
 # NEXT_SESSION
 
 _The live working state. READ THIS FIRST every session. Keep it short and current._
-_Last updated: 2026-09-05._
+_Last updated: 2026-09-06._
 
 ---
 
@@ -1189,6 +1189,10 @@ shows every press resolving back to canonical. Each must be updated with its dia
 and `the_line.html`'s data is generated (`scripts/build_reading_data.py`), with a test that
 fails when it is stale. **14 of the 60 are generated from source**,
 so they cannot drift; `tests/unit/test_diagrams.py` fails if a committed one falls behind.
+**`decision_map` was extended to `D1-D109` on 2026-09-06** — it had stopped at `D81`, which is
+what a hand-drawn map does when extending it is a redraw. Its banner now states the rule it
+follows: a reversed decision is never drawn as though it still stands, it gets a leaf naming
+what replaced it (`D1`, `D62`, `D83`, `D89`, `D102`, `D103`). Add a `D#`, add a leaf, same commit.
 
 ```bash
 uv run python scripts/gen_diagrams.py      # rebuild derived .mmd sources

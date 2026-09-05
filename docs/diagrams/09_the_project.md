@@ -63,7 +63,7 @@ passed needs a test in which only time passes.
 
 ---
 
-## 9.3 All 81 decisions
+## 9.3 All 109 decisions
 
 ![decision map](decision_map.svg)
 

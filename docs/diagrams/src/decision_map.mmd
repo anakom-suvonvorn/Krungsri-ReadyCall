@@ -1,10 +1,10 @@
-%% HANDWRITTEN. Checked against DECISIONS.md D1-D81 (every one is here, exactly once).
-%% D82-D109 are NOT on this map and it says so rather than pretending: the phases since
-%% then added 28 decisions and extending a mindmap is a redraw, not an edit. The D50 leaf
-%% is amended in place because D108 changes what it says (CLAUDE.md's rule); the rest of
-%% the recent ones are in DECISIONS.md and in the pages that draw their own areas.
+%% HANDWRITTEN. Checked against DECISIONS.md D1-D109 (every one is here, exactly once).
+%% A reversed or superseded decision is NOT drawn as though it still stands: it gets a leaf
+%% at the end of its branch naming what replaced it (D1, D62, D83, D89, D102, D103). D50 is
+%% amended in place by D108, which also has its own leaf; D86 is amended by D90 and both
+%% still stand. Reverse a decision and this file is part of that commit.
 mindmap
-  root((81 decisions))
+  root((109 decisions))
     Shape
       D2 modular monolith
       D3 ports and adapters
@@ -15,6 +15,7 @@ mindmap
       D34 one project not two
       D35 injected time and ids
       D39 defer the ORM until needed
+      D95 torch comes from the CUDA index
       D1 superseded by D34
     Data and truth
       D5 bank data READ-ONLY
@@ -23,6 +24,8 @@ mindmap
       D16 figures are data never model output
       D18 timings and provenance persisted
       D53 no domain model at a permission boundary
+      D97 real call audio stays OUTSIDE the repo
+      D105 a second driver drains the bus
     Identity
       D4 identity bound server-side
       D20 the L0-L3 ladder
@@ -37,6 +40,7 @@ mindmap
       D67 both eras accepted
       D71 the control depends on identification
       D74 gates SAY and DO never SEE
+      D84 no identity check in the IVR
       D62 reversed by D65
     Routing and the line
       D8 routing deterministic LLM only labels
@@ -49,6 +53,13 @@ mindmap
       D48 the app asks WHY before dialling
       D80 a menu is composed not one clip
       D81 menu_path is always canonical
+      D82 a wrong key is never a strike
+      D86 no operator key the catch-all is the way out
+      D90 repeat moves onto the freed 0
+      D91 no position no estimate just hold
+      D92 speech never changes WHICH queue
+      D83 reversed by D86
+      D89 reversed by D91
     The call
       D6 context starts at TAP
       D12 never blocked on AI
@@ -58,13 +69,18 @@ mindmap
       D44 capture is UNTYPED
       D46 a rating is an event not a state
       D54 the demo may bypass queue hours
+      D88 the intake offer is its own machine
+      D106 the transcript waits for an ACCEPT
     Matching
       D22 one pool + Hungarian + guarded deferral
       D23 fit weighted by confidence
       D49 our own solver gap MEASURED
-      D50 D108 unplaced is FOUR outcomes
+      D50 unplaced is not one outcome
       D52 a missed offer excludes that agent
       D64 a live matching board
+      D93 the wait ceiling runs BEFORE the solver
+      D94 a ceiling per urgency tier
+      D108 extends D50 to FOUR outcomes
     The agent
       D27 both sides rate
       D32 the workstation IS the phone
@@ -79,12 +95,23 @@ mindmap
       D70 queue strip splits mine and all
       D72 the challenge list lives in config
       D73 progress prediction is about ACW
+      D85 remaining ACW is log-normal and conditional
+      D87 an unfiled wrap-up becomes a backlog
+      D109 decline and pause is ONE click
     Voice and AI
       D9 STT streaming-first
       D10 IntakeStrategy seam
       D26 fork both legs separately
       D29 two LLM adapters from day one
       D30 Thonburian default Typhoon compared
+      D96 VAD is the ninth port
+      D98 a third guard asks if that speech was POSSIBLE
+      D99 NeMo is its own extra
+      D100 falling behind drops the OLDEST loudly
+      D101 batch what already waits pack to a MINIMUM
+      D104 Typhoon ASR is the engine
+      D102 accuracy half superseded by D103
+      D103 superseded by D104 kept as the fallback
     Persistence
       D75 one contract suite three backends
       D76 presence is a projection of the log
@@ -96,3 +123,4 @@ mindmap
       D14 PDPA consent per scope
       D36 the runner hands lifecycle steps over
       D47 the simulator is one static page
+      D107 the demo endpoint OPENS the recording
