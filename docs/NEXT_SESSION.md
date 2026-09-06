@@ -11,6 +11,26 @@ _Rewritten 2026-09-06 (second time that day, after `D110`–`D114`). Everything 
 before this block is in the sections below; what follows is what a fresh session needs and
 nothing it does not._
 
+### ⚠️ ZEROTH: read `docs/MARKET_FACTS.md`, and do not re-derive its numbers
+
+Every figure the orientation supplied is in there with its source slide — the broker
+channel share, the renewal/persistency case, market sizes, the real insurer names for
+fixtures, the competitor list, and **the logistics**. Two corrections it carries that a
+fresh session would otherwise get wrong:
+
+- **The pitch is 5 MINUTES, plus 5 minutes of Q&A**, twelve teams, presentation file
+  submitted 11:00-12:00 on day 2 (13 Sep). This rules out a live multi-step walkthrough
+  and it is the single most important planning constraint.
+- **The Gen Z challenge statement on insight p.35/48 is a WORKSHOP EXERCISE, not the
+  brief.** The real one is deliberately open: *"ในยุค AI เราจะช่วยให้ Insurance Broker
+  สามารถส่งมอบความคุ้มครองที่ใช่ ให้กับลูกค้าที่ใช่ ในเวลาที่ใช่ ผ่านช่องทางที่ใช่
+  ได้อย่างไร?"* — right coverage, right customer, right time, right channel. The team is
+  **already in the 12 finalists on the submitted idea**, so the job is refinement and
+  evidence, **not a pivot**. A voice-first answer is fine.
+
+⚠️ Half those slides are images with no text layer, so `pypdf` returns empty pages. Render
+with PyMuPDF at ~110 dpi and read the PNGs. An empty extraction is not an empty slide.
+
 ### ⚠️ FIRST: the direction changed on 2026-09-06. Read this before planning anything.
 
 The notes arrived, from the **hackathon orientation**, and they moved the project. The
