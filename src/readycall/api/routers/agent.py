@@ -17,6 +17,7 @@ naming are the ones the *shape* enforces rather than the code:
 
 from __future__ import annotations
 
+import asyncio
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, WebSocket
@@ -57,6 +58,11 @@ from readycall.services.identity.attestation import AttestationOutcome
 log = get_logger(__name__)
 
 router = APIRouter(prefix="/v1/agent", tags=["agent"])
+
+#: Fire-and-forget work started by a request. `asyncio` keeps only a weak reference to a
+#: task, so one that nobody holds can be collected while it is still running - the summary
+#: would then vanish sometimes, on a timer nobody could reproduce.
+_BACKGROUND: set[asyncio.Task[None]] = set()
 
 
 async def get_agent(request: Request) -> AgentPrincipal:
@@ -221,6 +227,15 @@ async def accept_offer(
     except PermanentError as exc:
         raise _bad_request(exc) from exc
     container.dispatch.release(session.call_session_id)
+    # The AI summary is asked for HERE and awaited NOWHERE (`D119`, `D12`). The agent is
+    # connected the moment this endpoint returns, already reading the rule-based summary;
+    # if the model answers in time the screen upgrades on the push, and if it never
+    # answers nothing at all happens. Fire-and-forget is the only shape that keeps
+    # "the call is never blocked on AI" true at the one moment it would be tempting to
+    # break it, and the task is held so it cannot be garbage-collected mid-flight.
+    task = asyncio.create_task(container.summarise_call(session.call_session_id, who.agent_id))
+    _BACKGROUND.add(task)
+    task.add_done_callback(_BACKGROUND.discard)
     return await _snapshot(container, who.agent_id)
 
 

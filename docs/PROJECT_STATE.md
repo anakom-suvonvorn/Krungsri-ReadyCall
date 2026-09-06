@@ -47,7 +47,7 @@ the disclosure gate moves when the agent attests. **What they said while waiting
 screen** (`D106`), and if they consented, **their audio is in object storage encrypted**
 (`D110`) with a key ref and a retention date. If they declined, it is nowhere.
 
-Verified on 2026-09-06: **817 tests** — 805 pass + 12 skipped with Postgres and MinIO both
+Verified on 2026-09-06: **831 tests** — 819 pass + 12 skipped with Postgres and MinIO both
 up (the 12 are foreign-key cases the in-memory backend cannot have, and the `ml`-extra ones).
 Without those containers the count of skips rises and nothing fails.
 `ruff check` and `ruff format --check` clean over **202** files, `mypy --strict`
@@ -95,7 +95,7 @@ demonstrable slice, so the demo is simply the current state of the system with a
 | Telephony | Asterisk 20 + ARI + AudioSocket by default, behind a `TelephonyProvider` port (Twilio / LiveKit / simulated adapters). Demo trick: a softphone on a real mobile pointed at the laptop over local Wi-Fi = a genuine VoIP call with no internet |
 | STT | **Typhoon ASR** (`scb10x/typhoon-asr-realtime`, a NeMo FastConformer transducer), re-implemented streaming-first (`D9`). Chosen on measurements against Thonburian Whisper fp16 and its CTranslate2 `int8_float16` build — it is the only one that meets the 1.5 s budget (`D30` closed by `D104`). The CT2 build is the documented fallback (`D103`) |
 | TTS | Pre-rendered prompt clips built from `voice_prompts.yaml` (`D24`); streaming only for future conversational intake |
-| LLM | **Planned for P4, and NOT built** (`D29`): `AnthropicAdapter` + `OpenAiCompatibleAdapter`, the latter covering Typhoon API, OpenAI, vLLM and Ollama by base URL. `adapters/llm/` holds **only `rulebased.py`** today, and even that is constructed by nothing — there is no `build_llm` factory. No LLM framework (`D31`) |
+| LLM | **Built** (`D119`): `build_llm` is the factory, with `AnthropicLlm` (structured output via forced tool use), `OpenAiCompatibleLlm` (one adapter for Typhoon-hosted / OpenAI / vLLM / Ollama / LM Studio by base URL alone) and `RuleBasedLlm` as the shipped default and degradation rung. Prompts are versioned files in `prompts/th/`. Measured live: `claude-sonnet-5` summarises an intake in **4.5 s for $0.0085**. No LLM framework (`D31`) |
 | Object storage | MinIO (S3 API) for recordings |
 | Agent workstation | React 18 + TypeScript + Vite. **A full contact-centre workstation in one browser tab — the softphone is in it** (SIP.js over WSS to Asterisk, WebRTC/Opus through the agent's headset), plus the brief, the queue and status control. No desk phone, no install (`D32`) |
 | Customer side | Responsive **web customer simulator** with a demo persona picker, calling the same public `/v1/…` API the real Krungsri app would |

@@ -124,6 +124,10 @@ class Settings(BaseSettings):
     debug: bool = False
     log_format: str = Field(default="console", description="console | json")
     config_dir: Path = Path("config")
+    #: Versioned LLM prompt files (`D18`, `D119`). Separate from `config_dir` because they
+    #: are model instructions rather than domain data, and because the version in each
+    #: filename is stored against every result the prompt produced.
+    prompt_dir: Path = Path("prompts/th")
     prompts_dir: Path = Path("prompts")
 
     # --- adapter selection (D3) ---

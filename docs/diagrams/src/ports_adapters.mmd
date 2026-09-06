@@ -21,6 +21,8 @@ flowchart LR
     logic --> P_keyring["ports/keyring.py"]:::port
     P_keyring --> A_keyring_local["local.py"]:::adapter
     logic --> P_llm["ports/llm.py"]:::port
+    P_llm --> A_llm_anthropic["anthropic.py"]:::adapter
+    P_llm --> A_llm_openai_compatible["openai_compatible.py"]:::adapter
     P_llm --> A_llm_rulebased["rulebased.py"]:::adapter
     logic --> P_stt["ports/stt.py"]:::port
     P_stt --> A_stt_faster_whisper["faster_whisper.py"]:::adapter

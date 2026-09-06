@@ -13,6 +13,7 @@ and the reset — and those are the things that break the endpointer silently.
 
 from __future__ import annotations
 
+import importlib.util
 import math
 
 import pytest
@@ -50,6 +51,15 @@ def vad(request: pytest.FixtureRequest) -> VoiceActivityDetector:
         from readycall.adapters.vad.silero import SileroVad
     except ImportError:  # pragma: no cover - the `ml` extra is genuinely absent
         pytest.skip("silero needs the `ml` extra")
+    # The import above is NOT enough, and that gap made this suite ERROR rather than skip
+    # on any box without the `ml` extra - CI included. `silero.py` imports torch lazily
+    # inside the constructor and re-raises it as `ConfigError`, so the module imports
+    # cleanly and `SileroVad()` is what fails. Checking for the dependency itself is the
+    # precise signal for "the extra is genuinely absent", and it keeps the construction
+    # below unguarded so a REAL load failure still errors - which is the whole point of
+    # the note that follows.
+    if importlib.util.find_spec("torch") is None:  # pragma: no cover - depends on the extra
+        pytest.skip("silero needs the `ml` extra (torch is not installed)")
     # Deliberately NOT `except Exception` around the construction. The first version was,
     # and it turned a real load failure into a skip: the project's `filterwarnings=error`
     # made a third-party DeprecationWarning raise, the suite reported five green skips,

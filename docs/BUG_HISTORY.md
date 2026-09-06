@@ -1541,3 +1541,52 @@ search of the bug file finds it._
   - **A green test on a degenerate fixture is a claim about the fixture, not the code.**
     This is `B24`'s family from the data side: the code was correct-looking, running, and
     exercised — by an input that could not distinguish right from wrong.
+
+---
+
+## B31. Two checks that were passing because of what happened to be installed
+
+_Found by `uv sync --extra web --extra llm`, which **prunes** anything not named and so
+removed the `ml` extra from the dev machine. Both faults had been latent since the audio
+work landed, and both would have shown on CI, which installs no `ml` at all._
+
+### Symptoms
+
+One command turned a green tree into:
+
+* `tests/contracts/test_vad.py` — **5 errors** where the file's own docstring promises the
+  Silero rows are *"skipped, loudly"* when the extra is absent.
+* `mypy` — **5 errors** across `silero.py`, three STT adapters and `api/deps.py`, all
+  `Cannot find implementation or library stub for module named "torch"`.
+
+### Root causes, and they are the same shape
+
+**The skip guard was watching the wrong thing.** It caught `ImportError` around
+`from readycall.adapters.vad.silero import SileroVad` — but that module imports cleanly.
+`silero.py` imports `torch` *lazily inside the constructor* and re-raises it as a
+`ConfigError` with a friendly message, so the failure happens at `SileroVad()`, one line
+below the `try`. The guard could never fire.
+
+The fix had to be careful, because the same file already carries a warning against
+widening it: an earlier version wrapped the construction in `except Exception` and turned
+a real load failure into five green skips. So the guard now asks the precise question —
+`importlib.util.find_spec("torch") is None` — which is exactly *"the extra is genuinely
+absent"* and leaves the construction unguarded, so a real load failure still errors.
+
+**The mypy override list had never included `torch`.** `silero_vad`, `faster_whisper`,
+`transformers` and `nemo` were all listed; `torch` was not, and the check passed anyway
+because every machine that ran it had `torch` installed as a side effect of the `ml`
+extra.
+
+### Lessons
+
+- **A check that depends on an optional extra being present is checking the machine.**
+  Both of these were green for weeks on the only box anybody ran them on, and both would
+  have been red on CI. This is `B15` again — working tree versus CI — with the dependency
+  set as the variable rather than the install command.
+- **`uv sync` prunes.** `uv sync --extra web` on a box with the GPU stack silently removes
+  it. Name every extra you want in one command; the README says so now.
+- **A lazy import moves where the failure happens, and guards do not follow it.** Deferring
+  `import torch` into a constructor is right — it keeps the module importable on a CI box
+  — but it relocates the error from import time to construction time, and every `except
+  ImportError` written around the import is then guarding an empty room.

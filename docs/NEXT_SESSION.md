@@ -194,7 +194,7 @@ moment in the recording it was said — **and if they consented, their audio is 
 storage encrypted, with the key ref and the retention date on an `audio_recordings` row.**
 If they declined, it is nowhere.
 
-Verified **2026-09-06**: **817 tests** — 805 pass + 12 skipped with Postgres and MinIO both
+Verified **2026-09-06**: **831 tests** — 819 pass + 12 skipped with Postgres and MinIO both
 up. `ruff check` + `ruff format --check` clean over 202 files, `mypy --strict` clean over
 145, all scenarios replay, 64/64 diagrams current, prompt pack fresh (54 clips),
 `audit_docs.py` clean on the live files. **And verified against a running server with a
@@ -501,7 +501,7 @@ ordering for the week to 2026-09-13.
 | ~~**A**~~ | ~~1-2~~ | ✅ **DONE 2026-09-07** (`D117`, `D118`, `B30`). **Broker domain pack** — intents/skills/queues around renewal, enquiry, quote, service, **handoff**; `insurer` on `Policy`; fixtures where one customer holds policies from three insurers. **Blocks everything else** | 1 |
 | **B** | 2-5 | **Compare & best-fit** — `products.yaml` with comparable attributes, gap analysis, rule-based ranking first, model writes only the reason sentence (`D16`) | 2 |
 | **C** | 1-6 | **Customer app v2 + the tool rail** — the 375-line static page becomes a Vite app; push-a-form working end to end, the rest as labelled stubs | 2 |
-| **D** | 2-4 | **The LLM, actually running** — `build_llm` FIRST (there is no adapter and no factory), then summary + intent into `summary_th`, then a labelled set | 1 |
+| ~~**D**~~ | ~~2-4~~ | ✅ **DONE 2026-09-07** (`D119`). **The LLM, actually running** — `build_llm` FIRST (there is no adapter and no factory), then summary + intent into `summary_th`, then a labelled set | 1 |
 | **E** | 5-7 | **Package, freeze, rehearse** — Dockerfile + compose profile, **feature freeze end of day 5**, and record a video of the demo working | all |
 
 **If the week collapses, three things:** the broker domain pack · compare & best-fit on the
@@ -736,14 +736,26 @@ Facts about *this laptop* rather than the repo, so a fresh session does not redi
   branch was unreachable and a missing `product_line` argument produced correct output
   for the wrong reason from P1b until 2026-09-07. They hold three now, from three
   carriers. Cardinality is part of a fixture's design.
-- **THERE IS NO LLM ADAPTER AND NO `build_llm`, WHATEVER THE DOCS USED TO SAY** (checked
-  2026-09-06). `adapters/llm/` holds `rulebased.py` alone, `RuleBasedLlm` is constructed by
-  nothing, and `Settings.llm_provider` accepts `anthropic` and `openai_compatible` with
-  **nothing behind either name** — `B23`'s shape, and `D110`'s problem statement in a new
-  place. Until this was corrected, `PROJECT_STATE` §3 said both adapters were "**both
-  implemented**" in the present tense, which is the same family as the `typhoon` claim the
-  2026-09-06 sweep caught: a plan sentence that aged into a false statement. P4's step zero
-  is the factory; the prompts come after it.
+- **`uv sync` PRUNES, AND A CHECK THAT NEEDS AN OPTIONAL EXTRA IS CHECKING THE MACHINE**
+  (`B31`). `uv sync --extra web --extra llm` removed the `ml` stack from this laptop and
+  instantly produced 5 test errors and 5 mypy errors that had been latent for weeks and
+  would have been red on CI. Name every extra in one command. And when you defer an
+  import into a constructor to keep a module importable, **every `except ImportError`
+  written around the import is now guarding an empty room.**
+- **THE LLM READ PATH MUST NEVER CALL A MODEL** (`D119`). `Container.brief_snapshot` runs
+  on every `/me` and every socket push; summarising there would hit the provider dozens of
+  times per call. `summarise_call` computes once, in the background, from `accept_offer`,
+  and the read path only *prefers* what is already cached.
+- **THE SUMMARY IS FIRE-AND-FORGET AND MUST STAY THAT WAY** (`D119`, `D12`). `accept_offer`
+  starts the task and never awaits it — the agent is connected the moment that endpoint
+  returns. Measured on the real provider: **4.5 s, $0.0085 a call** on `claude-sonnet-5`,
+  which is well outside §15's 1 s brief budget and survivable only because nobody waits
+  for it. If a summary is ever wanted BEFORE accept, that number says it needs a smaller
+  model, a shorter prompt or streaming.
+- **A PROMPT IS A FILE WITH ITS VERSION IN THE NAME, AND EDITING ONE IN PLACE IS A BUG**
+  (`D119`, `D18`). `analyses.prompt_version` names the file a result came from. A new
+  prompt is a new file. Rendering refuses a missing slot AND an undeclared one, because a
+  prompt that silently loses its transcript still returns a confident summary of nothing.
 - **A SECRET MAY BE DECLARED IN `Settings` BEFORE ITS ADAPTER EXISTS; A BEHAVIOUR KNOB MAY
   NOT.** That looks like a contradiction of `Q26` and is the opposite of one. A knob nothing
   reads is a lie about what the system does. A *secret* slot is redacted from every log line

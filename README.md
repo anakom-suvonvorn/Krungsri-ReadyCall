@@ -121,9 +121,12 @@ you fill in swaps one fake for one real thing. See [Configuration](#configuratio
 | `uv sync --extra web` | **+ FastAPI / uvicorn / websockets** | the API, the simulator, the workstation, **the full test suite** |
 | `uv sync --extra ml` | **+ torch (CUDA) / transformers / faster-whisper / silero-vad** | Silero voice detection and the two Whisper engines. ~3 GB, wants an NVIDIA GPU (§7) |
 | `uv sync --extra ml --extra asr` | **+ `nemo_toolkit[asr]`** | **Typhoon**, the shipped engine. Large; the CT2 fallback exists for a box where this will not install (`D103`, `D104`) |
+| `uv sync --extra llm` | **+ `anthropic` / `openai`** | the two real LLM adapters (`D119`). Small. **Not needed to run anything**: the shipped provider is `rulebased`, which is a real adapter with no key, no network and no extra |
+| `uv sync --extra s3` | **+ `boto3`** | MinIO or real S3 for the encrypted recordings (`D110`) |
 
 Three test files import FastAPI, so **`--extra web` is the one to use** unless you have a reason not
-to. `ml` and `asr` are real extras now and both are large; neither is needed to run the system, to
+to. ⚠️ `uv sync` **prunes** anything not named, so `uv sync --extra web` on a box that had the GPU
+stack removes it — name every extra you want in one command. `ml` and `asr` are real extras now and both are large; neither is needed to run the system, to
 replay a scenario or to pass the suite — the audio path is dependency-free by design, which is why
 CI exercises it with no GPU at all.
 </details>

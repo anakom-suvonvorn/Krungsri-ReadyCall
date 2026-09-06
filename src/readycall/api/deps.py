@@ -27,6 +27,7 @@ from readycall.adapters.core_data.caching import CachingCoreDataProvider
 from readycall.adapters.core_data.fixtures import FixtureFileProvider
 from readycall.adapters.core_data.null import NullCoreDataProvider
 from readycall.adapters.event_bus.memory import InMemoryEventBus
+from readycall.adapters.llm import build_llm
 from readycall.adapters.stt.scripted import ScriptedSttEngine, load_scripted_turns
 from readycall.adapters.telephony.simulated import SimulatedTelephonyProvider
 from readycall.adapters.vad.energy import EnergyVad
@@ -62,9 +63,11 @@ from readycall.logging import get_logger
 from readycall.ports.core_data import CoreDataProvider
 from readycall.ports.stt import SttEngine, SttHint
 from readycall.ports.vad import VoiceActivityDetector
+from readycall.prompts import PromptLibrary
 from readycall.services.agents.assignment import AssignmentService, OfferPolicy
 from readycall.services.agents.dispatch import DispatchService
 from readycall.services.agents.presence import PresenceService
+from readycall.services.analysis import IntakeSummariser, SummaryResult
 from readycall.services.brief.builder import BriefBuilder
 from readycall.services.call_orchestrator.orchestrator import CallOrchestrator
 from readycall.services.capture.keypad import KeypadCaptureService
@@ -254,6 +257,17 @@ class Container:
         self.bus = InMemoryEventBus()
         self.core = build_core_data(settings, self.clock)
 
+        #: The LLM, and the versioned prompts it is given (`D119`). `build_llm` is the only
+        #: place a client may be constructed; the default is the rule-based adapter, which
+        #: is a real one needing no key, no network and no extra (`D3`).
+        self.prompt_library = PromptLibrary.load(settings.prompt_dir)
+        self.llm = build_llm(settings, prompts=self.prompt_library, clock=self.clock)
+        #: Returns `None` on timeout, on failure, and whenever the provider is rule-based.
+        #: Every caller has to be correct in that case, because it is the ordinary one.
+        self.summariser = IntakeSummariser(
+            llm=self.llm, clock=self.clock, timeout_s=settings.llm_timeout_s
+        )
+
         #: Every durable store, chosen by `STORAGE_BACKEND` (`D75`, `D78`). Each service
         #: below gets its own and writes through to it; nothing reads it on the hot path.
         self.storage = storage or build_storage(settings)
@@ -401,6 +415,10 @@ class Container:
         self.identity_for_call: dict[str, IdentityResolution] = {}
         #: call_session_id -> the context snapshot the brief is rendered from.
         self.snapshot_for_call: dict[str, str] = {}
+        #: AI summaries, per call, once one has been produced (`D119`). Empty is the
+        #: ordinary state: the rule-based summary is already on the screen and this only
+        #: ever REPLACES it. Nothing waits for this dict to be filled.
+        self.ai_summaries: dict[str, SummaryResult] = {}
         #: Saved wrap-up forms, projected from the store. Never written by anything but
         #: an agent (`D45`) — the *absence* of an entry is meaningful data.
         self.wrapups: dict[str, CallWrapup] = {}
@@ -613,7 +631,53 @@ class Container:
             # the record shows what the agent saw before and after, and when it changed.
             version=1 + len(self.attestations.history(call_session_id)),
         )
+        # The AI summary REPLACES the rule-based one if it arrived, and this read path
+        # never calls a model: `brief_snapshot` runs on every `/me` and every socket
+        # push, so summarising here would hit the provider dozens of times per call
+        # (`D12`, and the cost line in `INTEGRATIONS` 3). `summarise_call` computes it
+        # once, in the background, after the agent is already talking.
+        summary = self.ai_summaries.get(call_session_id)
+        if summary is not None:
+            brief = brief.model_copy(update={"summary_th": summary.text_th})
         return _brief_out(brief, identity).model_dump(mode="json")
+
+    async def summarise_call(self, call_session_id: str, agent_id: str | None = None) -> None:
+        """Ask the model for a summary, in the background, and never block on it.
+
+        Called as a task from the accept path. The agent is already connected and already
+        reading the rule-based summary by the time this runs; if it succeeds the screen
+        upgrades on the next push, and if it does not, nothing happened. That ordering is
+        `D12` stated as code rather than as a comment.
+        """
+        if call_session_id in self.ai_summaries:
+            return
+        turns = self.transcript_delivery.turns_for(call_session_id)
+        if not turns:
+            return
+        session = await self.calls.get(call_session_id)
+        code = getattr(session, "menu_intent_code", None)
+        spec = self.pack.intents.get(code) if code else None
+        result = await self.summariser.summarise(
+            [str(t.get("text", "")) for t in turns],
+            intent_label_th=spec.label_th if spec else "ไม่ทราบเรื่องที่ติดต่อ",
+            line_label_th=str(spec.line) if spec else "unknown",
+        )
+        if result is None:
+            return
+        self.ai_summaries[call_session_id] = result
+        log.info(
+            "ai summary ready",
+            call_session_id=call_session_id,
+            provider=result.provider,
+            model=result.model,
+            prompt_version=result.prompt_version,
+            latency_ms=round(result.latency_ms or 0.0, 1),
+        )
+        if agent_id:
+            # Nudge the screen. Without this the upgrade waits for the ten-second
+            # heartbeat, which is exactly the "it refreshes every ten seconds" symptom
+            # `B27` teaches to distrust.
+            await self.hub.send(agent_id, "brief_updated", {"call_session_id": call_session_id})
 
     async def lookup_digits(
         self, call_session_id: str, *, kind: str, digits: str

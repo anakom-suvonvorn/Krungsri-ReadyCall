@@ -4260,3 +4260,95 @@ _Found by `D117`'s fixtures, not by a test — and it had been true since P1b._
   assembler's own docstring says it declines to guess between unrelated policies; no test
   could reach that branch, because no customer had two. Cardinality is part of a fixture's
   design — `B13`'s "never test a contention rule without contention", one layer down.
+
+## D119. The LLM seam, and the first sentence a model writes for a human
+_Track D of the week plan (`D115`). Six phases after `D29` named the two adapters._
+
+- **Problem.** `Settings.llm_provider` accepted `anthropic` and `openai_compatible`, and
+  `_check_coherent` even validated their keys — with **nothing behind either name**. That
+  is `B23`'s shape exactly: a config surface that cannot select anything. `RuleBasedLlm`
+  existed, was correct, and was **constructed nowhere**, which is `B7`'s family from the
+  other end. Both were caught on 2026-09-06 by reading the tree rather than the docs, and
+  the docs had said the adapters were "both implemented" in the present tense.
+
+- **Decision.** `build_llm` is the factory and the only place a client may be built —
+  `build_blob_storage`'s enforcement point, for the same reason. Two real adapters:
+  `AnthropicLlm` and `OpenAiCompatibleLlm`.
+
+### Structured output is forced, never requested
+
+`AnthropicLlm` hands the Pydantic schema over as a **tool definition** with
+`tool_choice` pinned to it, so the model cannot answer in prose that happens to begin with
+a brace. `OpenAiCompatibleLlm` uses `response_format: json_schema` where the server
+supports it and falls back to schema-in-the-prompt where it does not — and **marks which
+mechanism ran**, because *"the model was worse"* and *"the server could not constrain it"*
+are different findings and a comparison table that conflates them is misleading.
+
+One adapter covers Typhoon-hosted, OpenAI, vLLM, Ollama and LM Studio, because all five
+speak the same wire format. That is why `D29` promised a *table* rather than an argument:
+the comparison costs one adapter, not a project.
+
+### Prompts are files with versions in their names
+
+`prompts/th/<id>.<version>.md`, loaded by `PromptLibrary`. Two rules the format enforces
+rather than documents:
+
+- **Editing a live prompt in place is forbidden by construction.** A new prompt is a new
+  file, because `analyses.prompt_version` names the file every stored result came from,
+  and editing one makes every historical result unattributable (`D18`).
+- **Every slot must be declared, and every declared slot must be used.** Rendering refuses
+  a missing value *and* an undeclared one. The failure this prevents is the silent kind: a
+  typo'd key that happens to exist renders the wrong thing, and a prompt that quietly
+  loses its transcript still returns a confident-looking summary of nothing.
+
+### The summary, and the three rules it inherits
+
+`IntakeSummariser` is the first thing here that asks a model to write a sentence a human
+reads. It returns `SummaryResult | None`, and **`None` is the ordinary case** — on a laptop
+with no key it is the only case.
+
+- **`D12`.** `summarise()` bounds the adapter's deadline AND the whole exchange, the same
+  belt-and-braces `D112` argued for. It is called from `accept_offer` as a
+  **fire-and-forget task**, never awaited: the agent is connected the instant that endpoint
+  returns, already reading the rule-based summary, and the screen upgrades on a push if
+  the model answers. That ordering is the one place it would be tempting to break `D12`,
+  so it is written as code rather than as a comment.
+- **`D16`.** The prompt forbids stating figures, and `_FIGURE` refuses the output if one
+  appears anyway. Coverage amounts are read from the record; the model may reference them
+  and may not state them. The guard assumes the prompt will one day fail.
+- **`D13`.** `is_clear: false` is believed. A model allowed to say *"they were unclear"*
+  invents less than one obliged to produce three sentences, and a refused summary leaves
+  the rule-based one — which quotes the caller verbatim and cannot hallucinate.
+
+A caller who barely spoke is not summarised **and the model is not called**: most callers
+who take the recording then wait quietly, and summarising two syllables produces a
+sentence that sounds like information. Same distinction `D111` drew for the degradation
+reason.
+
+### The read path must never call a model
+
+`Container.brief_snapshot` runs on every `/me` and every socket push, so summarising there
+would hit the provider dozens of times per call. `summarise_call` computes it once and
+caches it per call; the read path only ever *prefers* what is already there.
+
+### Measured, on the real provider
+
+One live call through the whole path on 2026-09-07, `claude-sonnet-5`:
+
+| | |
+|---|---|
+| latency | **4.5 s** |
+| tokens | 1,561 in / 256 out |
+| cost | **$0.0085** per call |
+
+The summary was faithful — it named the procedure, the hospital, the document question and
+the "must I pay upfront" question, and invented no figures.
+
+⚠️ **4.5 s is well outside `ARCHITECTURE` §15's 1-second brief budget**, and that is
+survivable *only* because this runs after the agent is already talking. If a summary is
+ever wanted **before** accept, this measurement says it cannot be this prompt on this
+model: it needs a smaller model, a shorter prompt, or streaming — and the number to beat
+is on record now rather than assumed.
+
+The `llm` extra carries both SDKs (`uv sync --extra llm`); neither is installed by default,
+because the shipped provider is rule-based and needs nothing.
