@@ -476,7 +476,9 @@ changes nothing.
 
 **A note on starting P4 without an LLM key.** The whole structure, the rule-based fallback,
 the prompts, the golden set and the comparison harness build and test with **no key at all**
-— `LLM_PROVIDER=rulebased` is the default and it is a real adapter, not a stub. The one
+— `LLM_PROVIDER=rulebased` is the default and it is a real adapter, not a stub. ⚠️ But it is
+**an adapter nothing constructs**: there is no `build_llm`, so P4's step zero is the factory,
+not the prompts (checked 2026-09-06). The one
 exit criterion that needs a key is *"a Claude-vs-Typhoon table produced by the harness,
 not by opinion"*. `.env` has the slots ready (`ANTHROPIC_API_KEY`, or `LLM_BASE_URL` +
 `LLM_API_KEY` for the Typhoon/OpenAI/vLLM/Ollama adapter). Ask; do not stall on it.
@@ -629,6 +631,14 @@ Facts about *this laptop* rather than the repo, so a fresh session does not redi
 
 ## Things to be careful about (live landmines)
 
+- **THERE IS NO LLM ADAPTER AND NO `build_llm`, WHATEVER THE DOCS USED TO SAY** (checked
+  2026-09-06). `adapters/llm/` holds `rulebased.py` alone, `RuleBasedLlm` is constructed by
+  nothing, and `Settings.llm_provider` accepts `anthropic` and `openai_compatible` with
+  **nothing behind either name** — `B23`'s shape, and `D110`'s problem statement in a new
+  place. Until this was corrected, `PROJECT_STATE` §3 said both adapters were "**both
+  implemented**" in the present tense, which is the same family as the `typhoon` claim the
+  2026-09-06 sweep caught: a plan sentence that aged into a false statement. P4's step zero
+  is the factory; the prompts come after it.
 - **A SECRET MAY BE DECLARED IN `Settings` BEFORE ITS ADAPTER EXISTS; A BEHAVIOUR KNOB MAY
   NOT.** That looks like a contradiction of `Q26` and is the opposite of one. A knob nothing
   reads is a lie about what the system does. A *secret* slot is redacted from every log line

@@ -266,14 +266,19 @@ class LlmClient(Protocol):
     async def stream_text(self, prompt: PromptRef, vars: dict) -> AsyncIterator[str]: ...
 ```
 
-**Two adapters are implemented from day one; the rest are defined but left as stubs** (`D29`).
+**Two adapters are to be implemented on P4's first day; the rest are defined but left as stubs**
+(`D29`). ⚠️ **Neither exists yet.** As of 2026-09-06 `src/readycall/adapters/llm/` contains
+`rulebased.py` and nothing else, and P4 has not started — so the "status" column below is a
+plan for every row but the last. `Settings.llm_provider` already accepts `anthropic` and
+`openai_compatible` and there is **no factory behind either name**, which is `B23`'s shape:
+a name that cannot select anything. Wiring `build_llm` is P4 step zero.
 
 | Adapter | Status | Covers |
 |---|---|---|
-| **`AnthropicAdapter`** ⭐ | **implemented P4** | `claude-opus-5` (quality) / `claude-sonnet-5` (latency+cost). Strong Thai; structured output via tool-use; prompt caching for the fixed system prompt |
-| **`OpenAiCompatibleAdapter`** ⭐ | **implemented P4** | One adapter, parameterised by `base_url` + key — **covers Typhoon's hosted API, OpenAI, self-hosted vLLM, Ollama and LM Studio at once**, because they all speak the OpenAI wire format |
-| `GeminiAdapter` | defined only | Different wire format; add if wanted |
-| `RuleBasedAdapter` | implemented P0 | No model at all — the degradation rung: keyword/regex intent + template summary |
+| **`AnthropicAdapter`** ⭐ | ☐ planned, P4 | `claude-opus-5` (quality) / `claude-sonnet-5` (latency+cost). Strong Thai; structured output via tool-use; prompt caching for the fixed system prompt |
+| **`OpenAiCompatibleAdapter`** ⭐ | ☐ planned, P4 | One adapter, parameterised by `base_url` + key — **covers Typhoon's hosted API, OpenAI, self-hosted vLLM, Ollama and LM Studio at once**, because they all speak the OpenAI wire format |
+| `GeminiAdapter` | ☐ defined only | Different wire format; add if wanted |
+| `RuleBasedAdapter` | ☑ **built** (P0) | No model at all — the degradation rung: keyword/regex intent + template summary. Written, correct, and **instantiated nowhere** — see the warning above |
 
 So "run Typhoon" is a config choice, twice over:
 
