@@ -34,7 +34,7 @@ from fastapi.testclient import TestClient
 from readycall.api.app import create_app, sweep_once
 from readycall.clock import ManualClock
 from readycall.config import Settings
-from readycall.domain.enums import AgentSystemState
+from readycall.domain.enums import AgentSystemState, CallState
 from tests.conftest import REPO_ROOT
 
 #: Agents and the queue they can serve, from `mock/agents/agents.json`.
@@ -107,13 +107,19 @@ class Floor:
         )
 
     def hang_up(self, agent_id: str, call_session_id: str) -> None:
-        self.clients[agent_id].post(f"/v1/agent/calls/{call_session_id}/end", json={})
+        # The status is asserted because it was NOT, and that is how `B28` walked past
+        # this file: `end_call` answered 400 for a call taken on `D113`'s second round,
+        # the random walk discarded the response, and every invariant still held because
+        # the call it described had simply never ended.
+        response = self.clients[agent_id].post(f"/v1/agent/calls/{call_session_id}/end", json={})
+        assert response.status_code == 200, response.text
 
     def wrap_up(self, agent_id: str, call_session_id: str) -> None:
-        self.clients[agent_id].post(
+        response = self.clients[agent_id].post(
             f"/v1/agent/calls/{call_session_id}/wrapup",
             json={"disposition": "resolved", "notes": "-"},
         )
+        assert response.status_code == 200, response.text
 
     async def heartbeat(self) -> None:
         """What the open WebSocket does every ten seconds (`D51`).
@@ -373,4 +379,53 @@ async def test_a_caller_the_whole_floor_declines_comes_back_round(
     )
     assert call_id in {c.call_session_id for c in container.dispatch.waiting()}, (
         "and they are still in the pool, not silently dropped"
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_call_taken_on_a_later_round_completes_normally(
+    app: Any, clock: ManualClock
+) -> None:
+    """`B28`, under load. `D113` gave one agent TWO assignments for one call.
+
+    The scenario above proves the caller comes back round. It never proves anybody can
+    then *finish* the call — and that was the bug: accept on round 2 and End call
+    answered *"assignment ... was never accepted"*, because the per-call lookup returned
+    the round-1 decline. The whole call has to run to `CLOSED`, not just be re-offered.
+    """
+    rng = random.Random(28)
+    floor = Floor(app, MOTOR)
+    seen_waits: dict[str, float] = {}
+    for agent_id in MOTOR:
+        floor.declare(agent_id, "ready")
+
+    call_id = floor.place("motor", rng)
+    container = floor.container
+
+    # Decline all the way round the floor at least once, so the eventual taker is holding
+    # a second assignment for a call they already turned down.
+    taker: str | None = None
+    for _ in range(len(MOTOR) * 3):
+        await sweep_once(container)
+        await check_invariants(floor, seen_waits=seen_waits)
+        assignment = container.assignments.open_offer_for(call_id)
+        if assignment is None:
+            continue
+        if container.assignments.rounds_for(call_id) > 1:
+            taker = assignment.agent_id
+            floor.accept(taker, assignment.assignment_id)
+            break
+        floor.decline(assignment.agent_id, assignment.assignment_id)
+
+    assert taker is not None, "the caller never came round again, so B28 is untested here"
+    held = [a for a in container.assignments.for_agent(taker) if a.call_session_id == call_id]
+    assert len(held) > 1, "the taker should be holding a decline AND an accept for this call"
+
+    floor.hang_up(taker, call_id)
+    floor.wrap_up(taker, call_id)
+    await check_invariants(floor, seen_waits=seen_waits)
+
+    session = await container.calls.get(call_id)
+    assert session.state in {CallState.WRAP_UP, CallState.CLOSED}, (
+        f"a call taken on round 2 must reach the end of its life, not stall in {session.state}"
     )

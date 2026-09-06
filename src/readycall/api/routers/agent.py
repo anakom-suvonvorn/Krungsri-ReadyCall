@@ -555,10 +555,29 @@ def _require_own(container: Any, assignment_id: str, who: AgentPrincipal) -> Ass
 def _assignment_for_call(
     container: Any, call_session_id: str, who: AgentPrincipal
 ) -> Assignment | None:
-    for assignment in container.assignments.for_agent(who.agent_id):
-        if assignment.call_session_id == call_session_id:
-            return assignment  # type: ignore[no-any-return]
-    return None
+    """This agent's **live** assignment for a call — never a superseded one (`B28`).
+
+    Since `D113` a caller the whole floor declined comes round again, so one agent can
+    hold **two** assignments for one call: the round-1 decline and the round-2 accept.
+    This used to return whichever the store yielded first, which is the *decline* — so
+    `end_call` checked an assignment that had never been accepted and refused to end a
+    call the agent was demonstrably on.
+
+    A declined, timed-out or cancelled offer is history, not a key to the call. Treating
+    it as one also let an agent who said no keep acting on the caller somebody else took
+    (`D52`) — `attest_identity` and `start_capture` authorise through this function.
+    """
+    live = [
+        a
+        for a in container.assignments.for_agent(who.agent_id)
+        if a.call_session_id == call_session_id
+        and a.outcome in (OfferOutcome.PENDING, OfferOutcome.ACCEPTED)
+    ]
+    if not live:
+        return None
+    # Newest wins: `D113` can only ever leave one un-superseded, but ordering the answer
+    # is what stops this depending on dict insertion order again.
+    return max(live, key=lambda a: a.offered_at)  # type: ignore[no-any-return]
 
 
 async def _require_active_call(

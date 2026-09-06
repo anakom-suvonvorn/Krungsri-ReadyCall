@@ -1,7 +1,7 @@
 # BUG_HISTORY
 
 _Solved bugs and the lessons they bought. **Search this file FIRST when debugging** — the answer may already be here._
-_Last updated: 2026-09-05._
+_Last updated: 2026-09-06._
 
 Format per entry:
 
@@ -1320,3 +1320,189 @@ In a browser, in a tab that had just held A001's session:
 - **`B26` and `B27` are the same fix arriving twice**, one day apart, because the first one
   stopped at "the server now computes the right number". Fixing a value is not the same as
   making it visible.
+
+---
+
+## B28. A call taken on `D113`'s second round could never be ended
+
+_Found by the user, on the day `D113` shipped, by doing the one thing `D113` exists to make
+possible. **A new feature made an old lookup ambiguous, and nothing in the lookup knew.**_
+
+### Symptoms
+
+As the only qualified agent: place a call, **decline** it, watch it come round again
+(`D113`, correctly — the floor was exhausted), **accept** it, work it, then press
+**End call**:
+
+```
+assignment asgn_01M1T7NSB2X6JSP8 was never accepted
+```
+
+The agent is on a live call the system refuses to end. `WRAP_UP` is unreachable, so ACW
+never starts, the call sits in `IN_CALL` for the life of the shift, and the agent cannot
+sign out either — `logout` refuses while a call is active.
+
+### Root cause
+
+`_assignment_for_call` in `api/routers/agent.py` answered *"which assignment is this
+agent's, for this call"* by returning **the first match the store yielded**:
+
+```python
+for assignment in container.assignments.for_agent(who.agent_id):
+    if assignment.call_session_id == call_session_id:
+        return assignment
+```
+
+That was correct for as long as an agent could hold **one** assignment per call, which was
+every day until `D113`. `D52` excluded a declining agent for the life of the call, so a
+second offer to the same desk was impossible by construction.
+
+`D113` deleted that guarantee on purpose: when every qualified agent has declined, the
+exclusions are cleared and the caller goes round again. On a floor of one — every demo,
+every rehearsal, and the user's own screen — round 2 comes straight back to the same agent.
+Now `for_agent` returns **two** assignments for the call, in dict insertion order: the
+round-1 **decline** first, the round-2 **accept** second. `end_call` got the decline,
+checked `outcome is ACCEPTED`, and refused.
+
+### The second half, which the user did not see
+
+The same function **authorises** `attest_identity` and `start_capture`. While a stale
+decline counted as this agent's assignment, an agent who declined a call kept the right to
+act on that caller *while somebody else handled them* — attesting their identity, or
+starting a keypad capture on their live call. Reproduced on three agents:
+A001 declines, A002 is offered the call, and the log still reads
+`keypad capture started agent_id=A001`. That is `D52`'s disclosure boundary, breached by
+the same line.
+
+### Investigation
+
+`grep` for the error string reached `AssignmentService.end_call` in four steps, and the
+guard there is right — the interesting question was immediately *why is it holding an
+assignment that was declined*, not *why is it refusing*. From there the whole call graph of
+`for_agent` was read rather than just the one caller (`B26`'s lesson, applied on purpose):
+the other five consumers all filter by a state only the live assignment can be in
+(`PENDING`, `acw_started_at is not None`, `acw_ended_at is not None`) or sort by
+`offered_at` descending. `_assignment_for_call` was the only one that assumed uniqueness.
+
+### Fix
+
+Select only assignments that are still live — `PENDING` or `ACCEPTED` — and take the newest
+of those. A declined, timed-out or cancelled offer is history and stops being a key to the
+call, which fixes `end_call` and closes the `D52` hole in the same line. The sort is kept
+even though `D113` can leave only one un-superseded, so the answer never depends on dict
+insertion order again.
+
+### Verification
+
+Both directions, on the fix and with the fix disabled:
+
+* `test_a_call_taken_on_the_second_round_can_still_be_ended` — the user's exact path as one
+  agent, through HTTP. Fails without the fix with the reported message.
+* `test_a_declined_offer_stops_being_a_key_to_the_caller` — the disclosure half; the
+  capture must answer 404 once the offer is declined.
+* `test_a_call_taken_on_a_later_round_completes_normally` in the stress suite — declines
+  round the floor, accepts on round 2, and runs the call to `CLOSED`.
+
+### Why the stress suite missed it
+
+`test_a_caller_the_whole_floor_declines_comes_back_round` (added *with* `D113`) walks this
+exact scenario. It stops at "the caller was offered again", which was the whole of `Q31` —
+nothing then tried to **finish** the call. And `Floor.hang_up` discarded its response
+without checking the status, so even a walk that did end a call would have swallowed the
+400: every invariant still held, because the call it described had simply never ended.
+`hang_up` and `wrap_up` assert their status now.
+
+### Lessons
+
+- **A feature that removes a uniqueness guarantee has to name everything that relied on
+  it.** `D113`'s own landmine entry says `excluded_agents()` is no longer a permanent
+  record. It did not say the other thing that changed: *one agent can now hold two
+  assignments for one call*. That second sentence is where this bug lived.
+- **"The first match" is only an answer while there can be one match.** A lookup that
+  returns the head of an unordered collection is asserting uniqueness without saying so —
+  and it fails silently the day that stops being true, on whichever element the dict
+  happens to yield first.
+- **A test helper that ignores a status code cannot fail.** `hang_up` posted, discarded a
+  400, and the invariants afterwards were all true of a call that had never ended. This is
+  `B24`'s family in a test: correct code, running, proving nothing.
+- **Check the whole call graph of the thing you changed, not the caller you came in
+  through** (`B26` again). Coming in through `end_call`, the disclosure half was two
+  callers away and would not have been found by fixing the button the user pressed.
+
+---
+
+## B29. The test suite read the developer's `.env`, so one laptop's private file decided whether it passed
+
+_Found while answering a question about `.env`, not while debugging — which is the only
+reason it was found at all. It had been true since P0._
+
+### Symptoms
+
+Five tests in `tests/unit/test_transcript_over_http.py` failed on this laptop and on no
+other, with a message about the audio path rather than about configuration:
+
+```
+the audio path produced no turns - nothing opened the recording, the detector found
+no speech, or the scripted lines were refused by `D98`'s rate guard
+```
+
+Nothing in the repository had changed. `STT_ENGINE=scripted uv run pytest` passed.
+
+### Root cause
+
+`Settings.model_config` declares `env_file=".env"`. Tests build `Settings(...)` with the
+handful of fields they care about and let everything else default — and "default" silently
+included **whatever this machine happened to have in an untracked, gitignored file**.
+
+The user had uncommented `STT_ENGINE=typhoon` and `VAD_ENGINE=silero` to try the real
+engine. Both leaked into every test that did not pin them, so the suite loaded a real Thai
+ASR model on the GPU and asked it to transcribe the synthetic tones the fixtures generate.
+It returned nothing, correctly, and five tests failed.
+
+The same `.env` also assigned `STT_ENGINE`, `VAD_ENGINE` and `LLM_PROVIDER` **twice** each
+— once in the adapter block at the top and again in the behaviour block below. The later
+assignment wins, so the top block was decorative, and reading the file top-down gave
+exactly the wrong answer about what the machine was running.
+
+### Why this is worse than five red tests
+
+`tests/conftest.py` opens by promising *"nothing here touches a network, a GPU, or a
+database."* That was a claim nothing enforced. The failure direction that actually matters
+is the opposite one: a developer whose `.env` happens to be permissive gets a **green** run
+for code that would fail on CI or on anyone else's machine. `B9` was working-tree versus
+repository and `B15` was working-tree versus CI; this is the third member — the suite
+described one machine's private configuration and called it the system.
+
+### Fix
+
+A session-scoped autouse fixture in `tests/conftest.py` sets `Settings.model_config`'s
+`env_file` to `None` for the duration of the run and restores it afterwards.
+
+Environment **variables** are deliberately left alone: `READYCALL_TEST_MINIO=1` and
+`READYCALL_TEST_POSTGRES` are how the opt-in contract rows are selected, and
+`STT_ENGINE=scripted uv run pytest` has to keep working. It is the *file* nobody expects to
+change a test result.
+
+The user's `.env` was also rewritten to assign every name exactly once, with the stage-safe
+demo profile live and the real-engine profile sitting commented beside it. Both secrets were
+carried across byte-for-byte and verified by hash.
+
+### Verification
+
+* The five tests fail with the fix removed and the same `.env` in place, and pass with it.
+* `STT_ENGINE=scripted uv run pytest` still selects the scripted engine, so the
+  environment-variable override is untouched.
+
+### Lessons
+
+- **A gitignored file must never be able to change a test result.** Config precedence is a
+  feature for an application and a hazard for a suite: the suite's whole job is to describe
+  the repository, and anything machine-local that reaches it is describing something else.
+- **The dangerous direction is green, not red.** Five failures got investigated in minutes.
+  A permissive `.env` producing a pass would have hidden a real fault for as long as it
+  took somebody else to clone the repo.
+- **A docstring that promises a property is worth turning into a fixture.** The claim
+  "nothing here touches a GPU" had been sitting at the top of `conftest.py` since P0,
+  believed and unenforced.
+- **Assigning one name twice in an env file is `Q26`'s lie in reverse:** not a knob nothing
+  reads, but a knob read from a line you did not think was the live one.

@@ -3955,6 +3955,14 @@ offer", and that is still true** — the set is cleared, so a re-offered agent i
 it. What is no longer true is "nobody is ever rung twice about one call", which the
 invariant never said.
 
+⚠️ **And the consequence this entry failed to name, which cost `B28` the same day.** Clearing
+the exclusions means **one agent can hold two assignments for one call** — the round-1
+decline and the round-2 accept. Every lookup phrased as "this agent's assignment for that
+call" had been quietly relying on there being only one, and the first one a dict yields is
+the *decline*. `end_call` refused to end a call the agent was demonstrably on, and
+`attest_identity` / `start_capture` went on authorising an agent who had said no. When a
+change removes a uniqueness guarantee, the entry has to say which code was leaning on it.
+
 ## D114. The transcript is written down as it happens, by a fourth subscriber
 _`ARCHITECTURE` §6 has asked for this since P0 and `DATA_MODEL` §6 has carried the column
 list just as long, under a warning that nothing wrote them. `D106` said plainly that the

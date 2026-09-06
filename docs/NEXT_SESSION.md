@@ -168,7 +168,7 @@ left nothing behind.
 
 Almost every fault in this list came from somebody driving the screen and reporting what
 looked wrong — not from the suite. The pattern is worth knowing before reading any of it,
-because it is now **eleven** and they rhyme:
+because it is now **twelve** and they rhyme:
 
 1. **`B6` (2026-08-24)** — six faults, **three of which were decisions the docs already
    contained**. The lesson is about reading `.mmd` sources, not about React.
@@ -198,6 +198,12 @@ because it is now **eleven** and they rhyme:
    for the life of the shift, with no error and no failing test, while the queue showed
    them as being handled. Found by the user asking what happens when everyone says no.
    Closed by `D113`.
+12. **`B28` (2026-09-06)** — and this one is the sharpest of the lot, because it was found
+   by using the feature shipped **that same day**. `D113` made a caller the whole floor
+   declined come round again; the user declined, took the call on round 2, and could not
+   end it. One agent now holds two assignments for one call, and every lookup that said
+   "the first one" had been silently asserting there could only be one. It also let an
+   agent who declined keep acting on a caller somebody else took.
 11. **Two caught in the same session before shipping**, both by writing the test that
    would notice: `open_leg` replacing a leg and silently unsubscribing whoever opened
    first (`B24`'s shape, with two consumers now), and the STT worker's async stdin read
@@ -594,8 +600,11 @@ Facts about *this laptop* rather than the repo, so a fresh session does not redi
   `demo-master-key-32-bytes-long!!!`). It is in no file and is not a secret — it exists so
   the bucket's one object can still be opened. Generate a real one for anything else.
 - **`.env` EXISTS ON THIS LAPTOP AND IS GITIGNORED.** Created 2026-09-06 at the user's
-  request as the safe place for keys. It already carries a generated
-  `RECORDING_MASTER_KEY`, so switching `BLOB_STORAGE=localfs` works with no further setup.
+  request as the safe place for keys, and **rewritten later the same day** (`B29`) into
+  four sections — what must be filled (both already are), the stage-safe demo profile,
+  the real-engine profile commented beside it, and the knobs. One assignment per name.
+  It carries a generated `RECORDING_MASTER_KEY` and a real `ANTHROPIC_API_KEY` (inert
+  until P4 builds an adapter), so switching `BLOB_STORAGE=localfs` works with no setup.
   ⚠️ **Never print its contents, never commit it, and never regenerate that key** —
   everything written under it becomes unreadable. `.env.example` is the committed twin and
   carries names only.
@@ -631,6 +640,32 @@ Facts about *this laptop* rather than the repo, so a fresh session does not redi
 
 ## Things to be careful about (live landmines)
 
+- **SINCE `D113`, ONE AGENT CAN HOLD TWO ASSIGNMENTS FOR ONE CALL** (`B28`). The round-1
+  decline and the round-2 accept both exist, both belong to that agent, and `for_agent`
+  yields them in insertion order — the **decline first**. Anything asking "this agent's
+  assignment for this call" must filter to `PENDING`/`ACCEPTED` and take the newest;
+  `_assignment_for_call` is the one place that does it, and `end_call`, `save_wrapup`,
+  `attest_identity` and `start_capture` all reach the call through it. Returning the first
+  match made End call answer *"was never accepted"* on a call the agent was on, **and**
+  let an agent who declined keep acting on a caller somebody else had taken (`D52`).
+- **THE SUITE MUST NEVER READ `.env`, AND A FIXTURE NOW ENFORCES IT** (`B29`).
+  `Settings.model_config` names `env_file=".env"`, so before 2026-09-06 every test that
+  built `Settings(...)` inherited whatever this laptop's **gitignored** file happened to
+  say — `STT_ENGINE=typhoon` sent five transcript tests to the GPU. The autouse
+  session fixture in `conftest.py` neutralises the file and restores it afterwards.
+  Environment *variables* are left alone on purpose (`READYCALL_TEST_MINIO=1`,
+  `STT_ENGINE=scripted uv run pytest`). **The dangerous direction is green, not red:** a
+  permissive `.env` would hide a real fault rather than invent one.
+- **ONE NAME, ONE ASSIGNMENT IN `.env`** (`B29`). The user's file set `STT_ENGINE`,
+  `VAD_ENGINE` and `LLM_PROVIDER` twice each — the adapter block at the top and the
+  behaviour block below. **The later one wins**, so the top block was decorative and the
+  machine was really running typhoon + silero + anthropic while the file's first screen
+  said scripted + energy + rulebased. Rewritten 2026-09-06 into four labelled sections
+  with one assignment per name; `.env.backup-2026-09-06` is the original.
+- **A TEST HELPER THAT DISCARDS A STATUS CODE CANNOT FAIL** (`B28`). `Floor.hang_up` posted
+  to `/end`, threw the response away, and every invariant afterwards was true — of a call
+  that had never ended. The stress suite walked this exact scenario and stayed green.
+  Helpers in `test_floor_under_load.py` assert their status now; keep it that way.
 - **THERE IS NO LLM ADAPTER AND NO `build_llm`, WHATEVER THE DOCS USED TO SAY** (checked
   2026-09-06). `adapters/llm/` holds `rulebased.py` alone, `RuleBasedLlm` is constructed by
   nothing, and `Settings.llm_provider` accepts `anthropic` and `openai_compatible` with

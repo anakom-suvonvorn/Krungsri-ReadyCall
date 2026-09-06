@@ -640,3 +640,79 @@ async def test_the_wait_is_sent_as_an_anchor_not_only_as_a_number(client: Any) -
     assert queue["longest_wait_since"] == offer["waited_since"], (
         "one caller, so the strip and the card must be counting from the same instant"
     )
+
+
+# --- B28: D113 made two assignments per call possible, and end_call took the wrong one -----
+
+
+@pytest.mark.asyncio
+async def test_a_call_taken_on_the_second_round_can_still_be_ended(client: Any) -> None:
+    """`B28`, found by the user clicking the exact path `D113` created.
+
+    As the only qualified agent: decline, the caller comes round again (`D113`), accept
+    on round 2, then press End call — and it answered *"assignment ... was never
+    accepted"*. `_assignment_for_call` returned the first assignment the store yielded
+    for this agent and call, which before `D113` was the only one there could be. After
+    `D113` there are two, and the first is the **decline**.
+
+    The path is only reachable on a floor small enough to exhaust, which is every demo
+    and every rehearsal.
+    """
+    client.post("/v1/agent/demo-login", json={"agent_id": "A001"})
+    client.post("/v1/agent/state", json={"agent_intent": "ready"})
+    placed = place(client)
+    call_id = placed["call_session_id"]
+    container = client.app.state.container
+
+    await sweep_once(container)
+    first = container.assignments.open_offer_for(call_id)
+    assert first is not None
+    declined = client.post(
+        f"/v1/agent/offers/{first.assignment_id}/decline",
+        json={"reason": "busy", "stop_offering": False},
+    )
+    assert declined.status_code == 200, declined.text
+
+    await sweep_once(container)
+    second = container.assignments.open_offer_for(call_id)
+    assert second is not None, "D113 should send the caller round again"
+    assert second.assignment_id != first.assignment_id, (
+        "round 2 is a NEW assignment - which is the whole reason this bug exists"
+    )
+
+    accepted = client.post(f"/v1/agent/offers/{second.assignment_id}/accept")
+    assert accepted.status_code == 200, accepted.text
+
+    ended = client.post(f"/v1/agent/calls/{call_id}/end", json={"reason": "caller_hung_up"})
+    assert ended.status_code == 200, ended.text
+    assert ended.json()["presence"]["system_state"] == "after_call_work"
+
+
+@pytest.mark.asyncio
+async def test_a_declined_offer_stops_being_a_key_to_the_caller(client: Any) -> None:
+    """The same root cause, on a disclosure surface rather than a button (`D52`).
+
+    `attest_identity` and `start_capture` authorise through `_assignment_for_call`, so
+    while a stale decline counted as this agent's assignment, an agent who said no could
+    still attest identity on a caller somebody else was handling.
+    """
+    for agent_id in ("A001", "A002", "A003"):
+        client.post("/v1/agent/demo-login", json={"agent_id": agent_id})
+        client.post("/v1/agent/state", json={"agent_intent": "ready"})
+    placed = place(client)
+    call_id = placed["call_session_id"]
+    container = client.app.state.container
+
+    await sweep_once(container)
+    offered = container.assignments.open_offer_for(call_id)
+    assert offered is not None
+    client.post("/v1/agent/demo-login", json={"agent_id": offered.agent_id})
+    client.post("/v1/agent/state", json={"agent_intent": "ready"})
+    client.post(
+        f"/v1/agent/offers/{offered.assignment_id}/decline",
+        json={"reason": "busy", "stop_offering": False},
+    )
+
+    # Same agent, same call, no longer theirs.
+    refused = client.post(f"/v1/agent/calls/{call_id}/capture")
+    assert refused.status_code == 404, refused.text
