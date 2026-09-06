@@ -313,8 +313,37 @@ class Settings(BaseSettings):
         )
 
     # --- secrets (never logged, never committed) ---
+    #
+    # **Declared here even where nothing reads them yet, and that is the opposite of
+    # `Q26`'s complaint about dead env vars.** A behaviour knob nothing reads is a lie
+    # about what the system does. A *secret* that is declared but unread is a slot: it is
+    # redacted from every log line by name (`logging._SENSITIVE_KEYS`), it is documented
+    # in one place, and the day its adapter lands there is nowhere new to put it. The
+    # cost of the other way is somebody pasting a live key into a file that gets
+    # committed because there was no obvious home for it.
+    #
+    # ⚠️ **Every one of these belongs in `.env`, which is gitignored. `.env.example` gets
+    # the NAME and never the value.**
+
+    #: Read today by `AnthropicAdapter` (`D29`), when `LLM_PROVIDER=anthropic`.
     anthropic_api_key: str | None = None
+    #: Read today by `OpenAiCompatibleAdapter` — one adapter covers Typhoon-hosted,
+    #: OpenAI, vLLM and Ollama, distinguished only by `LLM_BASE_URL` (`D29`).
     llm_api_key: str | None = None
+    #: Not read yet. `GeminiAdapter` is defined in `D29` and not built.
+    gemini_api_key: str | None = None
+    #: Not read yet. For gated Hugging Face checkpoints — every model this project uses
+    #: today is public, so nothing needs it, and a gated one would fail at load without it.
+    huggingface_token: str | None = None
+    #: Not read yet. P5's telephony (`INTEGRATIONS` §1.1): Asterisk ARI is user+password,
+    #: Twilio is account SID + auth token.
+    asterisk_ari_username: str | None = None
+    asterisk_ari_password: str | None = None
+    twilio_account_sid: str | None = None
+    twilio_auth_token: str | None = None
+    #: Not read yet. P7 replaces `LocalKeyRing` with a vault (`D110`); this is where its
+    #: credential will go, and `RECORDING_MASTER_KEY` above is what it will replace.
+    vault_token: str | None = None
 
     @model_validator(mode="after")
     def _check_coherent(self) -> Settings:

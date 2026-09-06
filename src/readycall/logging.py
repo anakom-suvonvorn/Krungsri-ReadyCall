@@ -22,6 +22,19 @@ _SENSITIVE_KEYS = frozenset(
         "api_key",
         "anthropic_api_key",
         "llm_api_key",
+        # Declared in `Settings` whether or not an adapter reads them yet: the point of
+        # naming a secret is that it is redacted the day somebody sets it, not the day
+        # something starts using it.
+        "gemini_api_key",
+        "huggingface_token",
+        "hf_token",
+        "asterisk_ari_password",
+        "twilio_auth_token",
+        "vault_token",
+        "recording_master_key",
+        "blob_secret_key",
+        "secret",
+        "token",
         "password",
         "authorization",
         "citizen_id",
