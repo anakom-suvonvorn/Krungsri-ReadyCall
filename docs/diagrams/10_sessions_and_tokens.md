@@ -76,7 +76,7 @@ If the cookie is missing, unknown, or expired: `401`, and the route never execut
 **Client sends:**
 
 ```json
-{"product_code": "KS-MOTOR-1ST", "app_intent": "motor.claim.accident"}
+{"product_code": "KS-MOTOR-1ST", "app_intent": "motor.claim.notify"}
 ```
 
 Note what is absent. There is **no `customer_id` field in the schema at all**, and

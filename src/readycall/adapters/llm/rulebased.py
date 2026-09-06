@@ -23,13 +23,26 @@ from readycall.ports.llm import LlmResult, LlmUsage, PromptRef
 
 T = TypeVar("T", bound=BaseModel)
 
-#: Thai keyword -> intent code. The straw-man taxonomy lives in `config/intents.yaml`;
-#: this map is only the offline fallback's view of it.
+#: Thai keyword -> intent code. The taxonomy lives in `config/intents.yaml` (`D117`);
+#: this map is only the offline fallback's view of it, and it is deliberately partial -
+#: anything it cannot match falls through to the menu's answer, which is the reliable one
+#: (`D37`). Ordering matters: the first key whose keyword appears wins, so the specific
+#: claim words sit above the generic ones.
+#:
+#: Two entries were briefly one after `D117`'s rename merged `health.ipd.preauth` and
+#: `health.claim.submit` onto the same code, and a duplicate dict key silently discards
+#: the first tuple - the admission words would have stopped matching with nothing to say
+#: so. They are merged explicitly now.
 KEYWORDS: dict[str, tuple[str, ...]] = {
-    "motor.claim.accident": ("ชน", "อุบัติเหตุ", "เฉี่ยว", "รถชน"),
+    "motor.claim.notify": ("ชน", "อุบัติเหตุ", "เฉี่ยว", "รถชน"),
     "motor.roadside_assist": ("รถเสีย", "ยกรถ", "แบตหมด", "ยางแบน"),
-    "health.ipd.preauth": ("นอนโรงพยาบาล", "แอดมิท", "ค่าห้อง", "ผู้ป่วยใน"),
-    "health.claim.status": ("เคลม", "สินไหม", "เบิก"),
+    "health.claim.notify": ("นอนโรงพยาบาล", "แอดมิท", "ค่าห้อง", "ผู้ป่วยใน", "เคลม", "สินไหม", "เบิก"),
+    # The broker's own work, which the old insurer-shaped map had no codes for at all.
+    "health.advice.compare": ("เทียบ", "คุ้มครองพอ", "ประกันกลุ่ม", "ซื้อเพิ่ม"),
+    "motor.advice.compare": ("เทียบเบี้ย", "ราคาประกันรถ", "ย้ายบริษัท"),
+    "life.advice.mortgage": ("กู้บ้าน", "สินเชื่อบ้าน", "ผ่อนบ้าน"),
+    "travel.advice.quote": ("เดินทาง", "ไปต่างประเทศ", "วีซ่า"),
+    "general.advice.review": ("ทบทวน", "มีประกันอะไรบ้าง", "ดูทั้งหมด"),
     "general.renewal": ("ต่ออายุ", "หมดอายุ"),
     "general.billing": ("ชำระ", "จ่ายเบี้ย", "ใบเสร็จ"),
 }

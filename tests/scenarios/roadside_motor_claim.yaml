@@ -35,8 +35,8 @@ agent: A001
 expect:
   state: closed
   assurance: l1_probable     # caller ID matched, but nothing verified it (D20)
-  queue: q_motor_claim       # from the menu, before a word was transcribed (D37)
-  intent: motor.claim.accident
+  queue: q_claims       # from the menu, before a word was transcribed (D37)
+  intent: motor.claim.notify
 
 intake:
   turns:

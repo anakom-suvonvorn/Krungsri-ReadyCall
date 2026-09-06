@@ -713,7 +713,7 @@ async def _snapshot(container: Any, agent_id: str) -> WorkstationSnapshot:
     if open_offer is not None:
         session = await container.calls.get(open_offer.call_session_id)
         decision = container.dispatch.last_decision_for(open_offer.call_session_id)
-        queue_id = getattr(session, "queue_id", None) or "q_general"
+        queue_id = getattr(session, "queue_id", None) or "q_service"
         spec = container.pack.queues.get(queue_id)
         identity = container.identity_for_call.get(open_offer.call_session_id)
         # Urgency and wait come from the POOL's record of the caller, not from the call

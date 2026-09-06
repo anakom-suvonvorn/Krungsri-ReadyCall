@@ -124,7 +124,7 @@ def test_a_call_is_offered_accepted_ended_and_wrapped(client: Any, clock: Manual
     sign_in_agent(client, "A006")
     client.post("/v1/agent/state", json={"agent_intent": "ready"})
 
-    placed = place_call(client, intent_code="health.ipd.preauth", caller_number="0812345678")
+    placed = place_call(client, intent_code="health.claim.notify", caller_number="0812345678")
     assert placed["offered_to"] == "A006", placed
 
     snapshot = client.get("/v1/agent/me").json()
@@ -162,7 +162,7 @@ def test_going_to_lunch_also_ends_after_call_work(client: Any, clock: ManualCloc
     """Not only Ready (`D45`) — and lunch leaves them un-offerable, with no special case."""
     sign_in_agent(client, "A006")
     client.post("/v1/agent/state", json={"agent_intent": "ready"})
-    placed = place_call(client, intent_code="health.ipd.preauth")
+    placed = place_call(client, intent_code="health.claim.notify")
     offer = client.get("/v1/agent/me").json()["offer"]
     client.post(f"/v1/agent/offers/{offer['assignment_id']}/accept")
     client.post(f"/v1/agent/calls/{placed['call_session_id']}/end", json={})
@@ -179,13 +179,13 @@ def test_declining_re_offers_to_somebody_else(client: Any) -> None:
     """`D52`: the caller must not watch the same desk not answer, forever."""
     sign_in_agent(client, "A006")
     client.post("/v1/agent/state", json={"agent_intent": "ready"})
-    # A005 also holds health.claim; sign them in through a second cookie jar so both are
+    # A005 also holds claims.assist; sign them in through a second cookie jar so both are
     # available at once. Same app, different session.
     second = client.__class__(client.app)
     second.post("/v1/agent/demo-login", json={"agent_id": "A005"})
     second.post("/v1/agent/state", json={"agent_intent": "ready"})
 
-    placed = place_call(client, intent_code="health.claim.status")
+    placed = place_call(client, intent_code="health.claim.notify")
     first_offer = client.get("/v1/agent/me").json()["offer"]
     if first_offer is None:
         first_offer = second.get("/v1/agent/me").json()["offer"]
@@ -220,7 +220,7 @@ def test_an_unanswered_offer_expires_and_frees_the_agent(client: Any, clock: Man
 
     sign_in_agent(client, "A006")
     client.post("/v1/agent/state", json={"agent_intent": "ready"})
-    placed = place_call(client, intent_code="health.ipd.preauth")
+    placed = place_call(client, intent_code="health.claim.notify")
     assert client.get("/v1/agent/me").json()["offer"] is not None
 
     # Not yet: the offer is still inside its window.
@@ -255,7 +255,7 @@ def test_the_caller_nobody_answered_is_re_offered_elsewhere(
     second.post("/v1/agent/demo-login", json={"agent_id": "A005"})
     second.post("/v1/agent/state", json={"agent_intent": "ready"})
 
-    place_call(client, intent_code="health.claim.status")
+    place_call(client, intent_code="health.claim.notify")
     first, other = (
         (client, second) if client.get("/v1/agent/me").json()["offer"] else (second, client)
     )
@@ -299,7 +299,7 @@ def active_call(client: Any) -> str:
 
 def take_a_call(
     client: Any,
-    intent_code: str = "health.ipd.preauth",
+    intent_code: str = "health.claim.notify",
     caller_number: str = "0812345678",
 ) -> str:
     """Sign in, go ready, take the call. `caller_number` chooses whether ANI matches."""
@@ -633,7 +633,7 @@ def test_the_queue_strip_says_when_a_closed_queue_reopens(client: Any) -> None:
     sign_in_agent(client)
     queues = client.get("/v1/agent/queues").json()
     by_id = {q["queue_id"]: q for q in queues}
-    assert by_id["q_motor_claim"]["is_open"] is True, "a crash does not check the clock"
+    assert by_id["q_claims"]["is_open"] is True, "a crash does not check the clock"
     closed = [q for q in queues if not q["is_open"]]
     for queue in closed:
         assert queue["closed_reason"] in {"outside_hours", "holiday"}
@@ -806,7 +806,7 @@ def test_the_server_says_which_status_buttons_are_legal(client: Any) -> None:
         "draining",
     }
 
-    place_call(client, intent_code="health.ipd.preauth", ignore_hours=True)
+    place_call(client, intent_code="health.claim.notify", ignore_hours=True)
     offer = client.get("/v1/agent/me").json()["offer"]
     on_call = client.post(f"/v1/agent/offers/{offer['assignment_id']}/accept").json()
     assert set(on_call["presence"]["declarable"]) == {"ready", "last_call", "draining"}
@@ -827,7 +827,7 @@ def test_a_spent_last_call_is_distinguishable_from_a_fresh_sign_in(client: Any) 
     assert fresh["intent_reason"] == "signed_in"
 
     client.post("/v1/agent/state", json={"agent_intent": "ready"})
-    placed = place_call(client, intent_code="health.ipd.preauth", ignore_hours=True)
+    placed = place_call(client, intent_code="health.claim.notify", ignore_hours=True)
     offer = client.get("/v1/agent/me").json()["offer"]
     client.post(f"/v1/agent/offers/{offer['assignment_id']}/accept")
     client.post("/v1/agent/state", json={"agent_intent": "last_call"})
@@ -842,7 +842,7 @@ def test_the_timers_are_anchored_to_server_timestamps(client: Any, clock: Manual
     """So a browser refresh mid-call shows the true elapsed time, not zero."""
     sign_in_agent(client, "A006")
     client.post("/v1/agent/state", json={"agent_intent": "ready"})
-    placed = place_call(client, intent_code="health.ipd.preauth", ignore_hours=True)
+    placed = place_call(client, intent_code="health.claim.notify", ignore_hours=True)
     offer = client.get("/v1/agent/me").json()["offer"]
     client.post(f"/v1/agent/offers/{offer['assignment_id']}/accept")
 
@@ -865,7 +865,7 @@ def test_the_offer_card_says_what_the_call_is_about(client: Any) -> None:
     """
     sign_in_agent(client, "A006")
     client.post("/v1/agent/state", json={"agent_intent": "ready"})
-    place_call(client, intent_code="health.ipd.preauth", caller_number="0812345678")
+    place_call(client, intent_code="health.claim.notify", caller_number="0812345678")
 
     offer = client.get("/v1/agent/me").json()["offer"]
     assert offer["summary_th"], "the card has to say what this call is about"
@@ -884,7 +884,7 @@ def test_the_offer_preview_is_gated_like_the_brief(client: Any) -> None:
     """
     sign_in_agent(client, "A006")
     client.post("/v1/agent/state", json={"agent_intent": "ready"})
-    place_call(client, intent_code="health.ipd.preauth", caller_number="0812345678")
+    place_call(client, intent_code="health.claim.notify", caller_number="0812345678")
 
     body = client.get("/v1/agent/me")
     offer = body.json()["offer"]
@@ -950,7 +950,7 @@ def test_the_demo_endpoint_walks_the_real_menu(client: Any) -> None:
     """`# P2b:` retired. Only the keypresses are faked now — the greeting, the notice,
     the menu order, the retries and the queue decision are all the production walk."""
     body = place_call(client, did="+6621234000", keys=["2", "4"], ignore_hours=True)
-    assert body["queue_id"] == "q_health_policy"
+    assert body["queue_id"] == "q_service_health"
 
 
 def test_a_demo_caller_who_presses_nothing_is_not_stranded(client: Any) -> None:
@@ -962,7 +962,7 @@ def test_a_demo_caller_who_presses_nothing_is_not_stranded(client: Any) -> None:
 
 def test_pressing_zero_reaches_a_human_through_the_api(client: Any) -> None:
     body = place_call(client, did="+6621234000", keys=["0"], ignore_hours=True)
-    assert body["queue_id"] == "q_general"
+    assert body["queue_id"] == "q_service"
 
 
 # --- B10: leaving ACW without saving must not strand the call -----------------------------
@@ -987,7 +987,7 @@ def test_declaring_a_state_without_saving_still_ends_the_call(
     does it counts as this agent's active call."""
     sign_in_agent(client, "A006")
     client.post("/v1/agent/state", json={"agent_intent": "ready"})
-    call_id = _run_one_call(client, clock, intent_code="health.ipd.preauth", number="0812345678")
+    call_id = _run_one_call(client, clock, intent_code="health.claim.notify", number="0812345678")
 
     wrapping = client.get("/v1/agent/me").json()
     assert wrapping["active_call_session_id"] == call_id
@@ -1011,7 +1011,7 @@ def test_no_wrapup_is_invented_for_a_call_nobody_wrapped_up(
     disposition just to tidy the state machine."""
     sign_in_agent(client, "A006")
     client.post("/v1/agent/state", json={"agent_intent": "ready"})
-    call_id = _run_one_call(client, clock, intent_code="health.ipd.preauth", number="0812345678")
+    call_id = _run_one_call(client, clock, intent_code="health.claim.notify", number="0812345678")
     client.post("/v1/agent/state", json={"agent_intent": "lunch"})
 
     after = client.get("/v1/agent/me").json()
@@ -1029,7 +1029,7 @@ def test_walking_away_puts_the_wrap_up_in_a_backlog_not_a_bin(
     leaving, or "free to go" quietly means "the note is lost"."""
     sign_in_agent(client, "A006")
     client.post("/v1/agent/state", json={"agent_intent": "ready"})
-    call_id = _run_one_call(client, clock, intent_code="health.ipd.preauth", number="0812345678")
+    call_id = _run_one_call(client, clock, intent_code="health.claim.notify", number="0812345678")
 
     clock.advance(4)
     client.post("/v1/agent/state", json={"agent_intent": "lunch"})
@@ -1038,7 +1038,7 @@ def test_walking_away_puts_the_wrap_up_in_a_backlog_not_a_bin(
     assert len(pending) == 1
     row = pending[0]
     assert row["call_session_id"] == call_id
-    assert row["intent_code"] == "health.ipd.preauth"
+    assert row["intent_code"] == "health.claim.notify"
     assert row["intent_label_th"], "the agent needs to recognise which call this was"
     assert row["acw_seconds"] == pytest.approx(4.0, abs=0.5), (
         "how long they spent before walking away is context for coming back cold"
@@ -1051,7 +1051,7 @@ def test_a_backlog_wrap_up_can_be_filed_later_and_then_clears(
     """The whole point: they stepped away, and they can still finish it afterwards."""
     sign_in_agent(client, "A006")
     client.post("/v1/agent/state", json={"agent_intent": "ready"})
-    call_id = _run_one_call(client, clock, intent_code="health.ipd.preauth", number="0812345678")
+    call_id = _run_one_call(client, clock, intent_code="health.claim.notify", number="0812345678")
     client.post("/v1/agent/state", json={"agent_intent": "lunch"})
 
     clock.advance(1200)  # twenty minutes later, back from lunch
@@ -1069,7 +1069,7 @@ def test_an_accidental_state_press_is_recoverable(client: Any, clock: ManualCloc
     answers it without taking the choice away from the agent."""
     sign_in_agent(client, "A006")
     client.post("/v1/agent/state", json={"agent_intent": "ready"})
-    call_id = _run_one_call(client, clock, intent_code="health.ipd.preauth", number="0812345678")
+    call_id = _run_one_call(client, clock, intent_code="health.claim.notify", number="0812345678")
 
     client.post("/v1/agent/state", json={"agent_intent": "ready"})  # oops
     assert client.get("/v1/agent/me").json()["pending_wrapups"][0]["call_session_id"] == call_id
@@ -1090,10 +1090,10 @@ def test_the_backlog_holds_more_than_one_and_is_oldest_first(
     sign_in_agent(client, "A006")
     client.post("/v1/agent/state", json={"agent_intent": "ready"})
 
-    first = _run_one_call(client, clock, intent_code="health.ipd.preauth", number="0812345678")
+    first = _run_one_call(client, clock, intent_code="health.claim.notify", number="0812345678")
     client.post("/v1/agent/state", json={"agent_intent": "ready"})
     clock.advance(300)
-    second = _run_one_call(client, clock, intent_code="health.claim.status", number="0898887777")
+    second = _run_one_call(client, clock, intent_code="health.claim.notify", number="0898887777")
     client.post("/v1/agent/state", json={"agent_intent": "ready"})
 
     pending = client.get("/v1/agent/me").json()["pending_wrapups"]
@@ -1105,7 +1105,7 @@ def test_a_filed_wrapup_never_reappears_in_the_backlog(client: Any, clock: Manua
     filing one removes it by construction — there is no second flag to forget to clear."""
     sign_in_agent(client, "A006")
     client.post("/v1/agent/state", json={"agent_intent": "ready"})
-    call_id = _run_one_call(client, clock, intent_code="health.ipd.preauth", number="0812345678")
+    call_id = _run_one_call(client, clock, intent_code="health.claim.notify", number="0812345678")
     client.post(
         f"/v1/agent/calls/{call_id}/wrapup",
         json={"disposition": "advice_given", "notes": "saved during ACW"},
@@ -1126,10 +1126,10 @@ def test_a_stranded_call_does_not_come_back_after_the_next_one(
     sign_in_agent(client, "A006")
     client.post("/v1/agent/state", json={"agent_intent": "ready"})
 
-    first = _run_one_call(client, clock, intent_code="health.ipd.preauth", number="0812345678")
+    first = _run_one_call(client, clock, intent_code="health.claim.notify", number="0812345678")
     client.post("/v1/agent/state", json={"agent_intent": "ready"})  # no save — the bug's trigger
 
-    second = _run_one_call(client, clock, intent_code="health.claim.status", number="0898887777")
+    second = _run_one_call(client, clock, intent_code="health.claim.notify", number="0898887777")
     assert client.get("/v1/agent/me").json()["active_call_session_id"] == second
 
     client.post(

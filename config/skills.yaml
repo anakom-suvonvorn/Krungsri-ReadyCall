@@ -1,76 +1,135 @@
-# Skills and queues. Part of the domain pack (D28).
+# Skills and queues, shaped around what a BROKER actually does (`D117`).
 #
-# HARD RULE enforced at startup (D22): every skill must be held by at least two active
-# agents. If one person is the only one who can handle motor claims, no scoring function
-# can save the queue - that is a staffing problem and the config should refuse it rather
-# than let it surface as mysterious wait times on demo day.
+# Part of the domain pack (`D28`) - nothing in services/ may hardcode any of it.
+#
+# The structure follows the official duty split (insight deck p.30, quoted in
+# `docs/MARKET_FACTS.md` section 4). A broker's job is:
+#
+#   วิเคราะห์ความต้องการของลูกค้า          -> the ADVICE skills
+#   คัดสรรแบบประกันและบริษัทฯ ที่ตรงตาม     -> the ADVICE skills (this is the mandate for
+#     ความต้องการของลูกค้า                     compare-and-best-fit: the plan AND the company)
+#   บริการด้านกรมธรรม์                     -> the SERVICE skills
+#   ติดตามการต่ออายุกรมธรรม์               -> renewal.retention, its own desk
+#   สร้างความสัมพันธ์กับลูกค้า              -> general.service + the review intent
+#
+# And what a broker does NOT do: รับประกันภัย (underwrite), ชดใช้ค่าสินไหม (adjudicate and
+# pay claims). Those are the insurer's. So there is no `*.claim` skill any more - there is
+# `claims.assist`, which takes the first notification, gathers what the insurer will ask
+# for, and HANDS OVER. That is a different job needing different people, and pretending
+# otherwise put a claims-adjudication queue in a brokerage.
+#
+# WHY RENEWAL GETS ITS OWN DESK. 72.55% of life premium is renewal and persistency is 84%
+# (MARKET_FACTS section 6) - one policy in six lapses every year, and chasing them is a named
+# broker duty. A renewal conversation is retention work, not service work: different
+# script, different success measure, different person. Burying it inside `general.service`
+# hid the largest single block of revenue in the business.
+#
+# HARD RULE enforced at startup (`D22`): every skill must be held by at least two active
+# agents. If one person is the only one who can advise on motor, no scoring function can
+# save the queue - that is a staffing problem and the config should refuse it rather than
+# let it surface as mysterious wait times on demo day.
 
 version: 1
 
 skills:
-  motor.claim:      { label_th: "สินไหมรถยนต์",        queue: q_motor_claim }
-  motor.policy:     { label_th: "กรมธรรม์รถยนต์",       queue: q_motor_policy }
-  health.ipd:       { label_th: "ผู้ป่วยในสุขภาพ",       queue: q_health_ipd }
-  health.claim:     { label_th: "สินไหมสุขภาพ",         queue: q_health_claim }
-  health.policy:    { label_th: "กรมธรรม์สุขภาพ",       queue: q_health_policy }
-  travel.claim:     { label_th: "สินไหมเดินทาง",        queue: q_travel }
-  travel.policy:    { label_th: "กรมธรรม์เดินทาง",      queue: q_travel }
-  life.policy:      { label_th: "กรมธรรม์ชีวิต",         queue: q_life }
-  life.claim:       { label_th: "สินไหมชีวิต",           queue: q_life }
-  general.billing:  { label_th: "การชำระเงิน",           queue: q_general }
-  general.service:  { label_th: "บริการทั่วไป",          queue: q_general }
-  general.sales:    { label_th: "ขายผลิตภัณฑ์",         queue: q_general }
-  general.escalation: { label_th: "เรื่องร้องเรียน",      queue: q_escalation }
+  # --- advice: quote, compare, place. The broker's mandate ----------------------------
+  motor.advice:      { label_th: "ที่ปรึกษาประกันรถยนต์",    queue: q_advice_motor }
+  health.advice:     { label_th: "ที่ปรึกษาประกันสุขภาพ",    queue: q_advice_health }
+  life.advice:       { label_th: "ที่ปรึกษาประกันชีวิต",      queue: q_advice_life }
+  travel.advice:     { label_th: "ที่ปรึกษาประกันเดินทาง",   queue: q_advice_travel }
+
+  # --- policy service: the paperwork after it is placed -------------------------------
+  motor.service:     { label_th: "บริการกรมธรรม์รถยนต์",     queue: q_service_motor }
+  health.service:    { label_th: "บริการกรมธรรม์สุขภาพ",     queue: q_service_health }
+  life.service:      { label_th: "บริการกรมธรรม์ชีวิต",       queue: q_service_life }
+
+  # --- cross-line ---------------------------------------------------------------------
+  renewal.retention: { label_th: "ต่ออายุและรักษาลูกค้า",     queue: q_renewal }
+  claims.assist:     { label_th: "ช่วยเหลือด้านเคลม",         queue: q_claims }
+  general.service:   { label_th: "บริการทั่วไป",              queue: q_service }
+  general.escalation: { label_th: "เรื่องร้องเรียน",            queue: q_escalation }
 
 queues:
-  q_motor_claim:
-    label_th: "คิวสินไหมรถยนต์"
-    required_skill: motor.claim
-    sla_seconds: 30                 # someone at a crash site
+  # Claims assistance is the only always-open queue, and for the reason the old motor
+  # claims queue was: somebody may be standing next to a damaged car. What has changed is
+  # what happens next - we take the notification and hand to the insurer (`D117`).
+  q_claims:
+    label_th: "คิวช่วยเหลือด้านเคลม"
+    required_skill: claims.assist
+    sla_seconds: 30
     hours: always
-    overflow_queue: q_general
-  q_motor_policy:
-    label_th: "คิวกรมธรรม์รถยนต์"
-    required_skill: motor.policy
+    overflow_queue: q_service
+
+  # The retention desk. Business hours because a renewal conversation nobody is staffed
+  # for is worse than one that waits until tomorrow - and a lapse is measured in weeks.
+  q_renewal:
+    label_th: "คิวต่ออายุกรมธรรม์"
+    required_skill: renewal.retention
     sla_seconds: 90
     hours: business
-    overflow_queue: q_general
-  q_health_ipd:
-    label_th: "คิวผู้ป่วยใน"
-    required_skill: health.ipd
-    sla_seconds: 45
+    overflow_queue: q_service
+
+  # --- advice queues. Faster SLA than service on purpose: an advice call is somebody
+  # deciding whether to buy, and the brief's biggest leak is that they decide slowly.
+  q_advice_motor:
+    label_th: "คิวที่ปรึกษาประกันรถยนต์"
+    required_skill: motor.advice
+    sla_seconds: 60
+    hours: business
+    overflow_queue: q_service_motor
+
+  q_advice_health:
+    label_th: "คิวที่ปรึกษาประกันสุขภาพ"
+    required_skill: health.advice
+    sla_seconds: 60
+    hours: business
+    overflow_queue: q_service_health
+
+  q_advice_life:
+    label_th: "คิวที่ปรึกษาประกันชีวิตและการออม"
+    required_skill: life.advice
+    sla_seconds: 90
+    hours: business
+    overflow_queue: q_service_life
+
+  # Extended hours: a traveller is in another time zone by definition, and travel cover is
+  # bought late - often the night before a flight.
+  q_advice_travel:
+    label_th: "คิวที่ปรึกษาประกันเดินทาง"
+    required_skill: travel.advice
+    sla_seconds: 60
     hours: extended
-    overflow_queue: q_health_claim
-  q_health_claim:
-    label_th: "คิวสินไหมสุขภาพ"
-    required_skill: health.claim
-    sla_seconds: 60
-    hours: business
-    overflow_queue: q_general
-  q_health_policy:
-    label_th: "คิวกรมธรรม์สุขภาพ"
-    required_skill: health.policy
+    overflow_queue: q_service
+
+  # --- service queues -----------------------------------------------------------------
+  q_service_motor:
+    label_th: "คิวบริการกรมธรรม์รถยนต์"
+    required_skill: motor.service
     sla_seconds: 90
     hours: business
-    overflow_queue: q_general
-  q_travel:
-    label_th: "คิวประกันเดินทาง"
-    required_skill: travel.claim
-    sla_seconds: 60
-    hours: always                   # different time zones by definition
-    overflow_queue: q_general
-  q_life:
-    label_th: "คิวประกันชีวิต"
-    required_skill: life.policy
+    overflow_queue: q_service
+
+  q_service_health:
+    label_th: "คิวบริการกรมธรรม์สุขภาพ"
+    required_skill: health.service
     sla_seconds: 90
     hours: business
-    overflow_queue: q_general
-  q_general:
+    overflow_queue: q_service
+
+  q_service_life:
+    label_th: "คิวบริการกรมธรรม์ชีวิต"
+    required_skill: life.service
+    sla_seconds: 90
+    hours: business
+    overflow_queue: q_service
+
+  q_service:
     label_th: "คิวบริการทั่วไป"
     required_skill: general.service
     sla_seconds: 120
     hours: business
     overflow_queue: null
+
   q_escalation:
     label_th: "คิวเรื่องร้องเรียน"
     required_skill: general.escalation

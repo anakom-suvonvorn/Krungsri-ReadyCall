@@ -1,7 +1,7 @@
 # DECISIONS
 
 _Significant engineering decisions and their rationale. Append new ones at the bottom; never silently reverse one without a new entry explaining why._
-_Last updated: 2026-09-06._
+_Last updated: 2026-09-07._
 
 Format per entry: **Problem → Decision → Reasoning → Alternatives → Tradeoffs → Future.**
 
@@ -4149,3 +4149,114 @@ I-F-C-U scores **Impact** and **User insight**. A consent moment that is one cle
 and visibly changes what the system does is a far better answer to the brief's privacy
 section than a policy nobody reads — and it speaks directly to its fourth constraint, that
 decisioning must not become discriminatory.
+
+## D117. The domain is a BROKER's, not an insurer's
+_Track A of the week plan (`D115`), and the first change driven by Krungsri's own duty-split
+slide rather than by our reading of the brief. Closes `Q7`._
+
+- **Problem.** Every part of the domain pack described a single insurer's call centre:
+  `motor.claim` and `health.claim` skills, a `q_health_ipd` queue for pre-authorisation,
+  intents like `health.claim.submit` and `motor.claim.status`, and a `Policy` model with no
+  field for **which company underwrote it** — meaningless for one insurer, and the first
+  thing a broker needs. The hackathon is *"Reimagine Insurance Broker"*.
+
+- **The authority.** Insight deck p.30 (`docs/MARKET_FACTS.md` §4) splits the duties:
+
+  | insurer | broker |
+  |---|---|
+  | รับประกันภัย (underwrite) | วิเคราะห์ความต้องการของลูกค้า |
+  | ดูแลเรื่องความคุ้มครอง | **คัดสรรแบบประกันและบริษัทฯ ที่ตรงตามความต้องการ** |
+  | **ชดใช้ค่าสินไหม** (adjudicate and pay claims) | บริการด้านกรมธรรม์ |
+  | บริการด้านกรมธรรม์ | **ติดตามการต่ออายุกรมธรรม์** |
+  | | สร้างความสัมพันธ์กับลูกค้า |
+
+  And p.4: **broker is 75.2% of non-life distribution in 2025**, up from 55.3% in 2012,
+  while the agent channel collapsed from 14.2% to 3.6%.
+
+### The three structural changes
+
+**1. Claims become handoffs.** There is no `*.claim` skill any more. `claims.assist` takes
+the first notification, gathers what the insurer will ask for, and **hands over** — a
+different job needing different people. Every such intent carries
+`handoff_to_insurer: true`, which reaches the agent's screen *before they speak*, because
+"I will check and call you back" and "I am passing you to the insurer now" are different
+promises and only one of them is the broker's to make. `health.ipd.preauth` is gone
+outright: pre-authorisation is the insurer's decision, and a broker screen implying
+otherwise is the out-of-scope underwriting the brief names.
+
+**2. Renewal gets its own desk.** `renewal.retention` and `q_renewal`. **72.55% of life
+premium is renewal at 84% persistency** (`MARKET_FACTS` §6) — one policy in six lapses a
+year, and chasing them is a named duty. It was previously buried inside `general.billing`,
+which hid the largest single block of revenue in the business inside a payments queue. A
+renewal conversation is retention work: different script, different success measure,
+different person.
+
+**3. Advice becomes a first-class skill per line.** `motor.advice`, `health.advice`,
+`life.advice`, `travel.advice`, with `*.advice.compare` intents. This is the mandate
+(*คัดสรรแบบประกันและบริษัทฯ*) and the brief's biggest leak. `life.advice.mortgage` earns its
+own intent because mortgage-linked cover grows at **+9.91%** and the bank can *see* the home
+loan — the cleanest right-customer x right-time trigger in the data.
+
+### `Policy.insurer`, and why one field mattered so much
+
+A single company's system has no use for it. A broker holds one customer's cover across
+several carriers, and which carrier decides who a claim is handed to and whose terms a
+comparison is against. The fixtures now give the demo customer a real **portfolio**: two
+health policies from different carriers — one of them employer group cover capped at
+฿1,500/day — and a motor policy from a third. Real carrier names from `MARKET_FACTS` §8, so
+a judge from Krungsri Auto Broker recognises them on sight.
+
+⚠️ **The affiliated carrier (Allianz Ayudhya) is deliberately one row among several, and
+sometimes not the best answer.** A broker whose affiliate always wins is not a broker, and
+the honest version is the one that survives a question about it.
+
+### What this did NOT change
+
+Not one line of `services/` logic. Routing, matching, presence, the offer handshake, the
+transcript and the recording are untouched — this was `config/` plus one domain field, and
+that is `D28`'s whole promise arriving on schedule. **Say this in the pitch**: it is the
+strongest Feasibility evidence available to us.
+
+### Verified
+
+On a running server, not from tests alone: `health.claim.notify` routes to `q_claims`, the
+brief carries `insurer: เมืองไทยประกันภัย` and `handoff_to_insurer: true`, and at L1 the
+actions are correctly the three ungated ones — including *"ย้ำว่าการอนุมัติเป็นของบริษัท
+ประกัน"* — with the L2 steps withheld.
+
+## D118. Playbooks move to `config/playbooks.yaml`, guarded in both directions
+_Closes `Q19`, which had been parked as "a P4 task" since P1._
+
+- **Problem.** The recommended-action lists lived in `_PLAYBOOKS`, a dict inside
+  `services/brief/builder.py`. That is insurance content in a service, against `D28`, with
+  a comment admitting it. Tolerable at six short lists; not once `D117` needed twenty-four.
+
+- **Decision.** `config/playbooks.yaml`, loaded into the domain pack as `PlaybookSpec` —
+  exactly the shape `D72` used for the challenge list.
+
+**Guarded both ways at startup**, the same discipline the prompt ids get: an intent naming
+a playbook that does not exist is refused, **and so is a playbook no intent reaches**. The
+one-way check is the half that never catches dead domain content somebody keeps editing.
+`generic` must exist, because a missing playbook would otherwise render an empty action
+list — which reads on screen as "there is nothing to do" rather than as a config error.
+
+The steps encode the broker rule directly: none of them says *approve*, *is covered*, or
+*the premium will be*. Where the insurer owns the outcome, the last step says so out loud.
+
+## B30. The cold-call path knew the product line and threw it away
+_Found by `D117`'s fixtures, not by a test — and it had been true since P1b._
+
+- **Symptoms.** After giving the demo customer a real portfolio, four workstation tests
+  began reporting `relevant_policy: None`. The agent's policy panel was empty for a caller
+  whose policy we hold.
+- **Root cause.** `demo.py`'s app path passes `product_line` into
+  `ContextAssembler.build()`; the **cold-call path twelve lines below it does not**, though
+  `body.intent_code` is right there and the expression is identical.
+  `_pick_relevant_policy` falls back to "the only policy they have" when it has no line
+  signal — so with a one-policy fixture the omission was invisible, and correct output was
+  being produced for the wrong reason.
+- **Fix.** Pass the line on both paths.
+- **Lesson.** **A fixture with one of something tests nothing about choosing.** The
+  assembler's own docstring says it declines to guess between unrelated policies; no test
+  could reach that branch, because no customer had two. Cardinality is part of a fixture's
+  design — `B13`'s "never test a contention rule without contention", one layer down.

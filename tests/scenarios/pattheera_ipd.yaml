@@ -15,7 +15,7 @@ entry:
   # The app knows the section she tapped Contact from - she was reading the
   # hospitalisation coverage page - so BOTH menu steps are answered before the call is
   # even placed (D6, D37). This is the app path at its best.
-  app_intent: health.ipd.preauth
+  app_intent: health.claim.notify
   caller_number: "+66812345678"
 
 # Health content, so health_data is consented separately from ai_processing (D14).
@@ -30,8 +30,8 @@ agent: A006
 expect:
   state: closed
   assurance: l3_verified     # the app's correlation token binds identity (D4)
-  queue: q_health_ipd        # from the app's screen context, no keypresses needed
-  intent: health.ipd.preauth
+  queue: q_claims        # from the app's screen context, no keypresses needed
+  intent: health.claim.notify
 
 intake:
   turns:

@@ -64,7 +64,13 @@ class TestContextAssembler:
         assert payload.customer is not None
         assert payload.customer.customer_id == "C000001"
         assert payload.selected_product is not None
-        assert len(payload.active_policies) == 1
+        # Three since `D117`: the demo customer holds a broker PORTFOLIO - two health
+        # policies from different carriers (one of them employer group cover) and a motor
+        # policy from a third. One policy per customer was an insurer's view of the world.
+        assert len(payload.active_policies) == 3
+        assert len({p.insurer for p in payload.active_policies}) == 3, (
+            "and they are with three different carriers, which is the whole broker premise"
+        )
         assert payload.recent_interactions
         assert payload.last_contact_at is not None
         assert payload.previous_inquiry == "viewed_hospitalization_coverage"
@@ -192,7 +198,7 @@ class TestBriefBuilder:
             call_session_id="call_1",
             snapshot=snapshot,
             identity=identity(AssuranceLevel.L3_VERIFIED),
-            intent_code="health.ipd.preauth",
+            intent_code="health.claim.notify",
             product_line=ProductLine.HEALTH,
         )
         assert brief.kind is BriefKind.CONTEXT_ONLY
@@ -216,7 +222,7 @@ class TestBriefBuilder:
             call_session_id="call_1",
             snapshot=snapshot,
             identity=identity(AssuranceLevel.L1_PROBABLE),
-            intent_code="health.ipd.preauth",
+            intent_code="health.claim.notify",
             product_line=ProductLine.HEALTH,
         )
         assert "HL-2024-000811" in (brief.summary_th or ""), "the agent can see it"
@@ -237,7 +243,7 @@ class TestBriefBuilder:
             call_session_id="call_1",
             snapshot=snapshot,
             identity=identity(AssuranceLevel.L3_VERIFIED),
-            intent_code="health.coverage.query",
+            intent_code="health.service.policy",
         )
         assert brief.confidence is None
         assert not brief.show_confidence_number
@@ -251,7 +257,7 @@ class TestBriefBuilder:
             call_session_id="call_1",
             snapshot=snapshot,
             identity=identity(AssuranceLevel.L3_VERIFIED),
-            intent_code="health.ipd.preauth",
+            intent_code="health.claim.notify",
         )
         assert brief.intent is not None
         assert brief.intent.source == "dtmf"
@@ -281,7 +287,7 @@ class TestBriefBuilder:
             call_session_id="call_1",
             snapshot=snapshot,
             identity=identity(AssuranceLevel.L3_VERIFIED, "C000002"),
-            intent_code="motor.policy.renew",  # normally `normal`
+            intent_code="motor.renew",  # normally `normal`
             urgency_floor=Urgency.HIGH,
         )
         assert raised.urgency is Urgency.HIGH
@@ -290,7 +296,7 @@ class TestBriefBuilder:
             call_session_id="call_1",
             snapshot=snapshot,
             identity=identity(AssuranceLevel.L3_VERIFIED, "C000002"),
-            intent_code="motor.claim.accident",  # already `critical`
+            intent_code="motor.claim.notify",  # already `critical`
             urgency_floor=Urgency.LOW,
         )
         assert not_lowered.urgency is Urgency.CRITICAL
@@ -321,7 +327,7 @@ class TestBriefBuilder:
             call_session_id="call_1",
             snapshot=snapshot,
             identity=identity(AssuranceLevel.L3_VERIFIED),
-            intent_code="health.coverage.query",
+            intent_code="health.service.policy",
         )
         text = " ".join(
             [brief.summary_th or "", brief.suggested_opening_th or ""]
@@ -358,3 +364,57 @@ class _Flaky:
         if self.failing:
             raise RuntimeError("core is down")
         return await self._inner.list_interactions(customer_id, limit=limit)
+
+
+# --- D117: the two facts that make this a broker's brief rather than an insurer's --------
+
+
+@pytest.mark.asyncio
+async def test_the_brief_names_which_insurer_underwrote_the_policy(
+    core_fixtures: FixtureFileProvider, clock: ManualClock
+) -> None:
+    """A broker holds one customer across several carriers (`D117`).
+
+    Which carrier is not decoration: it decides who a claim is handed to and whose terms
+    a comparison is against. An insurer's own system would never carry the field, which
+    is exactly why its absence went unnoticed for six phases.
+    """
+    assembler = ContextAssembler(core=core_fixtures, clock=clock)
+    snapshot = await assembler.build(customer_id="C000001", product_line=ProductLine.HEALTH)
+
+    assert snapshot.payload.relevant_policy is not None
+    assert snapshot.payload.relevant_policy.insurer, "the carrier must be on the policy"
+    carriers = {p.insurer for p in snapshot.payload.active_policies}
+    assert len(carriers) > 1, "and this customer's cover is spread across more than one"
+
+
+@pytest.mark.asyncio
+async def test_a_claim_call_is_marked_as_ending_with_the_insurer(
+    core_fixtures: FixtureFileProvider, clock: ManualClock, builder: BriefBuilder
+) -> None:
+    """`D117`: a broker takes the notification and hands over; it does not adjudicate.
+
+    The agent has to know that before they speak, because *"I will check and call you
+    back"* and *"I am passing you to the insurer now"* are different promises and only
+    one of them is ours to make.
+    """
+    assembler = ContextAssembler(core=core_fixtures, clock=clock)
+    snapshot = await assembler.build(customer_id="C000001", product_line=ProductLine.HEALTH)
+
+    handed_over = builder.build_context_only(
+        call_session_id="c1",
+        snapshot=snapshot,
+        identity=identity(AssuranceLevel.L3_VERIFIED),
+        intent_code="health.claim.notify",
+    )
+    ours = builder.build_context_only(
+        call_session_id="c2",
+        snapshot=snapshot,
+        identity=identity(AssuranceLevel.L3_VERIFIED),
+        intent_code="health.advice.compare",
+    )
+
+    assert handed_over.intent is not None and handed_over.intent.handoff_to_insurer is True
+    assert ours.intent is not None and ours.intent.handoff_to_insurer is False, (
+        "comparing plans is the broker's own work and must not be flagged as a handoff"
+    )

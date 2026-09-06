@@ -28,7 +28,7 @@ schedules:
   extended:
     label_th: "เวลาทำการขยาย"
     always_open: false
-    # In-patient pre-authorisation (`q_health_ipd`). Admissions do not stop at six, but
+    # In-patient pre-authorisation (`q_claims`). Admissions do not stop at six, but
     # this is not a 24/7 desk either — 07:00–22:00 every day, holidays included, because
     # a hospital admitting someone on Songkran still needs an answer.
     observes_holidays: false

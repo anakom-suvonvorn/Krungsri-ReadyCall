@@ -1,0 +1,167 @@
+# What the agent should actually DO on this call, per intent (`D56`, `D118`).
+#
+# This closes `Q19`. The steps lived in `_PLAYBOOKS` inside `services/brief/builder.py`,
+# which was always a `D28` violation with a note on it - insurance content in a service.
+# The broker rewrite (`D117`) would have doubled the size of that dict, so it moved here
+# instead, the same way the challenge list moved in `D72`.
+#
+# Each entry is an ordered list of steps. `needs` is the assurance level required before
+# the step may be SHOWN (`D74`: assurance gates what the agent may say and do, never what
+# they may see - so a gated step is one that involves acting on the policy, not one that
+# involves reading it):
+#
+#   l0  - always shown. Anything you would do for a stranger.
+#   l2  - shown only once identity is established. Anything that acts on, quotes from, or
+#         changes a policy.
+#
+# The brief builder prepends "ยืนยันตัวตนผู้ติดต่อก่อนให้ข้อมูลกรมธรรม์" as step 0 whenever
+# disclosure is not yet permitted, so no playbook needs to include it.
+#
+# THE BROKER RULE THAT SHAPES ALL OF THESE (`D117`, `MARKET_FACTS` section 4): a broker
+# does not underwrite, price, or adjudicate claims. So no step here ever says "approve",
+# "the claim is covered", or "the premium will be" - the steps gather, explain what is on
+# the record, and hand over. Where the insurer owns the outcome, the last step says so.
+
+version: 1
+
+playbooks:
+  # --- advice: the broker's mandate. คัดสรรแบบประกันและบริษัทฯ --------------------------
+  motor_quote:
+    - { text_th: "สอบถามรถ ปีที่ผลิต และลักษณะการใช้งาน", needs: l0 }
+    - { text_th: "สอบถามความคุ้มครองที่ต้องการและงบประมาณต่อปี", needs: l0 }
+    - { text_th: "ตรวจสอบประวัติกรมธรรม์เดิมเพื่อคิดส่วนลดประวัติดี", needs: l2 }
+    - { text_th: "เปรียบเทียบแผนจากบริษัทที่เหมาะกับรถคันนี้ และอธิบายส่วนต่าง", needs: l0 }
+    - { text_th: "ส่งใบเสนอราคาให้ลูกค้าทางแอปหรือ SMS", needs: l2 }
+
+  motor_compare:
+    - { text_th: "ยืนยันกรมธรรม์ปัจจุบันและบริษัทผู้รับประกัน", needs: l2 }
+    - { text_th: "สอบถามสิ่งที่ลูกค้าให้ความสำคัญ เช่น ค่าเสียหายส่วนแรก อู่ในเครือ รถ EV", needs: l0 }
+    - { text_th: "แสดงตารางเปรียบเทียบความคุ้มครองเทียบกับแผนปัจจุบัน", needs: l2 }
+    - { text_th: "อธิบายเฉพาะจุดที่ต่างกันจริง ไม่ต้องอ่านทุกบรรทัด", needs: l0 }
+    - { text_th: "ย้ำว่าเบี้ยประกันสุดท้ายขึ้นกับการพิจารณาของบริษัทประกัน", needs: l0 }
+
+  health_quote:
+    - { text_th: "สอบถามอายุ สุขภาพโดยรวม และโรงพยาบาลที่ต้องการใช้", needs: l0 }
+    - { text_th: "สอบถามงบประมาณต่อปีและความคุ้มครองที่ต้องการ", needs: l0 }
+    - { text_th: "อธิบายว่าอายุน้อยและสุขภาพดีทำให้เบี้ยถูกและอนุมัติง่ายกว่า", needs: l0 }
+    - { text_th: "เปรียบเทียบแผนพร้อมเงื่อนไข Copayment และ Deductible", needs: l0 }
+    - { text_th: "ส่งใบเสนอราคาและใบคำขอเอาประกันให้ลูกค้า", needs: l2 }
+
+  health_compare:
+    - { text_th: "ยืนยันความคุ้มครองที่ถืออยู่ รวมถึงประกันกลุ่มจากนายจ้าง", needs: l2 }
+    - { text_th: "สอบถามสิ่งที่กังวล เช่น ค่าห้อง โรคร้ายแรง หรือภาระผ่อนบ้าน", needs: l0 }
+    - { text_th: "เทียบค่าห้องที่มีอยู่กับค่าห้องจริงของโรงพยาบาลที่ลูกค้าใช้", needs: l2 }
+    - { text_th: "เสนอแผนเสริมเฉพาะส่วนที่ขาด ไม่ต้องเปลี่ยนทั้งหมด", needs: l2 }
+    - { text_th: "แจ้งว่าค่ารักษาพยาบาลเพิ่มขึ้นเฉลี่ยปีละ 8-10 เปอร์เซ็นต์", needs: l0 }
+
+  life_quote:
+    - { text_th: "สอบถามเป้าหมาย เช่น คุ้มครองครอบครัว ออมเงิน หรือเกษียณ", needs: l0 }
+    - { text_th: "สอบถามภาระที่ต้องคุ้มครองและผู้ที่อยู่ในความดูแล", needs: l0 }
+    - { text_th: "อธิบายความต่างระหว่างแบบสะสมทรัพย์ ตลอดชีพ และควบการลงทุน", needs: l0 }
+    - { text_th: "เปรียบเทียบแผนที่ตรงกับเป้าหมายและงบประมาณ", needs: l0 }
+
+  life_compare:
+    - { text_th: "ยืนยันกรมธรรม์ชีวิตที่ถืออยู่และบริษัทผู้รับประกัน", needs: l2 }
+    - { text_th: "ทบทวนว่าทุนประกันยังพอกับภาระปัจจุบันหรือไม่", needs: l2 }
+    - { text_th: "เปรียบเทียบทางเลือกโดยไม่แนะนำให้ยกเลิกกรมธรรม์เดิมโดยไม่จำเป็น", needs: l0 }
+    - { text_th: "ย้ำว่าการเวนคืนกรมธรรม์เดิมอาจเสียประโยชน์ที่สะสมมา", needs: l0 }
+
+  mortgage_protection:
+    - { text_th: "สอบถามวงเงินสินเชื่อและระยะเวลาผ่อน", needs: l0 }
+    - { text_th: "อธิบายว่าคุ้มครองสินเชื่อช่วยไม่ให้ภาระตกกับครอบครัว", needs: l0 }
+    - { text_th: "ตรวจสอบว่ามีความคุ้มครองส่วนนี้อยู่แล้วหรือยัง", needs: l2 }
+    - { text_th: "เสนอทุนประกันที่สอดคล้องกับยอดหนี้คงเหลือ", needs: l2 }
+
+  travel_quote:
+    - { text_th: "สอบถามประเทศปลายทาง วันเดินทาง และจำนวนผู้เดินทาง", needs: l0 }
+    - { text_th: "ตรวจสอบว่าปลายทางต้องใช้ประกันตามเงื่อนไขวีซ่าหรือไม่", needs: l0 }
+    - { text_th: "เปรียบเทียบวงเงินค่ารักษาพยาบาลและการยกเลิกการเดินทาง", needs: l0 }
+    - { text_th: "ออกกรมธรรม์และส่งให้ลูกค้าก่อนวันเดินทาง", needs: l2 }
+
+  portfolio_review:
+    - { text_th: "สรุปกรมธรรม์ทั้งหมดที่ลูกค้าถืออยู่ พร้อมบริษัทผู้รับประกันแต่ละฉบับ", needs: l2 }
+    - { text_th: "ชี้จุดที่ซ้ำซ้อนและจุดที่ยังไม่มีความคุ้มครอง", needs: l2 }
+    - { text_th: "สอบถามการเปลี่ยนแปลงในชีวิต เช่น ซื้อบ้าน มีบุตร เปลี่ยนงาน", needs: l0 }
+    - { text_th: "จัดลำดับสิ่งที่ควรทำก่อน และนัดติดตามผล", needs: l0 }
+
+  # --- renewal: 72.55% of premium, and a named broker duty ------------------------------
+  renewal:
+    - { text_th: "ยืนยันกรมธรรม์ที่จะต่ออายุและบริษัทผู้รับประกัน", needs: l2 }
+    - { text_th: "แจ้งวันครบกำหนดและช่องทางชำระเงิน", needs: l2 }
+    - { text_th: "ทบทวนว่าความคุ้มครองเดิมยังเหมาะกับปัจจุบันหรือไม่", needs: l2 }
+    - { text_th: "หากลูกค้าลังเล ให้เสนอทางเลือกจากบริษัทอื่นก่อนปล่อยให้ขาดอายุ", needs: l0 }
+    - { text_th: "ยืนยันการต่ออายุ และส่งกรมธรรม์ใหม่ให้ลูกค้า", needs: l2 }
+
+  # --- claims: we assist and HAND OVER. The insurer decides (`D117`) --------------------
+  motor_claim_notify:
+    - { text_th: "ตรวจสอบความปลอดภัยและสอบถามว่ามีผู้บาดเจ็บหรือไม่", needs: l0 }
+    - { text_th: "ขอตำแหน่งที่เกิดเหตุและทะเบียนรถ", needs: l0 }
+    - { text_th: "ระบุบริษัทผู้รับประกันของกรมธรรม์นี้", needs: l2 }
+    - { text_th: "แจ้งเหตุไปยังบริษัทประกันและส่งต่อสายให้ศูนย์รับแจ้งเหตุ", needs: l2 }
+    - { text_th: "อธิบายเอกสารที่บริษัทจะขอ และแจ้งว่าผลการพิจารณาเป็นของบริษัทประกัน", needs: l0 }
+
+  roadside_assist:
+    - { text_th: "ขอตำแหน่งปัจจุบันและลักษณะปัญหา", needs: l0 }
+    - { text_th: "ตรวจสอบสิทธิ์บริการช่วยเหลือฉุกเฉินในกรมธรรม์", needs: l2 }
+    - { text_th: "ประสานศูนย์ช่วยเหลือของบริษัทผู้รับประกันและแจ้งเวลาโดยประมาณ", needs: l2 }
+
+  health_claim_notify:
+    - { text_th: "สอบถามโรงพยาบาลและวันที่เข้ารับการรักษา", needs: l0 }
+    - { text_th: "ตรวจสอบวงเงินค่าห้องและความคุ้มครองตามที่บันทึกไว้", needs: l2 }
+    - { text_th: "ระบุบริษัทผู้รับประกันและแจ้งขั้นตอนขออนุมัติล่วงหน้า", needs: l2 }
+    - { text_th: "อธิบายเอกสารที่ต้องเตรียม และย้ำว่าการอนุมัติเป็นของบริษัทประกัน", needs: l0 }
+
+  travel_claim_notify:
+    - { text_th: "สอบถามประเทศ วันที่เกิดเหตุ และลักษณะเหตุการณ์", needs: l0 }
+    - { text_th: "ตรวจสอบความคุ้มครองของกรมธรรม์เดินทางฉบับนี้", needs: l2 }
+    - { text_th: "แจ้งเอกสารที่ต้องเก็บไว้ และส่งเรื่องต่อบริษัทผู้รับประกัน", needs: l2 }
+
+  travel_emergency:
+    - { text_th: "สอบถามประเทศที่อยู่ขณะนี้และสถานการณ์ปัจจุบัน", needs: l0 }
+    - { text_th: "ให้เบอร์ศูนย์ช่วยเหลือฉุกเฉินต่างประเทศของบริษัทผู้รับประกันทันที", needs: l2 }
+    - { text_th: "ประสานบริษัทประกันให้ติดต่อกลับลูกค้าโดยตรง", needs: l2 }
+
+  life_death_claim:
+    - { text_th: "แสดงความเสียใจ และให้เวลาผู้ติดต่อ", needs: l0 }
+    - { text_th: "สอบถามความสัมพันธ์กับผู้เอาประกันและเลขกรมธรรม์", needs: l0 }
+    - { text_th: "ระบุบริษัทผู้รับประกันและเอกสารที่ต้องใช้", needs: l2 }
+    - { text_th: "ส่งเรื่องต่อบริษัทประกัน และแจ้งว่าจะติดตามให้", needs: l2 }
+
+  # --- policy service -------------------------------------------------------------------
+  policy_service:
+    - { text_th: "ยืนยันกรมธรรม์ที่ต้องการดำเนินการ", needs: l0 }
+    - { text_th: "อธิบายความคุ้มครองตามข้อมูลในระบบ", needs: l2 }
+    - { text_th: "ดำเนินการแก้ไขและยืนยันกับลูกค้าว่าเสร็จเรียบร้อย", needs: l2 }
+
+  life_policy_service:
+    - { text_th: "ยืนยันกรมธรรม์ที่ต้องการสอบถาม", needs: l0 }
+    - { text_th: "แจ้งมูลค่าเวนคืนหรือผู้รับผลประโยชน์ตามที่บันทึกไว้", needs: l2 }
+    - { text_th: "หากเปลี่ยนผู้รับผลประโยชน์ ให้ส่งแบบฟอร์มและอธิบายการลงนาม", needs: l2 }
+
+  network_hospital:
+    - { text_th: "สอบถามจังหวัดหรือพื้นที่ที่ลูกค้าต้องการ", needs: l0 }
+    - { text_th: "แจ้งโรงพยาบาลในเครือของบริษัทผู้รับประกันรายนั้น", needs: l2 }
+
+  billing:
+    - { text_th: "ยืนยันกรมธรรม์และงวดที่ต้องการสอบถาม", needs: l0 }
+    - { text_th: "แจ้งยอดและวันครบกำหนดตามที่บันทึกไว้", needs: l2 }
+    - { text_th: "อธิบายช่องทางชำระเงินที่ใช้ได้", needs: l0 }
+
+  update_details:
+    - { text_th: "สอบถามข้อมูลที่ต้องการแก้ไข", needs: l0 }
+    - { text_th: "ดำเนินการแก้ไขและแจ้งบริษัทผู้รับประกันที่เกี่ยวข้อง", needs: l2 }
+
+  document_request:
+    - { text_th: "สอบถามเอกสารที่ต้องการและช่องทางที่จะส่ง", needs: l0 }
+    - { text_th: "ส่งเอกสารและยืนยันว่าลูกค้าได้รับแล้ว", needs: l2 }
+
+  complaint:
+    - { text_th: "รับฟังจนจบโดยไม่ขัดจังหวะ และบันทึกรายละเอียด", needs: l0 }
+    - { text_th: "สรุปสิ่งที่ได้ยินกลับให้ลูกค้ายืนยัน", needs: l0 }
+    - { text_th: "แจ้งขั้นตอนและกรอบเวลาการติดตาม", needs: l0 }
+    - { text_th: "ส่งต่อหัวหน้างานหากเกี่ยวกับการพิจารณาของบริษัทประกัน", needs: l0 }
+
+  # --- the floor. Reached by every `*.other` and by `unknown` ---------------------------
+  generic:
+    - { text_th: "สอบถามรายละเอียดเรื่องที่ต้องการติดต่อ", needs: l0 }
+    - { text_th: "ตรวจสอบข้อมูลในระบบและช่วยดำเนินการ", needs: l0 }

@@ -1,7 +1,7 @@
 # PROJECT_STATE
 
 _What this project is, what exists, what doesn't, and where everything lives._
-_Last updated: 2026-09-06._
+_Last updated: 2026-09-07._
 
 ---
 
@@ -47,7 +47,7 @@ the disclosure gate moves when the agent attests. **What they said while waiting
 screen** (`D106`), and if they consented, **their audio is in object storage encrypted**
 (`D110`) with a key ref and a retention date. If they declined, it is nowhere.
 
-Verified on 2026-09-06: **815 tests** — 803 pass + 12 skipped with Postgres and MinIO both
+Verified on 2026-09-06: **817 tests** — 805 pass + 12 skipped with Postgres and MinIO both
 up (the 12 are foreign-key cases the in-memory backend cannot have, and the `ml`-extra ones).
 Without those containers the count of skips rises and nothing fails.
 `ruff check` and `ruff format --check` clean over **202** files, `mypy --strict`
@@ -137,11 +137,11 @@ FullProject/
 │  ├─ stt_vocabulary.yaml*   # jargon the ASR is nudged toward. READ B14 BEFORE EDITING
 │  ├─ demo_personas.yaml*    # DEMO: ids only, everything displayed is read live (D47)
 │  ├─ voice_prompts.yaml     # every spoken line, as Thai text (D24)
-│  └─ playbooks/             # per-intent recommended-action playbooks. NOT YET REAL (Q19):
-│                            #   the steps live in _PLAYBOOKS in services/brief/builder.py
-│                            #   until P4. The chain is intent -> playbook name -> ordered
-│                            #   (Thai text, required assurance) -> filtered by level ->
-│                            #   verify-identity inserted at 0 below L2 (D56).
+│  └─ playbooks.yaml*        # per-intent recommended actions (D118, closing Q19). The
+│                            #   chain is intent -> playbook name -> ordered (Thai text,
+│                            #   required assurance) -> filtered by level -> verify-identity
+│                            #   inserted at 0 below L2 (D56). Guarded BOTH ways at startup:
+│                            #   a missing playbook and an unreachable one both refuse boot.
 ├─ prompts/                  # versioned prompt files (never inline in code)
 │  └─ th/ intent_classify.v1.md  summarize_intake.v1.md  suggested_opening.v1.md  ...
 ├─ src/readycall/
@@ -429,8 +429,10 @@ performing by hand, i.e. what the next services take over (`D36`).
 | Call states | 15, transition table self-validated (the rating is an event, not a state — `D46`) |
 | Event types | 19 |
 | Scenarios | 3 (in-app happy path, cold-call motor claim, fully degraded) |
-| Mock core | 3 customers, 4 policies across 4 product lines, 5 products, 5 interactions, 2 claims |
-| Intent taxonomy | 28 intents across 5 lines, each with a catch-all (revisit during the hackathon) |
+| Mock core | 3 customers, **6 policies across 5 carriers** (`D117` — the demo customer holds a real broker portfolio: employer group health, a second health policy, and motor, from three different insurers), 5 products, 5 interactions, 2 claims |
+| Intent taxonomy | **33 intents** across 5 lines, each with a catch-all — **broker-shaped** since `D117`: advice/compare and renewal are first-class, claims are handoffs (`handoff_to_insurer`), and `health.ipd.preauth` is gone because pre-authorisation is the insurer's decision |
+| Skills / queues | **11 / 11** (`D117`). Advice and service per line, plus `renewal.retention`, `claims.assist`, `general.service`, `general.escalation`. Every skill held by 2+ agents, enforced at startup (`D22`) |
+| Playbooks | **24**, in `config/playbooks.yaml` (`D118`) |
 | Generated mock data | 2,000 customers / 2,292 policies / 5,880 interactions (seeded, gitignored) |
 | GPU, measured (`D95`) | RTX 3050 Laptop, sm_86, **4.00 GiB total / ~3.2 GiB free**, torch 2.11+cu128 |
 | STT latency, measured (`B14`) | faster-whisper `tiny` int8_float16: **155 ms** per utterance with speech in it |

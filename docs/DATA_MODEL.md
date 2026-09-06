@@ -1,7 +1,7 @@
 # DATA_MODEL
 
 _The two databases, every table, and — most importantly — how the bank's half gets swapped out for the real thing on hackathon day._
-_Status: **partly built as of P2c, plus `audio_recordings` (`D110`)**. Last updated: 2026-09-06._
+_Status: **partly built as of P2c, plus `audio_recordings` (`D110`)**. Last updated: 2026-09-07._
 
 > **What is real today:** **eleven tables** with Alembic migrations, verified against a live
 > Postgres — `call_sessions`, `call_state_transitions`, `agent_state_log`, `assignments`,
@@ -66,7 +66,7 @@ seeded by `mock/bank_core/generate.py`, exposed only via the port.
 | Table | Key columns |
 |---|---|
 | `products` | `product_code` PK, `line` (health/life/motor/travel/pa/savings), `name_th/en`, `short_desc`, `target_segment`, `features_json`, `is_active` |
-| `policies` | `policy_no` PK, `customer_id`, `product_code`, `status` (active/lapsed/pending/cancelled), `effective_date`, `expiry_date`, `sum_insured`, `premium`, `payment_frequency`, `next_due_date`, `coverage_json` (IPD room & board, OPD, deductible, co-pay, exclusions…), `riders_json`, `beneficiaries_json`, `channel_sold`, `agent_id_of_record` |
+| `policies` | `policy_no` PK, `customer_id`, `product_code`, **`insurer`** (`D117` — which carrier underwrote it; meaningless for one insurer, first-class for a broker), `status` (active/lapsed/pending/cancelled), `effective_date`, `expiry_date`, `sum_insured`, `premium`, `payment_frequency`, `next_due_date`, `coverage_json` (IPD room & board, OPD, deductible, co-pay, exclusions…), `riders_json`, `beneficiaries_json`, `channel_sold`, `agent_id_of_record` |
 | `claims` | `claim_id` PK, `policy_no`, `type`, `status`, `submitted_at`, `incident_date`, `amount_claimed`, `amount_paid`, `hospital_name`, `documents_required_json`, `last_update_at` |
 | `policy_documents` | `doc_id`, `policy_no`, `kind`, `url_ref` (metadata only, no binaries) |
 

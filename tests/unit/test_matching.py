@@ -47,7 +47,7 @@ def directory() -> FixtureAgentDirectory:
     return FixtureAgentDirectory(ROSTER)
 
 
-def make_agent(agent_id: str = "A", skill: str = "motor.claim", prof: float = 0.9, **kw) -> Agent:
+def make_agent(agent_id: str = "A", skill: str = "claims.assist", prof: float = 0.9, **kw) -> Agent:
     return Agent(
         agent_id=agent_id,
         display_name=agent_id,
@@ -73,9 +73,9 @@ def make_presence(agent_id: str = "A", load: int = 0, *, clock: ManualClock) -> 
 def make_call(**kw) -> WaitingCall:
     base = dict(
         call_session_id="call_1",
-        queue_id="q_motor_claim",
-        required_skill="motor.claim",
-        intent_code="motor.claim.accident",
+        queue_id="q_claims",
+        required_skill="claims.assist",
+        intent_code="motor.claim.notify",
         intent_urgency=Urgency.NORMAL,
         waiting_s=10.0,
         sla_seconds=30,
@@ -143,7 +143,7 @@ def test_missing_skill_excludes_rather_than_down_ranks(
     weights: MatchingWeights, clock: ManualClock
 ) -> None:
     """A failed hard filter is not a low score — it is not a candidate."""
-    agent = make_agent(skill="health.policy")
+    agent = make_agent(skill="health.service")
     assert hard_filter(make_call(), agent, make_presence(clock=clock), weights) == "skill"
 
 
@@ -292,7 +292,7 @@ async def test_losing_the_contest_for_an_agent_is_not_a_roster_gap(
     other is a CAPACITY problem — the wrong answer here ("no agent with this skill is
     available") sends a supervisor hiring for a skill they already have on the floor.
     """
-    only_one = make_agent("A1", skill="motor.claim", prof=0.9)
+    only_one = make_agent("A1", skill="claims.assist", prof=0.9)
     engine = MatchingEngine(directory=ListDirectory([only_one]), weights=weights, clock=clock)
     presence = {"A1": make_presence("A1", clock=clock)}
 
@@ -311,7 +311,10 @@ async def test_losing_the_contest_for_an_agent_is_not_a_roster_gap(
 async def test_a_skill_nobody_holds_is_a_roster_gap(
     weights: MatchingWeights, clock: ManualClock
 ) -> None:
-    wrong_skill = make_agent("A1", skill="travel.claim", prof=0.9)
+    # A skill that is NOT `make_call`'s default. It read `motor.policy` before `D117`,
+    # which the rename mapped onto the same code the default call now asks for - so the
+    # "wrong skill" agent became a perfectly qualified one and the gap disappeared.
+    wrong_skill = make_agent("A1", skill="life.advice", prof=0.9)
     engine = MatchingEngine(directory=ListDirectory([wrong_skill]), weights=weights, clock=clock)
     presence = {"A1": make_presence("A1", clock=clock)}
 
@@ -335,7 +338,7 @@ async def test_unplaced_kind_always_agrees_with_the_candidate_list(
         make_call(
             call_session_id=f"c{i}",
             required_skill=skill,
-            queue_id="q_general",
+            queue_id="q_service",
             # Past `defer_max_wait_s` (60) so nothing is held back, and well under the
             # 180 s fallback ceiling. Without this the contended motor call is DEFERred
             # and the ALL_QUALIFIED_BUSY branch never runs.
@@ -344,7 +347,11 @@ async def test_unplaced_kind_always_agrees_with_the_candidate_list(
         # Four motor calls against three motor-capable agents guarantees one loses the
         # contest outright; `life`/`health` have nobody at all on this cut-down floor.
         for i, skill in enumerate(
-            ["motor.claim"] * 4 + ["life.claim", "health.ipd"],
+            # Four against the contended skill, then two skills this cut-down floor does
+            # not hold at all - so ALL_QUALIFIED_BUSY and NO_QUALIFIED_AGENT both occur in
+            # one tick, which is the whole point. All six were briefly the SAME skill after
+            # `D117`'s rename, and a test with no variety cannot see a difference.
+            ["claims.assist"] * 4 + ["life.advice", "health.advice"],
         )
     ]
 
@@ -396,8 +403,8 @@ def _dual_skill_agent(agent_id: str, health: float, motor: float) -> Agent:
         team="mixed",
         languages=(AgentLanguage(language=Language.TH, level=CefrLevel.NATIVE),),
         skills=(
-            AgentSkill(skill_code="health.policy", proficiency=health),
-            AgentSkill(skill_code="motor.claim", proficiency=motor),
+            AgentSkill(skill_code="health.service", proficiency=health),
+            AgentSkill(skill_code="claims.assist", proficiency=motor),
         ),
     )
 
@@ -405,9 +412,9 @@ def _dual_skill_agent(agent_id: str, health: float, motor: float) -> Agent:
 def _health_call(cid: str, waiting_s: float, **kw: object) -> WaitingCall:
     return make_call(
         call_session_id=cid,
-        queue_id="q_health_policy",
-        required_skill="health.policy",
-        intent_code="health.coverage.query",
+        queue_id="q_service_health",
+        required_skill="health.service",
+        intent_code="health.service.policy",
         waiting_s=waiting_s,
         **kw,
     )
@@ -450,8 +457,8 @@ async def test_the_rescue_leaves_the_specialist_for_whoever_needs_them(
     well. Handing a starved caller the specialist would buy them a little and move the
     starvation onto whoever actually needed that specialist.
     """
-    weak = make_agent("A_weak", skill="health.policy", prof=0.35)
-    strong = make_agent("A_strong", skill="health.policy", prof=0.98)
+    weak = make_agent("A_weak", skill="health.service", prof=0.35)
+    strong = make_agent("A_strong", skill="health.service", prof=0.98)
     engine = MatchingEngine(directory=ListDirectory([strong, weak]), weights=weights, clock=clock)
     presence = {
         "A_weak": make_presence("A_weak", clock=clock),
@@ -468,7 +475,7 @@ async def test_the_rescue_leaves_the_specialist_for_whoever_needs_them(
 async def test_two_starved_callers_are_rescued_longest_wait_first(
     weights: MatchingWeights, clock: ManualClock
 ) -> None:
-    only_one = make_agent("A_only", skill="health.policy", prof=0.8)
+    only_one = make_agent("A_only", skill="health.service", prof=0.8)
     engine = MatchingEngine(directory=ListDirectory([only_one]), weights=weights, clock=clock)
     presence = {"A_only": make_presence("A_only", clock=clock)}
 
@@ -488,7 +495,7 @@ async def test_the_rescue_never_hands_out_an_unqualified_agent(
     """ "Any qualified agent" is not "anyone". The hard filters still run first: a caller
     waiting an hour must not be connected to someone who cannot help them (`D22`).
     """
-    wrong_skill = make_agent("A_motor", skill="motor.claim", prof=1.0)
+    wrong_skill = make_agent("A_motor", skill="claims.assist", prof=1.0)
     engine = MatchingEngine(directory=ListDirectory([wrong_skill]), weights=weights, clock=clock)
     presence = {"A_motor": make_presence("A_motor", clock=clock)}
 
@@ -505,8 +512,8 @@ async def test_a_rescued_caller_is_never_held_back_by_a_guard(
     """Deferral and the anti-hot-spot check both exist to improve a match. Neither may
     apply to someone already past the ceiling - that is the point of being past it.
     """
-    weak = make_agent("A_weak", skill="health.policy", prof=0.30)
-    strong = make_agent("A_strong", skill="health.policy", prof=0.99)
+    weak = make_agent("A_weak", skill="health.service", prof=0.30)
+    strong = make_agent("A_strong", skill="health.service", prof=0.99)
     engine = MatchingEngine(directory=ListDirectory([strong, weak]), weights=weights, clock=clock)
     presence = {
         "A_weak": make_presence("A_weak", clock=clock),
@@ -598,7 +605,7 @@ async def test_within_one_tier_the_longest_wait_still_wins(
     weights: MatchingWeights, clock: ManualClock
 ) -> None:
     """`D93`'s ordering survives inside a tier — urgency only breaks ties BETWEEN tiers."""
-    only_one = make_agent("A_only", skill="health.policy", prof=0.8)
+    only_one = make_agent("A_only", skill="health.service", prof=0.8)
     engine = MatchingEngine(directory=ListDirectory([only_one]), weights=weights, clock=clock)
     presence = {"A_only": make_presence("A_only", clock=clock)}
 
@@ -620,8 +627,8 @@ async def test_a_patient_caller_gets_longer_before_fit_is_abandoned(
     270 s one, so they are not rescued — they stay in the matrix where fit still counts,
     which is the right answer for somebody who is not in any hurry.
     """
-    weak = make_agent("A_weak", skill="health.policy", prof=0.30)
-    strong = make_agent("A_strong", skill="health.policy", prof=0.99)
+    weak = make_agent("A_weak", skill="health.service", prof=0.30)
+    strong = make_agent("A_strong", skill="health.service", prof=0.99)
     engine = MatchingEngine(directory=ListDirectory([strong, weak]), weights=weights, clock=clock)
     presence = {
         "A_weak": make_presence("A_weak", clock=clock),
@@ -795,15 +802,15 @@ async def test_a_waiting_caller_accrues_urgency_while_only_the_clock_moves() -> 
         state=CallState.MATCHED,
         created_at=clock.now(),
         queued_at=clock.now(),
-        queue_id="q_health_policy",
+        queue_id="q_service_health",
     )
     dispatch.admit(
         session,
         WaitingCall(
             call_session_id="call_1",
-            queue_id="q_health_policy",
-            required_skill="health.policy",
-            intent_code="health.coverage.query",
+            queue_id="q_service_health",
+            required_skill="health.service",
+            intent_code="health.service.policy",
             intent_urgency=Urgency.NORMAL,
             waiting_s=0.0,
             sla_seconds=120,
@@ -850,15 +857,15 @@ async def test_a_demo_callers_pre_accrued_wait_survives_the_refresh() -> None:
         state=CallState.MATCHED,
         created_at=clock.now(),
         queued_at=clock.now(),
-        queue_id="q_health_policy",
+        queue_id="q_service_health",
     )
     dispatch.admit(
         session,
         WaitingCall(
             call_session_id="call_2",
-            queue_id="q_health_policy",
-            required_skill="health.policy",
-            intent_code="health.coverage.query",
+            queue_id="q_service_health",
+            required_skill="health.service",
+            intent_code="health.service.policy",
             intent_urgency=Urgency.NORMAL,
             waiting_s=0.0,
             waiting_credit_s=95.0,

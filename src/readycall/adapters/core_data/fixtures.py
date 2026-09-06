@@ -212,6 +212,7 @@ class FixtureFileProvider:
             customer_id=str(row["customer_id"]),
             product_code=str(row["product_code"]),
             line=ProductLine(row.get("line", "unknown")),
+            insurer=row.get("insurer"),
             status=PolicyStatus(row.get("status", "active")),
             effective_date=_parse_date(row.get("effective_date")),
             expiry_date=_parse_date(row.get("expiry_date")),

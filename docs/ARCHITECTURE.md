@@ -6,7 +6,7 @@ the STT engine chosen on measurements (`D104`), the live transcript on the agent
 (`D106`) and the encrypted recording in object storage (`D110`). The analysis passes and
 the telephony integration are still design.
 Each section says what is real where it matters. See `PLAN.md` for the build order._
-_Last updated: 2026-09-06._
+_Last updated: 2026-09-07._
 
 ---
 
@@ -891,26 +891,45 @@ key off free text the model invented:
 Each entry looks roughly like:
 
 ```yaml
-motor.claim.accident:
-  label_th: "แจ้งอุบัติเหตุรถยนต์"
-  label_en: "Report a motor accident"
-  skill: motor.claim
+health.claim.notify:
+  label_th: "แจ้งเคลมค่ารักษาพยาบาล / เข้ารักษาผู้ป่วยใน"
+  label_en: "Notify a health claim or admission"
+  line: health
+  skill: claims.assist
   default_urgency: high
-  required_slots: [location, plate_number, injuries, other_party, drivable]
-  playbook: playbooks/motor_accident.yaml
+  required_slots: [hospital, admission_date, treatment, policy_no]
+  playbook: health_claim_notify
+  handoff_to_insurer: true      # a broker gathers and hands over; it does not adjudicate
 ```
 
-A rough straw-man of the shape — **this needs the team's domain input, it is a product decision more
-than a technical one**, and it is the main input P4 needs:
+**The taxonomy is broker-shaped since `D117`** (33 entries), and it follows the official duty
+split on the orientation deck's p.30 rather than our own reading — see `docs/MARKET_FACTS.md`
+§4. A broker analyses needs, **selects the plan and the company**, services the policy, chases
+renewals and holds the relationship. Underwriting, coverage decisions and **claims
+adjudication** are the insurer's.
 
-- **motor** — `claim.accident` · `claim.status` · `roadside_assist` · `policy.coverage` ·
-  `policy.renew` · `document.request`
-- **health** — `ipd.preauth` (the pitch's own scenario) · `claim.submit` · `claim.status` ·
-  `coverage.query` · `network.hospital`
-- **travel** — `claim.submit` · `coverage.query` · `policy.extend`
-- **life** — `policy.value` · `beneficiary.change` · `premium.payment` · `surrender.query`
-- **cross-cutting** — `general.billing` · `general.renewal` · `general.complaint` ·
-  `general.update_details` · `general.new_product` · **`unknown`**
+- **motor** — `advice.quote` · **`advice.compare`** · `renew` · `claim.notify` ·
+  `roadside_assist` · `service.policy`
+- **health** — `advice.quote` · **`advice.compare`** · `renew` · `claim.notify` ·
+  `service.policy` · `network.hospital`
+- **life** — `advice.quote` · `advice.compare` · **`advice.mortgage`** · `renew` ·
+  `claim.notify` · `service.policy`
+- **travel** — `advice.quote` · `emergency.overseas` · `claim.notify`
+- **cross-cutting** — **`general.advice.review`** · `general.renewal` · `general.billing` ·
+  `general.update_details` · `general.document.request` · `general.complaint` · **`unknown`**
+
+Plus a `*.other` catch-all per line.
+
+Three things changed from the pre-`D117` straw-man, and each one is a product decision:
+
+1. **Claims are `notify`, not `submit`/`status`, and they carry `handoff_to_insurer: true`.**
+   The broker takes the first notification and hands over. `health.ipd.preauth` was deleted
+   outright — pre-authorisation is the insurer's decision, and a broker screen implying
+   otherwise is the underwriting the brief puts out of scope.
+2. **`*.advice.compare` exists.** *คัดสรรแบบประกันและบริษัทฯ ที่ตรงตามความต้องการ* is the
+   broker's actual mandate and the brief's biggest leak (journey step 3, LEAK สูงสุด).
+3. **Renewal is its own skill and queue**, not a line in `general.billing`: 72.55% of life
+   premium is renewal at 84% persistency, and chasing it is a named duty.
 
 Around 20–40 entries is the right size: fine enough that a skill and a playbook are meaningful,
 coarse enough that a classifier can be accurate and an agent recognises every label. `unknown` is a

@@ -185,8 +185,8 @@ pressed.
 
 ```
 anonymous_declined     17 lines played   keys 2/4   -> q_health_policy   (dtmf)
-roadside_motor_claim   10 lines played   keys 1     -> q_motor_claim     (dtmf)
-pattheera_ipd           2 lines played   keys -     -> q_health_ipd      (app)
+roadside_motor_claim   10 lines played   keys 1     -> q_claims          (dtmf)
+pattheera_ipd           2 lines played   keys -     -> q_claims          (app)
 ```
 
 Two lines for the app path is the whole of `D48` in one number: a greeting, a recording

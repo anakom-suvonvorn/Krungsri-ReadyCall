@@ -107,49 +107,51 @@ menus:
   motor_reason:
     prompt: menu.motor_reason
     options:
-      - { key: "1", label_th: "แจ้งอุบัติเหตุ",           intent: motor.claim.accident }
-      - { key: "2", label_th: "ขอความช่วยเหลือฉุกเฉิน",   intent: motor.roadside_assist }
-      - { key: "3", label_th: "ติดตามสถานะเคลม",         intent: motor.claim.status }
-      - { key: "4", label_th: "สอบถามความคุ้มครอง",       intent: motor.policy.coverage }
-      - { key: "5", label_th: "ต่ออายุกรมธรรม์",          intent: motor.policy.renew }
-      - { key: "6", label_th: "เรื่องอื่นๆ",               intent: motor.other }
+      - { key: "1", label_th: "แจ้งเหตุหรือเปิดเคลม",        intent: motor.claim.notify }
+      - { key: "2", label_th: "ขอความช่วยเหลือฉุกเฉิน",      intent: motor.roadside_assist }
+      - { key: "3", label_th: "ต่ออายุกรมธรรม์",             intent: motor.renew }
+      - { key: "4", label_th: "เปรียบเทียบแผนและขอราคา",     intent: motor.advice.compare }
+      - { key: "5", label_th: "แก้ไขหรือสอบถามกรมธรรม์",     intent: motor.service.policy }
+      - { key: "6", label_th: "เรื่องอื่นๆ",                  intent: motor.other }
 
   health_reason:
     prompt: menu.health_reason
     options:
-      - { key: "1", label_th: "แจ้งเข้ารักษาผู้ป่วยใน",     intent: health.ipd.preauth }
-      - { key: "2", label_th: "ยื่นเคลมค่ารักษา",          intent: health.claim.submit }
-      - { key: "3", label_th: "ติดตามสถานะเคลม",         intent: health.claim.status }
-      - { key: "4", label_th: "สอบถามความคุ้มครอง",       intent: health.coverage.query }
-      - { key: "5", label_th: "โรงพยาบาลในเครือ",         intent: health.network.hospital }
-      - { key: "6", label_th: "เรื่องอื่นๆ",               intent: health.other }
+      - { key: "1", label_th: "แจ้งเคลมหรือเข้ารักษา",       intent: health.claim.notify }
+      - { key: "2", label_th: "ต่ออายุกรมธรรม์",             intent: health.renew }
+      - { key: "3", label_th: "เปรียบเทียบแผนและขอราคา",     intent: health.advice.compare }
+      - { key: "4", label_th: "แก้ไขหรือสอบถามกรมธรรม์",     intent: health.service.policy }
+      - { key: "5", label_th: "โรงพยาบาลในเครือ",            intent: health.network.hospital }
+      - { key: "6", label_th: "เรื่องอื่นๆ",                  intent: health.other }
 
   travel_reason:
     prompt: menu.travel_reason
     options:
-      - { key: "1", label_th: "เหตุฉุกเฉินระหว่างเดินทาง", intent: travel.emergency.overseas }
-      - { key: "2", label_th: "ยื่นเคลม",                  intent: travel.claim.submit }
-      - { key: "3", label_th: "สอบถามความคุ้มครอง",       intent: travel.coverage.query }
-      - { key: "4", label_th: "เรื่องอื่นๆ",               intent: travel.other }
+      - { key: "1", label_th: "เหตุฉุกเฉินระหว่างเดินทาง",    intent: travel.emergency.overseas }
+      - { key: "2", label_th: "ซื้อประกันเดินทาง",           intent: travel.advice.quote }
+      - { key: "3", label_th: "แจ้งเคลม",                    intent: travel.claim.notify }
+      - { key: "4", label_th: "เรื่องอื่นๆ",                  intent: travel.other }
 
   life_reason:
     prompt: menu.life_reason
     options:
-      - { key: "1", label_th: "สอบถามมูลค่ากรมธรรม์",      intent: life.policy.value }
-      - { key: "2", label_th: "เปลี่ยนผู้รับผลประโยชน์",     intent: life.beneficiary.change }
-      - { key: "3", label_th: "แจ้งเคลมกรณีเสียชีวิต",      intent: life.claim.death }
-      - { key: "4", label_th: "เรื่องอื่นๆ",               intent: life.other }
+      - { key: "1", label_th: "ชำระเบี้ยหรือต่ออายุ",         intent: life.renew }
+      - { key: "2", label_th: "มูลค่ากรมธรรม์และผู้รับผลประโยชน์", intent: life.service.policy }
+      - { key: "3", label_th: "ขอคำแนะนำและเปรียบเทียบแผน",  intent: life.advice.compare }
+      - { key: "4", label_th: "ประกันคุ้มครองสินเชื่อบ้าน",     intent: life.advice.mortgage }
+      - { key: "5", label_th: "แจ้งเคลมกรณีเสียชีวิต",         intent: life.claim.notify }
+      - { key: "6", label_th: "เรื่องอื่นๆ",                  intent: life.other }
 
   general_reason:
     prompt: menu.general_reason
     options:
-      - { key: "1", label_th: "การชำระเบี้ยประกัน",        intent: general.billing }
-      - { key: "2", label_th: "ต่ออายุกรมธรรม์",           intent: general.renewal }
-      - { key: "3", label_th: "แก้ไขข้อมูลส่วนตัว",         intent: general.update_details }
-      - { key: "4", label_th: "ขอเอกสาร",                 intent: general.document.request }
-      - { key: "5", label_th: "สนใจผลิตภัณฑ์ใหม่",         intent: general.new_product }
-      - { key: "6", label_th: "ร้องเรียน",                 intent: general.complaint }
-      - { key: "7", label_th: "เรื่องอื่นๆ",                intent: general.other }
+      - { key: "1", label_th: "ต่ออายุกรมธรรม์",             intent: general.renewal }
+      - { key: "2", label_th: "ทบทวนความคุ้มครองทั้งหมด",     intent: general.advice.review }
+      - { key: "3", label_th: "การชำระเบี้ยประกัน",           intent: general.billing }
+      - { key: "4", label_th: "แก้ไขข้อมูลส่วนตัว",           intent: general.update_details }
+      - { key: "5", label_th: "ขอเอกสาร",                    intent: general.document.request }
+      - { key: "6", label_th: "ร้องเรียน",                    intent: general.complaint }
+      - { key: "7", label_th: "เรื่องอื่นๆ",                   intent: general.other }
 
 # --- language (D38) -------------------------------------------------------------------
 #

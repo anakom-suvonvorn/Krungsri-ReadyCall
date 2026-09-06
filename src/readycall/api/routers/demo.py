@@ -241,7 +241,20 @@ async def place_call(
     if intent is not None:
         snapshot_id = container.snapshot_for_intent.get(intent.intent_id)
     if snapshot_id is None and resolution.customer_id:
-        snapshot = await container.assembler.build(customer_id=resolution.customer_id)
+        # Pass the line. The app path above already does, and this path knew it just as
+        # well and threw it away - so a cold caller holding more than one policy got
+        # `relevant_policy: None` and an empty policy panel. It was invisible while the
+        # demo customer held exactly one policy, because `_pick_relevant_policy` falls
+        # back to "the only one they have"; giving that customer a real broker portfolio
+        # (`D117`) removed the fallback and the gap showed immediately.
+        snapshot = await container.assembler.build(
+            customer_id=resolution.customer_id,
+            product_line=(
+                container.pack.intent(body.intent_code).line
+                if body.intent_code
+                else ProductLine.UNKNOWN
+            ),
+        )
         await container.snapshots.save(snapshot)
         snapshot_id = snapshot.snapshot_id
     if snapshot_id:

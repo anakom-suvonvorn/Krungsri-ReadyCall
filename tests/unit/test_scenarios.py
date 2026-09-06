@@ -120,10 +120,10 @@ async def test_the_menu_routes_the_call_with_no_identity_and_no_ai() -> None:
     assert run.transcript == []
 
     assert session.menu_path == ("2", "4")
-    assert session.queue_id == "q_health_policy"
+    assert session.queue_id == "q_service_health"
     assert run.brief is not None
     assert run.brief.intent is not None
-    assert run.brief.intent.intent_code == "health.coverage.query"
+    assert run.brief.intent.intent_code == "health.service.policy"
     assert run.brief.intent.source == "dtmf"
 
 

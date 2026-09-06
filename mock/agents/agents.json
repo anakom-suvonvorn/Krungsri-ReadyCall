@@ -16,16 +16,16 @@
     ],
     "skills": [
       {
+        "skill_code": "motor.advice",
+        "proficiency": 0.9
+      },
+      {
+        "skill_code": "motor.service",
+        "proficiency": 0.85
+      },
+      {
         "skill_code": "general.service",
         "proficiency": 0.6
-      },
-      {
-        "skill_code": "motor.claim",
-        "proficiency": 0.95
-      },
-      {
-        "skill_code": "motor.policy",
-        "proficiency": 0.8
       }
     ],
     "max_concurrent": 1,
@@ -44,12 +44,12 @@
     ],
     "skills": [
       {
-        "skill_code": "motor.claim",
-        "proficiency": 0.85
+        "skill_code": "motor.advice",
+        "proficiency": 0.95
       },
       {
-        "skill_code": "motor.policy",
-        "proficiency": 0.7
+        "skill_code": "motor.service",
+        "proficiency": 0.8
       }
     ],
     "max_concurrent": 1,
@@ -58,7 +58,7 @@
   {
     "agent_id": "A003",
     "display_name": "วรินทร์ อารีย์",
-    "team": "motor",
+    "team": "renewal",
     "level": 2,
     "languages": [
       {
@@ -72,15 +72,19 @@
     ],
     "skills": [
       {
-        "skill_code": "general.billing",
+        "skill_code": "claims.assist",
         "proficiency": 0.7
       },
       {
-        "skill_code": "motor.claim",
-        "proficiency": 0.6
+        "skill_code": "motor.advice",
+        "proficiency": 0.75
       },
       {
-        "skill_code": "motor.policy",
+        "skill_code": "motor.service",
+        "proficiency": 0.8
+      },
+      {
+        "skill_code": "renewal.retention",
         "proficiency": 0.9
       }
     ],
@@ -104,16 +108,16 @@
     ],
     "skills": [
       {
-        "skill_code": "health.claim",
+        "skill_code": "health.advice",
+        "proficiency": 0.9
+      },
+      {
+        "skill_code": "health.service",
         "proficiency": 0.85
       },
       {
-        "skill_code": "health.ipd",
-        "proficiency": 0.95
-      },
-      {
-        "skill_code": "health.policy",
-        "proficiency": 0.7
+        "skill_code": "claims.assist",
+        "proficiency": 0.8
       }
     ],
     "max_concurrent": 1,
@@ -136,12 +140,16 @@
     ],
     "skills": [
       {
-        "skill_code": "health.claim",
-        "proficiency": 0.9
+        "skill_code": "claims.assist",
+        "proficiency": 0.7
       },
       {
-        "skill_code": "health.policy",
+        "skill_code": "health.advice",
         "proficiency": 0.8
+      },
+      {
+        "skill_code": "health.service",
+        "proficiency": 0.9
       }
     ],
     "max_concurrent": 1,
@@ -164,16 +172,16 @@
     ],
     "skills": [
       {
-        "skill_code": "health.claim",
+        "skill_code": "health.advice",
+        "proficiency": 0.95
+      },
+      {
+        "skill_code": "health.service",
+        "proficiency": 0.85
+      },
+      {
+        "skill_code": "claims.assist",
         "proficiency": 0.75
-      },
-      {
-        "skill_code": "health.ipd",
-        "proficiency": 0.9
-      },
-      {
-        "skill_code": "health.policy",
-        "proficiency": 0.9
       }
     ],
     "max_concurrent": 1,
@@ -192,12 +200,12 @@
     ],
     "skills": [
       {
-        "skill_code": "general.service",
+        "skill_code": "health.service",
         "proficiency": 0.7
       },
       {
-        "skill_code": "health.policy",
-        "proficiency": 0.65
+        "skill_code": "general.service",
+        "proficiency": 0.75
       }
     ],
     "max_concurrent": 1,
@@ -220,16 +228,16 @@
     ],
     "skills": [
       {
-        "skill_code": "general.service",
-        "proficiency": 0.6
-      },
-      {
-        "skill_code": "travel.claim",
+        "skill_code": "travel.advice",
         "proficiency": 0.9
       },
       {
-        "skill_code": "travel.policy",
-        "proficiency": 0.85
+        "skill_code": "claims.assist",
+        "proficiency": 0.7
+      },
+      {
+        "skill_code": "general.service",
+        "proficiency": 0.65
       }
     ],
     "max_concurrent": 1,
@@ -252,12 +260,12 @@
     ],
     "skills": [
       {
-        "skill_code": "travel.claim",
-        "proficiency": 0.8
+        "skill_code": "travel.advice",
+        "proficiency": 0.85
       },
       {
-        "skill_code": "travel.policy",
-        "proficiency": 0.75
+        "skill_code": "motor.service",
+        "proficiency": 0.6
       }
     ],
     "max_concurrent": 1,
@@ -280,12 +288,12 @@
     ],
     "skills": [
       {
-        "skill_code": "life.claim",
-        "proficiency": 0.9
+        "skill_code": "life.advice",
+        "proficiency": 0.95
       },
       {
-        "skill_code": "life.policy",
-        "proficiency": 0.95
+        "skill_code": "life.service",
+        "proficiency": 0.85
       }
     ],
     "max_concurrent": 1,
@@ -304,16 +312,16 @@
     ],
     "skills": [
       {
+        "skill_code": "life.advice",
+        "proficiency": 0.8
+      },
+      {
+        "skill_code": "life.service",
+        "proficiency": 0.9
+      },
+      {
         "skill_code": "general.service",
         "proficiency": 0.6
-      },
-      {
-        "skill_code": "life.claim",
-        "proficiency": 0.7
-      },
-      {
-        "skill_code": "life.policy",
-        "proficiency": 0.8
       }
     ],
     "max_concurrent": 1,
@@ -322,7 +330,7 @@
   {
     "agent_id": "A012",
     "display_name": "จิราพร เกษมสุข",
-    "team": "general",
+    "team": "renewal",
     "level": 2,
     "languages": [
       {
@@ -336,16 +344,16 @@
     ],
     "skills": [
       {
-        "skill_code": "general.billing",
-        "proficiency": 0.85
-      },
-      {
-        "skill_code": "general.sales",
-        "proficiency": 0.7
+        "skill_code": "renewal.retention",
+        "proficiency": 0.9
       },
       {
         "skill_code": "general.service",
-        "proficiency": 0.9
+        "proficiency": 0.8
+      },
+      {
+        "skill_code": "motor.advice",
+        "proficiency": 0.65
       }
     ],
     "max_concurrent": 2,
@@ -354,7 +362,7 @@
   {
     "agent_id": "A013",
     "display_name": "อนันต์ วัฒนกุล",
-    "team": "general",
+    "team": "service",
     "level": 3,
     "languages": [
       {
@@ -368,16 +376,16 @@
     ],
     "skills": [
       {
-        "skill_code": "general.billing",
-        "proficiency": 0.7
-      },
-      {
         "skill_code": "general.escalation",
-        "proficiency": 0.95
+        "proficiency": 0.9
       },
       {
         "skill_code": "general.service",
         "proficiency": 0.85
+      },
+      {
+        "skill_code": "renewal.retention",
+        "proficiency": 0.7
       }
     ],
     "max_concurrent": 1,
@@ -386,7 +394,7 @@
   {
     "agent_id": "A014",
     "display_name": "พัชราภา สุขสันต์",
-    "team": "general",
+    "team": "renewal",
     "level": 2,
     "languages": [
       {
@@ -400,16 +408,16 @@
     ],
     "skills": [
       {
-        "skill_code": "general.billing",
-        "proficiency": 0.75
-      },
-      {
-        "skill_code": "general.sales",
-        "proficiency": 0.8
+        "skill_code": "renewal.retention",
+        "proficiency": 0.85
       },
       {
         "skill_code": "general.service",
-        "proficiency": 0.85
+        "proficiency": 0.8
+      },
+      {
+        "skill_code": "health.advice",
+        "proficiency": 0.6
       }
     ],
     "max_concurrent": 2,
@@ -418,7 +426,7 @@
   {
     "agent_id": "A015",
     "display_name": "ธีรภัทร มงคล",
-    "team": "general",
+    "team": "service",
     "level": 3,
     "languages": [
       {
@@ -437,15 +445,15 @@
       },
       {
         "skill_code": "general.service",
-        "proficiency": 0.8
+        "proficiency": 0.9
       },
       {
-        "skill_code": "health.policy",
-        "proficiency": 0.6
+        "skill_code": "motor.service",
+        "proficiency": 0.7
       },
       {
-        "skill_code": "motor.policy",
-        "proficiency": 0.6
+        "skill_code": "life.service",
+        "proficiency": 0.65
       }
     ],
     "max_concurrent": 1,

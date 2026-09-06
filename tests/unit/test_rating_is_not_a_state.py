@@ -47,7 +47,7 @@ async def test_a_rating_may_arrive_after_the_call_has_closed(
     """
     session = await orchestrator.start_cold_call()
     await orchestrator.enter_ivr(session)
-    await orchestrator.enqueue(session, queue_id="q_general")
+    await orchestrator.enqueue(session, queue_id="q_service")
     await orchestrator.transition(session, CallState.MATCHED, reason="agent_available")
     await orchestrator.transition(session, CallState.OFFERED, reason="offered")
     await orchestrator.transition(session, CallState.IN_CALL, reason="accepted")

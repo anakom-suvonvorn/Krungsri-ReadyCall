@@ -23,38 +23,55 @@ dids:
   "+6621234000":
     label: "General hotline - printed on most documents, and the number most people dial"
     product_line: unknown
-    default_queue: q_general
+    default_queue: q_service
     greeting_prompt: greeting.general
     skip_product_menu: false      # we know nothing; the menu earns its keep here
 
   "+6621234111":
-    label: "Motor claims - printed on the policy documents kept in the car"
+    label: "Claims assistance - printed on the policy documents kept in the car"
     product_line: motor
-    default_queue: q_motor_claim
-    greeting_prompt: greeting.motor_claim
+    default_queue: q_claims
+    greeting_prompt: greeting.claims
     skip_product_menu: true
     # A caller on this number is very likely standing next to a damaged car, so the
-    # urgency floor is raised before anyone has said a word (D22).
+    # urgency floor is raised before anyone has said a word (`D22`).
     urgency_floor: high
-    assumed_intent: motor.claim.accident
+    assumed_intent: motor.claim.notify
 
   "+6621234222":
     label: "Health - printed on the health card"
     product_line: health
-    default_queue: q_health_policy
+    default_queue: q_service_health
     greeting_prompt: greeting.health
     skip_product_menu: true
 
   "+6621234333":
     label: "Travel - printed on the travel policy schedule"
     product_line: travel
-    default_queue: q_travel
+    default_queue: q_advice_travel
     greeting_prompt: greeting.travel
     skip_product_menu: true
 
   "+6621234444":
     label: "Life and savings"
     product_line: life
-    default_queue: q_life
+    default_queue: q_service_life
     greeting_prompt: greeting.life
     skip_product_menu: true
+
+  "+6621234555":
+    label: >-
+      Renewal - the number printed on the renewal notice, and the one an outbound
+      retention call displays. A caller here is answering us rather than starting cold
+      (`D117`): renewal is 72.55% of life premium at 84% persistency, so the callback
+      from a renewal notice is the single highest-value inbound call this broker takes.
+    product_line: unknown
+    default_queue: q_renewal
+    greeting_prompt: greeting.renewal
+    # NOT skipped, and the startup check is what caught the sloppy thinking: this number
+    # tells us WHY somebody is calling, not WHICH policy. A customer holding motor, health
+    # and life renews one of them, and `skip_product_menu` means "we already know the
+    # line" - it is not a general "do not ask". The greeting already says which department
+    # they have reached, so one question is good service rather than a repetition.
+    skip_product_menu: false
+    assumed_intent: general.renewal

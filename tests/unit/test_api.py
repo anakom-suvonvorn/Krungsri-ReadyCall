@@ -144,7 +144,7 @@ def test_context_is_prefetched_and_reportable(signed_in: TestClient) -> None:
 
     status = signed_in.get(f"/v1/calls/intents/{intent_id}").json()
     assert status["context_ready"] is True
-    assert status["policies_found"] == 1
+    assert status["policies_found"] == 3  # a broker portfolio, not one policy (`D117`)
     assert status["provenance_fields"] > 0
     assert status["degraded"] == "none"
 
@@ -254,6 +254,6 @@ def test_choosing_a_reason_in_the_app_carries_the_intent(signed_in: TestClient) 
     """`D41` + `D48`: both menu questions answered before the call is placed."""
     created = signed_in.post(
         "/v1/calls/intents",
-        json={"product_code": "KS-HEALTH-A", "app_intent": "health.ipd.preauth"},
+        json={"product_code": "KS-HEALTH-A", "app_intent": "health.claim.notify"},
     )
     assert created.status_code == 201

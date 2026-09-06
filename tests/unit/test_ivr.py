@@ -73,7 +73,7 @@ class TestTheFloor:
         assert step.outcome is not None
         assert step.outcome.kind is IvrOutcomeKind.ROUTED
         assert step.outcome.product_line is ProductLine.HEALTH
-        assert step.outcome.intent_code == "health.coverage.query"
+        assert step.outcome.intent_code == "health.service.policy"
         assert step.outcome.path == ("2", "4")
 
     def test_the_recording_notice_comes_before_any_menu(
@@ -98,7 +98,7 @@ class TestTheFloor:
 
     def test_the_app_path_asks_nothing_at_all(self, machine: IvrMachine) -> None:
         """`D48`: tapping Contact answers both questions before the phone rings."""
-        _, step = machine.begin(call_session_id="c", known_intent="health.ipd.preauth", did=None)
+        _, step = machine.begin(call_session_id="c", known_intent="health.claim.notify", did=None)
         assert step.outcome is not None
         assert step.outcome.kind is IvrOutcomeKind.SKIPPED
         assert step.outcome.product_line is ProductLine.HEALTH
@@ -394,9 +394,9 @@ class TestTheServiceEndToEnd:
 
         assert session.state is CallState.IVR
         assert session.menu_path == ("2", "4")
-        assert session.menu_intent_code == "health.coverage.query"
+        assert session.menu_intent_code == "health.service.policy"
         assert session.product_line is ProductLine.HEALTH
-        assert result.queue_id == "q_health_policy"
+        assert result.queue_id == "q_service_health"
         assert result.played[0].startswith("greeting.")
 
     async def test_a_scripted_caller_presses_what_they_meant_not_what_was_configured(
@@ -423,7 +423,7 @@ class TestTheServiceEndToEnd:
         assert caller.sent[0] == "4", "health moved down, so the caller pressed 4 to get it"
         assert result.outcome.pressed[0] == "4"
         assert result.outcome.path == ("2", "4"), "the stored path is canonical either way"
-        assert result.outcome.intent_code == "health.coverage.query"
+        assert result.outcome.intent_code == "health.service.policy"
         assert session.menu_path == ("2", "4")
 
     async def test_the_catch_all_route_reaches_the_lines_generalist(
@@ -449,7 +449,7 @@ class TestTheServiceEndToEnd:
         assert result.outcome.kind is IvrOutcomeKind.EXHAUSTED
         assert result.outcome.product_line is ProductLine.HEALTH
         assert result.queue_id == pack.queue_for_intent("health.other")
-        assert result.queue_id != "q_general"
+        assert result.queue_id != "q_service"
 
     async def test_a_did_may_assume_an_intent_but_never_claims_it_was_pressed(
         self, service: IvrService, pack: DomainPack, orchestrator: CallOrchestrator
@@ -460,8 +460,8 @@ class TestTheServiceEndToEnd:
         session = await orchestrator.start_cold_call(dialled_did="+6621234111")
         result = await service.run(session, caller=ScriptedChoices([]), did=pack.did("+6621234111"))
 
-        assert result.queue_id == "q_motor_claim"
-        assert result.intent_code == "motor.claim.accident"
+        assert result.queue_id == "q_claims"
+        assert result.intent_code == "motor.claim.notify"
         assert result.intent_source == "did"
         assert result.outcome.intent_code is None, "nothing was pressed, so nothing is claimed"
         assert result.outcome.path == ()

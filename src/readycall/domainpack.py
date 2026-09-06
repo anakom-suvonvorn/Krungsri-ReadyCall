@@ -23,7 +23,7 @@ from typing import Any
 
 import yaml
 
-from readycall.domain.enums import ProductLine, Urgency
+from readycall.domain.enums import AssuranceLevel, ProductLine, Urgency
 from readycall.errors import ConfigError
 from readycall.logging import get_logger
 
@@ -51,6 +51,11 @@ class IntentSpec:
     playbook: str
     is_catch_all: bool = False
     sensitive: bool = False
+    #: Whether this call ENDS by handing the customer to the insurer (`D117`). A broker
+    #: does not adjudicate claims - it takes the notification, gathers what the insurer
+    #: will ask for, and hands over. The workstation says so, and the wrap-up offers
+    #: `handed_to_insurer` as the disposition.
+    handoff_to_insurer: bool = False
 
     @property
     def is_line_specific(self) -> bool:
@@ -90,6 +95,37 @@ class ChallengeSpec:
     #: Whether the agent must type what they actually did. True for `other`, where a blank
     #: is the unfalsifiable audit row `D42` exists to prevent.
     requires_note: bool = False
+
+
+#: How `playbooks.yaml` spells assurance levels. Short on purpose - the file is edited by
+#: whoever owns the domain, not by whoever owns the enum.
+_ASSURANCE_BY_NAME: dict[str, AssuranceLevel] = {
+    "l0": AssuranceLevel.L0_ANONYMOUS,
+    "l1": AssuranceLevel.L1_PROBABLE,
+    "l2": AssuranceLevel.L2_STRONG,
+    "l3": AssuranceLevel.L3_VERIFIED,
+}
+
+
+@dataclass(frozen=True, slots=True)
+class PlaybookStep:
+    """One recommended action, and the assurance it needs before being shown (`D56`)."""
+
+    text_th: str
+    needs: AssuranceLevel
+
+
+@dataclass(frozen=True, slots=True)
+class PlaybookSpec:
+    """The ordered actions for one intent (`D118`, closing `Q19`).
+
+    In config rather than in `services/brief/builder.py`, where it lived until the broker
+    rewrite. It is insurance content, so `D28` always said it belonged here; what forced
+    the move was `D117` roughly doubling it.
+    """
+
+    name: str
+    steps: tuple[PlaybookStep, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -190,6 +226,7 @@ class DomainPack:
     dids: dict[str, DidSpec]
     menus: dict[str, MenuSpec]
     challenges: dict[str, ChallengeSpec]
+    playbooks: dict[str, PlaybookSpec]
     menu_settings: MenuSettings
     #: Words the ASR is nudged toward (`D9`). Config, not code, because they are
     #: insurance-specific and `services/` may not hold a policy concept (`D28`).
@@ -310,6 +347,7 @@ class DomainPack:
             _read(directory / "menus.yaml")
         )
         challenges = cls._load_challenges(_read(directory / "challenges.yaml"))
+        playbooks = cls._load_playbooks(_read(directory / "playbooks.yaml"))
         vocabulary = cls._load_stt_vocabulary(directory)
 
         pack = cls(
@@ -319,6 +357,7 @@ class DomainPack:
             dids=dids,
             menus=menus,
             challenges=challenges,
+            playbooks=playbooks,
             menu_settings=settings,
             stt_vocabulary=vocabulary,
             language_menu=language_menu,
@@ -334,8 +373,33 @@ class DomainPack:
             dids=len(dids),
             menus=len(menus),
             challenges=len(challenges),
+            playbooks=len(playbooks),
         )
         return pack
+
+    @staticmethod
+    def _load_playbooks(raw: dict[str, Any]) -> dict[str, PlaybookSpec]:
+        out: dict[str, PlaybookSpec] = {}
+        for name, steps in (raw.get("playbooks") or {}).items():
+            if not isinstance(steps, list) or not steps:
+                raise ConfigError(f"playbook {name!r} has no steps")
+            parsed: list[PlaybookStep] = []
+            for step in steps:
+                try:
+                    parsed.append(
+                        PlaybookStep(
+                            text_th=str(step["text_th"]),
+                            needs=_ASSURANCE_BY_NAME[str(step.get("needs", "l0")).lower()],
+                        )
+                    )
+                except KeyError as exc:
+                    raise ConfigError(f"playbook {name!r}: bad step {step!r} ({exc})") from exc
+            out[str(name)] = PlaybookSpec(name=str(name), steps=tuple(parsed))
+        if "generic" not in out:
+            # The floor every `*.other` and `unknown` falls back to. Without it a missing
+            # playbook would render an empty action list, which reads as "nothing to do".
+            raise ConfigError("playbooks.yaml must define `generic`")
+        return out
 
     @staticmethod
     def _load_challenges(raw: dict[str, Any]) -> dict[str, ChallengeSpec]:
@@ -368,6 +432,7 @@ class DomainPack:
                     playbook=body.get("playbook", "generic"),
                     is_catch_all=bool(body.get("is_catch_all", False)),
                     sensitive=bool(body.get("sensitive", False)),
+                    handoff_to_insurer=bool(body.get("handoff_to_insurer", False)),
                 )
             except (KeyError, ValueError) as exc:
                 raise ConfigError(f"intent {code!r} is malformed: {exc}") from exc
@@ -486,6 +551,15 @@ class DomainPack:
         for code, spec in self.intents.items():
             if spec.skill not in self.skills:
                 problems.append(f"intent {code!r} -> unknown skill {spec.skill!r}")
+            if spec.playbook not in self.playbooks:
+                problems.append(f"intent {code!r} -> unknown playbook {spec.playbook!r}")
+
+        # BOTH DIRECTIONS, the same discipline the prompt ids get: a playbook nothing
+        # reaches is dead domain content that somebody will keep editing, and it is the
+        # half a one-way check never catches.
+        reachable = {spec.playbook for spec in self.intents.values()} | {"generic"}
+        for name in sorted(set(self.playbooks) - reachable):
+            problems.append(f"playbook {name!r} is defined but no intent uses it")
 
         for code, skill in self.skills.items():
             if skill.queue not in self.queues:

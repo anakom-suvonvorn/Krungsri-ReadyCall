@@ -440,7 +440,7 @@ class TestTheServiceEndToEnd:
     async def _queued(self, orchestrator: CallOrchestrator):  # type: ignore[no-untyped-def]
         session = await orchestrator.start_cold_call(dialled_did="+6621234000")
         await orchestrator.enter_ivr(session)
-        return await orchestrator.enqueue(session, queue_id="q_health_policy")
+        return await orchestrator.enqueue(session, queue_id="q_service_health")
 
     async def test_pressing_one_grants_both_scopes_an_intake_needs(
         self, service: IntakeService, orchestrator: CallOrchestrator
@@ -676,7 +676,7 @@ class TestTheServiceEndToEnd:
             await service.run_offer(session, caller=ScriptedChoices(keys))
             await service.on_agent_accepted(session.call_session_id)
             queues.append(session.queue_id)
-        assert queues == ["q_health_policy"] * 3
+        assert queues == ["q_service_health"] * 3
 
 
 # --- helpers --------------------------------------------------------------------------------

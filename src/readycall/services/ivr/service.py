@@ -246,7 +246,7 @@ class IvrService:
 
         An explicit intent beats the line's catch-all, which beats the DID's default.
         Knowing only the product line must still land the caller with someone who works
-        on that line: dropping them into `q_general` throws away what they told us.
+        on that line: dropping them into `q_service` throws away what they told us.
 
         There is no operator key any more (`D86`); the way out of a menu is its own
         "เรื่องอื่นๆ" option, which lands here through `catch_all_for` like anything else.
@@ -259,7 +259,7 @@ class IvrService:
             return self._pack.queue_for_intent(self._pack.catch_all_for(outcome.product_line).code)
         if did is not None:
             return did.default_queue
-        return "q_general"
+        return "q_service"
 
 
 __all__ = ["CallerInput", "IvrResult", "IvrService", "Press", "ScriptedChoices"]

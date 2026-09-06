@@ -132,6 +132,7 @@ class BriefBuilder:
             label_en=spec.label_en,
             confidence=0.95 if from_menu else 0.2,
             source="dtmf" if from_menu else "product_line_default",
+            handoff_to_insurer=spec.handoff_to_insurer,
         )
 
     def _summary(
@@ -164,16 +165,19 @@ class BriefBuilder:
     def _actions(self, spec: IntentSpec, *, may_disclose: bool) -> tuple[RecommendedAction, ...]:
         """From the intent's playbook — never improvised.
 
-        P1 ships a small built-in set per playbook; P4 moves these into
-        `config/playbooks/` alongside the prompts.
+        The steps come from `config/playbooks.yaml` since `D118`, which closed `Q19`. They
+        used to be a dict in this file, which was insurance content living in `services/`
+        against `D28` — tolerable while it was six short lists, and not once the broker
+        rewrite (`D117`) doubled it. A startup check now refuses an intent whose playbook
+        does not exist AND a playbook no intent reaches, so neither half can rot.
         """
-        steps = _PLAYBOOKS.get(spec.playbook, _PLAYBOOKS["generic"])
+        playbook = self._pack.playbooks.get(spec.playbook) or self._pack.playbooks["generic"]
         actions: list[RecommendedAction] = []
-        for order, (text_th, needs) in enumerate(steps, start=1):
-            if needs.rank > AssuranceLevel.L1_PROBABLE.rank and not may_disclose:
+        for order, step in enumerate(playbook.steps, start=1):
+            if step.needs.rank > AssuranceLevel.L1_PROBABLE.rank and not may_disclose:
                 continue
             actions.append(
-                RecommendedAction(order=order, text_th=text_th, requires_assurance=needs)
+                RecommendedAction(order=order, text_th=step.text_th, requires_assurance=step.needs)
             )
         if not may_disclose:
             actions.insert(
@@ -209,44 +213,3 @@ class BriefBuilder:
             # Note what is deliberately absent even when `customer` exists: their name.
             return f"สวัสดีค่ะ ยินดีให้บริการเรื่อง{spec.label_th} ขอทราบชื่อผู้ติดต่อด้วยค่ะ"
         return f"สวัสดีค่ะ {customer.polite_name_th} ทราบว่าติดต่อเรื่อง{spec.label_th} ยินดีช่วยดูแลค่ะ"
-
-
-L0 = AssuranceLevel.L0_ANONYMOUS
-L2 = AssuranceLevel.L2_STRONG
-
-#: Minimal per-playbook action lists. Moves to `config/playbooks/` at P4.
-_PLAYBOOKS: dict[str, tuple[tuple[str, AssuranceLevel], ...]] = {
-    "motor_accident": (
-        ("ตรวจสอบความปลอดภัยและสอบถามว่ามีผู้บาดเจ็บหรือไม่", L0),
-        ("ขอตำแหน่งที่เกิดเหตุและทะเบียนรถ", L0),
-        ("ตรวจสอบความคุ้มครองและค่าเสียหายส่วนแรก", L2),
-        ("แจ้งขั้นตอนการส่งเจ้าหน้าที่สำรวจภัย", L0),
-    ),
-    "roadside_assist": (
-        ("ขอตำแหน่งปัจจุบันและลักษณะปัญหา", L0),
-        ("ตรวจสอบสิทธิ์บริการช่วยเหลือฉุกเฉินในกรมธรรม์", L2),
-        ("ประสานรถยกและแจ้งเวลาโดยประมาณ", L0),
-    ),
-    "health_ipd_preauth": (
-        ("สอบถามโรงพยาบาลและวันที่เข้ารับการรักษา", L0),
-        ("ตรวจสอบสิทธิ์ผู้ป่วยในและวงเงินค่าห้อง", L2),
-        ("อธิบายเอกสารที่ต้องเตรียมสำหรับการเคลม", L0),
-    ),
-    "claim_status": (
-        ("ขอเลขที่เคลมหรือเลขกรมธรรม์", L0),
-        ("ตรวจสอบสถานะและเอกสารที่ยังขาด", L2),
-        ("แจ้งกรอบเวลาการพิจารณา", L0),
-    ),
-    "coverage_query": (
-        ("ยืนยันกรมธรรม์ที่ต้องการสอบถาม", L0),
-        ("อธิบายความคุ้มครองตามข้อมูลในระบบ", L2),
-    ),
-    "renewal": (
-        ("ยืนยันกรมธรรม์ที่จะต่ออายุ", L0),
-        ("แจ้งวันครบกำหนดและช่องทางชำระเงิน", L2),
-    ),
-    "generic": (
-        ("สอบถามรายละเอียดเรื่องที่ต้องการติดต่อ", L0),
-        ("ตรวจสอบข้อมูลในระบบและช่วยดำเนินการ", L0),
-    ),
-}

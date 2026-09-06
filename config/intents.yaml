@@ -1,112 +1,160 @@
-# The intent taxonomy: the closed list of reasons people call.
+# The intent taxonomy: the closed list of reasons people call a BROKER (`D117`).
 #
-# This is the domain pack (D28) - nothing in services/ may hardcode any of it, and
+# This is the domain pack (`D28`) - nothing in services/ may hardcode any of it, and
 # retargeting the system to another industry means replacing this file.
 #
-# Five things key off an intent code (ARCHITECTURE.md 13.1):
-#   skill           -> who is allowed to take the call (matching)
-#   required_slots  -> what facts we need (guided intake, entity completeness scoring)
-#   playbook        -> the recommended-actions list on the workstation
-#   default_urgency -> the situational urgency floor for matching
-#   the code itself -> the golden-set label, i.e. how accuracy is measurable at all
+# Six things key off an intent code (`ARCHITECTURE.md` 13.1):
+#   skill              -> who is allowed to take the call (matching)
+#   required_slots     -> what facts we need (guided intake, entity completeness scoring)
+#   playbook           -> the recommended-actions list on the workstation
+#   default_urgency    -> the situational urgency floor for matching
+#   handoff_to_insurer -> whether this call ENDS by handing over (`D117`)
+#   the code itself    -> the golden-set label, i.e. how accuracy is measurable at all
 #
-# STATUS: STRAW-MAN, awaiting the team's domain review (NEXT_SESSION Q7).
+# STATUS: reviewed against the domain 2026-09-07, closing `Q7`. The previous version was
+# an explicit straw-man "awaiting the team's domain review"; the hackathon orientation was
+# that review, and it moved the taxonomy substantially. See `D117`.
+#
+# THE ONE IDEA THAT RESHAPED IT. A broker is not a small insurer. The official duty split
+# (insight deck p.30, `docs/MARKET_FACTS.md` section 4) gives the insurer underwriting,
+# coverage decisions and CLAIMS ADJUDICATION, and gives the broker needs analysis,
+# selecting the plan AND THE COMPANY, policy service, chasing renewals, and the
+# relationship. So:
+#
+#   * `*.claim.submit` / `*.claim.status` are GONE as broker work. What remains is
+#     `*.claim.notify` - take the first notification, gather what the insurer will ask
+#     for, hand over, and stay with the customer. `handoff_to_insurer: true` marks them.
+#   * `*.advice.compare` is NEW and is the single most important addition. "Which of these
+#     is right for me" is the broker's actual mandate and the brief's biggest leak
+#     (LEAK สูงสุด at journey step 3).
+#   * `*.renew` is promoted out of `general` to its own retention desk, because renewal is
+#     72.55% of life premium at 84% persistency - the largest block of revenue there is.
+#
 # Roughly 20-40 entries is the target: fine enough that a skill and a playbook mean
-# something, coarse enough that a classifier stays accurate and an agent recognises
-# every label on sight.
+# something, coarse enough that a classifier stays accurate and an agent recognises every
+# label on sight. This file has 32.
 
 version: 1
 
 intents:
-  # --- motor ------------------------------------------------------------------------
-  motor.claim.accident:
-    label_th: "แจ้งอุบัติเหตุรถยนต์"
-    label_en: "Report a motor accident"
+  # --- motor: 56% of non-life premium, 82.5% of it sold through brokers ---------------
+  motor.advice.quote:
+    label_th: "ขอใบเสนอราคาประกันรถยนต์"
+    label_en: "Motor insurance quote"
     line: motor
-    skill: motor.claim
+    skill: motor.advice
+    default_urgency: normal
+    required_slots: [vehicle, usage, coverage_level]
+    playbook: motor_quote
+  motor.advice.compare:
+    label_th: "เปรียบเทียบแผนประกันรถยนต์"
+    label_en: "Compare motor plans"
+    line: motor
+    skill: motor.advice
+    default_urgency: normal
+    required_slots: [vehicle, current_policy_no, priorities]
+    playbook: motor_compare
+    # The broker's mandate, and the brief's biggest leak. An EV owner comparing battery
+    # cover and ADAS discounts across insurers is the worked example (MARKET_FACTS 7).
+  motor.renew:
+    label_th: "ต่ออายุประกันรถยนต์"
+    label_en: "Renew motor policy"
+    line: motor
+    skill: renewal.retention
+    default_urgency: normal
+    required_slots: [policy_no]
+    playbook: renewal
+  motor.claim.notify:
+    label_th: "แจ้งเหตุ / เปิดเคลมรถยนต์"
+    label_en: "Notify a motor claim"
+    line: motor
+    skill: claims.assist
     default_urgency: critical      # possibly standing at the roadside right now
     required_slots: [location, plate_number, injuries, other_party_involved, drivable]
-    playbook: motor_accident
-  motor.claim.status:
-    label_th: "ติดตามสถานะเคลมรถยนต์"
-    label_en: "Motor claim status"
-    line: motor
-    skill: motor.claim
-    default_urgency: normal
-    required_slots: [claim_id]
-    playbook: claim_status
+    playbook: motor_claim_notify
+    handoff_to_insurer: true
   motor.roadside_assist:
     label_th: "ขอความช่วยเหลือฉุกเฉินบนถนน"
     label_en: "Roadside assistance"
     line: motor
-    skill: motor.claim
+    skill: claims.assist
     default_urgency: high
     required_slots: [location, plate_number, problem]
     playbook: roadside_assist
-  motor.policy.coverage:
-    label_th: "สอบถามความคุ้มครองประกันรถยนต์"
-    label_en: "Motor coverage query"
+    handoff_to_insurer: true
+    # The insurer's roadside contractor does the work. Our job is to connect them fast
+    # and to know which insurer this policy is with - which is the whole point of holding
+    # the customer's portfolio across companies.
+  motor.service.policy:
+    label_th: "แก้ไข / สอบถามกรมธรรม์รถยนต์"
+    label_en: "Motor policy service"
     line: motor
-    skill: motor.policy
+    skill: motor.service
     default_urgency: normal
     required_slots: [policy_no]
-    playbook: coverage_query
-  motor.policy.renew:
-    label_th: "ต่ออายุประกันรถยนต์"
-    label_en: "Renew motor policy"
-    line: motor
-    skill: motor.policy
-    default_urgency: normal
-    required_slots: [policy_no]
-    playbook: renewal
+    playbook: policy_service
   motor.other:
     label_th: "เรื่องอื่นๆ เกี่ยวกับประกันรถยนต์"
     label_en: "Something else about motor insurance"
     line: motor
-    skill: motor.policy
+    skill: motor.service
     default_urgency: normal
     required_slots: []
     playbook: generic
     is_catch_all: true
 
-  # --- health -----------------------------------------------------------------------
-  health.ipd.preauth:
-    label_th: "แจ้งเข้ารักษาผู้ป่วยใน / ตรวจสอบค่าห้อง"
-    label_en: "Inpatient pre-authorisation / room and board"
+  # --- health: medical costs rising 8-10% a year, 62.5% broker-distributed ------------
+  health.advice.quote:
+    label_th: "ขอใบเสนอราคาประกันสุขภาพ"
+    label_en: "Health insurance quote"
     line: health
-    skill: health.ipd
-    default_urgency: high          # the pitch's own scenario: admitted tomorrow
-    required_slots: [hospital, admission_date, treatment, policy_no]
-    playbook: health_ipd_preauth
-  health.claim.submit:
-    label_th: "ยื่นเคลมค่ารักษาพยาบาล"
-    label_en: "Submit a health claim"
-    line: health
-    skill: health.claim
+    skill: health.advice
     default_urgency: normal
-    required_slots: [hospital, treatment_date, amount]
-    playbook: health_claim_submit
-  health.claim.status:
-    label_th: "ติดตามสถานะเคลมสุขภาพ"
-    label_en: "Health claim status"
+    required_slots: [age, budget, hospital_preference]
+    playbook: health_quote
+  health.advice.compare:
+    label_th: "เปรียบเทียบแผนประกันสุขภาพ / ความคุ้มครองพอไหม"
+    label_en: "Compare health plans / is my cover enough"
     line: health
-    skill: health.claim
+    skill: health.advice
     default_urgency: normal
-    required_slots: [claim_id]
-    playbook: claim_status
-  health.coverage.query:
-    label_th: "สอบถามความคุ้มครองสุขภาพ"
-    label_en: "Health coverage query"
+    required_slots: [current_policy_no, concern]
+    playbook: health_compare
+    # The mismatch story in one intent: someone with a group plan capped below what their
+    # hospital charges. The brief's opening framing is mismatch, not absence of cover.
+  health.renew:
+    label_th: "ต่ออายุประกันสุขภาพ"
+    label_en: "Renew health policy"
     line: health
-    skill: health.policy
+    skill: renewal.retention
     default_urgency: normal
     required_slots: [policy_no]
-    playbook: coverage_query
+    playbook: renewal
+  health.claim.notify:
+    label_th: "แจ้งเคลมค่ารักษาพยาบาล / เข้ารักษาผู้ป่วยใน"
+    label_en: "Notify a health claim or admission"
+    line: health
+    skill: claims.assist
+    default_urgency: high          # the pitch's own scenario: admitted tomorrow
+    required_slots: [hospital, admission_date, treatment, policy_no]
+    playbook: health_claim_notify
+    handoff_to_insurer: true
+    # Pre-authorisation is the INSURER'S decision (`D117`) - we gather, we advise on what
+    # they will ask for, and we hand over. Telling a caller their admission is approved is
+    # underwriting, which is out of scope for the brief and for us.
+  health.service.policy:
+    label_th: "แก้ไข / สอบถามกรมธรรม์สุขภาพ"
+    label_en: "Health policy service"
+    line: health
+    skill: health.service
+    default_urgency: normal
+    required_slots: [policy_no]
+    playbook: policy_service
   health.network.hospital:
     label_th: "สอบถามโรงพยาบาลในเครือ"
     label_en: "Network hospital query"
     line: health
-    skill: health.policy
+    skill: health.service
     default_urgency: low
     required_slots: [province]
     playbook: network_hospital
@@ -114,100 +162,144 @@ intents:
     label_th: "เรื่องอื่นๆ เกี่ยวกับประกันสุขภาพ"
     label_en: "Something else about health insurance"
     line: health
-    skill: health.policy
+    skill: health.service
     default_urgency: normal
     required_slots: []
     playbook: generic
     is_catch_all: true
 
-  # --- travel -----------------------------------------------------------------------
-  travel.claim.submit:
-    label_th: "ยื่นเคลมประกันเดินทาง"
-    label_en: "Submit a travel claim"
-    line: travel
-    skill: travel.claim
-    default_urgency: normal
-    required_slots: [country, incident_date, incident_type]
-    playbook: travel_claim_submit
-  travel.emergency.overseas:
-    label_th: "เหตุฉุกเฉินระหว่างเดินทางต่างประเทศ"
-    label_en: "Overseas travel emergency"
-    line: travel
-    skill: travel.claim
-    default_urgency: critical
-    required_slots: [country, situation]
-    playbook: travel_emergency
-  travel.coverage.query:
-    label_th: "สอบถามความคุ้มครองประกันเดินทาง"
-    label_en: "Travel coverage query"
-    line: travel
-    skill: travel.policy
-    default_urgency: low
-    required_slots: [destination, travel_dates]
-    playbook: coverage_query
-  travel.other:
-    label_th: "เรื่องอื่นๆ เกี่ยวกับประกันเดินทาง"
-    label_en: "Something else about travel insurance"
-    line: travel
-    skill: travel.policy
-    default_urgency: normal
-    required_slots: []
-    playbook: generic
-    is_catch_all: true
-
-  # --- life -------------------------------------------------------------------------
-  life.policy.value:
-    label_th: "สอบถามมูลค่ากรมธรรม์"
-    label_en: "Policy value query"
+  # --- life and savings: agent-and-bank territory, but the broker's renewal book ------
+  life.advice.quote:
+    label_th: "ขอคำแนะนำประกันชีวิตและการออม"
+    label_en: "Life and savings advice"
     line: life
-    skill: life.policy
+    skill: life.advice
+    default_urgency: normal
+    required_slots: [goal, budget, dependants]
+    playbook: life_quote
+  life.advice.compare:
+    label_th: "เปรียบเทียบแผนประกันชีวิต"
+    label_en: "Compare life plans"
+    line: life
+    skill: life.advice
+    default_urgency: normal
+    required_slots: [current_policy_no, goal]
+    playbook: life_compare
+  life.advice.mortgage:
+    label_th: "ประกันคุ้มครองสินเชื่อบ้าน"
+    label_en: "Mortgage protection"
+    line: life
+    skill: life.advice
+    default_urgency: normal
+    required_slots: [loan_amount, loan_term]
+    playbook: mortgage_protection
+    # Group mortgage-protection premium is growing +9.91% (MARKET_FACTS 7) and the bank
+    # can SEE the home loan. This is the cleanest right-customer x right-time trigger in
+    # the whole data set, which is why it earns its own intent rather than sitting inside
+    # the generic life advice one.
+  life.renew:
+    label_th: "ชำระเบี้ย / ต่ออายุประกันชีวิต"
+    label_en: "Life premium payment or renewal"
+    line: life
+    skill: renewal.retention
     default_urgency: normal
     required_slots: [policy_no]
-    playbook: life_policy_value
-  life.beneficiary.change:
-    label_th: "เปลี่ยนผู้รับผลประโยชน์"
-    label_en: "Change beneficiary"
-    line: life
-    skill: life.policy
-    default_urgency: normal
-    required_slots: [policy_no, beneficiary_name, relationship]
-    playbook: beneficiary_change
-  life.claim.death:
+    playbook: renewal
+  life.claim.notify:
     label_th: "แจ้งเคลมกรณีเสียชีวิต"
-    label_en: "Death claim notification"
+    label_en: "Notify a death claim"
     line: life
-    skill: life.claim
+    skill: claims.assist
     default_urgency: high
     required_slots: [policy_no, date_of_death, relationship_to_insured]
     playbook: life_death_claim
-    # A bereaved caller must never queue behind a renewal question, and the agent
-    # needs the tone warning on screen before they speak.
+    handoff_to_insurer: true
+    # A bereaved caller must never queue behind a renewal question, and the agent needs
+    # the tone warning on screen before they speak.
     sensitive: true
+  life.service.policy:
+    label_th: "สอบถามมูลค่า / เปลี่ยนผู้รับผลประโยชน์"
+    label_en: "Policy value or beneficiary change"
+    line: life
+    skill: life.service
+    default_urgency: normal
+    required_slots: [policy_no]
+    playbook: life_policy_service
   life.other:
     label_th: "เรื่องอื่นๆ เกี่ยวกับประกันชีวิต"
     label_en: "Something else about life insurance"
     line: life
-    skill: life.policy
+    skill: life.service
     default_urgency: normal
     required_slots: []
     playbook: generic
     is_catch_all: true
 
-  # --- cross-cutting ----------------------------------------------------------------
-  general.billing:
-    label_th: "สอบถามการชำระเบี้ยประกัน"
-    label_en: "Premium payment query"
-    skill: general.billing
+  # --- travel: 1.1% of premium, but outbound travel is +45% and premium is -1.5% ------
+  travel.advice.quote:
+    label_th: "ซื้อประกันเดินทาง"
+    label_en: "Buy travel insurance"
+    line: travel
+    skill: travel.advice
     default_urgency: normal
-    required_slots: [policy_no]
-    playbook: billing
+    required_slots: [destination, travel_dates, travellers]
+    playbook: travel_quote
+  travel.emergency.overseas:
+    label_th: "เหตุฉุกเฉินระหว่างเดินทางต่างประเทศ"
+    label_en: "Overseas travel emergency"
+    line: travel
+    skill: claims.assist
+    default_urgency: critical
+    required_slots: [country, situation]
+    playbook: travel_emergency
+    handoff_to_insurer: true
+  travel.claim.notify:
+    label_th: "แจ้งเคลมประกันเดินทาง"
+    label_en: "Notify a travel claim"
+    line: travel
+    skill: claims.assist
+    default_urgency: normal
+    required_slots: [country, incident_date, incident_type]
+    playbook: travel_claim_notify
+    handoff_to_insurer: true
+  travel.other:
+    label_th: "เรื่องอื่นๆ เกี่ยวกับประกันเดินทาง"
+    label_en: "Something else about travel insurance"
+    line: travel
+    skill: travel.advice
+    default_urgency: normal
+    required_slots: []
+    playbook: generic
+    is_catch_all: true
+
+  # --- cross-cutting -------------------------------------------------------------------
+  general.advice.review:
+    label_th: "ขอทบทวนความคุ้มครองทั้งหมด"
+    label_en: "Review my whole portfolio"
+    skill: general.service
+    default_urgency: low
+    required_slots: []
+    playbook: portfolio_review
+    # สร้างความสัมพันธ์กับลูกค้า, as an intent. A customer asking "am I covered properly?"
+    # across every policy they hold is the broker relationship working as designed, and it
+    # is the only intent that is deliberately line-agnostic by nature rather than by
+    # ignorance.
   general.renewal:
     label_th: "ต่ออายุกรมธรรม์"
     label_en: "Policy renewal"
-    skill: general.billing
+    skill: renewal.retention
     default_urgency: normal
     required_slots: [policy_no]
     playbook: renewal
+    # The line-unknown renewal. `<line>.renew` is preferred wherever the menu or the DID
+    # told us which product, because the retention script differs by line.
+  general.billing:
+    label_th: "สอบถามการชำระเบี้ยประกัน"
+    label_en: "Premium payment query"
+    skill: general.service
+    default_urgency: normal
+    required_slots: [policy_no]
+    playbook: billing
   general.update_details:
     label_th: "แก้ไขข้อมูลส่วนตัว"
     label_en: "Update personal details"
@@ -230,13 +322,6 @@ intents:
     required_slots: [subject]
     playbook: complaint
     sensitive: true
-  general.new_product:
-    label_th: "สนใจซื้อผลิตภัณฑ์ใหม่"
-    label_en: "Interested in a new product"
-    skill: general.sales
-    default_urgency: low
-    required_slots: [product_interest]
-    playbook: new_product
 
   general.other:
     label_th: "เรื่องอื่นๆ"
@@ -256,7 +341,7 @@ intents:
   #                   starts from scratch.
   #
   # Both are first-class outcomes, not failures. A caller whose reason is not on our list
-  # is a caller, not an error - and it is far better than a confident wrong label (D13).
+  # is a caller, not an error - and it is far better than a confident wrong label (`D13`).
   unknown:
     label_th: "ยังไม่ทราบเรื่องที่ติดต่อ"
     label_en: "Intent unclear"

@@ -206,7 +206,7 @@ def test_the_platform_axis_does_not_come_back(settings: Settings, storage: Stora
     with boot(settings, storage) as first:
         sign_in(first)
         first.post("/v1/agent/state", json={"agent_intent": "ready"})
-        call = place_call(first, intent_code="health.ipd.preauth")
+        call = place_call(first, intent_code="health.claim.notify")
         assert call["state"] in {"offered", "matched"}
         assert snapshot(first)["presence"]["system_state"] == "offering"
 
@@ -229,7 +229,7 @@ def test_a_waiting_caller_is_still_waiting_and_keeps_their_accrued_wait(
     """
     with boot(settings, storage) as first:
         # Nobody is signed in, so the caller is matched and left waiting rather than offered.
-        call = place_call(first, intent_code="health.ipd.preauth")
+        call = place_call(first, intent_code="health.claim.notify")
         call_id = call["call_session_id"]
         assert call["state"] == "matched"
 
@@ -259,7 +259,7 @@ def test_an_attested_identity_and_its_disclosure_log_survive(
     with boot(settings, storage) as first:
         sign_in(first)
         first.post("/v1/agent/state", json={"agent_intent": "ready"})
-        call = place_call(first, intent_code="health.ipd.preauth", caller_number="0812345678")
+        call = place_call(first, intent_code="health.claim.notify", caller_number="0812345678")
         call_id = call["call_session_id"]
         offer = snapshot(first)["offer"]
         first.post(f"/v1/agent/offers/{offer['assignment_id']}/accept")
@@ -292,7 +292,7 @@ def test_an_agent_who_missed_an_offer_is_still_excluded_from_it(
     with boot(settings, storage) as first:
         sign_in(first, "A006")
         first.post("/v1/agent/state", json={"agent_intent": "ready"})
-        call = place_call(first, intent_code="health.ipd.preauth")
+        call = place_call(first, intent_code="health.claim.notify")
         call_id = call["call_session_id"]
         offer = snapshot(first)["offer"]
         declined = first.post(
@@ -319,7 +319,7 @@ def test_the_brief_still_renders_after_a_restart(settings: Settings, storage: St
     with boot(settings, storage) as first:
         sign_in(first)
         first.post("/v1/agent/state", json={"agent_intent": "ready"})
-        place_call(first, intent_code="health.ipd.preauth", caller_number="0812345678")
+        place_call(first, intent_code="health.claim.notify", caller_number="0812345678")
         offer = snapshot(first)["offer"]
         first.post(f"/v1/agent/offers/{offer['assignment_id']}/accept")
         before = snapshot(first)["brief"]
@@ -341,7 +341,7 @@ def test_a_saved_wrapup_survives_and_an_unsaved_one_stays_absent(
     with boot(settings, storage) as first:
         sign_in(first)
         first.post("/v1/agent/state", json={"agent_intent": "ready"})
-        call = place_call(first, intent_code="health.ipd.preauth")
+        call = place_call(first, intent_code="health.claim.notify")
         call_id = call["call_session_id"]
         offer = snapshot(first)["offer"]
         first.post(f"/v1/agent/offers/{offer['assignment_id']}/accept")

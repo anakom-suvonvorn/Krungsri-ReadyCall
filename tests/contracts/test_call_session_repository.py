@@ -125,13 +125,13 @@ async def test_saving_twice_updates_rather_than_duplicating(
     call = a_call()
     await repo.save(call)
     call.state = CallState.QUEUED
-    call.queue_id = "q_health_ipd"
+    call.queue_id = "q_claims"
     await repo.save(call)
 
     loaded = await repo.get("call_1")
     assert loaded is not None
     assert loaded.state is CallState.QUEUED
-    assert loaded.queue_id == "q_health_ipd"
+    assert loaded.queue_id == "q_claims"
     assert len(await repo.list_in_states(CallState.QUEUED)) == 1
 
 

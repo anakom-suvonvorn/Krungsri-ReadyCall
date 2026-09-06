@@ -15,6 +15,16 @@
       "storage_ref": "prompt://348d827938bc05bf"
     },
     {
+      "clip_key": "850bf86722cb1680afc13675231e6210",
+      "prompt_id": "greeting.claims",
+      "text": "สวัสดีค่ะ ศูนย์ช่วยเหลือด้านเคลม กรุงศรี",
+      "voice": "th-TH-female-1",
+      "slots": {},
+      "duration_ms": 6000.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://00fa361bea7cfb6e"
+    },
+    {
       "clip_key": "e7625289a393b1eae9e957318fcc2eb5",
       "prompt_id": "greeting.general",
       "text": "สวัสดีค่ะ ยินดีต้อนรับสู่ศูนย์บริการลูกค้าประกันภัยกรุงศรี",
@@ -45,14 +55,14 @@
       "storage_ref": "prompt://5cd63dd7a8aeb7ca"
     },
     {
-      "clip_key": "5f5bbc6e7188154d330ff6521a4ed1cd",
-      "prompt_id": "greeting.motor_claim",
-      "text": "สวัสดีค่ะ ศูนย์รับแจ้งเหตุประกันรถยนต์ กรุงศรี",
+      "clip_key": "59e34d6a29d96749258771989794c3d4",
+      "prompt_id": "greeting.renewal",
+      "text": "สวัสดีค่ะ ฝ่ายต่ออายุกรมธรรม์ กรุงศรี",
       "voice": "th-TH-female-1",
       "slots": {},
-      "duration_ms": 6900.0,
+      "duration_ms": 5550.0,
       "sample_rate": 16000,
-      "storage_ref": "prompt://77a6de90838a52b0"
+      "storage_ref": "prompt://274aa5b5db856715"
     },
     {
       "clip_key": "9fa7c9a834a1d4a5590108df10202ebb",
@@ -167,14 +177,14 @@
       "storage_ref": "prompt://cd0784716aaa4552"
     },
     {
-      "clip_key": "77386e9c8e6325db01fdde6593f5948a",
+      "clip_key": "04cc823ad6c7b6416bb8d31c5d332dc8",
       "prompt_id": "menu.life_reason",
-      "text": "กรุณาเลือกเรื่องที่ท่านต้องการติดต่อ เกี่ยวกับประกันชีวิต",
+      "text": "กรุณาเลือกเรื่องที่ท่านต้องการติดต่อ เกี่ยวกับประกันชีวิตและการออม",
       "voice": "th-TH-female-1",
       "slots": {},
-      "duration_ms": 8550.0,
+      "duration_ms": 9900.0,
       "sample_rate": 16000,
-      "storage_ref": "prompt://7e5db81e7f7d2d3f"
+      "storage_ref": "prompt://b334e4ed6b9eae3c"
     },
     {
       "clip_key": "e8633d7e2f4b0cbe4e0a0b905d25dd1f",
@@ -187,30 +197,56 @@
       "storage_ref": "prompt://2f3535d9b4d68669"
     },
     {
-      "clip_key": "0b131cf8f5502e626262dff2050637e0",
+      "clip_key": "02c32482a0479c9f5212a2da192bc459",
       "prompt_id": "menu.option",
-      "text": "กด 3 ติดตามสถานะเคลม",
+      "text": "กด 5 แก้ไขหรือสอบถามกรมธรรม์",
+      "voice": "th-TH-female-1",
+      "slots": {
+        "key": "5",
+        "label": "แก้ไขหรือสอบถามกรมธรรม์"
+      },
+      "duration_ms": 4200.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://84febdae0f9f9d4f"
+    },
+    {
+      "clip_key": "04c8554ec70b6b477d65ebc0dea4440f",
+      "prompt_id": "menu.option",
+      "text": "กด 3 แจ้งเคลม",
       "voice": "th-TH-female-1",
       "slots": {
         "key": "3",
-        "label": "ติดตามสถานะเคลม"
+        "label": "แจ้งเคลม"
       },
-      "duration_ms": 3000.0,
+      "duration_ms": 1950.0,
       "sample_rate": 16000,
-      "storage_ref": "prompt://4fed1880ab2f2542"
+      "storage_ref": "prompt://f37c89ea49188c8e"
     },
     {
-      "clip_key": "1058981bc0543a41776f7bf246d733ea",
+      "clip_key": "08fb7d84370f87626e32f938616a4988",
       "prompt_id": "menu.option",
-      "text": "กด 1 แจ้งเข้ารักษาผู้ป่วยใน",
+      "text": "กด 3 ขอคำแนะนำและเปรียบเทียบแผน",
       "voice": "th-TH-female-1",
       "slots": {
-        "key": "1",
-        "label": "แจ้งเข้ารักษาผู้ป่วยใน"
+        "key": "3",
+        "label": "ขอคำแนะนำและเปรียบเทียบแผน"
       },
-      "duration_ms": 4050.0,
+      "duration_ms": 4650.0,
       "sample_rate": 16000,
-      "storage_ref": "prompt://6393df65985a0641"
+      "storage_ref": "prompt://610074018d15e227"
+    },
+    {
+      "clip_key": "123a043d5d41170a1713adb74f8970d8",
+      "prompt_id": "menu.option",
+      "text": "กด 3 การชำระเบี้ยประกัน",
+      "voice": "th-TH-female-1",
+      "slots": {
+        "key": "3",
+        "label": "การชำระเบี้ยประกัน"
+      },
+      "duration_ms": 3450.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://838ec7752e488239"
     },
     {
       "clip_key": "13a2b74254cdaa003dbacf4fac68cd6b",
@@ -224,6 +260,32 @@
       "duration_ms": 2400.0,
       "sample_rate": 16000,
       "storage_ref": "prompt://00ebe91f0c846bfd"
+    },
+    {
+      "clip_key": "1a4aa26b962afefa37d2acd18cb782bd",
+      "prompt_id": "menu.option",
+      "text": "กด 4 แก้ไขหรือสอบถามกรมธรรม์",
+      "voice": "th-TH-female-1",
+      "slots": {
+        "key": "4",
+        "label": "แก้ไขหรือสอบถามกรมธรรม์"
+      },
+      "duration_ms": 4200.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://0ddab5d44b75103d"
+    },
+    {
+      "clip_key": "2290ab1bb9a14d81b18d9587e6c4f9f6",
+      "prompt_id": "menu.option",
+      "text": "กด 1 ชำระเบี้ยหรือต่ออายุ",
+      "voice": "th-TH-female-1",
+      "slots": {
+        "key": "1",
+        "label": "ชำระเบี้ยหรือต่ออายุ"
+      },
+      "duration_ms": 3750.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://b6a43d79fc3b8983"
     },
     {
       "clip_key": "242be7759fe1830385ae7cfd916ad651",
@@ -252,32 +314,6 @@
       "storage_ref": "prompt://62e0bbe7cf1b771a"
     },
     {
-      "clip_key": "35e26cda71083eba8f3a6eccb146b12c",
-      "prompt_id": "menu.option",
-      "text": "กด 1 สอบถามมูลค่ากรมธรรม์",
-      "voice": "th-TH-female-1",
-      "slots": {
-        "key": "1",
-        "label": "สอบถามมูลค่ากรมธรรม์"
-      },
-      "duration_ms": 3750.0,
-      "sample_rate": 16000,
-      "storage_ref": "prompt://a1ea6f901c6feed6"
-    },
-    {
-      "clip_key": "3f55cb55846abd2d221b2eb9b3b9b3fc",
-      "prompt_id": "menu.option",
-      "text": "กด 3 แก้ไขข้อมูลส่วนตัว",
-      "voice": "th-TH-female-1",
-      "slots": {
-        "key": "3",
-        "label": "แก้ไขข้อมูลส่วนตัว"
-      },
-      "duration_ms": 3450.0,
-      "sample_rate": 16000,
-      "storage_ref": "prompt://ae2e639eae31fd15"
-    },
-    {
       "clip_key": "44ef0e8d88735899c83b9646b10ccf92",
       "prompt_id": "menu.option",
       "text": "กด 6 ร้องเรียน",
@@ -291,43 +327,30 @@
       "storage_ref": "prompt://5b69801441054d53"
     },
     {
-      "clip_key": "4ca6bd7c4be0352c8d04dadc15d23a0c",
+      "clip_key": "4c348011a9907bb65c9495d3252c5d08",
       "prompt_id": "menu.option",
-      "text": "กด 2 ยื่นเคลม",
-      "voice": "th-TH-female-1",
-      "slots": {
-        "key": "2",
-        "label": "ยื่นเคลม"
-      },
-      "duration_ms": 1950.0,
-      "sample_rate": 16000,
-      "storage_ref": "prompt://247295ca6ee4fe46"
-    },
-    {
-      "clip_key": "4f9957829233f46b38689dc4deff157a",
-      "prompt_id": "menu.option",
-      "text": "กด 1 แจ้งอุบัติเหตุ",
+      "text": "กด 1 ต่ออายุกรมธรรม์",
       "voice": "th-TH-female-1",
       "slots": {
         "key": "1",
-        "label": "แจ้งอุบัติเหตุ"
+        "label": "ต่ออายุกรมธรรม์"
       },
-      "duration_ms": 2850.0,
+      "duration_ms": 3000.0,
       "sample_rate": 16000,
-      "storage_ref": "prompt://d9717d4502d3c3d9"
+      "storage_ref": "prompt://4fa0487d18992748"
     },
     {
-      "clip_key": "50c6ef48e47c11934677ba2cdc1e88ff",
+      "clip_key": "51728201fdb634fb52a8bb2c568ea059",
       "prompt_id": "menu.option",
-      "text": "กด 4 สอบถามความคุ้มครอง",
+      "text": "กด 4 แก้ไขข้อมูลส่วนตัว",
       "voice": "th-TH-female-1",
       "slots": {
         "key": "4",
-        "label": "สอบถามความคุ้มครอง"
+        "label": "แก้ไขข้อมูลส่วนตัว"
       },
       "duration_ms": 3450.0,
       "sample_rate": 16000,
-      "storage_ref": "prompt://8f00c8f0e029c507"
+      "storage_ref": "prompt://c629f46b16065838"
     },
     {
       "clip_key": "57faee7f58902cdfd772c175997250f7",
@@ -343,17 +366,17 @@
       "storage_ref": "prompt://fe0bc8d68d227b60"
     },
     {
-      "clip_key": "7762b9a024f95c3c53722d3792eff472",
+      "clip_key": "78e9c9b8be9885fd24fe431d192ff3e8",
       "prompt_id": "menu.option",
-      "text": "กด 5 ต่ออายุกรมธรรม์",
+      "text": "กด 1 แจ้งเหตุหรือเปิดเคลม",
       "voice": "th-TH-female-1",
       "slots": {
-        "key": "5",
-        "label": "ต่ออายุกรมธรรม์"
+        "key": "1",
+        "label": "แจ้งเหตุหรือเปิดเคลม"
       },
-      "duration_ms": 3000.0,
+      "duration_ms": 3750.0,
       "sample_rate": 16000,
-      "storage_ref": "prompt://d04f8ecf06961c0f"
+      "storage_ref": "prompt://da470e10a60fb33f"
     },
     {
       "clip_key": "78fcb9f8df1c9e8cac456de938d98999",
@@ -369,17 +392,56 @@
       "storage_ref": "prompt://59c19651be96e75e"
     },
     {
-      "clip_key": "796b9ddf32cf095a248dedfc8705d776",
+      "clip_key": "7bfc73ae5154ab7263e6e2ac4615636d",
       "prompt_id": "menu.option",
-      "text": "กด 5 สนใจผลิตภัณฑ์ใหม่",
+      "text": "กด 4 ประกันคุ้มครองสินเชื่อบ้าน",
+      "voice": "th-TH-female-1",
+      "slots": {
+        "key": "4",
+        "label": "ประกันคุ้มครองสินเชื่อบ้าน"
+      },
+      "duration_ms": 4650.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://b0f86c9db3a54ce3"
+    },
+    {
+      "clip_key": "7da1e83a93026bc0a26bd8f5f713bbcf",
+      "prompt_id": "menu.option",
+      "text": "กด 5 แจ้งเคลมกรณีเสียชีวิต",
       "voice": "th-TH-female-1",
       "slots": {
         "key": "5",
-        "label": "สนใจผลิตภัณฑ์ใหม่"
+        "label": "แจ้งเคลมกรณีเสียชีวิต"
       },
-      "duration_ms": 3300.0,
+      "duration_ms": 3900.0,
       "sample_rate": 16000,
-      "storage_ref": "prompt://a171a3fc7b6ffd59"
+      "storage_ref": "prompt://65b2d52dfd99c04a"
+    },
+    {
+      "clip_key": "7ffa01f3b6ac623d7d3ccf8f77e258ef",
+      "prompt_id": "menu.option",
+      "text": "กด 2 มูลค่ากรมธรรม์และผู้รับผลประโยชน์",
+      "voice": "th-TH-female-1",
+      "slots": {
+        "key": "2",
+        "label": "มูลค่ากรมธรรม์และผู้รับผลประโยชน์"
+      },
+      "duration_ms": 5700.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://114dcd7cd141f24d"
+    },
+    {
+      "clip_key": "83056027705a03e5fad2880a9d46a38f",
+      "prompt_id": "menu.option",
+      "text": "กด 1 แจ้งเคลมหรือเข้ารักษา",
+      "voice": "th-TH-female-1",
+      "slots": {
+        "key": "1",
+        "label": "แจ้งเคลมหรือเข้ารักษา"
+      },
+      "duration_ms": 3900.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://7faec02cb9683b19"
     },
     {
       "clip_key": "863eec2389ca91728731640cf62618e9",
@@ -395,30 +457,17 @@
       "storage_ref": "prompt://4b8bac3ca236429a"
     },
     {
-      "clip_key": "a01c4336521e9cfdb593398b30f354dc",
+      "clip_key": "9128d575f54f0b64f919cc01043b3fec",
       "prompt_id": "menu.option",
-      "text": "กด 1 การชำระเบี้ยประกัน",
+      "text": "กด 2 ทบทวนความคุ้มครองทั้งหมด",
       "voice": "th-TH-female-1",
       "slots": {
-        "key": "1",
-        "label": "การชำระเบี้ยประกัน"
+        "key": "2",
+        "label": "ทบทวนความคุ้มครองทั้งหมด"
       },
-      "duration_ms": 3450.0,
+      "duration_ms": 4350.0,
       "sample_rate": 16000,
-      "storage_ref": "prompt://a16baf665709f9fd"
-    },
-    {
-      "clip_key": "a8a9095b6af8dff960715858b06a6173",
-      "prompt_id": "menu.option",
-      "text": "กด 4 ขอเอกสาร",
-      "voice": "th-TH-female-1",
-      "slots": {
-        "key": "4",
-        "label": "ขอเอกสาร"
-      },
-      "duration_ms": 1950.0,
-      "sample_rate": 16000,
-      "storage_ref": "prompt://8b52dc8733db36bc"
+      "storage_ref": "prompt://60923f0e8d427733"
     },
     {
       "clip_key": "afa0098043ee533a2aa3c7b368cd8c53",
@@ -432,6 +481,32 @@
       "duration_ms": 3150.0,
       "sample_rate": 16000,
       "storage_ref": "prompt://b009a394004b53df"
+    },
+    {
+      "clip_key": "b0a8bea56fa63f68f075c28e900c8502",
+      "prompt_id": "menu.option",
+      "text": "กด 3 ต่ออายุกรมธรรม์",
+      "voice": "th-TH-female-1",
+      "slots": {
+        "key": "3",
+        "label": "ต่ออายุกรมธรรม์"
+      },
+      "duration_ms": 3000.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://e74160baf0995853"
+    },
+    {
+      "clip_key": "b31c585180058e7f133196a777248fc4",
+      "prompt_id": "menu.option",
+      "text": "กด 2 ซื้อประกันเดินทาง",
+      "voice": "th-TH-female-1",
+      "slots": {
+        "key": "2",
+        "label": "ซื้อประกันเดินทาง"
+      },
+      "duration_ms": 3300.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://591deb4c98678a9f"
     },
     {
       "clip_key": "b4e4e96e0a0dbd1ee46241ddea01dce1",
@@ -460,30 +535,30 @@
       "storage_ref": "prompt://5fcb5e561c6de1d2"
     },
     {
-      "clip_key": "bf87445ff17a71d517a872786b38cac9",
+      "clip_key": "b7c4fffadaea4ad2c286bef19309266c",
       "prompt_id": "menu.option",
-      "text": "กด 2 เปลี่ยนผู้รับผลประโยชน์",
+      "text": "กด 3 เปรียบเทียบแผนและขอราคา",
       "voice": "th-TH-female-1",
       "slots": {
-        "key": "2",
-        "label": "เปลี่ยนผู้รับผลประโยชน์"
+        "key": "3",
+        "label": "เปรียบเทียบแผนและขอราคา"
       },
       "duration_ms": 4200.0,
       "sample_rate": 16000,
-      "storage_ref": "prompt://18c767980b35b668"
+      "storage_ref": "prompt://0268710d0fd045a8"
     },
     {
-      "clip_key": "bfe5b26212d625ea402e67a5872887b8",
+      "clip_key": "b939abfd1c91aa9e1c5a150c08d3ae47",
       "prompt_id": "menu.option",
-      "text": "กด 2 ยื่นเคลมค่ารักษา",
+      "text": "กด 4 เปรียบเทียบแผนและขอราคา",
       "voice": "th-TH-female-1",
       "slots": {
-        "key": "2",
-        "label": "ยื่นเคลมค่ารักษา"
+        "key": "4",
+        "label": "เปรียบเทียบแผนและขอราคา"
       },
-      "duration_ms": 3150.0,
+      "duration_ms": 4200.0,
       "sample_rate": 16000,
-      "storage_ref": "prompt://408486191f231986"
+      "storage_ref": "prompt://6badc3f55e7d79ee"
     },
     {
       "clip_key": "cc697709d3ca96340a6be64fa2792b86",
@@ -512,6 +587,19 @@
       "storage_ref": "prompt://d32c15b1646a08f5"
     },
     {
+      "clip_key": "d2b97116d0578ab58013939a6cb3c586",
+      "prompt_id": "menu.option",
+      "text": "กด 5 ขอเอกสาร",
+      "voice": "th-TH-female-1",
+      "slots": {
+        "key": "5",
+        "label": "ขอเอกสาร"
+      },
+      "duration_ms": 1950.0,
+      "sample_rate": 16000,
+      "storage_ref": "prompt://2e0f76de29f086f0"
+    },
+    {
       "clip_key": "db9391ee16d30851429fa3ee78501a43",
       "prompt_id": "menu.option",
       "text": "กด 2 ต่ออายุกรมธรรม์",
@@ -523,32 +611,6 @@
       "duration_ms": 3000.0,
       "sample_rate": 16000,
       "storage_ref": "prompt://a48c95e5c38f89ac"
-    },
-    {
-      "clip_key": "e0a332730988e3c091137332395c2357",
-      "prompt_id": "menu.option",
-      "text": "กด 3 สอบถามความคุ้มครอง",
-      "voice": "th-TH-female-1",
-      "slots": {
-        "key": "3",
-        "label": "สอบถามความคุ้มครอง"
-      },
-      "duration_ms": 3450.0,
-      "sample_rate": 16000,
-      "storage_ref": "prompt://256f7813f24d0ec1"
-    },
-    {
-      "clip_key": "f1671179f46edd209bb1e63f8086df70",
-      "prompt_id": "menu.option",
-      "text": "กด 3 แจ้งเคลมกรณีเสียชีวิต",
-      "voice": "th-TH-female-1",
-      "slots": {
-        "key": "3",
-        "label": "แจ้งเคลมกรณีเสียชีวิต"
-      },
-      "duration_ms": 3900.0,
-      "sample_rate": 16000,
-      "storage_ref": "prompt://48c3bfc54549ff1d"
     },
     {
       "clip_key": "f2fedf5472fc065e24842e1bb81f0911",

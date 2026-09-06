@@ -693,3 +693,26 @@ button.on:disabled {
   overflow-wrap: anywhere;
   line-height: 1.55;
 }
+
+/* --- D117: the two broker facts on the brief ------------------------------------------ */
+
+/* The carrier. NOT faint: for a broker this is load-bearing, not a footnote — it decides
+   who a claim is handed to and whose terms a comparison is against. */
+.insurer {
+  font-size: 13px;
+  color: var(--ink-dim);
+  margin-top: 2px;
+}
+
+/* "This call ends with the insurer." Sits above the policy so it is read before the agent
+   starts talking, and coloured as a notice rather than an error: handing over is the
+   correct outcome for this intent, not a failure. */
+.handoff-note {
+  margin: 0 0 10px;
+  padding: 7px 10px;
+  border-left: 3px solid var(--warn);
+  background: rgba(251, 191, 36, 0.09);
+  color: var(--warn);
+  font-size: 13px;
+  border-radius: 0 4px 4px 0;
+}

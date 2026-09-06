@@ -12,13 +12,35 @@
     "payment_frequency": "annual",
     "next_due_date": "2026-11-15",
     "coverages": [
-      {"kind": "ipd_room_board", "label_th": "ค่าห้องและค่าอาหาร", "amount": 3000, "unit": "per_day"},
-      {"kind": "ipd_annual_limit", "label_th": "วงเงินผู้ป่วยในต่อปี", "amount": 1000000, "unit": "per_year"},
-      {"kind": "opd_limit", "label_th": "ค่ารักษาผู้ป่วยนอก", "amount": 1500, "unit": "per_visit"},
-      {"kind": "deductible", "label_th": "ค่าใช้จ่ายส่วนแรก", "amount": 0}
+      {
+        "kind": "ipd_room_board",
+        "label_th": "ค่าห้องและค่าอาหาร",
+        "amount": 3000,
+        "unit": "per_day"
+      },
+      {
+        "kind": "ipd_annual_limit",
+        "label_th": "วงเงินผู้ป่วยในต่อปี",
+        "amount": 1000000,
+        "unit": "per_year"
+      },
+      {
+        "kind": "opd_limit",
+        "label_th": "ค่ารักษาผู้ป่วยนอก",
+        "amount": 1500,
+        "unit": "per_visit"
+      },
+      {
+        "kind": "deductible",
+        "label_th": "ค่าใช้จ่ายส่วนแรก",
+        "amount": 0
+      }
     ],
-    "riders": ["critical_illness_rider"],
-    "agent_id_of_record": "A006"
+    "riders": [
+      "critical_illness_rider"
+    ],
+    "agent_id_of_record": "A006",
+    "insurer": "เมืองไทยประกันภัย"
   },
   {
     "policy_no": "MT-2025-004512",
@@ -33,13 +55,30 @@
     "payment_frequency": "annual",
     "next_due_date": "2026-05-01",
     "coverages": [
-      {"kind": "own_damage", "label_th": "ความเสียหายต่อรถยนต์", "amount": 750000},
-      {"kind": "third_party_property", "label_th": "ทรัพย์สินบุคคลภายนอก", "amount": 1000000},
-      {"kind": "deductible", "label_th": "ค่าเสียหายส่วนแรก", "amount": 2000},
-      {"kind": "roadside_assist", "label_th": "บริการช่วยเหลือฉุกเฉิน", "note": "24 ชั่วโมง"}
+      {
+        "kind": "own_damage",
+        "label_th": "ความเสียหายต่อรถยนต์",
+        "amount": 750000
+      },
+      {
+        "kind": "third_party_property",
+        "label_th": "ทรัพย์สินบุคคลภายนอก",
+        "amount": 1000000
+      },
+      {
+        "kind": "deductible",
+        "label_th": "ค่าเสียหายส่วนแรก",
+        "amount": 2000
+      },
+      {
+        "kind": "roadside_assist",
+        "label_th": "บริการช่วยเหลือฉุกเฉิน",
+        "note": "24 ชั่วโมง"
+      }
     ],
     "riders": [],
-    "agent_id_of_record": "A001"
+    "agent_id_of_record": "A001",
+    "insurer": "วิริยะประกันภัย"
   },
   {
     "policy_no": "TR-2026-001204",
@@ -53,10 +92,19 @@
     "premium": 1250,
     "payment_frequency": "single",
     "coverages": [
-      {"kind": "medical_overseas", "label_th": "ค่ารักษาพยาบาลต่างประเทศ", "amount": 2000000},
-      {"kind": "trip_cancellation", "label_th": "การยกเลิกการเดินทาง", "amount": 50000}
+      {
+        "kind": "medical_overseas",
+        "label_th": "ค่ารักษาพยาบาลต่างประเทศ",
+        "amount": 2000000
+      },
+      {
+        "kind": "trip_cancellation",
+        "label_th": "การยกเลิกการเดินทาง",
+        "amount": 50000
+      }
     ],
-    "riders": []
+    "riders": [],
+    "insurer": "ทิพยประกันภัย"
   },
   {
     "policy_no": "PA-2023-007790",
@@ -70,8 +118,86 @@
     "premium": 2400,
     "payment_frequency": "annual",
     "coverages": [
-      {"kind": "accidental_death", "label_th": "การเสียชีวิตจากอุบัติเหตุ", "amount": 300000}
+      {
+        "kind": "accidental_death",
+        "label_th": "การเสียชีวิตจากอุบัติเหตุ",
+        "amount": 300000
+      }
     ],
-    "riders": []
+    "riders": [],
+    "insurer": "อลิอันซ์ อยุธยา"
+  },
+  {
+    "policy_no": "GRP-2023-114502",
+    "customer_id": "C000001",
+    "product_code": "EMP-GROUP-HEALTH",
+    "line": "health",
+    "insurer": "อลิอันซ์ อยุธยา",
+    "status": "active",
+    "effective_date": "2023-04-01",
+    "expiry_date": "2027-03-31",
+    "sum_insured": 200000,
+    "premium": 0,
+    "payment_frequency": "employer_paid",
+    "coverages": [
+      {
+        "kind": "ipd_room_board",
+        "label_th": "ค่าห้องและค่าอาหาร",
+        "amount": 1500,
+        "unit": "per_day"
+      },
+      {
+        "kind": "ipd_annual_limit",
+        "label_th": "วงเงินผู้ป่วยในต่อปี",
+        "amount": 200000,
+        "unit": "per_year"
+      },
+      {
+        "kind": "opd_limit",
+        "label_th": "ค่ารักษาผู้ป่วยนอก",
+        "amount": 800,
+        "unit": "per_visit"
+      },
+      {
+        "kind": "deductible",
+        "label_th": "ค่าใช้จ่ายส่วนแรก",
+        "amount": 0
+      }
+    ],
+    "riders": [],
+    "note_th": "ประกันกลุ่มจากนายจ้าง - สิ้นสุดเมื่อออกจากงาน"
+  },
+  {
+    "policy_no": "MT-2024-008830",
+    "customer_id": "C000001",
+    "product_code": "KS-MOTOR-2ND",
+    "line": "motor",
+    "insurer": "ธนชาตประกันภัย",
+    "status": "active",
+    "effective_date": "2024-11-20",
+    "expiry_date": "2026-11-20",
+    "sum_insured": 480000,
+    "premium": 14200,
+    "payment_frequency": "annual",
+    "next_due_date": "2026-10-20",
+    "coverages": [
+      {
+        "kind": "own_damage",
+        "label_th": "ความเสียหายต่อรถยนต์",
+        "amount": 480000
+      },
+      {
+        "kind": "third_party_property",
+        "label_th": "ทรัพย์สินบุคคลภายนอก",
+        "amount": 1000000
+      },
+      {
+        "kind": "deductible",
+        "label_th": "ค่าเสียหายส่วนแรก",
+        "amount": 5000
+      }
+    ],
+    "riders": [],
+    "agent_id_of_record": "A002"
   }
 ]

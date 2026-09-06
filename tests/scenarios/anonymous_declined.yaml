@@ -27,8 +27,8 @@ agent: A014
 expect:
   state: closed
   assurance: l0_anonymous
-  queue: q_health_policy     # the keypad got them there with no identity and no AI
-  intent: health.coverage.query
+  queue: q_service_health     # the keypad got them there with no identity and no AI
+  intent: health.service.policy
 
 intake:
   declined: true                   # pressed 2

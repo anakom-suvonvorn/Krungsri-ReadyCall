@@ -65,7 +65,7 @@ async def test_wildcard_subscriber_sees_everything(bus: InMemoryEventBus) -> Non
     bus.subscribe("*", handler)
     await bus.publish(state_changed())
     await bus.publish(
-        ev.CallQueued(call_session_id="call_1", occurred_at=NOW, queue_id="q_general")
+        ev.CallQueued(call_session_id="call_1", occurred_at=NOW, queue_id="q_service")
     )
     await bus.drain()
     assert seen == ["call.state.changed", "call.queued"]
@@ -108,7 +108,7 @@ async def test_a_handler_may_publish_and_the_cascade_settles(bus: InMemoryEventB
     bus.subscribe("call.queued", on_queued)
     bus.subscribe("matching.decided", on_matched)
     await bus.publish(
-        ev.CallQueued(call_session_id="call_1", occurred_at=NOW, queue_id="q_general")
+        ev.CallQueued(call_session_id="call_1", occurred_at=NOW, queue_id="q_service")
     )
     await bus.drain()
     assert tail == ["matching.decided"]

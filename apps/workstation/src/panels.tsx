@@ -761,6 +761,15 @@ export function BriefPanel({ brief }: { brief: Brief }) {
         </span>
       </div>
 
+      {brief.handoff_to_insurer && (
+        /* Said BEFORE the agent starts talking, because "I will check and call you back"
+           and "I am passing you to the insurer now" are different promises and only one
+           of them is the broker's to make (`D117`). */
+        <div className="handoff-note">
+          เรื่องนี้ต้องส่งต่อบริษัทประกัน — เราช่วยรวบรวมข้อมูลและประสานงานให้
+        </div>
+      )}
+
       <div className="brief-line">
         <span className="k">กรมธรรม์</span>
         <span>
@@ -768,6 +777,13 @@ export function BriefPanel({ brief }: { brief: Brief }) {
             <>
               <span className="mono">{brief.relevant_policy.policy_no}</span>
               {brief.relevant_policy.product_th ? ` · ${brief.relevant_policy.product_th}` : ""}
+              {/* The carrier, on its own line and not greyed out (`D117`). A broker
+                  holds one customer across several insurers, so "which company" is the
+                  first thing the agent needs — for a claim it decides who they are about
+                  to be handed to. */}
+              {brief.relevant_policy.insurer && (
+                <div className="insurer">บริษัทผู้รับประกัน: {brief.relevant_policy.insurer}</div>
+              )}
               <div className="faint">
                 {brief.relevant_policy.status}
                 {brief.relevant_policy.sum_insured
@@ -932,6 +948,11 @@ export function QueueStrip({ queues, skewMs = 0 }: { queues: Queue[]; skewMs?: n
  *  saved summary reads them back, and two copies would eventually disagree. */
 const DISPOSITIONS: Record<string, string> = {
   advice_given: "ให้คำแนะนำแล้ว",
+  quote_sent: "ส่งใบเสนอราคา",
+  renewed: "ต่ออายุแล้ว",
+  // A broker does not adjudicate claims (`D117`), so "เปิดเคลม" was describing somebody
+  // else's work. What we actually did is take the notification and hand it over.
+  handed_to_insurer: "ส่งต่อบริษัทประกัน",
   claim_opened: "เปิดเคลม",
   document_sent: "ส่งเอกสาร",
   escalated: "ส่งต่อ",

@@ -55,7 +55,7 @@ def weights() -> MatchingWeights:
     return MatchingWeights.load(REPO_ROOT / "config" / "matching_weights.yaml")
 
 
-def make_agent(agent_id: str = "A", skill: str = "motor.claim") -> Agent:
+def make_agent(agent_id: str = "A", skill: str = "claims.assist") -> Agent:
     return Agent(
         agent_id=agent_id,
         display_name=agent_id,
@@ -83,9 +83,9 @@ def make_presence(
 def make_call(**kw: Any) -> WaitingCall:
     base: dict[str, Any] = dict(
         call_session_id="call_1",
-        queue_id="q_motor_claim",
-        required_skill="motor.claim",
-        intent_code="motor.claim.accident",
+        queue_id="q_claims",
+        required_skill="claims.assist",
+        intent_code="motor.service.policy",
         intent_urgency=Urgency.NORMAL,
         waiting_s=10.0,
         sla_seconds=30,
@@ -155,8 +155,12 @@ async def test_a_floor_on_lunch_is_not_reported_as_an_empty_roster(
     assert decision.chosen_agent_id is None
     assert "ยังไม่พร้อมรับสาย" in (decision.rationale_th or "")
 
+    # A skill this one-agent floor genuinely does not hold. It used to be spelled
+    # `motor.claim`, which the broker rewrite (`D117`) mapped onto `claims.assist` - the
+    # same skill `make_agent` hands out - so the "wrong skill" became the right one and
+    # the assertion below started reading a successful ASSIGN as a roster gap.
     wrong_skill = {"A": make_presence()}
-    [decision] = await engine.match([make_call(required_skill="health.ipd")], wrong_skill)
+    [decision] = await engine.match([make_call(required_skill="life.advice")], wrong_skill)
     assert decision.kind is MatchKind.NO_QUALIFIED_AGENT, (
         "a real roster gap must still read as a roster gap"
     )
@@ -181,7 +185,7 @@ def client(clock: ManualClock) -> Any:
 
 def place(client: Any, **kw: Any) -> dict[str, Any]:
     body = {
-        "intent_code": "motor.claim.accident",
+        "intent_code": "motor.service.policy",
         "intake_keys": ["2"],
         "ignore_hours": True,
         **kw,
@@ -254,7 +258,7 @@ async def test_one_desk_does_not_collect_every_waiting_caller(client: Any) -> No
 
 
 def strip(client: Any) -> dict[str, Any]:
-    return next(q for q in me(client)["queues"] if q["queue_id"] == "q_motor_claim")
+    return next(q for q in me(client)["queues"] if q["queue_id"] == "q_service_motor")
 
 
 @pytest.mark.asyncio
@@ -635,7 +639,7 @@ async def test_the_wait_is_sent_as_an_anchor_not_only_as_a_number(client: Any) -
     # counting from it lands on the same number the server would have sent.
     assert (NOW - started).total_seconds() == pytest.approx(40.0, abs=1.0)
 
-    queue = next(q for q in me(client)["queues"] if q["queue_id"] == "q_motor_claim")
+    queue = next(q for q in me(client)["queues"] if q["queue_id"] == "q_service_motor")
     assert queue["longest_wait_since"] is not None
     assert queue["longest_wait_since"] == offer["waited_since"], (
         "one caller, so the strip and the card must be counting from the same instant"

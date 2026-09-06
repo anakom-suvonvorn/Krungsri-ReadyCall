@@ -8,59 +8,63 @@ flowchart LR
     product_line -- "3  ประกันเดินทาง" --> travel_reason["STEP 2  travel reason"]
     product_line -- "4  ประกันชีวิต" --> life_reason["STEP 2  life reason"]
     product_line -- "5  เรื่องอื่นๆ" --> general_reason["STEP 2  general reason"]
-    motor_reason -- "1  แจ้งอุบัติเหตุ" --> motor_claim_accident["motor.claim.accident
--> q_motor_claim"]:::intent
+    motor_reason -- "1  แจ้งเหตุหรือเปิดเคลม" --> motor_claim_notify["motor.claim.notify
+-> q_claims"]:::intent
     motor_reason -- "2  ขอความช่วยเหลือฉุกเฉิน" --> motor_roadside_assist["motor.roadside_assist
--> q_motor_claim"]:::intent
-    motor_reason -- "3  ติดตามสถานะเคลม" --> motor_claim_status["motor.claim.status
--> q_motor_claim"]:::intent
-    motor_reason -- "4  สอบถามความคุ้มครอง" --> motor_policy_coverage["motor.policy.coverage
--> q_motor_policy"]:::intent
-    motor_reason -- "5  ต่ออายุกรมธรรม์" --> motor_policy_renew["motor.policy.renew
--> q_motor_policy"]:::intent
+-> q_claims"]:::intent
+    motor_reason -- "3  ต่ออายุกรมธรรม์" --> motor_renew["motor.renew
+-> q_renewal"]:::intent
+    motor_reason -- "4  เปรียบเทียบแผนและขอราคา" --> motor_advice_compare["motor.advice.compare
+-> q_advice_motor"]:::intent
+    motor_reason -- "5  แก้ไขหรือสอบถามกรมธรรม์" --> motor_service_policy["motor.service.policy
+-> q_service_motor"]:::intent
     motor_reason -- "6  เรื่องอื่นๆ" --> motor_other["motor.other
--> q_motor_policy"]:::intent
-    health_reason -- "1  แจ้งเข้ารักษาผู้ป่วยใน" --> health_ipd_preauth["health.ipd.preauth
--> q_health_ipd"]:::intent
-    health_reason -- "2  ยื่นเคลมค่ารักษา" --> health_claim_submit["health.claim.submit
--> q_health_claim"]:::intent
-    health_reason -- "3  ติดตามสถานะเคลม" --> health_claim_status["health.claim.status
--> q_health_claim"]:::intent
-    health_reason -- "4  สอบถามความคุ้มครอง" --> health_coverage_query["health.coverage.query
--> q_health_policy"]:::intent
+-> q_service_motor"]:::intent
+    health_reason -- "1  แจ้งเคลมหรือเข้ารักษา" --> health_claim_notify["health.claim.notify
+-> q_claims"]:::intent
+    health_reason -- "2  ต่ออายุกรมธรรม์" --> health_renew["health.renew
+-> q_renewal"]:::intent
+    health_reason -- "3  เปรียบเทียบแผนและขอราคา" --> health_advice_compare["health.advice.compare
+-> q_advice_health"]:::intent
+    health_reason -- "4  แก้ไขหรือสอบถามกรมธรรม์" --> health_service_policy["health.service.policy
+-> q_service_health"]:::intent
     health_reason -- "5  โรงพยาบาลในเครือ" --> health_network_hospital["health.network.hospital
--> q_health_policy"]:::intent
+-> q_service_health"]:::intent
     health_reason -- "6  เรื่องอื่นๆ" --> health_other["health.other
--> q_health_policy"]:::intent
+-> q_service_health"]:::intent
     travel_reason -- "1  เหตุฉุกเฉินระหว่างเดินทาง" --> travel_emergency_overseas["travel.emergency.overseas
--> q_travel"]:::intent
-    travel_reason -- "2  ยื่นเคลม" --> travel_claim_submit["travel.claim.submit
--> q_travel"]:::intent
-    travel_reason -- "3  สอบถามความคุ้มครอง" --> travel_coverage_query["travel.coverage.query
--> q_travel"]:::intent
+-> q_claims"]:::intent
+    travel_reason -- "2  ซื้อประกันเดินทาง" --> travel_advice_quote["travel.advice.quote
+-> q_advice_travel"]:::intent
+    travel_reason -- "3  แจ้งเคลม" --> travel_claim_notify["travel.claim.notify
+-> q_claims"]:::intent
     travel_reason -- "4  เรื่องอื่นๆ" --> travel_other["travel.other
--> q_travel"]:::intent
-    life_reason -- "1  สอบถามมูลค่ากรมธรรม์" --> life_policy_value["life.policy.value
--> q_life"]:::intent
-    life_reason -- "2  เปลี่ยนผู้รับผลประโยชน์" --> life_beneficiary_change["life.beneficiary.change
--> q_life"]:::intent
-    life_reason -- "3  แจ้งเคลมกรณีเสียชีวิต" --> life_claim_death["life.claim.death
--> q_life"]:::intent
-    life_reason -- "4  เรื่องอื่นๆ" --> life_other["life.other
--> q_life"]:::intent
-    general_reason -- "1  การชำระเบี้ยประกัน" --> general_billing["general.billing
--> q_general"]:::intent
-    general_reason -- "2  ต่ออายุกรมธรรม์" --> general_renewal["general.renewal
--> q_general"]:::intent
-    general_reason -- "3  แก้ไขข้อมูลส่วนตัว" --> general_update_details["general.update_details
--> q_general"]:::intent
-    general_reason -- "4  ขอเอกสาร" --> general_document_request["general.document.request
--> q_general"]:::intent
-    general_reason -- "5  สนใจผลิตภัณฑ์ใหม่" --> general_new_product["general.new_product
--> q_general"]:::intent
+-> q_advice_travel"]:::intent
+    life_reason -- "1  ชำระเบี้ยหรือต่ออายุ" --> life_renew["life.renew
+-> q_renewal"]:::intent
+    life_reason -- "2  มูลค่ากรมธรรม์และผู้รับผลประโยชน์" --> life_service_policy["life.service.policy
+-> q_service_life"]:::intent
+    life_reason -- "3  ขอคำแนะนำและเปรียบเทียบแผน" --> life_advice_compare["life.advice.compare
+-> q_advice_life"]:::intent
+    life_reason -- "4  ประกันคุ้มครองสินเชื่อบ้าน" --> life_advice_mortgage["life.advice.mortgage
+-> q_advice_life"]:::intent
+    life_reason -- "5  แจ้งเคลมกรณีเสียชีวิต" --> life_claim_notify["life.claim.notify
+-> q_claims"]:::intent
+    life_reason -- "6  เรื่องอื่นๆ" --> life_other["life.other
+-> q_service_life"]:::intent
+    general_reason -- "1  ต่ออายุกรมธรรม์" --> general_renewal["general.renewal
+-> q_renewal"]:::intent
+    general_reason -- "2  ทบทวนความคุ้มครองทั้งหมด" --> general_advice_review["general.advice.review
+-> q_service"]:::intent
+    general_reason -- "3  การชำระเบี้ยประกัน" --> general_billing["general.billing
+-> q_service"]:::intent
+    general_reason -- "4  แก้ไขข้อมูลส่วนตัว" --> general_update_details["general.update_details
+-> q_service"]:::intent
+    general_reason -- "5  ขอเอกสาร" --> general_document_request["general.document.request
+-> q_service"]:::intent
     general_reason -- "6  ร้องเรียน" --> general_complaint["general.complaint
 -> q_escalation"]:::intent
     general_reason -- "7  เรื่องอื่นๆ" --> general_other["general.other
--> q_general"]:::intent
+-> q_service"]:::intent
     classDef entry fill:#1f6feb,stroke:#0b3d91,color:#fff
     classDef intent fill:#eef4ff,stroke:#5b8def,color:#0b2545

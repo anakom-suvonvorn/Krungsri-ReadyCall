@@ -194,7 +194,7 @@ moment in the recording it was said — **and if they consented, their audio is 
 storage encrypted, with the key ref and the retention date on an `audio_recordings` row.**
 If they declined, it is nowhere.
 
-Verified **2026-09-06**: **815 tests** — 803 pass + 12 skipped with Postgres and MinIO both
+Verified **2026-09-06**: **817 tests** — 805 pass + 12 skipped with Postgres and MinIO both
 up. `ruff check` + `ruff format --check` clean over 202 files, `mypy --strict` clean over
 145, all scenarios replay, 64/64 diagrams current, prompt pack fresh (54 clips),
 `audit_docs.py` clean on the live files. **And verified against a running server with a
@@ -498,7 +498,7 @@ ordering for the week to 2026-09-13.
 
 | track | days | what | who |
 |---|---|---|---|
-| **A** | 1-2 | **Broker domain pack** — intents/skills/queues around renewal, enquiry, quote, service, **handoff**; `insurer` on `Policy`; fixtures where one customer holds policies from three insurers. **Blocks everything else** | 1 |
+| ~~**A**~~ | ~~1-2~~ | ✅ **DONE 2026-09-07** (`D117`, `D118`, `B30`). **Broker domain pack** — intents/skills/queues around renewal, enquiry, quote, service, **handoff**; `insurer` on `Policy`; fixtures where one customer holds policies from three insurers. **Blocks everything else** | 1 |
 | **B** | 2-5 | **Compare & best-fit** — `products.yaml` with comparable attributes, gap analysis, rule-based ranking first, model writes only the reason sentence (`D16`) | 2 |
 | **C** | 1-6 | **Customer app v2 + the tool rail** — the 375-line static page becomes a Vite app; push-a-form working end to end, the rest as labelled stubs | 2 |
 | **D** | 2-4 | **The LLM, actually running** — `build_llm` FIRST (there is no adapter and no factory), then summary + intent into `summary_th`, then a labelled set | 1 |
@@ -602,7 +602,7 @@ GPU should own the demo machine. Typhoon uses 1068 MB, so P4's model is the ques
 |---|---|---|
 | **Q32** | **Should there be a "decline and show me a different caller" button?** The user proposed it and then talked themselves out of it, and they were right to. Two reasons. **It already exists implicitly:** declining re-solves the matrix immediately, and the caller you get next is the best remaining match *for you* — fit is scored per call×agent, so it is not "a worse call", it is the best of what is left. **And the explicit version is harmful:** a button that lets an agent skip a caller and keep their place is cherry-picking, which is the well-known contact-centre pathology the Hungarian solver exists to prevent — the hard cases would circulate while the easy ones got taken, and `matching_decisions` would record it as the system's choice rather than as a person's. `D109`'s *decline + pause* covers the legitimate need underneath the idea ("not now"), and costs the agent their place in the rotation, which is what makes it honest. | **Decided: not building it.** `D109` covers the real need |
 | **Q33** | **Ring every qualified agent at once and give the call to whoever answers first?** The user's "random idea", and it is a real pattern — it is what a room full of desk phones does. Worth keeping because it is a genuine **degradation rung**: if nothing has been accepted after N seconds, broadcasting beats a caller waiting. As the *primary* mechanism it deletes everything the matcher buys — fit, continuity, load balance, the anti-starvation ceiling — and replaces them with *who clicked fastest*, which systematically rewards the least busy rather than the best suited and gives N-1 agents an interruption for every call. `AgentHub.broadcast()` already exists, so the mechanism is cheap; the policy is what needs deciding. **Revisit after P5**, when there is real telephony to measure a real accept latency against. | **Parked.** Not for the hackathon build |
-| Q7 | Intent taxonomy + menu wording | **User: leave as-is, revisit during the hackathon.** |
+| ~~Q7~~ | ~~Intent taxonomy + menu wording~~ | **RESOLVED 2026-09-07 by `D117`.** The orientation was the domain review, and the taxonomy is broker-shaped now: 33 intents, advice/compare and renewal first-class, claims as handoffs |
 | Q8 | Typhoon model ids / licence / pricing | Verify against live docs when writing the adapter |
 | Q9 | `OFFER_TIMEOUT_S=20`, ACW thresholds | Guesses; tune against how a real agent works |
 | Q11 | Language menu wording when English lands | `preferred` vs `acceptable` modelled (`D38`) |
@@ -612,7 +612,7 @@ GPU should own the demo machine. Typhoon uses 1068 MB, so P4's model is the ques
 | **Q16** | **A keypad lookup confirms a policy number at L1.** The caller supplied the digits and the agent must not read them aloud below L2 — but it is a confirmation oracle. Designed this way in `D44`; worth a second look. | Allowed |
 | **Q17** | **Commit `apps/workstation/dist/`?** It is gitignored, so a fresh clone has no workstation until `npm run build` runs — and on a venue with no internet, `npm install` is what fails. | Not committed |
 | **Q18** | **"Not this person" is a one-way door.** It clears the customer exactly as `D42` asks, but leaves the agent with nobody to attach the call to, and customer search does not exist (`D32` defers lookup). A rejected call stays anonymous for its duration. A test asserts this so it fails the day search lands. **Now visible rather than silent (`D61`)**: the two forward outcomes are disabled with the reason in the tooltip instead of answering 400. | Accepted for now |
-| **Q19** | **`config/playbooks/` does not exist** but is in the folder map. Actions live in `_PLAYBOOKS` in `builder.py` (`D56`). Moving them out is a P4 task. | Deferred to P4 |
+| ~~Q19~~ | ~~`config/playbooks/` does not exist~~ | **RESOLVED 2026-09-07 by `D118`.** `config/playbooks.yaml` holds all 24, guarded both ways at startup; `_PLAYBOOKS` is deleted |
 | **Q20** | **Should a reveal-on-click with a per-field audit entry come back at P7**, for the most sensitive fields only? `D74` opened display to the agent; the honest answer depends on Krungsri's own agent-desktop policy, which we do not have. | Not for now; every read is logged |
 | **Q21** | **Which storage backend does the DEMO run on?** `memory` is the default and needs nothing; `postgres` is what survives a restart, and it is what makes the persistence work visible on stage at all. Running it on the day adds a container to the list of things that can fail, against `PLAN.md`'s risk register — *never depend on the venue*. Leaning: **rehearse on `postgres`, keep `memory` as the one-keystroke fallback**, since both pass the same suite. | Not decided |
 
@@ -720,6 +720,22 @@ Facts about *this laptop* rather than the repo, so a fresh session does not redi
   to `/end`, threw the response away, and every invariant afterwards was true — of a call
   that had never ended. The stress suite walked this exact scenario and stayed green.
   Helpers in `test_floor_under_load.py` assert their status now; keep it that way.
+- **A BROKER HANDS CLAIMS OVER; IT DOES NOT ADJUDICATE THEM** (`D117`). There is no
+  `*.claim` skill — `claims.assist` takes the notification and hands to the insurer, and
+  every such intent carries `handoff_to_insurer: true` which the agent's screen shows
+  BEFORE they speak. If you find yourself adding a step that says "approved", "is
+  covered", or quotes a premium, it belongs to the insurer and the brief names it as out
+  of scope. `health.ipd.preauth` was deleted for exactly this reason.
+- **ONE AGENT CAN NO LONGER BE ASSUMED INTERCHANGEABLE WITH ANOTHER ON THE SAME LINE**
+  (`D117`). Advice and service are separate skills per line, and `renewal.retention` and
+  `claims.assist` are cross-line. A test that signs in an advisor and places a claim will
+  simply never be offered it — which is correct, and cost about an hour to recognise the
+  first time. `mock/agents/agents.json` is the map.
+- **A FIXTURE WITH ONE OF SOMETHING TESTS NOTHING ABOUT CHOOSING** (`B30`). The demo
+  customer held exactly one policy, so `_pick_relevant_policy`'s "decline to guess"
+  branch was unreachable and a missing `product_line` argument produced correct output
+  for the wrong reason from P1b until 2026-09-07. They hold three now, from three
+  carriers. Cardinality is part of a fixture's design.
 - **THERE IS NO LLM ADAPTER AND NO `build_llm`, WHATEVER THE DOCS USED TO SAY** (checked
   2026-09-06). `adapters/llm/` holds `rulebased.py` alone, `RuleBasedLlm` is constructed by
   nothing, and `Settings.llm_provider` accepts `anthropic` and `openai_compatible` with

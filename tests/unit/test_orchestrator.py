@@ -37,7 +37,7 @@ async def test_transition_log_records_order_time_and_reason(
     session = await orchestrator.start_cold_call()
     await orchestrator.enter_ivr(session)
     clock.advance(9.0)
-    await orchestrator.enqueue(session, queue_id="q_general")
+    await orchestrator.enqueue(session, queue_id="q_service")
 
     assert [t.to_state for t in session.transitions] == [
         CallState.CONNECTING,
@@ -97,7 +97,7 @@ async def test_no_consent_means_no_intake_but_the_call_still_proceeds(
 
     # And the call can still reach an agent regardless of any of that.
     await orchestrator.enter_ivr(session)
-    await orchestrator.enqueue(session, queue_id="q_general")
+    await orchestrator.enqueue(session, queue_id="q_service")
     await orchestrator.transition(session, CallState.MATCHED, reason="agent_available")
     assert session.state is CallState.MATCHED
 
@@ -122,7 +122,7 @@ async def test_every_event_carries_the_call_id_and_trace_id(
 ) -> None:
     session = await orchestrator.start_cold_call()
     await orchestrator.enter_ivr(session)
-    await orchestrator.enqueue(session, queue_id="q_general")
+    await orchestrator.enqueue(session, queue_id="q_service")
     await bus.drain()
 
     recorded = bus.recorded(session.call_session_id)

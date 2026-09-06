@@ -344,7 +344,7 @@ endpointer cuts it into utterances (`D107`). Any 16-bit mono WAV in `DEMO_AUDIO_
 (`tests/audio` by default) will do — including one you record yourself:
 
 ```bash
-curl -X POST http://127.0.0.1:8000/v1/demo/calls -H "Content-Type: application/json" -d "{\"intent_code\": \"motor.claim.accident\", \"caller_number\": \"0812345678\", \"intake_keys\": [\"1\"], \"audio\": \"demo_intake.wav\", \"ignore_hours\": true}"
+curl -X POST http://127.0.0.1:8000/v1/demo/calls -H "Content-Type: application/json" -d "{\"intent_code\": \"motor.claim.notify\", \"caller_number\": \"0812345678\", \"intake_keys\": [\"1\"], \"audio\": \"demo_intake.wav\", \"ignore_hours\": true}"
 ```
 
 `"intake_keys": ["1"]` is the caller accepting the recording offer. Press `2` instead and

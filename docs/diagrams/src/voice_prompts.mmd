@@ -30,12 +30,14 @@ flowchart LR
         did_p6621234222["+6621234222"]:::cfg
         did_p6621234333["+6621234333"]:::cfg
         did_p6621234444["+6621234444"]:::cfg
+        did_p6621234555["+6621234555"]:::cfg
     end
     p_call_goodbye["call.goodbye"]:::static
+    p_greeting_claims["greeting.claims"]:::static
     p_greeting_general["greeting.general"]:::static
     p_greeting_health["greeting.health"]:::static
     p_greeting_life["greeting.life"]:::static
-    p_greeting_motor_claim["greeting.motor_claim"]:::static
+    p_greeting_renewal["greeting.renewal"]:::static
     p_greeting_travel["greeting.travel"]:::static
     p_input_none["input.none"]:::static
     p_intake_declined["intake.declined"]:::static
@@ -83,10 +85,11 @@ flowchart LR
     menu_product_line --> p_menu_product_line
     menu_travel_reason --> p_menu_travel_reason
     did_p6621234000 --> p_greeting_general
-    did_p6621234111 --> p_greeting_motor_claim
+    did_p6621234111 --> p_greeting_claims
     did_p6621234222 --> p_greeting_health
     did_p6621234333 --> p_greeting_travel
     did_p6621234444 --> p_greeting_life
+    did_p6621234555 --> p_greeting_renewal
     classDef role fill:#eef4ff,stroke:#5b8def,color:#0b2545
     classDef cfg fill:#fff4e6,stroke:#e8a33d,color:#4a2f00
     classDef static fill:#e9f7ef,stroke:#2f9e5f,color:#08361d

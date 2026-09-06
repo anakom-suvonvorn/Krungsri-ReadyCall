@@ -1,7 +1,7 @@
 # BUG_HISTORY
 
 _Solved bugs and the lessons they bought. **Search this file FIRST when debugging** — the answer may already be here._
-_Last updated: 2026-09-06._
+_Last updated: 2026-09-07._
 
 Format per entry:
 
@@ -1506,3 +1506,38 @@ carried across byte-for-byte and verified by hash.
   believed and unenforced.
 - **Assigning one name twice in an env file is `Q26`'s lie in reverse:** not a knob nothing
   reads, but a knob read from a line you did not think was the live one.
+
+---
+
+## B30. The cold-call path knew the product line and threw it away
+
+_The reasoning and the lesson live with `D117` in `DECISIONS.md`; this entry exists so a
+search of the bug file finds it._
+
+- **Symptoms.** `relevant_policy: None` on the agent's screen for a caller whose policy we
+  hold, with an empty policy panel. Appeared the moment the demo customer was given a
+  second policy (`D117`) and four workstation tests turned red together.
+- **Root cause.** `api/routers/demo.py` passes `product_line` to the context assembler on
+  the app path and **not** on the cold-call path twelve lines below, although
+  `body.intent_code` is in scope there and the expression is identical.
+  `_pick_relevant_policy` falls back to "the only policy they have" when it has no line
+  signal, so a one-policy fixture produced correct output for the wrong reason and hid the
+  gap from P1b until now.
+- **Investigation.** The instinct was that the fixture change had broken something. It had
+  not: it had removed a fallback that was concealing a real omission. Reading
+  `_pick_relevant_policy` before touching either side is what turned "my new fixture broke
+  four tests" into "four tests were passing for the wrong reason".
+- **Fix.** Pass the line on both paths, with the reason written at the call site.
+- **Verification.** On a running server: a cold call with `health.claim.notify` now returns
+  `relevant_policy` with the carrier on it. The four tests pass for the right reason.
+- **Lessons.**
+  - **A fixture with one of something tests nothing about choosing.** The branch that
+    declines to guess between unrelated policies was unreachable, because no customer had
+    two. Cardinality is part of a fixture's design — `B13`'s "never test a contention rule
+    without contention", one layer down.
+  - **When two code paths do the same job, diff them.** The app path and the cold-call
+    path sit twelve lines apart and one of them was missing an argument the other passes.
+    That is the cheapest possible review and nobody had done it.
+  - **A green test on a degenerate fixture is a claim about the fixture, not the code.**
+    This is `B24`'s family from the data side: the code was correct-looking, running, and
+    exercised — by an input that could not distinguish right from wrong.

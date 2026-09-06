@@ -70,11 +70,21 @@ prompts:
   greeting.general:
     text_th: "สวัสดีค่ะ ยินดีต้อนรับสู่ศูนย์บริการลูกค้าประกันภัยกรุงศรี"
 
-  greeting.motor_claim:
-    text_th: "สวัสดีค่ะ ศูนย์รับแจ้งเหตุประกันรถยนต์ กรุงศรี"
+  greeting.claims:
+    text_th: "สวัสดีค่ะ ศูนย์ช่วยเหลือด้านเคลม กรุงศรี"
     note: >-
       Dialled from beside a damaged car, so the line names the service rather than
       welcoming anyone. `dids.yaml` also raises the urgency floor on this number.
+      Named for CLAIMS ASSISTANCE rather than for motor claims, because a broker takes
+      the notification and hands the claim itself to the insurer (`D117`) - and the same
+      desk does it for every line.
+
+  greeting.renewal:
+    text_th: "สวัสดีค่ะ ฝ่ายต่ออายุกรมธรรม์ กรุงศรี"
+    note: >-
+      The number on a renewal notice, and the caller-ID an outbound retention call shows.
+      Somebody dialling it is answering us, so the line says which department they have
+      reached rather than asking what they want (`D117`).
 
   greeting.health:
     text_th: "สวัสดีค่ะ ศูนย์บริการประกันสุขภาพ กรุงศรี"
@@ -109,7 +119,7 @@ prompts:
     text_th: "กรุณาเลือกเรื่องที่ท่านต้องการติดต่อ เกี่ยวกับประกันเดินทาง"
 
   menu.life_reason:
-    text_th: "กรุณาเลือกเรื่องที่ท่านต้องการติดต่อ เกี่ยวกับประกันชีวิต"
+    text_th: "กรุณาเลือกเรื่องที่ท่านต้องการติดต่อ เกี่ยวกับประกันชีวิตและการออม"
 
   menu.general_reason:
     text_th: "กรุณาเลือกเรื่องที่ท่านต้องการติดต่อ"

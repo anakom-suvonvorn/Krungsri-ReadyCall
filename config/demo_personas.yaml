@@ -20,7 +20,7 @@ personas:
     # The pitch's own scenario (Krungsri.pdf p.7): reading the hospitalisation coverage
     # page, being admitted tomorrow, wants to confirm room and board.
     entry_screen: coverage.hospitalisation
-    app_intent: health.ipd.preauth
+    app_intent: health.claim.notify
     product_code: KS-HEALTH-A
     blurb_en: "Reading hospitalisation coverage - admitted tomorrow"
     blurb_th: "กำลังดูความคุ้มครองผู้ป่วยใน - พรุ่งนี้ต้องนอนโรงพยาบาล"
@@ -29,7 +29,7 @@ personas:
     # Holds two policies in *different* lines, which is the case that makes the assembler
     # decline to guess a relevant policy when no signal says which one the call is about.
     entry_screen: claims.report
-    app_intent: motor.claim.accident
+    app_intent: motor.claim.notify
     product_code: KS-MOTOR-1ST
     blurb_en: "Two policies in different lines - motor claim"
     blurb_th: "ถือกรมธรรม์สองประเภท - แจ้งเคลมรถยนต์"

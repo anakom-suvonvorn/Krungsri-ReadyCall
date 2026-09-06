@@ -126,7 +126,7 @@ class TestSkillsAndQueues:
     def test_urgent_queues_have_tighter_slas(self, skills_cfg: dict[str, Any]) -> None:
         """Someone at a crash site should not have the same SLA as a renewal question."""
         queues = skills_cfg["queues"]
-        assert queues["q_motor_claim"]["sla_seconds"] < queues["q_general"]["sla_seconds"]
+        assert queues["q_claims"]["sla_seconds"] < queues["q_service"]["sla_seconds"]
 
 
 class TestMenus:

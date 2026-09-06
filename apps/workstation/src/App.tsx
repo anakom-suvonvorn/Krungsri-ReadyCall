@@ -520,13 +520,13 @@ function SignIn({ onDone }: { onDone: (snapshot: Snapshot) => void }) {
 function intentForSkills(skills: { skill_code: string }[]): string {
   const held = new Set(skills.map((s) => s.skill_code));
   const preferred: [string, string][] = [
-    ["health.ipd", "health.ipd.preauth"],
-    ["health.claim", "health.claim.status"],
-    ["health.policy", "health.other"],
-    ["motor.claim", "motor.claim.accident"],
-    ["motor.policy", "motor.other"],
-    ["travel.claim", "travel.claim.submit"],
-    ["life.policy", "life.other"],
+    ["claims.assist", "health.claim.notify"],
+    ["claims.assist", "health.claim.notify"],
+    ["health.service", "health.other"],
+    ["claims.assist", "motor.claim.notify"],
+    ["motor.service", "motor.other"],
+    ["claims.assist", "travel.claim.notify"],
+    ["life.service", "life.other"],
     ["general.escalation", "general.complaint"],
   ];
   for (const [skill, intent] of preferred) if (held.has(skill)) return intent;

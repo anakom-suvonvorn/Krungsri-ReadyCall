@@ -79,10 +79,26 @@ class Coverage(DomainModel):
 
 
 class Policy(DomainModel):
+    """One policy the customer holds.
+
+    ``insurer`` is what makes this a BROKER's record rather than an insurer's (`D117`).
+    A single company's system has no use for the field - every policy in it is theirs. A
+    broker holds one customer's cover across several carriers, and *which carrier* is the
+    first thing that matters: it decides who a claim is handed to, whose renewal terms are
+    being compared against whose, and whether the affiliated insurer is genuinely the best
+    answer on this particular risk.
+
+    Optional because the field is unknown for a policy the customer mentions but we have
+    no record of, and because a single-insurer deployment has nothing to put in it.
+    """
+
     policy_no: str
     customer_id: str
     product_code: str
     line: ProductLine
+    #: The carrier. A display name from `core_mapping.yaml`, never an internal code -
+    #: it is read aloud to the customer and printed on the comparison.
+    insurer: str | None = None
     status: PolicyStatus
     effective_date: date | None = None
     expiry_date: date | None = None
@@ -397,6 +413,10 @@ class IntentPrediction(DomainModel):
     confidence: float = Field(ge=0.0, le=1.0)
     alternatives: tuple[tuple[str, float], ...] = ()
     source: str = "unknown"  # did / dtmf / app / speech / blended
+    #: Whether this reason for calling ENDS with the insurer rather than with us (`D117`).
+    #: Carried on the prediction because the wire layer has no domain pack to look it up
+    #: in, and because it belongs to the intent rather than to the customer.
+    handoff_to_insurer: bool = False
 
     @property
     def is_unknown(self) -> bool:

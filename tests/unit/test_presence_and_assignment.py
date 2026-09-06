@@ -324,7 +324,7 @@ async def test_the_exclusion_is_a_hard_filter_with_its_own_reason() -> None:
     """It must show up in the decision record, not vanish into a low score (`D22`)."""
     weights = MatchingWeights.load(REPO_ROOT / "config" / "matching_weights.yaml")
     clock = ManualClock()
-    agent = make_agent("A001", skill="motor.claim", prof=0.9)
+    agent = make_agent("A001", skill="claims.assist", prof=0.9)
     who = AgentPresence(
         agent_id="A001",
         system_state=AgentSystemState.AVAILABLE,
@@ -333,9 +333,9 @@ async def test_the_exclusion_is_a_hard_filter_with_its_own_reason() -> None:
     )
     call = WaitingCall(
         call_session_id="c1",
-        queue_id="q_motor_claim",
-        required_skill="motor.claim",
-        intent_code="motor.claim.accident",
+        queue_id="q_claims",
+        required_skill="claims.assist",
+        intent_code="motor.claim.notify",
         intent_urgency=Urgency.NORMAL,
         waiting_s=10.0,
         sla_seconds=30,

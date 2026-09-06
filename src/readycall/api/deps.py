@@ -724,6 +724,7 @@ def _brief_out(brief: CaseBrief, identity: IdentityResolution) -> BriefOut:
         policy_out = BriefPolicyOut(
             policy_no=policy.policy_no,
             product_th=payload.selected_product.name_th if payload.selected_product else None,
+            insurer=policy.insurer,
             status=str(policy.status),
             line=str(policy.line),
             sum_insured=policy.sum_insured,
@@ -780,6 +781,7 @@ def _brief_out(brief: CaseBrief, identity: IdentityResolution) -> BriefOut:
         recent_claim_count=len(payload.recent_claims) if disclose and payload else 0,
         last_contact_th=last_contact,
         disclosure_locked=not disclose,
+        handoff_to_insurer=bool(brief.intent and brief.intent.handoff_to_insurer),
         degraded=str(brief.degraded),
         build_ms=brief.build_ms,
         provenance=tuple(

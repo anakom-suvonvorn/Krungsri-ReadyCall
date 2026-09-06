@@ -3,31 +3,36 @@
 flowchart TB
     ROOT["ProductLine"]:::root
     ROOT --> L_MOTOR["motor
-6 intents"]:::line
-    L_MOTOR --> i_motor_claim_accident["motor.claim.accident"]
-    L_MOTOR --> i_motor_claim_status["motor.claim.status"]
+7 intents"]:::line
+    L_MOTOR --> i_motor_advice_compare["motor.advice.compare"]
+    L_MOTOR --> i_motor_advice_quote["motor.advice.quote"]
+    L_MOTOR --> i_motor_claim_notify["motor.claim.notify"]
     L_MOTOR --> i_motor_other["motor.other *catch-all*"]
-    L_MOTOR --> i_motor_policy_coverage["motor.policy.coverage"]
-    L_MOTOR --> i_motor_policy_renew["motor.policy.renew"]
+    L_MOTOR --> i_motor_renew["motor.renew"]
     L_MOTOR --> i_motor_roadside_assist["motor.roadside_assist"]
+    L_MOTOR --> i_motor_service_policy["motor.service.policy"]
     ROOT --> L_HEALTH["health
-6 intents"]:::line
-    L_HEALTH --> i_health_claim_status["health.claim.status"]
-    L_HEALTH --> i_health_claim_submit["health.claim.submit"]
-    L_HEALTH --> i_health_coverage_query["health.coverage.query"]
-    L_HEALTH --> i_health_ipd_preauth["health.ipd.preauth"]
+7 intents"]:::line
+    L_HEALTH --> i_health_advice_compare["health.advice.compare"]
+    L_HEALTH --> i_health_advice_quote["health.advice.quote"]
+    L_HEALTH --> i_health_claim_notify["health.claim.notify"]
     L_HEALTH --> i_health_network_hospital["health.network.hospital"]
     L_HEALTH --> i_health_other["health.other *catch-all*"]
+    L_HEALTH --> i_health_renew["health.renew"]
+    L_HEALTH --> i_health_service_policy["health.service.policy"]
     ROOT --> L_LIFE["life
-4 intents"]:::line
-    L_LIFE --> i_life_beneficiary_change["life.beneficiary.change"]
-    L_LIFE --> i_life_claim_death["life.claim.death"]
+7 intents"]:::line
+    L_LIFE --> i_life_advice_compare["life.advice.compare"]
+    L_LIFE --> i_life_advice_mortgage["life.advice.mortgage"]
+    L_LIFE --> i_life_advice_quote["life.advice.quote"]
+    L_LIFE --> i_life_claim_notify["life.claim.notify"]
     L_LIFE --> i_life_other["life.other *catch-all*"]
-    L_LIFE --> i_life_policy_value["life.policy.value"]
+    L_LIFE --> i_life_renew["life.renew"]
+    L_LIFE --> i_life_service_policy["life.service.policy"]
     ROOT --> L_TRAVEL["travel
 4 intents"]:::line
-    L_TRAVEL --> i_travel_claim_submit["travel.claim.submit"]
-    L_TRAVEL --> i_travel_coverage_query["travel.coverage.query"]
+    L_TRAVEL --> i_travel_advice_quote["travel.advice.quote"]
+    L_TRAVEL --> i_travel_claim_notify["travel.claim.notify"]
     L_TRAVEL --> i_travel_emergency_overseas["travel.emergency.overseas"]
     L_TRAVEL --> i_travel_other["travel.other *catch-all*"]
     ROOT --> L_PA["pa
@@ -36,10 +41,10 @@ flowchart TB
 0 intents"]:::line
     ROOT --> L_UNKNOWN["unknown
 8 intents"]:::line
+    L_UNKNOWN --> i_general_advice_review["general.advice.review"]
     L_UNKNOWN --> i_general_billing["general.billing"]
     L_UNKNOWN --> i_general_complaint["general.complaint"]
     L_UNKNOWN --> i_general_document_request["general.document.request"]
-    L_UNKNOWN --> i_general_new_product["general.new_product"]
     L_UNKNOWN --> i_general_other["general.other *catch-all*"]
     L_UNKNOWN --> i_general_renewal["general.renewal"]
     L_UNKNOWN --> i_general_update_details["general.update_details"]

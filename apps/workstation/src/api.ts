@@ -142,6 +142,8 @@ export type Brief = {
   relevant_policy: {
     policy_no: string;
     product_th: string | null;
+    /** Which carrier underwrote it (`D117`). The broker's first question. */
+    insurer: string | null;
     status: string;
     line: string;
     sum_insured: number | null;
@@ -152,6 +154,8 @@ export type Brief = {
   recent_claim_count: number;
   last_contact_th: string | null;
   disclosure_locked: boolean;
+  /** This call ends with the insurer, not with us (`D117`). */
+  handoff_to_insurer: boolean;
   degraded: string;
   build_ms: number | null;
   provenance: { field: string; source: string; stale: boolean }[];

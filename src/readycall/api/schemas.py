@@ -664,6 +664,10 @@ class BriefPolicyOut(ApiModel):
 
     policy_no: str
     product_th: str | None = None
+    #: Which carrier underwrote it (`D117`). The first thing a broker needs and the one
+    #: field an insurer's own screen would never have: it decides who a claim is handed
+    #: to and whose terms a comparison is against.
+    insurer: str | None = None
     status: str
     line: str
     sum_insured: float | None = None
@@ -695,6 +699,12 @@ class BriefOut(ApiModel):
     #: True whenever assurance is below `L2_STRONG`; the workstation says so rather than
     #: rendering an empty row that looks like missing data.
     disclosure_locked: bool = True
+    #: Whether this call is expected to END by handing the customer to the insurer
+    #: (`D117`). A broker takes the notification and gathers what the insurer will ask
+    #: for; it does not adjudicate. The screen says so before the agent starts talking,
+    #: because "I will check and call you back" and "I am passing you to the insurer now"
+    #: are different promises and only one of them is ours to make.
+    handoff_to_insurer: bool = False
     degraded: str = "none"
     build_ms: float | None = None
     provenance: tuple[BriefProvenanceOut, ...] = ()

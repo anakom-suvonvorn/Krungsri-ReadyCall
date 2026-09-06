@@ -57,7 +57,7 @@ def test_a_holiday_closes_business_and_names_itself(hours: QueueHours) -> None:
 
 
 def test_the_extended_schedule_covers_evenings_but_not_the_night(hours: QueueHours) -> None:
-    """`q_health_ipd`: hospitals admit at 21:00; nobody pre-authorises at 04:00."""
+    """`q_claims`: hospitals admit at 21:00; nobody pre-authorises at 04:00."""
     assert hours.is_open("extended", local(hours, 2026, 8, 24, 21, 0))
     assert hours.is_open("extended", local(hours, 2026, 8, 23, 9, 0))  # Sunday
     assert not hours.is_open("extended", local(hours, 2026, 8, 24, 4, 0))

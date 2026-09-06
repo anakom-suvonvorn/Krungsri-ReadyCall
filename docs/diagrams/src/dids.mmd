@@ -3,19 +3,22 @@
 flowchart LR
     d_p6621234000["+6621234000
 General hotline"]:::did --> r_d_p6621234000["line: unknown
-MENU ASKS step 1"] --> q_general["default: q_general"]:::queue
+MENU ASKS step 1"] --> q_service["default: q_service"]:::queue
     d_p6621234111["+6621234111
-Motor claims"]:::did --> r_d_p6621234111["line: motor
+Claims assistance"]:::did --> r_d_p6621234111["line: motor
 skips step 1
-urgency floor: high"] --> q_motor_claim["default: q_motor_claim"]:::queue
+urgency floor: high"] --> q_claims["default: q_claims"]:::queue
     d_p6621234222["+6621234222
 Health"]:::did --> r_d_p6621234222["line: health
-skips step 1"] --> q_health_policy["default: q_health_policy"]:::queue
+skips step 1"] --> q_service_health["default: q_service_health"]:::queue
     d_p6621234333["+6621234333
 Travel"]:::did --> r_d_p6621234333["line: travel
-skips step 1"] --> q_travel["default: q_travel"]:::queue
+skips step 1"] --> q_advice_travel["default: q_advice_travel"]:::queue
     d_p6621234444["+6621234444
 Life and savings"]:::did --> r_d_p6621234444["line: life
-skips step 1"] --> q_life["default: q_life"]:::queue
+skips step 1"] --> q_service_life["default: q_service_life"]:::queue
+    d_p6621234555["+6621234555
+Renewal"]:::did --> r_d_p6621234555["line: unknown
+MENU ASKS step 1"] --> q_renewal["default: q_renewal"]:::queue
     classDef did fill:#eef4ff,stroke:#5b8def,color:#0b2545
     classDef queue fill:#e9f7ef,stroke:#2f9e5f,color:#08361d

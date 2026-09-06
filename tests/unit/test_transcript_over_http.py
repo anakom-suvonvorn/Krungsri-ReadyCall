@@ -99,7 +99,7 @@ def sign_in(client: Any, agent_id: str = "A002") -> None:
 
 def place_recorded_call(client: Any, **kwargs: Any) -> dict[str, Any]:
     body = {
-        "intent_code": "motor.claim.accident",
+        "intent_code": "motor.service.policy",
         "caller_number": "0812345678",
         # `1` accepts the recording offer. `2` would decline it and there would be no
         # transcript at all, which is a different test.
@@ -299,7 +299,7 @@ def test_a_path_is_not_a_filename(client: Any) -> None:
         response = client.post(
             "/v1/demo/calls",
             json={
-                "intent_code": "motor.claim.accident",
+                "intent_code": "motor.service.policy",
                 "intake_keys": ["1"],
                 "audio": attempt,
                 "ignore_hours": True,
@@ -313,7 +313,7 @@ def test_an_unknown_file_is_a_404_not_a_crash(client: Any) -> None:
     response = client.post(
         "/v1/demo/calls",
         json={
-            "intent_code": "motor.claim.accident",
+            "intent_code": "motor.service.policy",
             "intake_keys": ["1"],
             "audio": "nothing_here.wav",
             "ignore_hours": True,

@@ -41,8 +41,8 @@ from tests.conftest import REPO_ROOT
 MOTOR = ("A001", "A002", "A003")
 HEALTH = ("A004", "A005", "A006")
 INTENTS = {
-    "motor": ("motor.claim.accident", "motor.policy.renew", "motor.roadside_assist"),
-    "health": ("health.ipd.preauth", "health.claim.status", "health.coverage.query"),
+    "motor": ("motor.advice.compare", "motor.service.policy", "motor.advice.quote"),
+    "health": ("health.advice.compare", "health.service.policy", "health.claim.notify"),
 }
 
 
