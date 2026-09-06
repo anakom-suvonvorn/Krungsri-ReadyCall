@@ -23,7 +23,7 @@ from fastapi.staticfiles import StaticFiles
 
 from readycall import __version__
 from readycall.api.deps import Container
-from readycall.api.routers import agent, demo, health, mobile
+from readycall.api.routers import agent, assist, demo, health, mobile
 from readycall.api.security import AuthenticationRequired
 from readycall.clock import Clock
 from readycall.config import Settings, get_settings
@@ -35,6 +35,7 @@ from readycall.ports.blob_storage import ProvisionableBlobStorage
 log = get_logger(__name__)
 
 SIM_DIR = Path(__file__).resolve().parents[3] / "apps" / "customer_sim"
+ASSIST_DIR = Path(__file__).resolve().parents[3] / "apps" / "customer_assist"
 WORKSTATION_DIST = Path(__file__).resolve().parents[3] / "apps" / "workstation" / "dist"
 
 
@@ -231,6 +232,7 @@ def create_app(
     app.include_router(health.router)
     app.include_router(mobile.router)
     app.include_router(agent.router)
+    app.include_router(assist.router)
     if settings.demo_login_enabled:
         app.include_router(demo.router)
 
@@ -249,6 +251,15 @@ def create_app(
         @app.get("/workstation", include_in_schema=False)
         async def workstation() -> FileResponse:
             return FileResponse(WORKSTATION_DIST / "index.html")
+
+    if ASSIST_DIR.is_dir():
+        # The customer's paired screen (`D120`). The token is a PATH segment, so every
+        # `/assist/<token>` serves the same page and the page reads its own token from
+        # `location.pathname` - which is what lets the whole thing be one static file
+        # that opens from a link on a stranger's phone (`D47`'s reasoning).
+        @app.get("/assist/{token}", include_in_schema=False)
+        async def assist_screen(token: str) -> FileResponse:
+            return FileResponse(ASSIST_DIR / "index.html")
 
     if SIM_DIR.is_dir():
         app.mount("/sim/static", StaticFiles(directory=SIM_DIR), name="sim-static")

@@ -194,7 +194,7 @@ moment in the recording it was said — **and if they consented, their audio is 
 storage encrypted, with the key ref and the retention date on an `audio_recordings` row.**
 If they declined, it is nowhere.
 
-Verified **2026-09-06**: **831 tests** — 819 pass + 12 skipped with Postgres and MinIO both
+Verified **2026-09-06**: **841 tests** — 829 pass + 12 skipped with Postgres and MinIO both
 up. `ruff check` + `ruff format --check` clean over 202 files, `mypy --strict` clean over
 145, all scenarios replay, 64/64 diagrams current, prompt pack fresh (54 clips),
 `audit_docs.py` clean on the live files. **And verified against a running server with a
@@ -500,7 +500,7 @@ ordering for the week to 2026-09-13.
 |---|---|---|---|
 | ~~**A**~~ | ~~1-2~~ | ✅ **DONE 2026-09-07** (`D117`, `D118`, `B30`). **Broker domain pack** — intents/skills/queues around renewal, enquiry, quote, service, **handoff**; `insurer` on `Policy`; fixtures where one customer holds policies from three insurers. **Blocks everything else** | 1 |
 | **B** | 2-5 | **Compare & best-fit** — `products.yaml` with comparable attributes, gap analysis, rule-based ranking first, model writes only the reason sentence (`D16`) | 2 |
-| **C** | 1-6 | **Customer app v2 + the tool rail** — the 375-line static page becomes a Vite app; push-a-form working end to end, the rest as labelled stubs | 2 |
+| ~~**C**~~ | ~~1-6~~ | ◐ **PARTLY DONE 2026-09-07** (`D120`) — pairing, the tool rail and push-a-form all work end to end; the comparison DATA is Track B's. **Customer app v2 + the tool rail** — the 375-line static page becomes a Vite app; push-a-form working end to end, the rest as labelled stubs | 2 |
 | ~~**D**~~ | ~~2-4~~ | ✅ **DONE 2026-09-07** (`D119`). **The LLM, actually running** — `build_llm` FIRST (there is no adapter and no factory), then summary + intent into `summary_th`, then a labelled set | 1 |
 | **E** | 5-7 | **Package, freeze, rehearse** — Dockerfile + compose profile, **feature freeze end of day 5**, and record a video of the demo working | all |
 
@@ -736,9 +736,18 @@ Facts about *this laptop* rather than the repo, so a fresh session does not redi
   branch was unreachable and a missing `product_line` argument produced correct output
   for the wrong reason from P1b until 2026-09-07. They hold three now, from three
   carriers. Cardinality is part of a fixture's design.
+- **A PERSONAL PUSH TO A LINK-ONLY SCREEN MUST STAY REFUSED** (`D120`, `D42`). Tapping a
+  link proves somebody holds that phone; it is not identity. `_NEEDS_VERIFIED` is the
+  list, and widening it to make a demo smoother would put a stranger's policy on whoever
+  is holding the handset. The refusal names the reason so the broker can ask them to sign
+  in — that message is the feature, not an error string.
+- **THE CUSTOMER SCREEN POLLS AND MUST NOT RE-RENDER ON EVERY POLL** (`D120`). It compares
+  a content signature first, because a re-render wipes a form the customer is halfway
+  through typing — the optimistic-UI hazard `D44`'s keypad panel already taught, in the
+  one place it would be most infuriating.
 - **`uv sync` PRUNES, AND A CHECK THAT NEEDS AN OPTIONAL EXTRA IS CHECKING THE MACHINE**
   (`B31`). `uv sync --extra web --extra llm` removed the `ml` stack from this laptop and
-  instantly produced 5 test errors and 5 mypy errors that had been latent for weeks and
+  instantly produced five suite errors and five mypy errors that had been latent for weeks and
   would have been red on CI. Name every extra in one command. And when you defer an
   import into a constructor to keep a module importable, **every `except ImportError`
   written around the import is now guarding an empty room.**

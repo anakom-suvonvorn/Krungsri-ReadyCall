@@ -302,6 +302,19 @@ class EndCallRequest(ApiModel):
     reason: str = Field(default="caller_hung_up", max_length=64)
 
 
+class AssistPushRequest(ApiModel):
+    """One thing the broker puts on the customer's screen (`D120`).
+
+    `kind` is validated against a CLOSED set in the router, for the same reason the intent
+    taxonomy is closed: the customer's page renders known shapes, and an unknown kind is a
+    blank panel on somebody's phone mid-call.
+    """
+
+    kind: str = Field(max_length=32)
+    title_th: str = Field(max_length=120)
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
 class WrapupRequest(ApiModel):
     """Saving this closes the **call record**. It does not end after-call work (`D45`)."""
 

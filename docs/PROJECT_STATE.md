@@ -47,7 +47,7 @@ the disclosure gate moves when the agent attests. **What they said while waiting
 screen** (`D106`), and if they consented, **their audio is in object storage encrypted**
 (`D110`) with a key ref and a retention date. If they declined, it is nowhere.
 
-Verified on 2026-09-06: **831 tests** — 819 pass + 12 skipped with Postgres and MinIO both
+Verified on 2026-09-06: **841 tests** — 829 pass + 12 skipped with Postgres and MinIO both
 up (the 12 are foreign-key cases the in-memory backend cannot have, and the `ml`-extra ones).
 Without those containers the count of skips rises and nothing fails.
 `ruff check` and `ruff format --check` clean over **202** files, `mypy --strict`

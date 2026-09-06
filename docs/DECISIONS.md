@@ -4352,3 +4352,99 @@ is on record now rather than assumed.
 
 The `llm` extra carries both SDKs (`uv sync --extra llm`); neither is installed by default,
 because the shipped provider is rule-based and needs nothing.
+
+## D120. Binding the call to the customer's screen, and the two tiers that gate it
+_Track C of the week plan (`D115`). The user's idea, and the best piece of user insight in
+their orientation notes._
+
+- **Problem.** A broker on the phone says *"go to the website, tap the menu at the top
+  right, then Documents, then Upload"*. The brief prices exactly this: journey step 4 leaks
+  because **เอกสารเยอะ ลูกค้า drop-off กลางทาง**. The customer who suffers most is the one
+  least able to follow spoken navigation — but the leak is universal, which is why the
+  tech-shy customer is the *proof* of the design and not the segment it serves.
+
+- **Decision.** Bind the call to a screen, and let the broker **push** onto it. The
+  customer never navigates.
+
+### Pairing is a link, not a code, and the direction is the argument
+
+The phone number is already the strongest binding available: the call is on it, and ANI
+says which. So a link **sent to the number we are already talking to** is
+self-authenticating to precisely what the ANI is worth — `D20`'s L1, probable and not
+verified — and costs the customer one tap.
+
+A read-back code is *stronger*: it proves the person is looking at the screen **and** on
+the call. It is also a chore handed to somebody who rang because they were stuck. We take
+the link and let assurance carry the rest, which is the same trade `D82` made about wrong
+keypresses: do not spend a distressed person's effort on our paperwork.
+
+Three entry paths, one destination:
+
+| path | how pairing happens |
+|---|---|
+| in-app call | implicit — the app started the call and already carries the correlation token (`D6`) |
+| phone call, then a link | the broker presses *send link*; whoever taps it holds the phone we are on |
+| already in the app, called separately | the app is **told** by the server (`live_for`), rather than showing a button nobody can find |
+
+That third row answers the user's own question directly. A permanently visible *"let an
+agent help me"* button is odd on a screen nobody is calling from, and the customer would
+have to go looking for it at the exact moment they are least able to. The server knows a
+call is live for this signed-in customer, so the app can *offer* rather than *display*.
+
+**And yes — this is a second real consumer for identity resolution.** Until now the
+identity ladder only decided how much of the record to render. It now also decides whether
+a customer can be told that help is available on the call they are already on.
+
+### Two tiers, which are `D74`'s rule pointed at the customer's screen
+
+| tier | reached by | what may be pushed |
+|---|---|---|
+| `GUEST` | tapping the link | anything true for **anybody**: plan comparisons, product information, a document checklist, how-to steps |
+| `VERIFIED` | signing in | anything about **them**: their policies, a prefilled form, an upload, a signature |
+
+This is the whole answer to *"do we have to make them register?"* — **no**, not to receive
+help. Someone comparing plans gets everything they need without an account, because none of
+it is about them; the wall appears only where the thing on screen is personal. Registering
+first would gate the half with no privacy cost at all, which is the ordinary and wrong
+design.
+
+**A personal push to a link-only screen is refused, and the refusal is the feature.** The
+broker is told *why* and asks the customer to sign in, instead of a stranger's policy
+appearing on whoever happens to be holding that handset. `D42`'s argument, one layer out:
+possession of a device is not identity.
+
+### The shape of the two front ends, and why they differ
+
+The customer's screen is **one static HTML file**, no build step — `D47`'s reasoning for
+the simulator, and stronger here: this page opens from a link on a stranger's phone, and
+anything needing a bundler is one more thing to be stale on the day. The workstation earns
+its React build because it is a dense operator tool somebody sits in front of all shift;
+this is a page somebody looks at for four minutes while a human talks to them.
+
+It **polls at 1 s** rather than holding a socket. It is a *view* of what the broker pushed,
+a one-second poll is invisible to a human, it needs no socket infrastructure, and it
+survives the mobile proxies that eat WebSockets. The agent side keeps its socket because it
+carries the live transcript, where the budget is 1.5 s (`D105`). Different problems,
+different transports — and saying so is cheaper than discovering it at a venue.
+
+⚠️ **The page re-renders only when the content signature changes**, so a poll cannot wipe a
+form the customer is halfway through typing. That is the optimistic-UI hazard `D44`'s
+keypad panel already taught, in the one place it would be most infuriating.
+
+### What is deliberately not here
+
+**Nothing is sent.** No SMS, no LINE — `NotifierPort` is P5, and until then the link comes
+back to the broker to read out, which is also exactly what a rehearsal needs. **Nothing is
+stored durably**: a pairing dies with the call plus a ten-minute grace, so a form somebody
+was halfway through when the broker hung up still submits, and a token is never a standing
+key to a screen (`D14`). And the closed `PushKind` set is closed for the intent taxonomy's
+reason: an unknown kind is a blank panel on somebody's phone mid-call.
+
+### Verified end to end, in a browser
+
+On a running server, on a 375-wide viewport: the broker minted a link, a comparison
+rendered on the customer's phone (group plan at ฿1,500/day against a top-up at ฿4,000, the
+two carriers named), a **form push was refused at guest tier with the reason**, sign-in
+unlocked it, the prefilled form appeared, the customer typed into it and submitted — and
+`GET /v1/agent/calls/{id}/assist` showed the broker exactly what they had written. Journey
+steps 3 and 4, on one call, without anybody reading a field name down a phone line.

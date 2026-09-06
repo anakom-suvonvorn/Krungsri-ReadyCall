@@ -68,6 +68,7 @@ from readycall.services.agents.assignment import AssignmentService, OfferPolicy
 from readycall.services.agents.dispatch import DispatchService
 from readycall.services.agents.presence import PresenceService
 from readycall.services.analysis import IntakeSummariser, SummaryResult
+from readycall.services.assist import AssistService
 from readycall.services.brief.builder import BriefBuilder
 from readycall.services.call_orchestrator.orchestrator import CallOrchestrator
 from readycall.services.capture.keypad import KeypadCaptureService
@@ -433,6 +434,10 @@ class Container:
         #: enqueues and handlers wait for `drain()` (`D15`), and until `D105` the only
         #: drain in the live process was a background task on `POST /v1/calls/intents`.
         self.transcript_delivery = TranscriptDeliveryService(notifier=self.hub)
+        #: The customer's paired screen (`D120`). Holds nothing durably: a pairing dies
+        #: with the call, which is the right retention for a token whose only purpose is
+        #: one conversation (`D14`).
+        self.assist = AssistService(clock=self.clock)
         self.transcript_delivery.subscribe(self.bus)
 
         #: The FOURTH consumer of `transcript.turn` (`D114`), and its own subscriber

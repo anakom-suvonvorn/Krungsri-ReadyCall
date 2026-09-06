@@ -1554,9 +1554,9 @@ work landed, and both would have shown on CI, which installs no `ml` at all._
 
 One command turned a green tree into:
 
-* `tests/contracts/test_vad.py` — **5 errors** where the file's own docstring promises the
+* `tests/contracts/test_vad.py` — **five errors** where the file's own docstring promises the
   Silero rows are *"skipped, loudly"* when the extra is absent.
-* `mypy` — **5 errors** across `silero.py`, three STT adapters and `api/deps.py`, all
+* `mypy` — **five errors** across `silero.py`, three STT adapters and `api/deps.py`, all
   `Cannot find implementation or library stub for module named "torch"`.
 
 ### Root causes, and they are the same shape

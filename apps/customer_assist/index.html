@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>เจ้าหน้าที่กำลังช่วยคุณ · Krungsri ReadyCall</title>
+<!--
+  The customer's paired screen (`D120`).
+
+  ONE STATIC FILE, no build step, for the same reason the customer simulator is one
+  (`D47`): it has to open on a stranger's phone from a link, and anything needing a
+  bundler is one more thing that can be stale or missing on the day. The workstation
+  earns its React build because it is a dense, long-lived operator tool; this is a
+  page somebody looks at for four minutes while a human talks to them.
+
+  POLLED, not socketed. This screen is a *view* of what the broker pushed; a one-second
+  poll is invisible to a human, needs no socket infrastructure, and survives the mobile
+  proxies that eat WebSockets. The agent side keeps its socket because it carries the
+  live transcript, where the budget is 1.5 s (`D105`).
+-->
+<style>
+  :root {
+    --bg: #f4f5f7;
+    --card: #ffffff;
+    --ink: #16191d;
+    --dim: #5b6472;
+    --line: #dfe3e9;
+    --brand: #ffc72c;
+    --brand-ink: #241c00;
+    --ok: #14795a;
+    --ok-bg: #e6f4ef;
+    --wait: #8a6d1f;
+    --wait-bg: #fdf6e3;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "IBM Plex Sans Thai", "Noto Sans Thai", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 16px;
+    line-height: 1.55;
+    padding-bottom: 40px;
+  }
+  header {
+    background: var(--brand);
+    color: var(--brand-ink);
+    padding: 14px 18px calc(14px + env(safe-area-inset-top)) 18px;
+    padding-top: calc(14px + env(safe-area-inset-top));
+  }
+  header .who { font-weight: 700; font-size: 17px; }
+  header .sub { font-size: 13px; opacity: 0.75; margin-top: 2px; }
+  main { padding: 16px; max-width: 640px; margin: 0 auto; }
+
+  .status {
+    display: flex; align-items: center; gap: 9px;
+    padding: 11px 14px; border-radius: 10px; font-size: 14px;
+    margin-bottom: 16px;
+  }
+  .status.live { background: var(--ok-bg); color: var(--ok); }
+  .status.idle { background: var(--wait-bg); color: var(--wait); }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: currentColor; flex: none; }
+  .status.live .dot { animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: 0.3 } }
+  @media (prefers-reduced-motion: reduce) { .status.live .dot { animation: none } }
+
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    padding: 16px; margin-bottom: 14px;
+  }
+  .card h2 { margin: 0 0 4px; font-size: 16px; }
+  .kind {
+    font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--dim); margin-bottom: 8px;
+  }
+  .empty { color: var(--dim); text-align: center; padding: 40px 20px; font-size: 15px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 8px; }
+  th, td { text-align: right; padding: 8px 6px; border-bottom: 1px solid var(--line); }
+  th:first-child, td:first-child { text-align: left; }
+  th { font-size: 12px; color: var(--dim); font-weight: 600; }
+  td.best { background: var(--ok-bg); color: var(--ok); font-weight: 600; }
+  .tw { overflow-x: auto; }
+
+  label { display: block; font-size: 14px; margin: 12px 0 4px; color: var(--dim); }
+  input[type=text], input[type=tel], input[type=date], textarea {
+    width: 100%; padding: 11px 12px; font-size: 16px; font-family: inherit;
+    border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink);
+  }
+  input:focus-visible, textarea:focus-visible, button:focus-visible {
+    outline: 2px solid var(--ok); outline-offset: 2px;
+  }
+  button {
+    width: 100%; margin-top: 14px; padding: 13px; font-size: 16px; font-weight: 600;
+    font-family: inherit; border: 0; border-radius: 8px;
+    background: var(--brand); color: var(--brand-ink); cursor: pointer;
+  }
+  button.secondary { background: #eceff3; color: var(--ink); }
+  button:disabled { opacity: .55; cursor: default; }
+  .done { color: var(--ok); font-size: 14px; margin-top: 10px; }
+  .lock { color: var(--dim); font-size: 14px; }
+  ul { margin: 8px 0 0; padding-left: 20px; }
+  li { margin-bottom: 5px; }
+  .err { color: #a2331d; font-size: 14px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="who">Krungsri ReadyCall</div>
+  <div class="sub">หน้าจอช่วยเหลือระหว่างสนทนา</div>
+</header>
+
+<main>
+  <div id="status" class="status idle"><span class="dot"></span><span id="statusText">กำลังเชื่อมต่อ…</span></div>
+  <div id="body"></div>
+</main>
+
+<script>
+"use strict";
+// The token IS the credential and it is in the path: it dies with the call and grants
+// only what a link-tapper may see. `D14` forbids anything sensitive in a query string.
+const TOKEN = location.pathname.split("/").filter(Boolean).pop() || "";
+const API = "/v1/assist/" + encodeURIComponent(TOKEN);
+
+const el = (id) => document.getElementById(id);
+const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+let lastSignature = "";
+let busy = false;
+
+async function poll() {
+  if (busy) return;
+  try {
+    const r = await fetch(API, { headers: { "Accept": "application/json" } });
+    if (!r.ok) return showGone();
+    render(await r.json());
+  } catch (e) {
+    // A dropped poll is not an error worth showing: the next one is a second away.
+  }
+}
+
+function showGone() {
+  el("status").className = "status idle";
+  el("statusText").textContent = "ลิงก์นี้หมดอายุแล้ว";
+  el("body").innerHTML = '<div class="empty">กรุณาขอลิงก์ใหม่จากเจ้าหน้าที่</div>';
+}
+
+function render(s) {
+  el("status").className = "status " + (s.call_active ? "live" : "idle");
+  el("statusText").textContent = s.call_active
+    ? "กำลังสนทนากับเจ้าหน้าที่"
+    : "ยังไม่มีสายที่กำลังสนทนา";
+
+  // Re-render only when something changed, so a half-typed form is never wiped by a
+  // poll. This is the same hazard as an optimistic UI overwriting a user's input, and
+  // on a form the customer is filling mid-call it would be infuriating.
+  const signature = JSON.stringify([s.tier, s.prompt_th, s.items.map(
+    (i) => [i.item_id, i.responded])]);
+  if (signature === lastSignature) return;
+  lastSignature = signature;
+
+  const parts = [];
+  if (s.tier !== "verified") parts.push(signInCard(s.prompt_th));
+  if (!s.items.length) {
+    parts.push('<div class="empty">เจ้าหน้าที่ยังไม่ได้ส่งอะไรมา<br>สิ่งที่ส่งมาจะแสดงที่นี่ทันที</div>');
+  }
+  for (const item of s.items) parts.push(card(item));
+  el("body").innerHTML = parts.join("");
+  wire(s);
+}
+
+function signInCard(prompt) {
+  return '<div class="card"><h2>เข้าสู่ระบบ</h2>'
+    + '<div class="lock">' + esc(prompt) + "</div>"
+    + '<label for="cid">รหัสลูกค้า (เดโม)</label>'
+    + '<input id="cid" type="text" inputmode="text" value="C000001" autocomplete="off">'
+    + '<button id="signin">เข้าสู่ระบบ</button>'
+    + '<div id="signinErr" class="err"></div></div>';
+}
+
+function card(item) {
+  const head = '<div class="card" data-item="' + esc(item.item_id) + '">'
+    + '<div class="kind">' + esc(item.kind) + "</div>"
+    + "<h2>" + esc(item.title_th) + "</h2>";
+  if (item.kind === "comparison") return head + comparison(item.payload) + "</div>";
+  if (item.kind === "form") return head + form(item) + "</div>";
+  if (item.kind === "document_request") return head + docRequest(item) + "</div>";
+  if (item.kind === "navigate") {
+    return head + '<a href="' + esc(item.payload.href || "#") + '">'
+      + esc(item.payload.label_th || "เปิดหน้านี้") + "</a></div>";
+  }
+  return head + info(item.payload) + "</div>";
+}
+
+function info(p) {
+  let html = p.text_th ? "<p>" + esc(p.text_th) + "</p>" : "";
+  if (Array.isArray(p.bullets_th) && p.bullets_th.length) {
+    html += "<ul>" + p.bullets_th.map((b) => "<li>" + esc(b) + "</li>").join("") + "</ul>";
+  }
+  return html;
+}
+
+function comparison(p) {
+  const cols = p.columns_th || [];
+  const rows = p.rows || [];
+  if (!cols.length || !rows.length) return "<p>ไม่มีข้อมูลเปรียบเทียบ</p>";
+  let html = '<div class="tw"><table><thead><tr>'
+    + cols.map((c) => "<th>" + esc(c) + "</th>").join("") + "</tr></thead><tbody>";
+  for (const row of rows) {
+    html += "<tr>" + (row.cells || []).map((cell, i) =>
+      "<td" + (row.best_index === i ? ' class="best"' : "") + ">" + esc(cell) + "</td>"
+    ).join("") + "</tr>";
+  }
+  html += "</tbody></table></div>";
+  if (p.note_th) html += '<div class="lock" style="margin-top:10px">' + esc(p.note_th) + "</div>";
+  return html;
+}
+
+function form(item) {
+  if (item.responded) {
+    return '<div class="done">ส่งข้อมูลเรียบร้อยแล้ว ขอบคุณค่ะ</div>';
+  }
+  const fields = item.payload.fields || [];
+  return fields.map((f) =>
+    "<label for=\"f_" + esc(f.name) + "\">" + esc(f.label_th) + "</label>"
+    + (f.multiline
+      ? '<textarea id="f_' + esc(f.name) + '" rows="3"></textarea>'
+      : '<input id="f_' + esc(f.name) + '" type="' + esc(f.type || "text")
+        + '" value="' + esc(f.value || "") + '">')
+  ).join("") + '<button class="submit">ส่งให้เจ้าหน้าที่</button>';
+}
+
+function docRequest(item) {
+  if (item.responded) return '<div class="done">ส่งเอกสารเรียบร้อยแล้ว</div>';
+  return "<p>" + esc(item.payload.text_th || "กรุณาถ่ายรูปเอกสารและส่งให้เจ้าหน้าที่") + "</p>"
+    + '<button class="secondary submit">ถ่ายรูปและส่ง (เดโม)</button>';
+}
+
+function wire(s) {
+  const signin = el("signin");
+  if (signin) {
+    signin.onclick = async () => {
+      busy = true;
+      try {
+        const r = await fetch(API + "/sign-in", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ customer_id: el("cid").value.trim() }),
+        });
+        if (!r.ok) { el("signinErr").textContent = "เข้าสู่ระบบไม่สำเร็จ"; return; }
+        lastSignature = "";
+        render(await r.json());
+      } finally { busy = false; }
+    };
+  }
+  for (const button of document.querySelectorAll(".submit")) {
+    button.onclick = async () => {
+      const card = button.closest("[data-item]");
+      const itemId = card.getAttribute("data-item");
+      const response = {};
+      for (const input of card.querySelectorAll("input, textarea")) {
+        response[input.id.replace(/^f_/, "")] = input.value;
+      }
+      button.disabled = true;
+      busy = true;
+      try {
+        const r = await fetch(API + "/respond", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ item_id: itemId, response }),
+        });
+        if (r.ok) { lastSignature = ""; render(await r.json()); }
+        else { button.disabled = false; }
+      } finally { busy = false; }
+    };
+  }
+}
+
+poll();
+setInterval(poll, 1000);
+</script>
+</body>
+</html>

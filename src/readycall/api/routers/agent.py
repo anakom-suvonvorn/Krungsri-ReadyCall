@@ -29,6 +29,7 @@ from readycall.api.schemas import (
     AgentLoginRequest,
     AgentPresenceOut,
     AgentSkillOut,
+    AssistPushRequest,
     AttestIdentityRequest,
     CaptureKeysRequest,
     CaptureLabelRequest,
@@ -52,6 +53,7 @@ from readycall.domain.models import Assignment, CallWrapup
 from readycall.errors import PermanentError
 from readycall.logging import get_logger
 from readycall.services.agents.dispatch import sole_candidate
+from readycall.services.assist import PushKind
 from readycall.services.capture.keypad import Capture
 from readycall.services.identity.attestation import AttestationOutcome
 
@@ -288,6 +290,89 @@ async def end_call(
     except PermanentError as exc:
         raise _bad_request(exc) from exc
     return await _snapshot(container, who.agent_id)
+
+
+# --- the tool rail: what the broker can put on the customer's screen (D120) ---------------
+
+
+@router.post("/calls/{call_session_id}/assist/link")
+async def open_assist_link(
+    call_session_id: str, who: AgentDep, container: ContainerDep
+) -> dict[str, Any]:
+    """Mint the pairing link for this call, so the broker can send it.
+
+    Idempotent per call: pressing it twice - once because the SMS was slow and once
+    because the customer said they had not got it - must not create a second live token
+    with half the pushes going to a screen nobody is looking at.
+
+    Nothing is sent from here. `NotifierPort` (SMS / LINE) is P5; until then the link
+    comes back for the agent to read out, which is also exactly what a rehearsal needs.
+    """
+    session, _assignment = await _require_active_call(container, call_session_id, who)
+    identity = container.identity_for_call.get(call_session_id)
+    pairing = container.assist.open_for_call(
+        call_session_id,
+        customer_id=identity.customer_id if identity else None,
+    )
+    return {
+        "token": pairing.token,
+        "link": container.assist.link_for(pairing),
+        "tier": str(pairing.tier),
+        "paired": pairing.is_paired,
+        "caller_number": getattr(session, "caller_number", None),
+    }
+
+
+@router.get("/calls/{call_session_id}/assist")
+async def assist_state(
+    call_session_id: str, who: AgentDep, container: ContainerDep
+) -> dict[str, Any]:
+    """What the customer's screen currently holds, and what they have sent back."""
+    await _require_active_call(container, call_session_id, who)
+    pairing = container.assist.for_call(call_session_id)
+    if pairing is None:
+        return {"paired": False, "tier": None, "items": []}
+    return {
+        "paired": pairing.is_paired,
+        "tier": str(pairing.tier),
+        "link": container.assist.link_for(pairing),
+        "items": [
+            {
+                "item_id": i.item_id,
+                "kind": str(i.kind),
+                "title_th": i.title_th,
+                "responded": i.response is not None,
+                "response": i.response,
+            }
+            for i in pairing.items
+        ],
+    }
+
+
+@router.post("/calls/{call_session_id}/assist/push")
+async def push_to_customer(
+    call_session_id: str, body: AssistPushRequest, who: AgentDep, container: ContainerDep
+) -> dict[str, Any]:
+    """Put something on the paired screen.
+
+    A personal push to a screen that has only tapped a link is REFUSED, and the refusal
+    is the feature (`D120`): the broker is told why and asks the customer to sign in,
+    rather than a stranger's policy appearing on whoever is holding that phone. That is
+    `D74`'s rule - assurance gates what may be said and done - applied to the customer's
+    own screen rather than to the agent's.
+    """
+    await _require_active_call(container, call_session_id, who)
+    try:
+        kind = PushKind(body.kind)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"unknown push kind {body.kind!r}") from None
+    try:
+        item = container.assist.push(
+            call_session_id, kind=kind, title_th=body.title_th, payload=body.payload
+        )
+    except PermanentError as exc:
+        raise _bad_request(exc) from exc
+    return {"item_id": item.item_id, "kind": str(item.kind), "title_th": item.title_th}
 
 
 @router.post("/calls/{call_session_id}/wrapup", response_model=WorkstationSnapshot)
