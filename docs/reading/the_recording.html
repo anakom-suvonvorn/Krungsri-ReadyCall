@@ -1,0 +1,961 @@
+<title>What Happens to the Caller's Voice</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&family=JetBrains+Mono:wght@400;500;700&family=Noto+Sans+Thai:wght@400;500;600&display=swap">
+
+<style>
+  /* The house palette from the other reading pages, so these read as a set.
+     Three accents only: something MEASURED, a HAZARD, and the encrypted path. */
+  :root {
+    --paper:      #fbfaf7;
+    --paper-2:    #f3f1ea;
+    --paper-3:    #ebe8de;
+    --ink:        #16181d;
+    --ink-soft:   #4a4d55;
+    --ink-faint:  #7d8089;
+    --rule:       #ddd8cd;
+    --rule-soft:  #eae6dc;
+
+    --measured:    #14614a;
+    --measured-bg: #e4efea;
+    --trap:        #b8420f;
+    --trap-bg:     #fbeee7;
+    --locked:      #4a3a86;
+    --locked-bg:   #ece9f6;
+
+    --shadow:     rgba(22,24,29,.07);
+
+    --f-display: "Fraunces", Georgia, serif;
+    --f-body:    "Newsreader", Georgia, serif;
+    --f-mono:    "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+    --f-thai:    "Noto Sans Thai", "Leelawadee UI", Tahoma, sans-serif;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper:      #14161a;
+      --paper-2:    #1b1e23;
+      --paper-3:    #23272e;
+      --ink:        #eceae4;
+      --ink-soft:   #b3b0a8;
+      --ink-faint:  #85837c;
+      --rule:       #32363d;
+      --rule-soft:  #262a30;
+      --measured:    #5cc39a;
+      --measured-bg: #14302a;
+      --trap:        #f0885a;
+      --trap-bg:     #2e1d15;
+      --locked:      #a89ae0;
+      --locked-bg:   #221d38;
+      --shadow:     rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper:      #14161a;
+    --paper-2:    #1b1e23;
+    --paper-3:    #23272e;
+    --ink:        #eceae4;
+    --ink-soft:   #b3b0a8;
+    --ink-faint:  #85837c;
+    --rule:       #32363d;
+    --rule-soft:  #262a30;
+    --measured:    #5cc39a;
+    --measured-bg: #14302a;
+    --trap:        #f0885a;
+    --trap-bg:     #2e1d15;
+    --locked:      #a89ae0;
+    --locked-bg:   #221d38;
+    --shadow:     rgba(0,0,0,.35);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--f-body);
+    font-size: 18px;
+    line-height: 1.65;
+    margin: 0;
+    padding: 0 1.25rem 6rem;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap  { max-width: 43rem; margin: 0 auto; }
+
+  header.top {
+    max-width: 43rem;
+    margin: 0 auto;
+    padding: 4.5rem 0 2rem;
+    border-bottom: 2px solid var(--ink);
+  }
+  .kicker {
+    font-family: var(--f-mono);
+    font-size: .72rem;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin: 0 0 1.2rem;
+  }
+  h1 {
+    font-family: var(--f-display);
+    font-weight: 600;
+    font-size: clamp(2.2rem, 6vw, 3.1rem);
+    line-height: 1.06;
+    letter-spacing: -.02em;
+    margin: 0 0 1rem;
+    text-wrap: balance;
+  }
+  .standfirst {
+    font-size: 1.15rem;
+    color: var(--ink-soft);
+    margin: 0 0 1.4rem;
+    text-wrap: pretty;
+  }
+  .byline {
+    font-family: var(--f-mono);
+    font-size: .72rem;
+    color: var(--ink-faint);
+    letter-spacing: .04em;
+  }
+
+  section { max-width: 43rem; margin: 0 auto; padding-top: 3.4rem; }
+  section.wide { max-width: 62rem; }
+  section.wide > p, section.wide > h2, section.wide > h3,
+  section.wide > ul, section.wide > ol, section.wide > .note,
+  section.wide > .term, section.wide > blockquote { max-width: 43rem; margin-inline: auto; }
+
+  h2 {
+    font-family: var(--f-display);
+    font-weight: 600;
+    font-size: 1.75rem;
+    line-height: 1.16;
+    letter-spacing: -.012em;
+    margin: 0 0 .5rem;
+    text-wrap: balance;
+  }
+  h3 {
+    font-family: var(--f-display);
+    font-weight: 600;
+    font-size: 1.18rem;
+    margin: 2.2rem 0 .4rem;
+    text-wrap: balance;
+  }
+  .part {
+    font-family: var(--f-mono);
+    font-size: .7rem;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    display: block;
+    margin-bottom: .5rem;
+  }
+  p { margin: 0 0 1.1rem; text-wrap: pretty; }
+  ul, ol { margin: 0 0 1.1rem; padding-left: 1.3rem; }
+  li { margin-bottom: .5rem; }
+  strong { font-weight: 600; }
+  .th { font-family: var(--f-thai); font-size: .96em; }
+
+  code {
+    font-family: var(--f-mono);
+    font-size: .8em;
+    background: var(--paper-2);
+    border: 1px solid var(--rule-soft);
+    border-radius: 3px;
+    padding: .08em .3em;
+  }
+
+  .term {
+    background: var(--paper-2);
+    border: 1px solid var(--rule);
+    border-radius: 5px;
+    padding: 1rem 1.1rem;
+    margin: 0 0 1.4rem;
+    overflow-x: auto;
+  }
+  .term pre {
+    font-family: var(--f-mono);
+    font-size: .76rem;
+    line-height: 1.55;
+    margin: 0;
+    white-space: pre;
+    color: var(--ink-soft);
+  }
+  .term .cmd { color: var(--ink); font-weight: 500; }
+  .term .hit { color: var(--measured); font-weight: 500; }
+  .term .bad { color: var(--trap); font-weight: 500; }
+  .term-label {
+    font-family: var(--f-mono);
+    font-size: .66rem;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin: 0 0 .5rem;
+  }
+
+  .note {
+    border-left: 3px solid var(--rule);
+    background: var(--paper-2);
+    padding: .9rem 1.1rem;
+    margin: 1.6rem 0;
+    border-radius: 0 4px 4px 0;
+  }
+  .note p:last-child { margin-bottom: 0; }
+  .note .lab {
+    font-family: var(--f-mono);
+    font-size: .66rem;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    display: block;
+    margin-bottom: .35rem;
+    color: var(--ink-faint);
+  }
+  .note.hazard { border-left-color: var(--trap); background: var(--trap-bg); }
+  .note.hazard .lab { color: var(--trap); }
+  .note.fact { border-left-color: var(--measured); background: var(--measured-bg); }
+  .note.fact .lab { color: var(--measured); }
+  .note.locked { border-left-color: var(--locked); background: var(--locked-bg); }
+  .note.locked .lab { color: var(--locked); }
+
+  figure { margin: 2rem 0 2.4rem; }
+  figure svg { display: block; width: 100%; height: auto; }
+  figcaption {
+    font-size: .86rem;
+    color: var(--ink-faint);
+    margin-top: .7rem;
+    max-width: 43rem;
+    margin-inline: auto;
+    text-wrap: pretty;
+  }
+  .scroller { overflow-x: auto; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .9rem;
+    margin: 0 0 1.4rem;
+  }
+  th, td {
+    text-align: left;
+    padding: .5rem .6rem;
+    border-bottom: 1px solid var(--rule-soft);
+    vertical-align: top;
+  }
+  th {
+    font-family: var(--f-mono);
+    font-size: .68rem;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    border-bottom: 1px solid var(--rule);
+  }
+  td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  hr.sep {
+    border: 0;
+    border-top: 1px solid var(--rule);
+    max-width: 43rem;
+    margin: 3.5rem auto 0;
+  }
+
+  footer.end {
+    max-width: 43rem;
+    margin: 4rem auto 0;
+    padding-top: 1.5rem;
+    border-top: 2px solid var(--ink);
+    font-size: .9rem;
+    color: var(--ink-faint);
+  }
+</style>
+
+<header class="top">
+  <p class="kicker">Krungsri ReadyCall · 6 September 2026 · D110–D114</p>
+  <h1>What Happens to the Caller's Voice</h1>
+  <p class="standfirst">Five things landed in one session. The largest one takes a person's
+  recorded voice and puts it somewhere it can survive a restart without becoming a
+  liability. This page is what each of them actually does, in order, with no jargon that
+  is not explained first.</p>
+  <p class="byline">Written because "the encrypted recording landed" is a sentence that
+  tells you nothing.</p>
+</header>
+
+<section>
+  <span class="part">The short version</span>
+  <h2>One paragraph each</h2>
+
+  <p><strong>The recording</strong> — a caller who says yes to being recorded now has
+  their audio written to storage, scrambled with a key, with a date on it after which it
+  must be deleted. A caller who says no leaves nothing behind at all. You can check that
+  yourself by counting files.</p>
+
+  <p><strong>The empty panel</strong> — when the transcript box on the agent's screen is
+  empty, it now says whether that is because the caller was silent or because our
+  speech system broke. It used to be unable to tell you.</p>
+
+  <p><strong>The runaway</strong> — if the speech model hangs, it is now <em>killed</em>
+  after eight seconds instead of holding up every sentence behind it. That needed the
+  model to be running in its own process, which is why it took a while.</p>
+
+  <p><strong>The caller nobody took</strong> — your <code>Q31</code>. Fixed exactly as you
+  decided: it circles back forever by default, and the card tells the agent which round it
+  is and whether they are the last person who could take it.</p>
+
+  <p><strong>The words are written down</strong> — the transcript now survives a restart.
+  Before, it lived only in memory.</p>
+</section>
+
+<hr class="sep">
+
+<section class="wide">
+  <span class="part">Part one</span>
+  <h2>The recording, from a voice to a file</h2>
+
+  <p>Start with what was already true before this session, because the new part is small
+  and sits on top of it.</p>
+
+  <p>When somebody calls, the phone line delivers audio in tiny packets — twenty
+  milliseconds each, which is about the length of a single syllable's beginning. Something
+  has to take those packets, convert them into one standard shape (16,000 numbers per
+  second, one channel), and hand them onward. That thing is the <strong>media
+  gateway</strong>, and it has existed since the audio work landed a few days ago.</p>
+
+  <p>The gateway does not care what is being said. It reshapes and passes on. Whoever
+  wants the audio subscribes, and gets every frame.</p>
+
+  <p>Until this week there was exactly one subscriber: the transcriber. Now there are
+  two.</p>
+
+  <figure>
+    <svg viewBox="0 0 780 300" role="img" aria-label="The media gateway fans normalised audio frames to two independent subscribers: the transcriber, which turns them into text, and the recorder, which keeps them and writes one encrypted file." xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+        </marker>
+      </defs>
+      <g fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="14" y="120" width="118" height="60" rx="6"/>
+        <rect x="212" y="120" width="150" height="60" rx="6"/>
+        <rect x="452" y="34" width="176" height="72" rx="6"/>
+        <rect x="452" y="196" width="176" height="72" rx="6"/>
+      </g>
+      <g font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="currentColor">
+        <text x="73" y="146" text-anchor="middle">the phone</text>
+        <text x="73" y="163" text-anchor="middle" opacity=".62">20 ms packets</text>
+
+        <text x="287" y="140" text-anchor="middle">media gateway</text>
+        <text x="287" y="156" text-anchor="middle" opacity=".62">reshapes. does not</text>
+        <text x="287" y="170" text-anchor="middle" opacity=".62">listen.</text>
+
+        <text x="540" y="56" text-anchor="middle">subscriber 1 · transcriber</text>
+        <text x="540" y="74" text-anchor="middle" opacity=".62">audio → Thai text</text>
+        <text x="540" y="90" text-anchor="middle" opacity=".62">(nothing kept)</text>
+
+        <text x="540" y="218" text-anchor="middle">subscriber 2 · recorder</text>
+        <text x="540" y="236" text-anchor="middle" opacity=".62">keeps the audio,</text>
+        <text x="540" y="252" text-anchor="middle" opacity=".62">writes ONE file</text>
+
+        <text x="700" y="62" text-anchor="middle" opacity=".72">on the</text>
+        <text x="700" y="78" text-anchor="middle" opacity=".72">screen</text>
+        <text x="700" y="224" text-anchor="middle" opacity=".72">in the</text>
+        <text x="700" y="240" text-anchor="middle" opacity=".72">bucket</text>
+      </g>
+      <g stroke="currentColor" stroke-width="1.5" fill="none" marker-end="url(#a1)">
+        <path d="M132,150 L206,150"/>
+        <path d="M362,150 L400,150 L400,70 L446,70"/>
+        <path d="M362,150 L400,150 L400,232 L446,232"/>
+        <path d="M628,70 L668,70"/>
+        <path d="M628,232 L668,232"/>
+      </g>
+      <g font-family="ui-monospace, Menlo, Consolas, monospace" font-size="10" fill="currentColor" opacity=".62">
+        <text x="169" y="142" text-anchor="middle">raw</text>
+        <text x="404" y="106" text-anchor="start">same frames</text>
+        <text x="404" y="196" text-anchor="start">same frames</text>
+      </g>
+    </svg>
+    <figcaption>Two subscribers, neither depending on the other. If the speech model is
+    down the recording is still kept; if storage is down the transcript still reaches the
+    screen. That independence is the reason the recorder is a subscriber rather than a
+    feature of the gateway.</figcaption>
+  </figure>
+
+  <div class="note">
+    <span class="lab">A bug this shape caused, caught before it shipped</span>
+    <p>The gateway used to <em>replace</em> a leg every time somebody opened one. With one
+    subscriber that never mattered. With two, whoever opened first would silently stop
+    receiving audio while still believing it was subscribed — running, correct, and fed
+    nothing. That exact shape has bitten this project four times before, so it now has two
+    tests that fail if the fix is removed.</p>
+  </div>
+
+  <h3>The moment consent is checked, and why it is late on purpose</h3>
+
+  <p>The caller is asked, in Thai, whether they want the pre-call recording. Press 1 for
+  yes, 2 for no. Here is the thing that makes the timing awkward: <strong>the audio starts
+  flowing before they answer.</strong> That is deliberate — the window while their offer is
+  ringing at an agent's desk is the same window in which they are talking, and losing it
+  would lose the point of the product.</p>
+
+  <p>So when do you check consent? If you check when the audio starts, you are too early —
+  the keypress can arrive a second later, and you would have to either throw away everybody
+  whose answer was slow, or record them anyway.</p>
+
+  <p>The answer: <strong>check at the very end, when the audio is sealed.</strong> The
+  frames accumulate in memory the whole time. At the moment the recording closes, the
+  system asks the call session one question: did this person grant the
+  <code>recording</code> consent? If yes, it goes to storage. If no, the buffer is dropped
+  and <em>nothing is written anywhere</em>.</p>
+
+  <div class="note fact">
+    <span class="lab">Checked, not asserted</span>
+    <p>Two calls were placed against a real storage server — one pressing 1, one pressing
+    2 — and the bucket was listed afterwards. <strong>One object.</strong> That is the
+    version of a privacy promise you can count rather than read.</p>
+  </div>
+</section>
+
+<hr class="sep">
+
+<section class="wide">
+  <h2>What is actually in the file</h2>
+
+  <p>This is the part worth understanding properly, because "it's encrypted" is not an
+  explanation of anything.</p>
+
+  <p>The naive approach is: have one password, scramble every recording with it, keep the
+  password somewhere safe. That works until you want to delete one recording, or rotate the
+  password, or give someone access to one call and not the rest. Then you are re-scrambling
+  everything.</p>
+
+  <p>So the standard approach — and what every serious system does — is <strong>envelope
+  encryption</strong>, which is two locks instead of one.</p>
+
+  <figure>
+    <svg viewBox="0 0 780 330" role="img" aria-label="Envelope encryption: each recording gets its own random data key which scrambles the audio; that data key is itself scrambled by a master key held outside the file; the scrambled data key travels inside the file, so the file plus the master key is enough to open it and the file alone is not." xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+        </marker>
+      </defs>
+
+      <g fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="16" y="30" width="150" height="56" rx="6"/>
+        <rect x="16" y="150" width="150" height="56" rx="6"/>
+        <rect x="16" y="252" width="150" height="56" rx="6"/>
+      </g>
+      <g font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="currentColor">
+        <text x="91" y="52" text-anchor="middle">the audio</text>
+        <text x="91" y="70" text-anchor="middle" opacity=".62">a WAV file</text>
+
+        <text x="91" y="172" text-anchor="middle">a data key</text>
+        <text x="91" y="190" text-anchor="middle" opacity=".62">random, THIS call only</text>
+
+        <text x="91" y="274" text-anchor="middle">the master key</text>
+        <text x="91" y="292" text-anchor="middle" opacity=".62">never in the file</text>
+      </g>
+
+      <g stroke="currentColor" stroke-width="1.5" fill="none" marker-end="url(#a2)">
+        <path d="M166,58 L262,58"/>
+        <path d="M91,150 L91,110 L262,110 L262,64" />
+        <path d="M166,178 L214,178 L214,190 L262,190"/>
+        <path d="M91,252 L91,222 L214,222 L214,196 L258,196"/>
+      </g>
+
+      <g fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="266" y="34" width="200" height="52" rx="6"/>
+        <rect x="266" y="166" width="200" height="52" rx="6"/>
+        <rect x="524" y="60" width="238" height="200" rx="8" stroke-dasharray="5 4"/>
+        <rect x="544" y="90" width="198" height="40" rx="4"/>
+        <rect x="544" y="142" width="198" height="40" rx="4"/>
+        <rect x="544" y="194" width="198" height="46" rx="4"/>
+      </g>
+      <g font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="currentColor">
+        <text x="366" y="56" text-anchor="middle">scramble the audio</text>
+        <text x="366" y="74" text-anchor="middle" opacity=".62">AES-256-GCM</text>
+
+        <text x="366" y="188" text-anchor="middle">scramble the DATA KEY</text>
+        <text x="366" y="206" text-anchor="middle" opacity=".62">with the master</text>
+
+        <text x="643" y="80" text-anchor="middle" opacity=".72">one file in the bucket</text>
+        <text x="643" y="107" text-anchor="middle" font-size="10.5" opacity=".62">which master key was used</text>
+        <text x="643" y="122" text-anchor="middle" font-size="11">"local:v1" — a NAME, not a key</text>
+        <text x="643" y="159" text-anchor="middle" font-size="10.5" opacity=".62">the scrambled data key</text>
+        <text x="643" y="174" text-anchor="middle" font-size="11">useless without the master</text>
+        <text x="643" y="212" text-anchor="middle" font-size="10.5" opacity=".62">the scrambled audio</text>
+        <text x="643" y="228" text-anchor="middle" font-size="11">the caller's actual voice</text>
+      </g>
+      <g stroke="currentColor" stroke-width="1.5" fill="none" marker-end="url(#a2)">
+        <path d="M466,60 L500,60 L500,214 L540,214"/>
+        <path d="M466,192 L500,192 L500,160 L540,160"/>
+      </g>
+      <g font-family="ui-monospace, Menlo, Consolas, monospace" font-size="10" fill="currentColor" opacity=".6">
+        <text x="286" y="290" text-anchor="start">the master key stays in the key ring.</text>
+        <text x="286" y="306" text-anchor="start">it is the one thing the file never contains.</text>
+      </g>
+    </svg>
+    <figcaption>Every recording gets its own random key. That key is itself locked with a
+    master key that lives outside the file. So the file carries its own lock, scrambled —
+    and the file alone is worthless.</figcaption>
+  </figure>
+
+  <p>Think of it as a locked box inside a locked room. The box's key is taped to the
+  outside of the box, but that key is itself inside a smaller locked box, and the only
+  thing that opens <em>that</em> is the room key, which is never in the room.</p>
+
+  <p>Why bother, instead of one password for everything?</p>
+
+  <ul>
+    <li><strong>Deleting becomes trivial.</strong> Destroy a master key and everything
+    locked under it is unreadable, whether or not the delete job finished. That is what
+    makes a legal deletion promise real rather than aspirational.</li>
+    <li><strong>Rotating becomes possible.</strong> Each file records <em>which</em> master
+    locked it, by name. Introduce a new master, and old files still open under the old
+    one.</li>
+    <li><strong>Leaking the database is not leaking the audio.</strong> The index of
+    recordings names the master key. It does not contain it, and it does not contain the
+    per-file key either — that lives inside the file.</li>
+  </ul>
+
+  <h3>One piece of cryptography, not four</h3>
+
+  <p>There are four places a recording could be stored: in memory, in a folder, in MinIO on
+  a laptop, or in Amazon S3. The tempting design is for each of them to encrypt its own
+  files.</p>
+
+  <p>That would mean four pieces of cryptography to review — and the one nobody reviewed
+  carefully would be the one holding a real customer. So instead there is <strong>exactly
+  one</strong>, and it sits in front of all four. Every storage backend receives scrambled
+  bytes and could not read them if it wanted to.</p>
+
+  <div class="note locked">
+    <span class="lab">A refusal that was correct, and is now the wrong refusal</span>
+    <p>Before this session the code deliberately would not write recordings to a folder on
+    disk, and said so: a real recording must never land unencrypted on a dev machine.
+    That was right <em>while nothing encrypted</em>. It is wrong now — what lands in a
+    folder is scrambled bytes with no key beside them, so the property the refusal was
+    protecting is now guaranteed by construction rather than by absence. The old note is
+    a good example of a rule that was correct until the thing it feared stopped being
+    possible.</p>
+  </div>
+
+  <h3>The one way to get this badly wrong, and the guard against it</h3>
+
+  <p>If you do not set a master key, the system generates one when it starts up — a
+  different one every time. Combined with in-memory storage that is perfectly coherent:
+  the files die with the process and so does the key.</p>
+
+  <p>Combined with <em>real</em> storage it is a disaster of a specific, quiet kind. Every
+  recording would be written successfully. Every one would satisfy an audit. Every one
+  would be permanently unopenable the moment the process restarted, and nobody would find
+  out for months.</p>
+
+  <div class="note hazard">
+    <span class="lab">So the app refuses to start</span>
+    <p>Durable storage without a master key is refused at startup, with a message telling
+    you how to generate one. Ciphertext nobody can ever read is worse than an honest gap —
+    at least a gap is visible.</p>
+  </div>
+</section>
+
+<hr class="sep">
+
+<section class="wide">
+  <h2>When it is written, and when it is deleted</h2>
+
+  <h3>Not while the agent is picking up</h3>
+
+  <p>The obvious place to upload the file is the moment the agent presses Accept. That is
+  wrong, and the reason is a rule this project keeps coming back to: <strong>the call is
+  never waiting on infrastructure.</strong></p>
+
+  <p>Pressing Accept is the instant a human is connected to a distressed person. Putting a
+  network round-trip to a storage server in the middle of that is exactly the wrong place
+  for it. So Accept does something cheap — it hands the buffer to a queue and returns — and
+  the upload happens a moment later on the background sweep that already runs once a
+  second. If the upload fails, it keeps its place and is retried.</p>
+
+  <p>There is a test that fails if somebody ever moves the upload back into the accept
+  path. It does not measure timing; it asserts that after Accept the store is still empty
+  and the work is queued. A timing test would just get slower and be ignored.</p>
+
+  <h3>The row goes in last</h3>
+
+  <p>There is a table listing every recording: where it is, which master key protects it,
+  how long it is, when it must be deleted. The row is written <strong>after</strong> the
+  storage server confirms the file, never before.</p>
+
+  <p>The other order produces the worst outcome available: a recording that appears in
+  every report, satisfies every audit, and plays nothing.</p>
+
+  <h3>The deletion date is stamped on the way in</h3>
+
+  <p>Each recording carries the date after which it must be deleted, calculated when it is
+  stored, from the retention setting as it stood at that moment. Not calculated later.</p>
+
+  <p>If you calculated it at deletion time instead, then lowering the retention setting
+  would silently shorten the life of audio already held, and raising it would silently
+  extend it. The promise that binds is the one that was true when the caller said yes.</p>
+
+  <p>The deletion job itself is a script you run, not a background task that runs itself.
+  Deletion is the operation you least want happening unattended on a demo machine at
+  2 a.m. It prints which storage it is about to act on before it does anything, has a
+  dry-run mode, and <strong>refuses outright</strong> if pointed at in-memory storage —
+  where a clean run would be a green tick over an untouched bucket, which is the most
+  misleading result available.</p>
+
+  <p>And it deletes <strong>the file before the row</strong>. The other order can leave a
+  file with no row pointing at it: audio nobody knows they are holding, invisible to every
+  report.</p>
+</section>
+
+<hr class="sep">
+
+<section>
+  <span class="part">Part two</span>
+  <h2>The screen now says why it is empty</h2>
+
+  <p>The agent's screen has a transcript panel. When it is empty it shows a sentence
+  explaining why — and one of those sentences, <span class="th">"ระบบถอดความไม่พร้อมใช้งานในสายนี้"</span>
+  (the transcription system was unavailable on this call), <strong>could never appear</strong>.
+  The code that decided the reason always answered "no problem", so a caller whose speech
+  model had crashed looked exactly like a caller who had said nothing.</p>
+
+  <p>Now the transcriber reports every utterance an engine failure cost, and the layer above
+  — the only one that can see both the transcriber and the caller — decides what to say.</p>
+
+  <p>The rule is deliberately narrow. It claims "unavailable" only when the engine failed
+  <em>and</em> nothing at all was transcribed. Here is why that matters: most callers who
+  accept the recording and then wait quietly produce no turns at all. A rule that looked
+  only at "the transcript is empty" would put a system failure on the agent's screen about
+  every single one of them.</p>
+
+  <p>And a call where five of six sentences arrived? That is thinner, but saying "the system
+  was unavailable" about it would be a bigger claim than the evidence supports. It is logged
+  loudly and the brief does not lie about it.</p>
+</section>
+
+<hr class="sep">
+
+<section class="wide">
+  <span class="part">Part three</span>
+  <h2>Killing a runaway</h2>
+
+  <p>Some background. A speech model handed a second of near-silence once took
+  <strong>8.6 seconds</strong> and came back with invented Thai. There are three guards
+  against that, and all three are <em>detectors</em>: they catch the bad output after it
+  arrives. By then the time is already spent, and — worse — the transcriber processes one
+  utterance at a time, so everything the caller says next is queued behind the stuck one.</p>
+
+  <p>The preventer is a deadline. And a deadline that cannot be enforced is not a
+  deadline.</p>
+
+  <p>This was written down months ago as a thing that could <em>not</em> be built, in one
+  of the more useful notes in the decision log:</p>
+
+  <blockquote style="margin:0 0 1.2rem;padding-left:1.1rem;border-left:3px solid var(--rule);color:var(--ink-soft);">
+    <p style="margin:0"><code>asyncio.wait_for</code> around <code>to_thread</code> does not
+    kill the thread, so a runaway decode has to be killed with the process. Half-implementing
+    it now would be a guard that looks like one and is not.</p>
+  </blockquote>
+
+  <p>In plain terms: in Python you can stop <em>waiting</em> for something, but you cannot
+  make it <em>stop</em>. If the model is chewing on an utterance, telling it "you have run
+  out of time" achieves nothing — it keeps chewing, keeps holding the graphics card, and is
+  still there for the next sentence. The only thing you can actually kill is a whole
+  process.</p>
+
+  <p>So the model now runs in its own process. Everything above it is unchanged — the code
+  that asks for a transcription cannot tell the difference, which is the entire point of the
+  way this system is structured.</p>
+
+  <figure>
+    <svg viewBox="0 0 780 250" role="img" aria-label="The main process sends an utterance to a separate worker process holding the model, and waits with a deadline. If the deadline passes the worker process is killed, the utterance is reported lost, and the next utterance starts a fresh worker." xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+        </marker>
+      </defs>
+      <g fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="16" y="80" width="180" height="86" rx="6"/>
+        <rect x="330" y="24" width="200" height="76" rx="6"/>
+        <rect x="330" y="150" width="200" height="76" rx="6" stroke-dasharray="5 4"/>
+        <rect x="602" y="150" width="162" height="76" rx="6"/>
+      </g>
+      <g font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="currentColor">
+        <text x="106" y="112" text-anchor="middle">the call</text>
+        <text x="106" y="130" text-anchor="middle" opacity=".62">one utterance,</text>
+        <text x="106" y="145" text-anchor="middle" opacity=".62">8 second deadline</text>
+
+        <text x="430" y="50" text-anchor="middle">worker process</text>
+        <text x="430" y="68" text-anchor="middle" opacity=".62">holds the model</text>
+        <text x="430" y="84" text-anchor="middle" opacity=".62">answers in 0.19 s</text>
+
+        <text x="430" y="176" text-anchor="middle">worker has hung</text>
+        <text x="430" y="194" text-anchor="middle" opacity=".62">deadline passes</text>
+        <text x="430" y="210" text-anchor="middle" opacity=".62">→ KILLED</text>
+
+        <text x="683" y="176" text-anchor="middle">one sentence lost</text>
+        <text x="683" y="194" text-anchor="middle" opacity=".62">counted, and the</text>
+        <text x="683" y="210" text-anchor="middle" opacity=".62">screen says why</text>
+      </g>
+      <g stroke="currentColor" stroke-width="1.5" fill="none" marker-end="url(#a3)">
+        <path d="M196,110 L262,110 L262,62 L324,62"/>
+        <path d="M196,136 L262,136 L262,188 L324,188"/>
+        <path d="M530,188 L596,188"/>
+      </g>
+      <g font-family="ui-monospace, Menlo, Consolas, monospace" font-size="10" fill="currentColor" opacity=".62">
+        <text x="266" y="56" text-anchor="start">normally</text>
+        <text x="266" y="216" text-anchor="start">rarely</text>
+      </g>
+      <g font-family="ui-monospace, Menlo, Consolas, monospace" font-size="10" fill="currentColor" opacity=".62">
+        <text x="16" y="232" text-anchor="start">the next utterance starts a fresh worker and pays one model load — the trade this makes</text>
+      </g>
+    </svg>
+    <figcaption>The deadline covers sending as well as waiting for the answer: a wedged
+    worker stops reading as well as replying, and which of the two blocks you depends on
+    operating-system buffer sizes nobody controls.</figcaption>
+  </figure>
+
+  <p>The test for this does not check that an error was raised. It checks that
+  <strong>the process is gone</strong> — because a guard that raised an error and left the
+  model running would pass an error test while still holding the graphics card.</p>
+
+  <p>This is off by default. Every test, every scripted demo and the stage-safe path run
+  the model in the main process, where a subprocess would buy nothing and cost a spawn.
+  It is for the configuration with a real model in it.</p>
+</section>
+
+<hr class="sep">
+
+<section class="wide">
+  <span class="part">Part four</span>
+  <h2>The caller nobody would take</h2>
+
+  <p>This is your <code>Q31</code>, and it is the one with a genuinely nasty failure mode.</p>
+
+  <p>When an agent declines a call, they are excluded from being offered that same call
+  again — otherwise the matcher would immediately ring them back, which is obviously
+  wrong. That exclusion had no expiry.</p>
+
+  <p>So: a caller that every qualified agent declines has no candidates left. Not one. And
+  the safety net that rescues long-waiting callers picks from qualified agents — all of
+  whom are excluded — so it could not help either.</p>
+
+  <p><strong>The caller waited for the rest of the shift.</strong> No error, no failing
+  test, nothing in a log. The queue showed them as being handled.</p>
+
+  <figure>
+    <svg viewBox="0 0 780 260" role="img" aria-label="A caller is offered to each qualified agent in turn and each declines, leaving no candidates. The exclusions are then cleared, a round counter increments, and the caller is offered round again from the start." xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="a4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+        </marker>
+      </defs>
+      <g fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="16" y="96" width="112" height="58" rx="6"/>
+        <rect x="182" y="40" width="104" height="42" rx="5"/>
+        <rect x="182" y="104" width="104" height="42" rx="5"/>
+        <rect x="182" y="168" width="104" height="42" rx="5"/>
+        <rect x="352" y="96" width="150" height="58" rx="6"/>
+        <rect x="560" y="96" width="204" height="58" rx="6"/>
+      </g>
+      <g font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="currentColor">
+        <text x="72" y="120" text-anchor="middle">the caller</text>
+        <text x="72" y="138" text-anchor="middle" opacity=".62">waiting</text>
+
+        <text x="234" y="66" text-anchor="middle">agent A · no</text>
+        <text x="234" y="130" text-anchor="middle">agent B · no</text>
+        <text x="234" y="194" text-anchor="middle">agent C · no</text>
+
+        <text x="427" y="116" text-anchor="middle">nobody left</text>
+        <text x="427" y="134" text-anchor="middle" opacity=".62">before: stuck forever</text>
+
+        <text x="662" y="116" text-anchor="middle">clear the exclusions</text>
+        <text x="662" y="134" text-anchor="middle" opacity=".62">round 2 · offer again</text>
+      </g>
+      <g stroke="currentColor" stroke-width="1.5" fill="none" marker-end="url(#a4)">
+        <path d="M128,110 L160,110 L160,61 L176,61"/>
+        <path d="M128,125 L160,125 L176,125"/>
+        <path d="M128,140 L160,140 L160,189 L176,189"/>
+        <path d="M286,61 L320,61 L320,110 L346,110"/>
+        <path d="M286,125 L346,125"/>
+        <path d="M286,189 L320,189 L320,140 L346,140"/>
+        <path d="M502,125 L554,125"/>
+      </g>
+      <path d="M662,154 L662,232 L72,232 L72,160" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#a4)"/>
+      <text x="367" y="248" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="10" fill="currentColor" opacity=".62">and round again — forever, by default</text>
+    </svg>
+    <figcaption>The exclusions are cleared as a set, not expired one agent at a time — a
+    per-agent timer would re-offer to whoever declined ten seconds ago while somebody who
+    declined ten minutes ago stayed excluded.</figcaption>
+  </figure>
+
+  <h3>Your three decisions, as built</h3>
+
+  <table>
+    <thead>
+      <tr><th>Question</th><th>Built</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Does a ring-out count as a decline?</td>
+        <td><strong>Yes.</strong> And there is a second reason beyond "the caller cannot
+        tell": if it did <em>not</em> count, one agent who walked away from their desk
+        would keep the pool looking un-exhausted forever, and the caller would never get a
+        second round at all.</td>
+      </tr>
+      <tr>
+        <td>Is there a cap?</td>
+        <td><strong>A setting, defaulting to no cap.</strong> <code>0</code> means keep
+        circling. Your reasoning is recorded word-for-word in the decision log, because the
+        argument will outlive the code.</td>
+      </tr>
+      <tr>
+        <td>Tell the agent?</td>
+        <td><strong>Yes, with the round number</strong>, as you asked. Plus the second
+        message you suggested.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>On the "how many agents can take this" question</h3>
+
+  <p>You proposed always showing a count, then talked yourself out of it. You were right,
+  and there is a rule underneath your instinct worth naming:</p>
+
+  <div class="note locked">
+    <span class="lab">The rule</span>
+    <p><strong>Show a fact when it increases responsibility. Never when it diffuses
+    it.</strong></p>
+  </div>
+
+  <p>"Three others could take this" is a diffusion-of-responsibility prompt on a card whose
+  other button is <em>decline</em> — and it is not actionable either. The agent can do
+  nothing with "3"; it is information about the system rather than about this caller.</p>
+
+  <p>"You are the only one who can take this" is the opposite on both counts. It is the one
+  thing the agent cannot work out for themselves, and it is the truthful answer to what
+  declining will actually do: the call comes straight back to them.</p>
+
+  <p>So only that one is shown. Here is the card as it actually renders, on round three,
+  with one agent signed in:</p>
+
+  <div class="term">
+    <p class="term-label">the offer card, live</p>
+<pre>  <span class="cmd">สายเข้า</span>                                             <span class="cmd">11</span>
+  คิวสินไหมรถยนต์ · แจ้งอุบัติเหตุรถยนต์
+
+  <span class="out">[L0 · ไม่ทราบตัวตน]  [ด่วน]  รอมาแล้ว 00:46</span>
+
+  ทำไมถึงเป็นคุณ
+  ทักษะ motor.claim 95% · รอบเกิน SLA (38s / 30s) · เรื่องเร่งด่วน
+
+  <span class="bad">สายนี้ถูกส่งต่อครบทุกคนแล้ว และวนกลับมาอีกครั้ง (รอบที่ 3)</span>
+
+  <span class="bad">ขณะนี้คุณเป็นเจ้าหน้าที่คนเดียวที่รับสายนี้ได้</span>
+
+  [ รับสาย (Accept) ]   [ ไม่รับ ]   [ ไม่รับ + พักรับสาย ]</pre>
+  </div>
+
+  <p>One more detail worth knowing: "the only one who can take it" is counted from the
+  matcher's own list of candidates, using the exact same filter the matcher used to decide
+  who to ring. Not a second calculation of who is available. Computing availability twice,
+  in two places, is precisely how an earlier bug happened where a caller was offered to an
+  agent whose own screen said they were unavailable.</p>
+</section>
+
+<hr class="sep">
+
+<section>
+  <span class="part">Part five</span>
+  <h2>The words are written down</h2>
+
+  <p>The transcript reached the agent's screen last week. It lived only in memory: restart
+  the server and an in-flight transcript was gone.</p>
+
+  <p>That was defensible while it matched what a restart already does to the caller's place
+  in the queue. It stopped being defensible the moment the <em>audio</em> became durable —
+  a call whose recording survives and whose words do not is a worse asymmetry than losing
+  both.</p>
+
+  <p>Each sentence is now written as it happens, by a <strong>fourth subscriber</strong> to
+  the same stream — its own, not a line added inside the code that feeds the screen. If it
+  shared, a storage failure could blank the agent's panel. Separated, a failed write costs a
+  database row and nothing else. There is a test that publishes through a storage layer
+  which deliberately explodes, and asserts the screen still received the sentence.</p>
+
+  <p>Written per sentence rather than all at once at the end, because the case a durable
+  transcript is <em>for</em> is the call that ends badly. Verified against a real database:
+  six sentences stored for a call <strong>nobody accepted</strong>.</p>
+</section>
+
+<hr class="sep">
+
+<section class="wide">
+  <h2>Check any of it yourself</h2>
+
+  <p>All of this runs with no keys and no containers. These are the commands that
+  demonstrate the claims rather than assert them.</p>
+
+  <div class="term">
+    <p class="term-label">the whole path, no containers</p>
+<pre><span class="cmd">uv run python scripts/make_demo_audio.py</span>
+<span class="cmd">uv run python -m readycall.entrypoints.api</span>
+<span class="out"># sign in at /workstation as A001, press พร้อมรับสาย, then place a call:</span>
+<span class="cmd">curl -X POST http://127.0.0.1:8000/v1/demo/calls -H "Content-Type: application/json" \
+  -d '{"intent_code":"motor.claim.accident","intake_keys":["1"],"audio":"demo_intake.wav","ignore_hours":true}'</span>
+<span class="out"># press Accept — six Thai sentences appear, each with its moment in the recording</span></pre>
+  </div>
+
+  <div class="term">
+    <p class="term-label">the privacy claim, counted</p>
+<pre><span class="out"># place the same call twice: once with intake_keys ["1"], once with ["2"].
+# then list what is actually stored.</span>
+<span class="hit">→ one object. the caller who pressed 2 left nothing.</span></pre>
+  </div>
+
+  <div class="term">
+    <p class="term-label">what is in the file</p>
+<pre><span class="out">what the bucket actually holds:</span>  <span class="bad">b'RCE1\x00\x08local:v1\x00&lt;'</span>
+<span class="out">  contains a WAV header:</span>       <span class="bad">False</span>
+<span class="out">with the right master key:</span>      <span class="hit">b'RIFF'  b'WAVE'  622124 bytes</span>
+<span class="out">with a wrong master key:</span>        <span class="bad">PermanentError: could not unwrap the data key</span></pre>
+  </div>
+
+  <div class="term">
+    <p class="term-label">the caller nobody would take</p>
+<pre><span class="out"># as the only motor agent: accept nothing, decline once.</span>
+<span class="cmd">GET /v1/agent/me</span>
+<span class="hit">round: 2 | sole_candidate: True</span>
+<span class="out"># the call came straight back, and the card says both things</span></pre>
+  </div>
+</section>
+
+<hr class="sep">
+
+<section>
+  <h2>What this does not do</h2>
+
+  <p>Being clear about the edges matters more than the list of wins.</p>
+
+  <ul>
+    <li><strong>The key ring is not a real vault.</strong> The master key sits in the
+    process environment, which means anyone who can read that environment can read the
+    recordings. Replacing it with a proper vault is a later phase, and it is a second
+    adapter rather than a rewrite — that is why the key ring is a swappable piece rather
+    than code sprinkled around.</li>
+    <li><strong>There is no player.</strong> The recording exists and decrypts; nothing
+    offers it to the agent to listen to. That is now a screen job, not a storage one.</li>
+    <li><strong>Only the caller's side is recorded.</strong> The agent's half of the
+    conversation is a later phase.</li>
+    <li><strong>The deletion job covers audio and text, and not briefs or snapshots.</strong>
+    A full erasure request would still need those.</li>
+  </ul>
+</section>
+
+<footer class="end">
+  <p>Written 6 September 2026, after <code>D110</code>–<code>D114</code>. The decision log
+  entries carry the arguments in full, including the ones that were rejected;
+  <code>docs/diagrams/07_voice_and_ai.md</code> §7.z draws the recording path against the
+  code. Every number on this page was measured on this machine on the day, not estimated.</p>
+</footer>

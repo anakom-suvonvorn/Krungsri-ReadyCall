@@ -122,6 +122,7 @@ FullProject/
 ├─ docs/*                    # ← this documentation system
 │  ├─ diagrams/*           # 64 diagrams + 12 explanation pages; a quarter generated from source
 │  └─ reading/*            # readable twins: the keypad, the restart, the workstation, the offer,
+│                          # the audio path, and THE RECORDING (D110-D114, the newest)
 │                          #   the audio path (which also carries the verification commands)
 ├─ config/*                  # ← the entire insurance-specific "domain pack" (D28)
 │  ├─ core_mapping.yaml      # bank-data field mapping (swap target, DATA_MODEL §4)
