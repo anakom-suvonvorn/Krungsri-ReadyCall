@@ -11,17 +11,35 @@ _Rewritten 2026-09-06 (second time that day, after `D110`–`D114`). Everything 
 before this block is in the sections below; what follows is what a fresh session needs and
 nothing it does not._
 
-### ⚠️ FIRST: the user has feedback waiting
+### ⚠️ FIRST: the direction changed on 2026-09-06. Read this before planning anything.
 
-The session ended with the user saying **"i have quite a lot to say"** and asking for this
-save *before* saying it. So:
+The notes arrived, from the **hackathon orientation**, and they moved the project. The
+whole argument is in `docs/reading/the_broker_turn.html` (open it in a browser — it is the
+shared vocabulary with the user now) and recorded as **`D115`** and **`D116`**.
 
-- **Expect notes, and read them before building anything.** Nine of the last eleven faults
-  in this project were found by the user driving the screen, not by the suite. Their notes
-  are the highest-yield input there is.
-- **Do not barrel into P4.** It is the next planned item and it is not started; starting it
-  before hearing them would be exactly the wrong order.
-- **One question is genuinely open and is theirs to answer: `Q24`** — see below.
+**In one paragraph.** Re-reading the *briefing* against the *submitted deck* shows
+ReadyCall answers journey step 2 — *"re-collects data we already hold"* — while the brief
+marks step 3 (**แนะนำสินค้า**, recommend a product) as **LEAK สูงสุด**, its biggest, and
+step 4 as where customers physically drop off. The brief's headline problem is **mismatch**
+(people hold the wrong cover), and its named business outcome is **product holding per
+customer > 1.5**. Neither is a service-desk metric. So: keep everything built, and
+**extend forward** into compare-and-best-fit (step 3) and an agent **tool rail** that binds
+the call to the customer's screen (step 4). And reframe the domain from an insurer's call
+centre to a **broker's** — many insurers, one customer.
+
+- **`Q7` is CLOSED** (`D115`). The intent taxonomy was parked as a straw-man "awaiting the
+  team's domain review". The orientation was that review; it is now broker-shaped work.
+- **`Q24` is ANSWERED** (`D116`), by the brief rather than by us: *"ข้อมูลสุขภาพเป็น
+  sensitive data ต้องขอ consent แยก"*. Name the health scope in the offer wording on health
+  lines AND gate extraction in code. Both, one keypress.
+- **The consent gate MOVED** (`D116`): it is not about whether we may *hold* an
+  affiliate-sourced field, it is about whether we may **recommend** from it — which is
+  exactly the new feature. The brief gates personalised recommendation explicitly.
+- **P4 is no longer the next phase as written.** Its LLM work survives (and is Track D of
+  the week plan), but the ordering is now pitch-first: visible before invisible, because
+  the hackathon is an **idea pitch** and the demo is a supporting artifact.
+- **Judging is I-F-C-U = Impact · Feasibility · Creativity · User insight** (confirmed from
+  the briefing PDF, not guessed).
 
 ### Where the machine actually is
 
@@ -156,7 +174,7 @@ moment in the recording it was said — **and if they consented, their audio is 
 storage encrypted, with the key ref and the retention date on an `audio_recordings` row.**
 If they declined, it is nowhere.
 
-Verified **2026-09-06**: **812 tests** — 800 pass + 12 skipped with Postgres and MinIO both
+Verified **2026-09-06**: **815 tests** — 803 pass + 12 skipped with Postgres and MinIO both
 up. `ruff check` + `ruff format --check` clean over 202 files, `mypy --strict` clean over
 145, all scenarios replay, 64/64 diagrams current, prompt pack fresh (54 clips),
 `audit_docs.py` clean on the live files. **And verified against a running server with a
@@ -454,9 +472,25 @@ and recorded; they are not work.
 this file), and `Q24` is asked and unanswered — it blocks P4's entity extractor
 specifically, not the whole phase._
 
-**0. Read the user's notes, and get an answer to `Q24`.** Not busywork: nine of the last
-eleven faults came from them driving the screen, and `Q24` is the one decision that has to
-land before the first line of an entity extractor.
+**0. DONE — the notes arrived and became `D115`/`D116`.** The plan they produced is
+`docs/reading/the_broker_turn.html`. The five tracks below replace the old P4-first
+ordering for the week to 2026-09-13.
+
+| track | days | what | who |
+|---|---|---|---|
+| **A** | 1-2 | **Broker domain pack** — intents/skills/queues around renewal, enquiry, quote, service, **handoff**; `insurer` on `Policy`; fixtures where one customer holds policies from three insurers. **Blocks everything else** | 1 |
+| **B** | 2-5 | **Compare & best-fit** — `products.yaml` with comparable attributes, gap analysis, rule-based ranking first, model writes only the reason sentence (`D16`) | 2 |
+| **C** | 1-6 | **Customer app v2 + the tool rail** — the 375-line static page becomes a Vite app; push-a-form working end to end, the rest as labelled stubs | 2 |
+| **D** | 2-4 | **The LLM, actually running** — `build_llm` FIRST (there is no adapter and no factory), then summary + intent into `summary_th`, then a labelled set | 1 |
+| **E** | 5-7 | **Package, freeze, rehearse** — Dockerfile + compose profile, **feature freeze end of day 5**, and record a video of the demo working | all |
+
+**If the week collapses, three things:** the broker domain pack · compare & best-fit on the
+workstation · **one** tool working end to end. One real tool proves the rail; five
+half-built ones prove less.
+
+⚠️ **Ship the container on `STT_ENGINE=scripted`.** A plain container cannot reach the GPU
+without host setup that varies by machine, which is exactly what fails at a venue. Keep the
+real engine as a documented host-run option.
 
 **1. P4 — analysis and the brief v2+.** The largest remaining phase and the one the pitch
 leans on hardest. Intent classification, entity extraction, a rolling summary, brief
@@ -1407,6 +1441,7 @@ URL from another conversation creates a duplicate instead.
 | `reading/the_line.html` — the keypad | https://claude.ai/code/artifact/5953f7a7-d0c4-4829-8cc7-fec2b6f5b856 |
 | `reading/2026-09-03_what_happened.md` — **markdown, not a page.** The 3 September session from zero, with a glossary and the two open decisions. Written for the user after three summaries failed to land | _(a file, no URL)_ |
 | `reading/2026-09-05_the_words_on_the_screen.md` — **markdown, not a page.** How the transcript reached the agent's screen, and the two services that turned out to be running nowhere (`B24`). Ends in three commands that put six Thai sentences on a real screen | _(a file, no URL)_ |
+| `reading/the_broker_turn.html` — **the plan of record from 2026-09-06.** Why the pitch extends from the service call into comparison (step 3, the brief's biggest leak) and document handling (step 4), the broker-vs-agent reframe, the consent correction, the persona recommendation and the seven-day track plan. `D115`/`D116`. **Artifact publishing was blocked, so this one is a file** | _(a file, no URL)_ |
 | `reading/the_recording.html` — **what happens to the caller's voice**: the encrypted recording explained from a phone packet to a file in a bucket (envelope encryption drawn, not asserted), the killable decode worker, `Q31`'s circle-back, and the durable transcript. Written because *"the encrypted recording landed"* tells the reader nothing | https://claude.ai/code/artifact/c51ef926-0a13-45b7-b59f-6731be83255c |
 | `reading/the_audio_path.html` — the wait ceiling, the GPU, and the audio path, in plain language, **ending in commands that verify each claim** | https://claude.ai/code/artifact/722ddf9f-77bc-410b-8057-7f90a693ec4c |
 | `reading/the_offer.html` — what the intake offer is, in plain language | https://claude.ai/code/artifact/2c6fa04d-089f-4f4c-bfa6-fb4abc95a0af |

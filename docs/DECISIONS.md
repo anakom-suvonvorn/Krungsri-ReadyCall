@@ -4030,3 +4030,122 @@ Not a read path anything uses yet: the agent's screen is still served from
 is where the socket push comes from. The durable copy is for what comes *after* — P4's
 analysis, P6's wrap-up draft and the Call Explorer, and `D14`'s erasure job, which now has
 a `delete_for_call` on the text half to match `D110`'s on the audio.
+
+## D115. The pitch extends forward into the broker's own job — comparison and closing
+_Taken 2026-09-06, after the user attended the hackathon orientation. The first decision in
+this project driven by re-reading the **briefing** rather than the code._
+
+- **Problem.** The submitted deck (`../Krungsri.pdf`) answers one question: a customer is
+  already calling, so make that call better. Context in, routed well, brief on the screen.
+  That is real and it is built. Re-reading the briefing's own journey diagram against it
+  shows the mismatch:
+
+  | step | the brief's leak | us |
+  |---|---|---|
+  | 1 หาลูกค้า | wrong segment, no prioritisation | nothing |
+  | 2 วิเคราะห์ความต้องการ | **re-collects data we already hold** | **this is ReadyCall** |
+  | 3 แนะนำสินค้า | **LEAK สูงสุด** — too many options, slow, misses the pain point | nothing |
+  | 4 ปิดการขาย | too many documents, drop-off mid-way | nothing |
+  | 5 ดูแลหลังขาย | manual, not personalised, lapse | partial (service calls) |
+  | 6 engagement | mass blast, customer feels abandoned | nothing |
+
+  Two more things in the brief point the same way. The headline problem is stated as
+  **mismatch** — people hold cover that does not fit their risk or life stage — not
+  absence. And the named business outcome is **product holding per customer > 1.5**.
+  Neither is a service-desk metric.
+
+- **Decision.** Keep everything built. **Extend the spine forward** into steps 3 and 4 with
+  two capabilities: **compare & best-fit**, and an **agent tool rail** that binds the call
+  to the customer's screen. Reframe the domain from an insurer's call centre to a
+  **broker's**.
+
+### Broker, not agent, and why it is not cosmetic
+
+An agent (ตัวแทน) represents one insurer: one-to-one. A broker represents the customer
+across many: many-to-one. That is *why* comparison is the broker's core job, and it is why
+the biggest leak sits where it does. It also splits the call taxonomy — a broker owns
+renewal, enquiry, quoting, selling and policy service, and **hands claims and deep plan
+adjudication to the insurer**, which is an outcome the system does not currently have.
+
+The user's read that this is mostly the YAML is **right, and it is the strongest feasibility
+evidence in the pitch** — `D28` put the whole domain in `config/` for exactly this. Three
+things are not config: `Policy` has no `insurer` (meaningless for one insurer, first-class
+for a broker), "handed to insurer X" is not an available ending, and the mock customers
+need policies from several insurers or there is nothing to compare.
+
+This also closes **`Q7`**, which parked the intent taxonomy as a straw-man *"awaiting the
+team's domain review"*. The orientation was that review.
+
+### The two guardrails on compare & best-fit, which keep it in scope
+
+The brief puts **underwriting and premium pricing explicitly out of scope**. So: rank on
+**real plan attributes against real gaps**, and let the model write the *reason sentence*
+only. A figure that cannot be traced to a data field does not render — `D16`'s rule, in the
+place it matters most commercially. Surface and compare; never quote, never underwrite.
+
+### Why the tool rail is a generalisation rather than an invention
+
+`D44`'s keypad capture is already the shape: a control the agent triggers, which changes
+what the customer's device is doing, with the result landing on the workstation. The rail
+is more of those — push a form, request a document, send a link, sign, OCR. Building it as
+"a second tool of a kind that exists" is a much smaller claim than "a co-browsing product".
+
+**Honest stubs are allowed and must be labelled.** Signature and OCR should look real and
+be visibly stubbed; the pitch is judged on whether the flow holds.
+
+### What this does NOT do
+
+It does not delete the service-call spine — that is journey step 2, it is the in-scope
+bullet *"สรุปลูกค้าให้ broker ก่อนคุย"*, and it is the only part of this that is finished.
+It does not add lead scoring (step 1) or engagement (step 6): both are in scope for the
+brief, neither fits the week, and both are named in the deck as roadmap instead.
+
+## D116. The consent gate moves from HOLDING data to RECOMMENDING from it
+_Corrects a reading the user proposed, using the briefing's own words. Sharpens `Q24`
+rather than dissolving it._
+
+- **Problem.** The user's position: data from banks, insurers and affiliates was consented
+  where it was collected, so we only need consent for what we gather ourselves — the
+  recording and what comes out of it.
+
+- **Half of that is right,** and it is already how the system behaves. What a broker may
+  **see** is a different question from what they may **say and do** (`D74`), and showing a
+  routed broker a record the affiliate lawfully shared is internal processing.
+
+- **The other half is contradicted by the briefing in writing:**
+
+  > PDPA — ต้องมี consent ชัดเจนก่อนใช้ข้อมูลวิเคราะห์/**แนะนำเฉพาะบุคคล**
+  >
+  > ข้อมูลสุขภาพเป็น sensitive data ต้องขอ consent **แยก**
+
+  **Personalised recommendation is exactly `D115`'s compare-and-best-fit feature**, and the
+  brief requires explicit consent before it runs *regardless of where the data came from*.
+
+- **Decision.** The gate does not disappear; it **moves**. Consent is not primarily about
+  whether we may hold a field — it is about whether we may **use it to recommend**. So:
+  1. Holding and displaying affiliate-sourced data stays as it is (`D74`).
+  2. **Personalised recommendation is gated**, and the gate is checked where the ranking
+     runs, not where the data is read.
+  3. **Health stays a separate scope** (`D14`), now on the brief's authority rather than on
+     our reading of PDPA.
+
+### What this does to `Q24`
+
+`Q24` asked whether a health-line caller speaking health data into a recording consented
+only as `recording` + `ai_processing` is a problem. The brief answers the legal half:
+health is sensitive and needs separate consent, stated. So the recommendation stands and is
+no longer a judgement call — **name the health scope in the offer wording on health lines,
+and gate extraction in code so health entities cannot be pulled without it.** Two
+independent protections, one keypress.
+
+It also *narrows* where the gate belongs, which is the useful part: the risk is in
+**deriving** structured health facts from speech and in **recommending** from them, not in
+rendering what an insurer already told us. A gate on display would have cost the broker the
+record they were routed and protected nobody.
+
+### Why this is worth points rather than a tax
+
+I-F-C-U scores **Impact** and **User insight**. A consent moment that is one clear keypress
+and visibly changes what the system does is a far better answer to the brief's privacy
+section than a policy nobody reads — and it speaks directly to its fourth constraint, that
+decisioning must not become discriminatory.

@@ -1,0 +1,774 @@
+<title>The Broker Turn</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+  :root {
+    --paper:   #EEEDE8;
+    --card:    #F8F7F4;
+    --sunk:    #E4E3DC;
+    --line:    #D3D2C9;
+    --ink:     #171C19;
+    --muted:   #5C635D;
+    --faint:   #838A83;
+    --pine:    #1F4D3D;
+    --pine-sk: #E1EBE5;
+    --clay:    #9E3F26;
+    --clay-sk: #F6E4DD;
+    --brass:   #7E641A;
+    --brass-sk:#F1EAD3;
+
+    --display: "Fraunces", Georgia, "Times New Roman", serif;
+    --body: "IBM Plex Sans", "IBM Plex Sans Thai", "Noto Sans Thai", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+    --col: 68ch;
+    color-scheme: light;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper:   #141714;
+      --card:    #1C201D;
+      --sunk:    #232723;
+      --line:    #333833;
+      --ink:     #E9EAE4;
+      --muted:   #A2A9A2;
+      --faint:   #7C837C;
+      --pine:    #74BE9F;
+      --pine-sk: #1B2C25;
+      --clay:    #E39274;
+      --clay-sk: #2E1D16;
+      --brass:   #D2B45C;
+      --brass-sk:#2A2413;
+      color-scheme: dark;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --paper:   #141714;
+    --card:    #1C201D;
+    --sunk:    #232723;
+    --line:    #333833;
+    --ink:     #E9EAE4;
+    --muted:   #A2A9A2;
+    --faint:   #7C837C;
+    --pine:    #74BE9F;
+    --pine-sk: #1B2C25;
+    --clay:    #E39274;
+    --clay-sk: #2E1D16;
+    --brass:   #D2B45C;
+    --brass-sk:#2A2413;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 16.5px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 28px 120px;
+  }
+
+  .col { max-width: var(--col); }
+
+  /* ---- masthead ---- */
+  header.top {
+    padding: 64px 0 40px;
+    border-bottom: 2px solid var(--ink);
+    margin-bottom: 44px;
+  }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 18px;
+    margin-bottom: 26px;
+  }
+  h1 {
+    font-family: var(--display);
+    font-optical-sizing: auto;
+    font-weight: 600;
+    font-size: clamp(38px, 6.2vw, 68px);
+    line-height: 1.02;
+    letter-spacing: -0.022em;
+    margin: 0 0 22px;
+    text-wrap: balance;
+    max-width: 16ch;
+  }
+  .standfirst {
+    font-size: clamp(17px, 2vw, 20.5px);
+    line-height: 1.5;
+    color: var(--muted);
+    max-width: 58ch;
+    margin: 0;
+  }
+  .standfirst strong { color: var(--ink); font-weight: 600; }
+
+  /* ---- sections ---- */
+  section { margin: 0 0 72px; scroll-margin-top: 24px; }
+
+  h2 {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: clamp(25px, 3.2vw, 33px);
+    line-height: 1.14;
+    letter-spacing: -0.014em;
+    margin: 0 0 6px;
+    text-wrap: balance;
+  }
+  .kicker {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--pine);
+    margin: 0 0 14px;
+    font-weight: 500;
+  }
+  h3 {
+    font-family: var(--body);
+    font-weight: 600;
+    font-size: 17.5px;
+    letter-spacing: -0.003em;
+    margin: 34px 0 8px;
+  }
+  p { margin: 0 0 15px; }
+  .col p:last-child { margin-bottom: 0; }
+
+  a { color: var(--pine); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  a:focus-visible, summary:focus-visible { outline: 2px solid var(--pine); outline-offset: 3px; border-radius: 2px; }
+
+  code, .m {
+    font-family: var(--mono);
+    font-size: 0.855em;
+    background: var(--sunk);
+    padding: 1px 5px;
+    border-radius: 3px;
+    color: var(--ink);
+  }
+  .th { font-family: var(--body); }
+
+  strong { font-weight: 600; }
+
+  ul, ol { margin: 0 0 15px; padding-left: 20px; }
+  li { margin-bottom: 7px; }
+  li::marker { color: var(--faint); }
+
+  /* ---- pull quote from the brief ---- */
+  .brief-quote {
+    border-left: 3px solid var(--clay);
+    background: var(--clay-sk);
+    padding: 16px 20px;
+    margin: 22px 0;
+    border-radius: 0 4px 4px 0;
+  }
+  .brief-quote p { margin: 0 0 6px; }
+  .brief-quote p:last-child { margin: 0; }
+  .brief-quote .src {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--clay);
+  }
+
+  /* ---- the journey figure ---- */
+  figure { margin: 30px 0; }
+  .scroller { overflow-x: auto; padding-bottom: 6px; }
+  .scroller svg { display: block; min-width: 940px; width: 100%; height: auto; }
+  figcaption {
+    font-size: 14px;
+    color: var(--muted);
+    margin-top: 12px;
+    max-width: 72ch;
+  }
+
+  /* ---- verdict strip ---- */
+  .verdict {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 1px;
+    background: var(--line);
+    border: 1px solid var(--line);
+    margin: 28px 0 6px;
+  }
+  .verdict > div { background: var(--card); padding: 17px 18px; }
+  .verdict dt {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--faint);
+    margin-bottom: 7px;
+  }
+  .verdict dd {
+    margin: 0;
+    font-size: 15px;
+    line-height: 1.45;
+  }
+  .verdict dd b { font-weight: 600; }
+
+  /* ---- tables ---- */
+  .tw { overflow-x: auto; margin: 24px 0; }
+  table { border-collapse: collapse; width: 100%; min-width: 560px; font-size: 15px; }
+  th, td { text-align: left; padding: 11px 14px 11px 0; vertical-align: top; border-bottom: 1px solid var(--line); }
+  th {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    color: var(--faint);
+    font-weight: 500;
+    border-bottom: 1px solid var(--ink);
+    padding-top: 0;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  /* ---- tags ---- */
+  .tag {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border-radius: 3px;
+    white-space: nowrap;
+    font-weight: 500;
+  }
+  .t-built { background: var(--pine-sk); color: var(--pine); }
+  .t-new   { background: var(--clay-sk); color: var(--clay); }
+  .t-part  { background: var(--brass-sk); color: var(--brass); }
+
+  /* ---- capability blocks ---- */
+  .cap {
+    border-top: 1px solid var(--line);
+    padding-top: 22px;
+    margin-top: 30px;
+  }
+  .cap-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
+  .cap-head h3 { margin: 0; font-size: 19px; }
+
+  /* ---- the week ---- */
+  .week { display: flex; flex-direction: column; gap: 1px; background: var(--line); border: 1px solid var(--line); margin: 26px 0; }
+  .track { background: var(--card); padding: 18px 20px; display: grid; grid-template-columns: 132px 1fr; gap: 20px; }
+  @media (max-width: 640px) { .track { grid-template-columns: 1fr; gap: 8px; } }
+  .track-meta { }
+  .track-id {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--pine);
+    font-weight: 500;
+    display: block;
+    margin-bottom: 4px;
+  }
+  .track-days { font-family: var(--mono); font-size: 12.5px; color: var(--faint); font-variant-numeric: tabular-nums; }
+  .track h3 { margin: 0 0 6px; font-size: 16.5px; }
+  .track p { font-size: 14.7px; margin: 0 0 8px; color: var(--muted); }
+  .track p strong { color: var(--ink); }
+  .track ul { font-size: 14.5px; margin: 0; color: var(--muted); }
+  .track ul strong { color: var(--ink); }
+
+  /* ---- spine callout ---- */
+  .spine {
+    background: var(--pine);
+    color: #F4F8F5;
+    padding: 26px 28px;
+    border-radius: 5px;
+    margin: 30px 0;
+  }
+  :root[data-theme="dark"] .spine,
+  :root:not([data-theme="light"]) .spine { color: #0E1A15; }
+  @media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) .spine { color: #F4F8F5; } }
+  .spine h3 { margin: 0 0 12px; color: inherit; font-size: 17px; }
+  .spine ol { margin: 0; padding-left: 20px; }
+  .spine li { margin-bottom: 9px; }
+  .spine li:last-child { margin-bottom: 0; }
+  .spine code { background: rgba(127,127,127,0.22); color: inherit; }
+
+  /* ---- warn ---- */
+  .warn {
+    border: 1px solid var(--clay);
+    background: var(--clay-sk);
+    padding: 18px 20px;
+    border-radius: 4px;
+    margin: 24px 0;
+  }
+  .warn h3 { margin: 0 0 8px; font-size: 16px; color: var(--clay); }
+  .warn p:last-child { margin-bottom: 0; }
+
+  details {
+    border-top: 1px solid var(--line);
+    padding: 14px 0;
+  }
+  summary { cursor: pointer; font-weight: 600; font-size: 15.5px; list-style-position: outside; }
+  details[open] summary { margin-bottom: 10px; }
+  details > *:not(summary) { font-size: 15px; color: var(--muted); }
+  details > *:not(summary) strong { color: var(--ink); }
+
+  footer {
+    border-top: 2px solid var(--ink);
+    padding-top: 22px;
+    font-size: 14px;
+    color: var(--muted);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+
+<div class="wrap">
+
+<header class="top">
+  <div class="eyebrow">
+    <span>HACK VIDVA</span>
+    <span>Krungsri Universe × KMITL</span>
+    <span>Plan of record · 6 Sep 2026</span>
+    <span>7 days to pitch</span>
+  </div>
+  <h1>The Broker Turn</h1>
+  <p class="standfirst">Your orientation notes are right, and the briefing document proves it. ReadyCall as pitched fixes the <strong>second</strong> leak in the broker journey. The brief marks the <strong>third</strong> as <span class="th">LEAK สูงสุด</span> — the biggest one — and every idea you came back with lands on it.</p>
+</header>
+
+<section id="finding">
+  <p class="kicker">The finding</p>
+  <h2>We built a service desk. The brief is asking for a sales desk.</h2>
+
+  <div class="col">
+    <p>The submitted deck answers one question: <em>a customer is already calling — how do we make that call better?</em> Context before the call, routing, a brief on the screen. That is real, it is built, and it maps to a named in-scope bullet: <span class="th">“Broker productivity tools (เช่น สรุปลูกค้าให้ broker ก่อนคุย)”</span>.</p>
+
+    <p>But read the journey diagram on page 1 of the briefing. Six steps, each with its leak. Ours sits on step 2. The brief labels step 3 the biggest leak in the business, and step 4 the place customers physically walk away.</p>
+  </div>
+
+  <figure>
+    <div class="scroller">
+      <svg viewBox="0 0 1000 372" role="img" aria-label="The six-step broker journey from the briefing. Steps 1 to 6 are find leads, understand needs, recommend product, close the sale, after-sales care, and ongoing engagement. Step 3, recommending a product, is marked as the biggest leak. ReadyCall today covers only step 2. The proposed additions cover steps 3, 4 and 5.">
+        <defs>
+          <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
+          </marker>
+        </defs>
+
+        <!-- leak severity bars -->
+        <g>
+          <text x="0" y="14" font-family="IBM Plex Mono, monospace" font-size="10" letter-spacing="1.3" fill="var(--faint)">LEAK SEVERITY, AS THE BRIEF RANKS IT</text>
+        </g>
+
+        <!-- columns -->
+        <g font-family="IBM Plex Sans, sans-serif">
+          <!-- step 1 -->
+          <rect x="0" y="52" width="152" height="18" fill="var(--clay)" opacity="0.34"/>
+          <text x="0" y="92" font-size="13" font-weight="600" fill="var(--ink)">1 · <tspan font-family="IBM Plex Sans Thai, IBM Plex Sans, sans-serif">หาลูกค้า</tspan></text>
+          <text x="0" y="110" font-size="11.5" fill="var(--muted)">Find leads</text>
+          <text x="0" y="134" font-size="11" fill="var(--clay)">Wrong segment,</text>
+          <text x="0" y="148" font-size="11" fill="var(--clay)">no prioritisation</text>
+
+          <!-- step 2 -->
+          <rect x="170" y="44" width="152" height="26" fill="var(--clay)" opacity="0.5"/>
+          <text x="170" y="92" font-size="13" font-weight="600" fill="var(--ink)">2 · <tspan font-family="IBM Plex Sans Thai, IBM Plex Sans, sans-serif">วิเคราะห์ความต้องการ</tspan></text>
+          <text x="170" y="110" font-size="11.5" fill="var(--muted)">Understand needs</text>
+          <text x="170" y="134" font-size="11" fill="var(--clay)">Re-collects data</text>
+          <text x="170" y="148" font-size="11" fill="var(--clay)">we already hold</text>
+
+          <!-- step 3 -->
+          <rect x="340" y="24" width="152" height="46" fill="var(--clay)"/>
+          <text x="340" y="17" font-family="IBM Plex Mono, monospace" font-size="9.5" letter-spacing="1" fill="var(--clay)" font-weight="500">BIGGEST</text>
+          <text x="340" y="92" font-size="13" font-weight="600" fill="var(--ink)">3 · <tspan font-family="IBM Plex Sans Thai, IBM Plex Sans, sans-serif">แนะนำสินค้า</tspan></text>
+          <text x="340" y="110" font-size="11.5" fill="var(--muted)">Recommend a product</text>
+          <text x="340" y="134" font-size="11" fill="var(--clay)">Too many options,</text>
+          <text x="340" y="148" font-size="11" fill="var(--clay)">misses the pain point</text>
+
+          <!-- step 4 -->
+          <rect x="510" y="34" width="152" height="36" fill="var(--clay)" opacity="0.72"/>
+          <text x="510" y="92" font-size="13" font-weight="600" fill="var(--ink)">4 · <tspan font-family="IBM Plex Sans Thai, IBM Plex Sans, sans-serif">ปิดการขาย</tspan></text>
+          <text x="510" y="110" font-size="11.5" fill="var(--muted)">Close the sale</text>
+          <text x="510" y="134" font-size="11" fill="var(--clay)">Too many documents,</text>
+          <text x="510" y="148" font-size="11" fill="var(--clay)">drop-off mid-way</text>
+
+          <!-- step 5 -->
+          <rect x="680" y="44" width="152" height="26" fill="var(--clay)" opacity="0.5"/>
+          <text x="680" y="92" font-size="13" font-weight="600" fill="var(--ink)">5 · <tspan font-family="IBM Plex Sans Thai, IBM Plex Sans, sans-serif">ดูแลหลังขาย</tspan></text>
+          <text x="680" y="110" font-size="11.5" fill="var(--muted)">After-sales care</text>
+          <text x="680" y="134" font-size="11" fill="var(--clay)">Manual contact,</text>
+          <text x="680" y="148" font-size="11" fill="var(--clay)">not personalised → lapse</text>
+
+          <!-- step 6 -->
+          <rect x="850" y="48" width="150" height="22" fill="var(--clay)" opacity="0.42"/>
+          <text x="850" y="92" font-size="13" font-weight="600" fill="var(--ink)">6 · Engagement</text>
+          <text x="850" y="110" font-size="11.5" fill="var(--muted)">Keep the relationship</text>
+          <text x="850" y="134" font-size="11" fill="var(--clay)">Mass blast; customer</text>
+          <text x="850" y="148" font-size="11" fill="var(--clay)">feels abandoned</text>
+        </g>
+
+        <!-- coverage: today -->
+        <line x1="0" y1="182" x2="1000" y2="182" stroke="var(--line)" stroke-width="1"/>
+        <text x="0" y="204" font-family="IBM Plex Mono, monospace" font-size="10" letter-spacing="1.2" fill="var(--faint)">READYCALL, BUILT AND RUNNING TODAY</text>
+        <rect x="170" y="216" width="152" height="30" rx="3" fill="var(--pine)"/>
+        <text x="246" y="236" font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="var(--paper)" text-anchor="middle" font-weight="600">context · routing · brief</text>
+        <rect x="680" y="216" width="152" height="30" rx="3" fill="none" stroke="var(--pine)" stroke-width="1" stroke-dasharray="4 3"/>
+        <text x="756" y="236" font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="var(--pine)" text-anchor="middle">service calls only</text>
+
+        <!-- coverage: proposed -->
+        <text x="0" y="286" font-family="IBM Plex Mono, monospace" font-size="10" letter-spacing="1.2" fill="var(--faint)">WHAT THIS WEEK ADDS</text>
+        <rect x="340" y="298" width="152" height="30" rx="3" fill="var(--clay)"/>
+        <text x="416" y="318" font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="var(--paper)" text-anchor="middle" font-weight="600">compare &amp; best-fit</text>
+        <rect x="510" y="298" width="152" height="30" rx="3" fill="var(--clay)"/>
+        <text x="586" y="318" font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="var(--paper)" text-anchor="middle" font-weight="600">the tool rail</text>
+        <rect x="680" y="298" width="152" height="30" rx="3" fill="none" stroke="var(--clay)" stroke-width="1" stroke-dasharray="4 3"/>
+        <text x="756" y="318" font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="var(--clay)" text-anchor="middle">renewal intents</text>
+
+        <text x="0" y="352" font-family="IBM Plex Sans, sans-serif" font-size="11" fill="var(--faint)">Solid = built or committed this week.  Dashed = partial.</text>
+      </svg>
+    </div>
+    <figcaption>The six-step journey and its leaks are the briefing's own; the severity ordering is theirs too — step 3 is labelled <span class="th">LEAK สูงสุด</span>. The two bands underneath are ours: what exists today, and what the week adds.</figcaption>
+  </figure>
+
+  <div class="col">
+    <p>Two more things in the brief point the same way. The headline problem is not <em>“people have no insurance”</em> — it is <strong>mismatch</strong>: people hold cover that does not fit their risk or life stage. And the business outcome the bank names is <strong>product holding per customer above 1.5</strong>. Neither is a service-desk metric. Both are step 3.</p>
+
+    <p>So the move is not to throw away what exists. It is to <strong>extend the spine forward</strong>: the same context layer that prepares a service call also prepares a <em>sales</em> conversation, and the same workstation grows the tools to finish one.</p>
+  </div>
+
+  <dl class="verdict">
+    <div><dt>Keep</dt><dd>Context-aware calling, routing, pre-call intake, the brief. <b>It is the step-2 leak and it is built.</b></dd></div>
+    <div><dt>Add</dt><dd>Compare &amp; best-fit at step 3, and the agent tool rail at step 4. <b>Both are your ideas.</b></dd></div>
+    <div><dt>Reframe</dt><dd>From “insurer's call centre” to <b>broker</b> — many insurers, one customer.</dd></div>
+    <div><dt>Drop</dt><dd>Nothing. But freeze the invisible backlog for a week.</dd></div>
+  </dl>
+</section>
+
+<section id="broker">
+  <p class="kicker">Reframe</p>
+  <h2>Broker, not agent — and you are right that it is mostly configuration</h2>
+
+  <div class="col">
+    <p>The distinction you drew at the orientation is the load-bearing one. An <strong>agent</strong> (<span class="th">ตัวแทน</span>) represents one insurer: one-to-one. A <strong>broker</strong> represents the customer across many insurers: many-to-one. That is not a labelling difference — it is <em>why comparison is the broker's core job at all</em>, and why the biggest leak is where it is.</p>
+
+    <p>It also redraws the call taxonomy exactly as you described. A broker owns renewal, enquiry, quoting, selling, policy admin and the relationship. Deep plan adjudication and the claim itself belong to the insurer, and the broker's job on those calls is to <strong>hand over well</strong> — which is a different outcome from resolving.</p>
+
+    <p>You said this is mostly the YAML rather than the logic. That is right, and it is worth saying out loud in the pitch, because it is the strongest feasibility evidence we have: the domain lives in <code>config/</code> by design, and nothing in <code>services/</code> is allowed to hardcode an insurance literal. Retargeting is a config swap.</p>
+
+    <p>Three things are <em>not</em> config, and they are small but real:</p>
+  </div>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>What changes</th><th>Where</th><th>Size</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>Intents, skills, queues, menus</strong> reshaped around renewal / enquiry / quote / service / handoff</td>
+          <td><code>config/intents.yaml</code>, <code>skills.yaml</code>, <code>menus.yaml</code>, <code>dids.yaml</code></td>
+          <td>Config <span class="tag t-built">swap</span></td>
+        </tr>
+        <tr>
+          <td><strong>A policy needs an insurer.</strong> Today <code>Policy</code> knows its product and line but not who underwrote it — meaningless for one insurer, first-class for a broker</td>
+          <td><code>domain/models.py</code>, the assembler, the brief</td>
+          <td>One field <span class="tag t-new">code</span></td>
+        </tr>
+        <tr>
+          <td><strong>“Handed to insurer X” is a real ending</strong> to a call, and no such outcome exists — every call currently resolves or abandons</td>
+          <td>wrap-up dispositions, <code>config/</code></td>
+          <td>Small <span class="tag t-new">code</span></td>
+        </tr>
+        <tr>
+          <td><strong>Mock customers hold policies from several insurers</strong>, or the comparison view has nothing to compare</td>
+          <td><code>mock/bank_core/</code>, fixtures</td>
+          <td>Data <span class="tag t-part">half-day</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="col">
+    <p>Do this track <strong>first</strong>. Everything else in the week reads as broker work only if the domain underneath it does.</p>
+    <p>It also closes a question that has been parked since the start — the intent taxonomy was written as a straw-man <em>“awaiting the team's domain review”</em>. The orientation was that review.</p>
+  </div>
+</section>
+
+<section id="capabilities">
+  <p class="kicker">The two additions</p>
+  <h2>Your ideas, polished</h2>
+
+  <div class="cap">
+    <div class="cap-head">
+      <h3>Compare &amp; best-fit</h3>
+      <span class="tag t-new">Step 3 · the biggest leak</span>
+    </div>
+    <div class="col">
+      <p>Today a broker compares plans with brochures and PDFs — the brief says so in those words. The result is <span class="th">ตัวเลือกเยอะ ตัดสินใจช้า</span>: too many options, slow decisions, and a recommendation that misses the point.</p>
+
+      <p>Build a comparison surface that both sides can see: the customer's <em>current</em> cover in the left column and candidate plans beside it, differences highlighted rather than listed. Then a ranked shortlist with <strong>a written reason per row</strong> — “covers the ฿3,000/day room rate your current plan caps at ฿1,500”, not a score out of ten.</p>
+
+      <p>Two guardrails, and they are what keep it inside the brief's scope rather than outside it:</p>
+      <ul>
+        <li><strong>Rank on facts, explain with the model.</strong> The ordering comes from real plan attributes against the customer's real gaps. The model writes the sentence; it never invents the number. A figure that cannot be traced to a data field does not render.</li>
+        <li><strong>Surface and compare — never quote or underwrite.</strong> Premium pricing and underwriting are explicitly out of scope. Show published plan features and the gap analysis; the broker decides and the insurer quotes.</li>
+      </ul>
+
+      <p>This is also the answer to “what is the AI actually <em>for</em>”. Summarising a call is useful; closing the mismatch the brief opens with is the pitch.</p>
+    </div>
+  </div>
+
+  <div class="cap">
+    <div class="cap-head">
+      <h3>The tool rail</h3>
+      <span class="tag t-new">Step 4 · the drop-off</span>
+    </div>
+    <div class="col">
+      <p>Your form-filling observation is the best piece of user insight in the notes, and the brief independently confirms the leak: <span class="th">เอกสารเยอะ ลูกค้า drop-off กลางทาง</span> — too many documents, customers walk away mid-process.</p>
+
+      <p>The idea: stop describing a website down the phone. <strong>Bind the call to the customer's screen</strong>, and let the broker put the right thing on it.</p>
+
+      <p>Two entry paths, converging:</p>
+      <ul>
+        <li><strong>From a normal phone call</strong> — the broker presses <em>send link</em>, an SMS/LINE message goes to the number already on the call, the customer opens it and signs in, then taps <span class="th">“ให้เจ้าหน้าที่ช่วย”</span>. Call and screen are now paired.</li>
+        <li><strong>From inside the app</strong> — already signed in, so the pairing is implicit from the first second. This is the path the existing <em>Contact</em> flow already builds.</li>
+      </ul>
+
+      <p>Then the broker works a rail of tools: push a form and watch it fill, request a document, capture digits, start a signature, run OCR on a photographed ID. The customer never navigates anywhere. Things simply <em>arrive</em>.</p>
+
+      <p>Two things make this more credible than it sounds for a week of work:</p>
+      <ul>
+        <li><strong>The pattern already exists.</strong> Keypad capture is exactly this shape — a control the broker triggers that changes what the customer's device is doing, with the result landing on the workstation. The rail generalises a thing that is built, rather than inventing one.</li>
+        <li><strong>Honest stubs are fine.</strong> E-signature and OCR should look and feel real and be clearly stubbed underneath. Nobody will ask you to sign a legally binding document on stage; they will ask whether the <em>flow</em> holds.</li>
+      </ul>
+
+      <p>One reframe worth making. You described the extreme user — an older customer whose children installed the app. That is a sharp story, but do not build it as a persona: <strong>document drop-off is universal</strong>, and the brief prices it as a leak for everyone. Use the tech-shy customer as the moment that <em>proves</em> the design, not as the segment it serves.</p>
+    </div>
+  </div>
+</section>
+
+<section id="consent">
+  <p class="kicker">Correction</p>
+  <h2>On consent, you are half right — and the half that is wrong is graded</h2>
+
+  <div class="col">
+    <p>Your reasoning: data arriving from banks, insurers and affiliates was already consented at the point it was collected, so we only need consent for what we gather ourselves — the recording and what comes out of it.</p>
+
+    <p>For <em>holding and showing</em> that data to a broker who has been routed the call, that is essentially right, and it matches how the system already works: what a broker may <strong>see</strong> is a different question from what they may <strong>say and do</strong>.</p>
+
+    <p>But the briefing gates something else, in writing:</p>
+  </div>
+
+  <div class="brief-quote">
+    <p class="th">PDPA — ต้องมี consent ชัดเจนก่อนใช้ข้อมูลวิเคราะห์/แนะนำเฉพาะบุคคล</p>
+    <p class="th">ข้อมูลสุขภาพเป็น sensitive data ต้องขอ consent แยก</p>
+    <p class="src">Briefing, section 03 — Privacy / Regulation constraints</p>
+  </div>
+
+  <div class="col">
+    <p>Read those against what we are now building. <strong>Personalised analysis and recommendation is exactly the compare-and-best-fit feature</strong> — the brief requires explicit consent before it runs, regardless of where the underlying data came from. So the consent gate does not disappear; it <em>moves</em>, from “may we hold this” to “may we use this to recommend”.</p>
+
+    <p>And the second line settles a question that has been open and blocking: health data needs separate consent, stated by the brief itself. That is no longer a judgement call about how strictly a regulator reads PDPA — it is a judging criterion. The recommendation stands and is now backed by the document: <strong>name the health scope in the offer wording on health lines, and gate extraction in code so health details can never be pulled without it.</strong></p>
+
+    <p>Handled well this is a scoring opportunity, not a tax. Under <em>Impact</em> and <em>User insight</em>, a consent moment that is one clear keypress and visibly changes what the system does is far stronger than a privacy policy nobody reads — and it directly answers the brief's fourth constraint about decisioning that must not become discriminatory.</p>
+  </div>
+</section>
+
+<section id="persona">
+  <p class="kicker">Positioning</p>
+  <h2>Who this is for</h2>
+
+  <div class="col">
+    <p>The brief hands you three personas and asks you to pick. My recommendation is to lead with <strong><span class="th">มนุษย์เงินเดือน</span> — the salaried employee</strong>, and to name the other two as the same machine pointed elsewhere.</p>
+  </div>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Persona</th><th>The brief's pain point</th><th>Fit for this pitch</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong><span class="th">มนุษย์เงินเดือน</span></strong><br><span style="color:var(--muted)">Salaried</span></td>
+          <td>Has group cover, assumes <em>“I'm already covered”</em>. No idea whether it is enough against a mortgage and a family. No time to compare.</td>
+          <td><span class="tag t-built">Lead with this</span> Largest overlap with the bank's book. The false belief is a crisp story, and the mismatch is provable from data the bank already holds.</td>
+        </tr>
+        <tr>
+          <td><strong>SME owner</strong></td>
+          <td>Personal and business risk tangled together; uneven cash flow. Sees insurance as a cost, not risk management.</td>
+          <td><span class="tag t-part">Second</span> Strongest for the tool rail — time-poor, document-heavy, most to lose from drop-off.</td>
+        </tr>
+        <tr>
+          <td><strong>Freelancer</strong></td>
+          <td>No employer benefits, unpredictable income. Too small for a broker to serve one-to-one profitably.</td>
+          <td><span class="tag t-part">Third</span> The scale argument: this system is <em>how</em> a broker serves a segment that was never worth serving by hand.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="col">
+    <h3>The demo story, end to end</h3>
+    <p>Keep the existing persona and give her a life event. She has a group health plan through work and a new mortgage. She taps <em>Contact</em> in the app about hospital cover.</p>
+    <p>ReadyCall carries her identity and policies in, she describes the issue while waiting, and the broker picks up already knowing who she is and why she called — <strong>that is the demo you already have.</strong> Then the new half: the brief shows her group plan caps room and board below what her hospital charges, the comparison panel puts two top-up plans against her current cover, and the broker pushes the application form straight to her phone. She fills it in while still on the call.</p>
+    <p>One call. Journey steps 2, 3 and 4, closed in order. That is a pitch.</p>
+  </div>
+</section>
+
+<section id="week">
+  <p class="kicker">Execution</p>
+  <h2>The week</h2>
+
+  <div class="col">
+    <p>You said it plainly and it is the right call: this is an <strong>idea pitch</strong>. The demo exists so people can feel the flow. So the ordering rule for the next seven days is <em>visible before invisible</em> — with one exception, which is that the invisible work already banked (encrypted recordings, consent, the durable transcript) is what makes the feasibility claim survive a hard question.</p>
+  </div>
+
+  <div class="spine">
+    <h3>If the week collapses and you only get three things</h3>
+    <ol>
+      <li><strong>The broker domain pack.</strong> Without it, every screen still says “insurer's call centre” and the reframe never lands.</li>
+      <li><strong>Compare &amp; best-fit on the workstation.</strong> The biggest leak, the bank's own metric, and the most quotable screenshot in the deck.</li>
+      <li><strong>One tool working end to end — push a form to the customer's phone.</strong> One is enough to prove the rail. Five half-built ones prove less than one that works.</li>
+    </ol>
+  </div>
+
+  <div class="week">
+    <div class="track">
+      <div class="track-meta"><span class="track-id">Track A</span><span class="track-days">Days 1–2 · 1 person</span></div>
+      <div>
+        <h3>Broker domain pack</h3>
+        <p>Rewrite the domain for a brokerage. <strong>Blocks everything else, so it goes first.</strong></p>
+        <ul>
+          <li>Intents, skills and queues around <strong>renewal, enquiry, quote, policy service, complaint, handoff</strong> — claims become handoffs, not resolutions</li>
+          <li><code>insurer</code> on <code>Policy</code>, through the assembler to the brief</li>
+          <li>Fixtures where one customer holds policies from <strong>three different insurers</strong></li>
+          <li>Menus and spoken lines to match, then re-render the prompt pack</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="track">
+      <div class="track-meta"><span class="track-id">Track B</span><span class="track-days">Days 2–5 · 2 people</span></div>
+      <div>
+        <h3>Compare &amp; best-fit</h3>
+        <p>The biggest leak, and the centre of the new pitch.</p>
+        <ul>
+          <li>A <code>products.yaml</code> with genuinely comparable attributes — room &amp; board, deductible, co-pay, exclusions, OPD, sum insured</li>
+          <li>Gap analysis: the customer's current cover against each candidate, <strong>differences ranked by size</strong></li>
+          <li>Rule-based ranking first so it works with no key at all; the model writes the reason sentence on top</li>
+          <li>A comparison panel on the workstation, and the same data rendered for the customer's screen</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="track">
+      <div class="track-meta"><span class="track-id">Track C</span><span class="track-days">Days 1–6 · 2 people</span></div>
+      <div>
+        <h3>Customer app v2 &amp; the tool rail</h3>
+        <p>The 375-line static page cannot carry this. <strong>Rebuild it as a real app</strong> — same Vite + React setup as the workstation, so there is one toolchain and one build step.</p>
+        <ul>
+          <li>Sign in, policies, <em>Contact</em>, and the in-call <span class="th">“ให้เจ้าหน้าที่ช่วย”</span> mode</li>
+          <li>A live channel to the paired call so pushed things simply appear</li>
+          <li><strong>Push a form</strong> — the one tool that must genuinely work, both directions</li>
+          <li>Then, in order of remaining time: request a document · send a link · signature · OCR. <strong>Honest stubs, clearly labelled</strong></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="track">
+      <div class="track-meta"><span class="track-id">Track D</span><span class="track-days">Days 2–4 · 1 person</span></div>
+      <div>
+        <h3>The AI, actually running</h3>
+        <p>You asked for this specifically. Note the starting point: there is <strong>no LLM adapter at all yet</strong> — only the rule-based fallback, and even that is constructed by nothing.</p>
+        <ul>
+          <li><code>build_llm</code> first — the factory, before any prompt. Your Anthropic key is already in <code>.env</code> waiting</li>
+          <li>Summary and intent on the existing brief, replacing the rule-based text in a field the screen already renders — <strong>no client change needed</strong></li>
+          <li>A small labelled set, so “85% intent accuracy” is a measurement rather than a claim</li>
+          <li>If time allows, the same set through Typhoon for a real side-by-side table. That table is good pitch material on its own</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="track">
+      <div class="track-meta"><span class="track-id">Track E</span><span class="track-days">Days 5–7 · everyone</span></div>
+      <div>
+        <h3>Package, freeze, rehearse</h3>
+        <p><strong>Feature freeze at the end of day 5.</strong> Days 6 and 7 are for the deck and the run-through, not for one more panel.</p>
+        <ul>
+          <li>Docker packaging (below), so any laptop can run it</li>
+          <li><strong>Record a video of the demo working.</strong> Live demos fail at venues; a recording you can cut to is the cheapest insurance in this whole plan</li>
+          <li>Rehearse on the persona you will actually use — personalised menus renumber, and a human reading a script off paper will press what the script says</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="docker">
+  <p class="kicker">Your question</p>
+  <h2>One command on any machine — yes, and mostly already there</h2>
+
+  <div class="col">
+    <p>The compose file already runs Postgres, Redis, MinIO and a database browser. What is missing is the application itself. Three pieces:</p>
+    <ul>
+      <li>A multi-stage <strong>Dockerfile</strong>: Node builds the workstation and the customer app, then a Python image copies the built assets and runs the API.</li>
+      <li>An <code>app</code> service in the compose file, wired to the containers already there.</li>
+      <li>A <strong>demo profile</strong> so <code>docker compose --profile demo up</code> brings up everything in one command.</li>
+    </ul>
+
+    <div class="warn">
+      <h3>The honest caveat: the GPU does not come with it</h3>
+      <p>The real Thai speech engine needs the machine's GPU, and a plain container will not reach it without extra host setup that varies by machine — exactly the kind of thing that fails at a venue.</p>
+      <p>So ship the container on the <strong>stage-safe scripted engine</strong>, which needs no GPU, no model download and no network, and keep the real engine as a documented host-run option for the machine that has the graphics card. <em>“Runs anywhere; runs the real model on our box”</em> is a better story than a container that only works on one laptop anyway.</p>
+    </div>
+  </div>
+</section>
+
+<section id="not">
+  <p class="kicker">Discipline</p>
+  <h2>What not to do this week</h2>
+
+  <div class="col">
+    <p>Everything below is real work that must happen eventually. None of it changes the pitch, so none of it happens in the next seven days. Writing it here is how it survives being deferred.</p>
+  </div>
+
+  <details>
+    <summary>Real telephony</summary>
+    <p>The softphone stays stubbed, exactly as you said. It makes the system <em>work</em>; it does not make the flow <em>legible</em>, and it is the single highest-risk dependency in the project. The demo endpoint that places calls has stood in for it since the beginning and will hold for one more week.</p>
+  </details>
+
+  <details>
+    <summary>A real TTS voice</summary>
+    <p>Every Thai line in the system has never been spoken aloud — the pack is text rendered by a null engine. Worth fixing before anyone hears the IVR live; not worth a day this week, since the pitch shows screens rather than plays audio.</p>
+  </details>
+
+  <details>
+    <summary>The rest of the tool rail</summary>
+    <p>Signature, OCR, document upload. Get <em>one</em> tool working properly and stub the others convincingly. A rail with one real tool and four honest placeholders demos better than five that half-work.</p>
+  </details>
+
+  <details>
+    <summary>Lead scoring, and journey steps 1 and 6</summary>
+    <p>Both are in scope for the brief and both are genuinely good. Neither fits in a week alongside the rest. Name them in the deck as where this goes next — a pitch that knows its own roadmap reads as more considered, not less finished.</p>
+  </details>
+
+  <details>
+    <summary>Persisting the last few things in memory</summary>
+    <p>Call intents and app-context events still live only in memory, and briefs are not covered by the erasure job. Real gaps, invisible on stage, and the kind of thing that is much cheaper to fix calmly afterwards.</p>
+  </details>
+</section>
+
+<footer>
+  <p><strong>Status.</strong> This is a recommendation, not a decision. The two calls that are genuinely yours: whether to lead with the salaried persona, and how far the tool rail goes before the freeze. Everything else follows from the brief.</p>
+  <p>Written 6 September 2026, after the orientation. Sources: the hackathon briefing, the submitted HACK VIDVA deck, and the current state of the build.</p>
+</footer>
+
+</div>
