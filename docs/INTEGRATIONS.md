@@ -513,11 +513,19 @@ of the real system.
 
 ## 7. Configuration surface (`.env` / `pydantic-settings`)
 
+> **`.env` is gitignored; `.env.example` is committed and carries names only.** Since
+> 2026-09-06 the example file marks every secret `[READ]` (an adapter uses it today) or
+> `[SLOT]` (the field exists, its adapter does not). Declaring an unread *secret* is
+> deliberate and is not `Q26`'s complaint about dead env vars: a declared secret is
+> redacted from every log line by name the moment somebody sets it, and having the slot
+> ready is what stops a live key being pasted somewhere with no home. Declaring an unread
+> *behaviour knob* is still a lie about what the system does.
+
 **The audio path, added at P3 step 4b.** Every one defaults to needing nothing installed:
 
 | Variable | Default | Notes |
 |---|---|---|
-| `STT_ENGINE` | `scripted` | `scripted` · `thonburian_hf` · `thonburian_ct2` (faster-whisper) · `typhoon`/`distill`/`cloud` are named and not built, and **say so in the log** rather than falling back silently |
+| `STT_ENGINE` | `scripted` | `scripted` (the stage-safe default) · **`typhoon` is the SHIPPED engine** (`D104`) and needs the `asr` extra · `thonburian_ct2` (faster-whisper) is the documented fallback · `thonburian_hf` · `distill` and `cloud` are named and **not built**, and say so in the log rather than falling back silently |
 | `VAD_ENGINE` | `energy` | `energy` needs nothing and is also the degradation rung; `silero` is the real one (`D9`) and needs the `ml` extra |
 | `STT_MODEL` | `biodatlab/whisper-th-medium-combined` | For `thonburian_ct2` this must be a **local converted directory** (`scripts/convert_ct2.py`), not an HF id (`B17`) |
 | `STT_DEVICE` | `auto` | Resolves to `cuda` when a GPU is genuinely usable, `cpu` otherwise — resolved in `build_stt`, so importing config never imports torch |

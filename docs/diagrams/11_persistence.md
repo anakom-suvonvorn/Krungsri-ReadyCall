@@ -24,7 +24,8 @@ So it is drawn rather than described.
 column counts, read off the SQLAlchemy models themselves. If somebody adds a table without
 adding a reason, it appears here on the next regeneration.
 
-Nine tables, in four groups:
+**Eleven tables**, in five groups (nine landed with P2c; `audio_recordings` and
+`transcript_turns` joined them on 2026-09-06, `D110` and `D114`):
 
 - **the call** — `call_sessions` is the spine; `call_state_transitions` is the timeline that
   makes `D18`'s "context was ready before the phone rang" a fact you can print rather than a
@@ -36,6 +37,11 @@ Nine tables, in four groups:
   safe to talk to this caller?*
 - **explainability** — `matching_decisions`, including for the calls we chose **not** to
   assign (`D50`).
+- **what the caller actually said and sounded like** — `transcript_turns`, written one
+  sentence at a time as they are spoken (`D114`), and `audio_recordings`, which is an
+  **index and never the audio**: where the object is, which *master* key wrapped that
+  object's own data key, and the date after which it must be deleted (`D110`, `D14`).
+  Someone who reads that table learns a recording exists and can decrypt none of it.
 
 The yellow boxes on the right are the interesting half. **They are not tables, on purpose**
 (`D78`), and each one is computed from a table that already exists:
@@ -142,6 +148,13 @@ that make the platform send someone a call. This does not weaken `D51`:
 **And an absence can be data.** No `call_wrapups` row means the call was never wrapped up,
 which is true and useful. `D45` struck out an auto-save precisely so that stays true — a
 restore that invented one would replace a fact with a fabrication.
+
+**What is new since this page was written: the caller's own words and voice now survive
+too.** `transcript_turns` is written a sentence at a time as they are spoken (`D114`), so a
+call that ends badly still leaves the text it produced; and a consented recording is an
+encrypted object with a row pointing at it (`D110`). Neither is *restored into memory* at
+startup, and that is deliberate — nothing reads them on a hot path. They are the record,
+not the working set (`D78`'s distinction, applied one layer out).
 
 This is also the first time the two-axis model (`D33`) has had to do real work. It was
 introduced to tell *"they chose break"* apart from *"nobody picked up"*; it turns out to be

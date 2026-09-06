@@ -105,8 +105,12 @@ ruff, mypy). Then, optionally:
 cp .env.example .env
 ```
 
-**You do not need a `.env`** — every setting has a working default. Copy it when you want to change
-one. See [Configuration](#configuration).
+`.env` is gitignored and is the only place a real key belongs. `.env.example` beside it
+carries the same **names with no values** and is committed, so adding a key means adding
+its name there too. Every secret in it is marked `[READ]` — an adapter uses it today — or
+`[SLOT]`, meaning the field exists and its adapter does not, so setting it changes nothing
+yet. **Nothing in there is required**: the system runs with no keys at all, and each line
+you fill in swaps one fake for one real thing. See [Configuration](#configuration).
 
 <details>
 <summary>Which extras exist, and when you need them</summary>
@@ -807,7 +811,7 @@ The audio path is two env vars and both default to needing nothing:
 
 | Variable | Default | Notes |
 |---|---|---|
-| `STT_ENGINE` | `scripted` | `scripted` returns canned transcripts and never touches a GPU — every test, all three scenarios and the stage-safe demo path run on it. `thonburian_ct2` is faster-whisper/CTranslate2, `thonburian_hf` is the transformers pipeline. `distill`, `typhoon` and `cloud` are named but not built, and say so in the log rather than falling back silently. |
+| `STT_ENGINE` | `scripted` | `scripted` returns canned transcripts and never touches a GPU — every test, all three scenarios and the stage-safe demo path run on it. **`typhoon` is the engine this project ships** (`D104`) and needs the `asr` extra; `thonburian_ct2` (faster-whisper/CTranslate2) is the documented fallback; `thonburian_hf` is the transformers pipeline. `distill` and `cloud` are named but not built, and say so in the log rather than falling back silently. |
 | `VAD_ENGINE` | `energy` | `energy` needs no dependencies and is also the degradation rung. `silero` is the real one (`D9`) and needs the `ml` extra. |
 | `STT_DEVICE` | `auto` | Resolves to `cuda` when a GPU is genuinely usable, `cpu` otherwise — so a box with the extra installed and no working GPU falls back instead of dying at model load. |
 | `STT_COMPUTE_TYPE` | `int8_float16` | int8 weights, fp16 compute. The default because of the measured 4.00 GiB / ~3.2 GiB free (`D95`). |

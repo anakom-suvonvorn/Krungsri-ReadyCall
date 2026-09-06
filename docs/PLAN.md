@@ -237,9 +237,9 @@ which is P6 (`D26`).
   grace** (`D21`) — the accept endpoint finalises a live intake as partial, proved on a
   running server. Turns arrive through `IntakeService.on_turn`, **fed for real since
   `D96`** by `services/transcription/`, and the strategy publishes each one on the bus as
-  `transcript.turn`. What is missing is a **subscriber**: nothing takes those events off
-  the bus and pushes them to the workstation, which is why the screen has no live
-  transcript yet.
+  `transcript.turn`. Two subscribers take them off the bus: `TranscriptDeliveryService`
+  pushes them to the workstation (`D106`) and `TranscriptRecorder` writes them down
+  (`D114`).
 
 **Exit criteria**
 - ✅ Utterance end → turn visible **p95 < 1.5 s** on the RTX 3050, with the chosen engine named and

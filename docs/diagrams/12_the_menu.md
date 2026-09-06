@@ -276,13 +276,14 @@ one property on this page you can verify by counting objects in a bucket. §7.z 
 
 What is still missing from this picture:
 
-- **`_degradation()` returns `NONE` unconditionally**, even though `TranscriptionService`
-  now knows whether the engine failed. The screen is already waiting for it:
-  `emptyTranscriptReason()` renders a different sentence for `stt_unavailable` and that
-  branch is currently unreachable.
-- **The decode timeout** (`D98`'s missing half), which needs `D2`'s killable worker.
-- **Transcript turns are not persisted** (`DATA_MODEL` §6), so a restart loses one in
-  flight — the same thing a restart already does to the caller's place in the queue.
+- ~~`_degradation()` returns `NONE` unconditionally~~ — **built** (`D111`): the screen's
+  `stt_unavailable` sentence is reachable now, and only when the engine failed *and*
+  nothing was transcribed, so a quiet caller is never blamed on the engine.
+- ~~The decode timeout~~ — **built** (`D112`), in the worker process `D2` planned, because
+  a deadline you cannot enforce is not a deadline.
+- **A player** for the recording on the agent's screen. The audio exists and decrypts
+  (`D110`) and the turns are durable (`D114`); nothing offers either to the agent to
+  replay.
 - **A real TTS voice.** `TTS_ENGINE=null` synthesises nothing, so the pack is a manifest
   and this whole page describes lines nobody has heard out loud yet (`Q22`).
 

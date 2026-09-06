@@ -441,3 +441,27 @@ about, which is exactly why they were left rather than done for completeness.
 ## Changes since this was written
 
 _Append here rather than editing above._
+
+### 2026-09-06 — two more tables, and the pattern held
+
+`audio_recordings` (`D110`) and `transcript_turns` (`D114`) joined the nine. Both were
+built by copying the shape this phase established, and that is the interesting part: a
+`Protocol` beside the service that consumes it, an in-memory implementation the default
+configuration actually runs, a Postgres one returning **domain models** (`D77`), and a
+block added to the same contract suite so all three backends prove the same behaviour.
+Neither needed a new idea, which is what a good seam is supposed to feel like a month
+later.
+
+Two ways they are **not** like the nine, both deliberate:
+
+- **Neither is a write-through projection** (`D78`). Every store this phase built backs a
+  working set some service keeps in memory, because a matcher tick cannot afford a query.
+  Nothing reads a recording or a stored turn on a hot path — they are read by a playback
+  somebody asks for, by P4's analysis, and by the retention job. So there is no in-memory
+  half to keep in step, and adding one would create the second answer `D76` warns about.
+- **`transcript_turns` is written by a SUBSCRIBER, not by the service that owns the data.**
+  `TranscriptRecorder` takes `transcript.turn` off the bus, so a storage failure cannot
+  reach the agent's screen (`D12`). A test publishes through a store that raises and
+  asserts the screen still got the sentence.
+
+The count in §1 is now **eleven**, and `alembic upgrade head` runs three migrations.

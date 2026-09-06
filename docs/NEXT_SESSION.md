@@ -7,18 +7,108 @@ _Last updated: 2026-09-06._
 
 ## If you have just been compacted, read this first
 
-_Rewritten 2026-09-06. Everything settled before this block is in the sections below; what
-follows is what a fresh session needs and nothing it does not._
+_Rewritten 2026-09-06 (second time that day, after `D110`–`D114`). Everything settled
+before this block is in the sections below; what follows is what a fresh session needs and
+nothing it does not._
+
+### ⚠️ FIRST: the user has feedback waiting
+
+The session ended with the user saying **"i have quite a lot to say"** and asking for this
+save *before* saying it. So:
+
+- **Expect notes, and read them before building anything.** Nine of the last eleven faults
+  in this project were found by the user driving the screen, not by the suite. Their notes
+  are the highest-yield input there is.
+- **Do not barrel into P4.** It is the next planned item and it is not started; starting it
+  before hearing them would be exactly the wrong order.
+- **One question is genuinely open and is theirs to answer: `Q24`** — see below.
+
+### Where the machine actually is
 
 **P3 is complete.** A caller reaches the right queue through a real menu, is offered the
 pre-call recording, their speech is transcribed by an engine chosen on measurements, **what
-they said is on the agent's screen the moment Accept is pressed** (2026-09-05), and **their
-audio is in object storage encrypted** with a key ref and a retention date (2026-09-06,
-`D110`) — or nowhere at all, if they declined.
+they said is on the agent's screen the moment Accept is pressed**, and **their audio is in
+object storage encrypted** with a key ref and a retention date — or nowhere at all, if they
+declined. The transcript survives a restart. A caller nobody will take circles back instead
+of waiting forever.
 
-**The next slice is P4**, analysis and the brief v2+. Everything that was queued in front
-of it is done: the encrypted recording (`D110`), the degradation reporting and the decode
-timeout (`D111`, `D112`), and `Q31`'s circle-back (`D113`).
+P0 · P1 · P1b · P2a · P2b · P2c · P3 done. **P4 is next and is not started.**
+
+### The five slices of 2026-09-06, in one line each
+
+| | what it is | the one thing to know |
+|---|---|---|
+| `D110` | the encrypted recording | **one** wrapper does the crypto for every backend; consent is checked at the SEAL, not at the open; the upload never touches the accept path |
+| `D111` | `_degradation()` answers for real | claims `stt_unavailable` only when the engine failed **and** nothing was transcribed — a quiet caller must never be blamed on the engine |
+| `D112` | the decode timeout | needed `D2`'s worker process, because `wait_for` cannot kill a thread. The test asserts **the process is gone** |
+| `D113` | `Q31` closed | exclusions cleared when everyone declines; cap is config and **0 = forever** is what ships; the card says the round and whether this agent is the last |
+| `D114` | the durable transcript | a **fourth** subscriber, its own, so a storage failure cannot blank the screen |
+
+**All five are explained in plain language for the user** at
+`docs/reading/the_recording.html` (published:
+https://claude.ai/code/artifact/c51ef926-0a13-45b7-b59f-6731be83255c). Read it before
+explaining any of this to them again — it is the shared vocabulary now.
+
+### `Q24` — the open question, and the recommendation already given
+
+A caller on the **health line** speaks health data into a recording consented only as
+`recording` + `ai_processing`. Under PDPA health information is a **special category**
+needing specific consent, and we do not have it.
+
+**It is harmless today**, because nothing extracts anything — we hold audio and a
+transcript of what they said. **It stops being harmless at the first line of P4's entity
+extractor**, which turns speech into structured fields like `condition: cardiac`. That is
+the difference between holding a recording and building a health record.
+
+The three options and the recommendation are written out in `Q24` below. The recommendation
+put to the user, and still the right one: **name the health scope in the offer wording on
+health lines (one keypress, honest disclosure) AND gate extraction so health entities can
+never be pulled without the scope** — two independent protections, no extra burden on a
+distressed caller. Rejected: a third keypress, because it lengthens the longest prompt in
+the system on the line where callers are least able to wait.
+
+**Do not write the extractor before this is settled.**
+
+### What is NOT built, precisely
+
+1. **P7's real key management.** `LocalKeyRing` holds the master in the process
+   environment, so anyone who can read that environment can read the recordings. The port
+   exists so a vault is a second adapter and nothing else changes.
+2. **A player on the agent's screen.** The recording exists and decrypts; nothing offers
+   it to the agent. A UI job now, not a storage one.
+3. **The agent's own leg.** `D26` — only the caller is recorded and transcribed. P6.
+4. **A real TTS voice.** `TTS_ENGINE=null` synthesises nothing, so the pack is a manifest
+   and every Thai line in this system has never been heard out loud (`Q22`).
+5. **Erasure beyond audio and text.** `scripts/purge_recordings.py` covers recordings, and
+   `TranscriptStore.delete_for_call` covers turns. Briefs and context snapshots are not
+   covered.
+
+### How to see the whole thing working
+
+```bash
+uv run python scripts/make_demo_audio.py    # a fresh clone has NO audio: *.wav is gitignored
+uv run python -m readycall.entrypoints.api
+#   /workstation, sign in as A001/A002/A003 (motor), press พร้อมรับสาย, then:
+curl -X POST http://127.0.0.1:8000/v1/demo/calls -H "Content-Type: application/json" \
+  -d '{"intent_code":"motor.claim.accident","intake_keys":["1"],"audio":"demo_intake.wav","ignore_hours":true}'
+#   press Accept: six Thai sentences, each with its moment in the recording.
+```
+
+`README.md` has the long version, plus §"Prove the recording is encrypted" — place the same
+call twice, once pressing `1` and once pressing `2`, and count the objects in the bucket.
+There is one.
+
+### Before changing the matcher, the workstation or the audio path
+
+- **`B25`** — the availability filter is the only thing keeping an unavailable agent from
+  being rung, and its absence was invisible for weeks.
+- **`D113`** — `excluded_agents()` is now *who has declined in this round*, not a permanent
+  record. The stress suite's invariant still holds; read why before changing it.
+- **`tests/integration/test_floor_under_load.py`** — seeded random walks over the real API
+  asserting **invariants**. **Add a scenario here whenever a fault is found by clicking or
+  by reasoning about the system**; that is now six for six.
+- **`D110`'s landmine list** — `build_blob_storage` is the only place a store may be built,
+  and that is what makes `localfs` safe rather than forbidden.
 
 ### The engine, in one table
 
@@ -34,10 +124,11 @@ Paced, 20 real Thai call-centre calls, same detector and guards throughout (`D10
 a box where NeMo will not install. `scripted` is the default and is the stage-safe path —
 its lines come from `config/demo_transcript.yaml` since `D107`.
 
-### The seven bugs of the last two sessions, and the one sentence each is worth
+### The bugs that shaped this codebase, and the one sentence each is worth
 
-**Not one of them was found by a test.** Five were found by the user clicking around a
-running workstation; two by tracing the call graph by hand.
+**Not one of them was found by a test.** Most were found by the user driving a running
+workstation; the rest by tracing the call graph by hand. This table is why the landmine
+list further down is as long as it is.
 
 | | what it was | the lesson |
 |---|---|---|
@@ -49,36 +140,6 @@ running workstation; two by tracing the call graph by hand.
 
 Two methodology traps that each cost a published number: **rank on the CER mean, never the
 median** (unstable at n=20), and **the test set moved the headline by 1.8x**.
-
-### What is NOT built, precisely
-
-1. **P7's real key management.** `LocalKeyRing` holds the master in the process
-   environment. The port exists so a vault is a second adapter, and nothing else changes.
-2. **A player on the agent's screen.** The recording exists and decrypts; nothing offers it
-   to the agent. That is now a UI job rather than a storage one.
-
-### How to see the whole thing working, in one minute
-
-```bash
-uv run python scripts/make_demo_audio.py    # a fresh clone has NO audio: *.wav is gitignored
-uv run python -m readycall.entrypoints.api
-#   /workstation, sign in as A001/A002/A003 (motor), press พร้อมรับสาย, then:
-curl -X POST http://127.0.0.1:8000/v1/demo/calls -H "Content-Type: application/json" \
-  -d '{"intent_code":"motor.claim.accident","intake_keys":["1"],"audio":"demo_intake.wav","ignore_hours":true}'
-#   press Accept: six Thai sentences, each with its moment in the recording.
-```
-
-`README.md` §"Watch a caller's words reach the agent's screen" is the long version, and
-§"Prove the recording is encrypted" is the `D110` half — place the same call twice, once
-pressing `1` and once pressing `2`, and count the objects in the bucket. There is one.
-
-### Before changing the matcher or the workstation, read these two
-
-- **`B25`** — because the availability filter is the only thing keeping an unavailable
-  agent from being rung, and its absence was invisible for weeks.
-- **`tests/integration/test_floor_under_load.py`** — the stress suite. Seeded random walks
-  over the real API asserting *invariants*, verified to catch `B25` by disabling the fix.
-  **Add a scenario there whenever a bug is found by clicking**; that is now five for five.
 
 ## Where things stand right now
 
@@ -107,7 +168,7 @@ left nothing behind.
 
 Almost every fault in this list came from somebody driving the screen and reporting what
 looked wrong — not from the suite. The pattern is worth knowing before reading any of it,
-because it is now **nine** and they rhyme:
+because it is now **eleven** and they rhyme:
 
 1. **`B6` (2026-08-24)** — six faults, **three of which were decisions the docs already
    contained**. The lesson is about reading `.mmd` sources, not about React.
@@ -132,6 +193,16 @@ because it is now **nine** and they rhyme:
 9. **`B27`** — the same wait was sent as a number rather than an anchor, so nothing made it
    move; and `lastSeq` is per tab while `seq` is per agent, so the second agent in one tab
    discarded its own offer.
+10. **`Q31` (2026-09-06)** — not a `B` entry because it was *designed* in rather than
+   introduced, but it belongs in this list: a caller every qualified agent declined waited
+   for the life of the shift, with no error and no failing test, while the queue showed
+   them as being handled. Found by the user asking what happens when everyone says no.
+   Closed by `D113`.
+11. **Two caught in the same session before shipping**, both by writing the test that
+   would notice: `open_leg` replacing a leg and silently unsubscribing whoever opened
+   first (`B24`'s shape, with two consumers now), and the STT worker's async stdin read
+   that **works on Linux CI and fails on Windows** with a handle error — a worker that
+   would have passed everywhere except the demo laptop.
 
 All of them are the same family as `B3` and `B4`: *a confident, plausible, wrong result that
 no test could see.* When something looks fine, check that it is actually running — and,
@@ -371,7 +442,15 @@ is handed.
 
 _Rewritten 2026-09-06, after `D110`–`D114`. The encrypted recording, the degradation
 reporting, the decode timeout, `Q31`'s circle-back and the durable transcript are all done
-and recorded; they are not work. **P4 is the top item and nothing is blocking it.**_
+and recorded; they are not work.
+
+⚠️ **Two things come before any of this.** The user has feedback waiting (see the top of
+this file), and `Q24` is asked and unanswered — it blocks P4's entity extractor
+specifically, not the whole phase._
+
+**0. Read the user's notes, and get an answer to `Q24`.** Not busywork: nine of the last
+eleven faults came from them driving the screen, and `Q24` is the one decision that has to
+land before the first line of an entity extractor.
 
 **1. P4 — analysis and the brief v2+.** The largest remaining phase and the one the pitch
 leans on hardest. Intent classification, entity extraction, a rolling summary, brief
@@ -394,6 +473,13 @@ Customer and the brief but never on the `WaitingCall`, so `customer_priority` an
 screen, which is a UI job now that the audio exists and decrypts · `call_intents` /
 `app_context_events` still in memory · `D64`'s live matching board · `Q26`'s env var that
 changes nothing.
+
+**A note on starting P4 without an LLM key.** The whole structure, the rule-based fallback,
+the prompts, the golden set and the comparison harness build and test with **no key at all**
+— `LLM_PROVIDER=rulebased` is the default and it is a real adapter, not a stub. The one
+exit criterion that needs a key is *"a Claude-vs-Typhoon table produced by the harness,
+not by opinion"*. `.env` has the slots ready (`ANTHROPIC_API_KEY`, or `LLM_BASE_URL` +
+`LLM_API_KEY` for the Typhoon/OpenAI/vLLM/Ollama adapter). Ask; do not stall on it.
 
 **Before the hackathon**, separately from the build: `Q21` (which storage backend the demo
 runs on — and now also which **blob** backend, since `memory` is the one that needs no key
@@ -474,7 +560,7 @@ GPU should own the demo machine. Typhoon uses 1068 MB, so P4's model is the ques
 | **Q29** | **The p95 latency runs from 4.5 s to 58.7 s against a 1.5 s budget**, and the spread tracks throughput: at rtf <= 0.31 it is 4.5-8 s, at rtf >= 0.65 it is 31-59 s, because once decode is slower than speech the backlog compounds for the rest of the call. `D30`'s table is the thing that decides what to do. Thonburian medium fp16 takes ~3 s per utterance on this card and one consumer serialises them, so three short phrases in four seconds queue up. Candidates, and they are not exclusive: the **CT2 int8_float16 build** (`scripts/convert_ct2.py`, this is the row that was always meant to decide it), **Typhoon** (a transducer, so no 30 s padding — `D99` says exactly why this might be structural rather than incremental), a **smaller Thonburian**, or accepting a slower transcript because `D12` means the call is never waiting on it. | **RESOLVED by `D104`.** Typhoon, a transducer with no 30 s window: p95 **0.19 s median / 0.28 s worst**, **20 of 20** calls inside the budget, `busy` worst 0.020. `D99` predicted the structural reason before it was measured. CT2 int8 is the documented fallback |
 | **Q27** | **The dataset is all `Government` domain, not insurance.** All 3189 calls (`D97`). It measures Thai telephone ASR honestly and says nothing about insurance jargon — and our `stt_vocabulary.yaml` hint is *wrong* for it, which makes it a fair test of whether the hint hurts when it does not apply. An insurance-domain set would still be worth having, and the hackathon may supply one. | Use it, and label the numbers as general Thai |
 | **Q26** | **`Settings.max_wait_before_any_agent_s` is an env var that changes nothing.** The matcher reads `config/matching_weights.yaml`, never `Settings`, so `MAX_WAIT_BEFORE_ANY_AGENT_S=30` in `.env` silently does nothing — and since `D94` it also describes a shape (one number) the system no longer has. It survives only as the bound for a startup coherence check against `target_wait_s`. Delete it, or wire the weights loader to it. Found while writing `D94`. | Left in place, documented |
-| **Q24** | **A health-line caller speaks health data into a recording nobody consented to hold as such.** `D14` makes `health_data` a separate scope; the offer grants only `recording` and `ai_processing` (`D88`). Three options: a third keypress (honest, and it lengthens the longest prompt in the system on the line where callers are most distressed); name the scope in the offer's wording on health lines (one keypress, three scopes); or gate the *extraction* at P4 so health entities are never pulled without it. **Leaning: the second plus the third.** Decide before P4 writes an entity extractor — that is the first code that can breach it. | Not asked for |
+| **Q24** ⚠️ **ASKED 2026-09-06, AWAITING AN ANSWER — BLOCKS P4's ENTITY EXTRACTOR** | **A health-line caller speaks health data into a recording nobody consented to hold as such.** `D14` makes `health_data` a separate scope; the offer grants only `recording` and `ai_processing` (`D88`). Under PDPA (and GDPR) health information is a **special category** needing *specific* consent, and we have the general one. **It is harmless today** — nothing extracts anything, so we hold audio and a transcript of what they said. **It stops being harmless at the first line of an entity extractor**, which turns speech into `condition: cardiac`: that is the difference between holding a recording and building a health record. Three options: (a) **a third keypress** — cleanest legally, and it lengthens the longest prompt in the system on the line where callers are least able to wait; (b) **name the health scope in the offer's wording on health lines** — one keypress, honest disclosure, weaker if a regulator reads "specific" strictly; (c) **gate the extraction** so health entities are never pulled without the scope — costs the caller nothing, but on its own just means we never extract. **RECOMMENDED, and put to the user: (b) + (c)** — two independent protections, one keypress, and if the wording ever regresses the code refuses rather than silently over-collecting. Rejected (a) for the same reason `D113` defaults to circling rather than cutting off: the system should not spend a distressed person's time on our paperwork. | **Awaiting the user.** Do not write the extractor first |
 | **Q23** | **Personalised menus renumber, and a human on a real keypad has no `ScriptedChoices`.** Every automated caller presses canonical keys and is translated (`D81`), so nothing in the suite or the demo endpoint can get this wrong. But at P5 a person reading a rehearsal script off paper will press what the script says, and for a recognised persona the numbers may have moved. Either rehearse with the persona that will actually be used, or set `personalisation.enabled: false` for the demo. | Enabled; decide before the day |
 
 Resolved: **`Q31` — the caller everyone declined now goes round again (`D113`)**, with
@@ -505,6 +591,12 @@ Facts about *this laptop* rather than the repo, so a fresh session does not redi
   `ZGVtby1tYXN0ZXIta2V5LTMyLWJ5dGVzLWxvbmchISE=` (the ASCII string
   `demo-master-key-32-bytes-long!!!`). It is in no file and is not a secret — it exists so
   the bucket's one object can still be opened. Generate a real one for anything else.
+- **`.env` EXISTS ON THIS LAPTOP AND IS GITIGNORED.** Created 2026-09-06 at the user's
+  request as the safe place for keys. It already carries a generated
+  `RECORDING_MASTER_KEY`, so switching `BLOB_STORAGE=localfs` works with no further setup.
+  ⚠️ **Never print its contents, never commit it, and never regenerate that key** —
+  everything written under it becomes unreadable. `.env.example` is the committed twin and
+  carries names only.
 - **The GPU stack is installed and working**: `torch` + `cu128`, `nemo_toolkit[asr]`, and
   the HF cache holds four Thai checkpoints (~11.8 GB) paid for by the earlier project. So
   `STT_ENGINE=typhoon` runs here with no download. A fresh machine does not have any of it.
@@ -537,6 +629,12 @@ Facts about *this laptop* rather than the repo, so a fresh session does not redi
 
 ## Things to be careful about (live landmines)
 
+- **A SECRET MAY BE DECLARED IN `Settings` BEFORE ITS ADAPTER EXISTS; A BEHAVIOUR KNOB MAY
+  NOT.** That looks like a contradiction of `Q26` and is the opposite of one. A knob nothing
+  reads is a lie about what the system does. A *secret* slot is redacted from every log line
+  by name the moment somebody sets it, documented in one place, and stops a live key being
+  pasted somewhere with no obvious home. The declared-but-unread ones are marked `[SLOT]` in
+  `.env.example`; setting one changes nothing yet, and that is said out loud.
 - **THE TRANSCRIPT HAS TWO COPIES NOW, AND THEY ANSWER DIFFERENT QUESTIONS** (`D114`).
   `TranscriptDeliveryService`'s in-memory list is the **live** path — what the socket
   pushes and what `GET /v1/agent/me` renders while the call is happening.

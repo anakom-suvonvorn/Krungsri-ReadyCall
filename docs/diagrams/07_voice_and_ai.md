@@ -329,7 +329,10 @@ invisible to every report.
 
 ### What is still not in this picture
 
-The **live call** — `D26`'s agent leg is P6, and this covers the intake only. The
-**transcript**, which still has no table (`DATA_MODEL` §6), so a restart loses one in
-flight. A **player** on the agent's screen, which is now a UI job rather than a storage
-one. And P7's **real** key management, which is the whole point of the port being a port.
+The **live call** — `D26`'s agent leg is P6, and this covers the intake only. A **player**
+on the agent's screen: the audio exists and decrypts, so that is a UI job now rather than a
+storage one. And P7's **real** key management, which is the whole point of the port being a
+port — `LocalKeyRing` holds the master in the process environment, so anyone who can read
+that environment can read the recordings.
+
+The transcript is durable since `D114`, so it is no longer on this list.

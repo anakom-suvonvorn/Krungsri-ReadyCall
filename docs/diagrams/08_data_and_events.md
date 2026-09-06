@@ -75,6 +75,19 @@ Every event is a versioned pydantic model, and decoding an unknown event name ra
 than silently ignoring it — a silently dropped event is the kind of bug that takes a day to
 find.
 
+**An event has to carry everything its consumers need, because it is the only carrier they
+have.** `transcript.turn` grew four fields when the turns became durable (`D114`):
+`transcript_turns` has had `engine`, `engine_version`, `is_final` and `intake_id` on paper
+since P0, and a subscriber that persists what it is handed cannot invent what it was not.
+The rule that falls out: **if you add a column, add the field to the event in the same
+change** — otherwise the store either has a permanently empty column or, worse, somebody
+fills it by guessing.
+
+`transcript.turn` now has **four** consumers, which is the shape this design is for:
+Agent Delivery pushes it to a screen (`D106`), the recorder writes it down (`D114`), and
+Analysis and call-progress are P4 and P6. None of them knows the others exist, and a
+failure in one cannot reach another.
+
 ---
 
 ## 8.4 What one real call actually emits

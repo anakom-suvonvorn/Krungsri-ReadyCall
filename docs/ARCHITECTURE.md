@@ -226,10 +226,13 @@ customer (if any), product, snapshot and queue.
 > document promises; `ports/vad.py` plus `services/transcription/` endpoint it and turn it
 > into `TranscriptTurn`s; and `TranscriptionService` feeds `IntakeService.on_turn`, which
 > had been waiting for it since `D88` (`D96`), with **Typhoon ASR** chosen on measurements
-> over 20 real Thai calls (`D30` closed by `D104`). **Still not built**: the encrypted
-> recording to object storage (P7's keys). **The live transcript reaches the agent's
-> screen** since `D106`: the turns are held while nobody owns the call — which is the
-> whole of intake — and flushed to whoever accepts.
+> over 20 real Thai calls (`D30` closed by `D104`). **The live transcript reaches the
+> agent's screen** since `D106`: the turns are held while nobody owns the call — which is
+> the whole of intake — and flushed to whoever accepts, and written down as they happen
+> since `D114`. **And the encrypted recording landed** (`D110`): a second subscriber on the
+> same frames writes one AES-256-GCM object per consented call, with a key ref and a
+> retention date. What is still absent here is P7's real key management and the agent's
+> own leg (`D26`, P6).
 > **Read `B14`, `B16` and `B18` before changing anything in that path.** Three guards sit
 > between the model and the agent and each exists because of something measured: Whisper
 > fed near-silence costs **8.6 s** and invents domain vocabulary (`B14`); the repetition
