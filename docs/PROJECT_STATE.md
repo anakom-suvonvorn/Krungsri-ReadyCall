@@ -47,11 +47,11 @@ the disclosure gate moves when the agent attests. **What they said while waiting
 screen** (`D106`), and if they consented, **their audio is in object storage encrypted**
 (`D110`) with a key ref and a retention date. If they declined, it is nowhere.
 
-Verified on 2026-09-06: **841 tests** — 829 pass + 12 skipped with Postgres and MinIO both
+Verified on 2026-09-07: **842 tests** — 830 pass + 12 skipped with Postgres and MinIO both
 up (the 12 are foreign-key cases the in-memory backend cannot have, and the `ml`-extra ones).
 Without those containers the count of skips rises and nothing fails.
 `ruff check` and `ruff format --check` clean over **202** files, `mypy --strict`
-clean over **145** source files, 64/64 diagrams current, the prompt pack fresh, and all three
+clean over **145** source files, 69/69 diagrams current, the prompt pack fresh, and all three
 scenarios replay byte-identically. The database suites ran against a **live Postgres** on
 2026-09-02, and a restart was verified outside pytest with two real uvicorn processes.
 
@@ -120,7 +120,7 @@ FullProject/
 ├─ uv.lock  .python-version  .env.example  .gitignore
 ├─ README.md*
 ├─ docs/*                    # ← this documentation system
-│  ├─ diagrams/*           # 64 diagrams + 12 explanation pages; a quarter generated from source
+│  ├─ diagrams/*           # 69 diagrams + 13 explanation pages; a fifth generated from source
 │  └─ reading/*            # readable twins: the keypad, the restart, the workstation, the offer,
 │                          # the audio path, and THE RECORDING (D110-D114, the newest)
 │                          #   the audio path (which also carries the verification commands)
@@ -237,7 +237,10 @@ FullProject/
 │  ├─ workstation/*          # React 18 + TS + Vite — the agent desktop (D32). dist/ is
 │  │                         #   gitignored and mounted at /workstation when it exists,
 │  │                         #   so the API runs with no node installed.
-│  └─ customer_sim/*         # one static HTML page, no build step (D47)
+│  ├─ customer_sim/*         # one static HTML page, no build step (D47)
+│  └─ customer_assist/*      # D120. The customer's PAIRED screen, opened from a link the
+│                            #   broker sends. One static page, polls 1s. Separate from the
+│                            #   sim on purpose: a stranger opens this from a phone.
 ├─ infra/*
 │  ├─ docker-compose.yml  asterisk/  grafana/  k8s/
 ├─ scripts/*                 # audit_docs, gen_diagrams, render_diagrams, run_matching, run_scenario,
@@ -444,7 +447,7 @@ performing by hand, i.e. what the next services take over (`D36`).
 | **Rejected: `distill-whisper-th-large-v3`** | Free to try (already in the HF cache) and worse than CT2 on every axis: CER 0.096 vs 0.087 median, `busy` worst 0.23 vs 0.11, VRAM 1942 vs ~1000 MB. A distilled *large* is still a large |
 | **Throughput** | `busy` = model-seconds per second of audio; above 1.00 the transcriber never catches up. fp16 **0.25 median / 1.25 worst**; CT2 hinted **0.08 / 0.11**. `pad` = seconds Whisper encoded per second of call: median **2.7**, because it pads every clip to a fixed 30 s window |
 | **Real Thai latency** (`D30`) | Paced over 12 calls: p95 **4.5 s - 58.7 s** against a **1.5 s** budget, and the spread tracks throughput — rtf <= 0.31 gives 4.5-8 s, rtf >= 0.65 gives 31-59 s. Once decode is slower than speech the backlog compounds and the last utterance lands a minute late; **half these calls are in that regime.** Invisible until now because every run used `--fast` (`B20`). No segment was abandoned, so these are honest end-to-end numbers. This is `Q29` and it is what `D30`'s table now decides |
-| Diagrams | 64 (14 generated from source, 50 hand-drawn), across 12 explanation pages |
+| Diagrams | 69 (14 generated from source, 55 hand-drawn), across 13 explanation pages |
 
 ---
 

@@ -1,0 +1,42 @@
+%% HANDWRITTEN. Checked against D119 + services/analysis/summary.py + api/routers/agent.py
+%% Every path through the AI summary, and the fact that FOUR of them end in "nothing happens".
+flowchart TB
+    ACC(["agent presses Accept"]) --> CONN["the call connects.<br/>The rule-based summary is ALREADY<br/>on the screen — it quotes the caller<br/>verbatim and cannot hallucinate"]
+
+    CONN --> FF["asyncio.create_task(summarise_call)<br/><br/>started and NEVER awaited · D12"]
+    CONN ==>|"the endpoint returns HERE"| DONE(["agent is talking to the customer"])
+
+    FF --> Q1{"did the caller say<br/>more than a few words?"}
+    Q1 -->|"no"| N1["return None.<br/>The model is NOT called — no cost,<br/>no latency, and this is not a failure.<br/>Most callers wait quietly · D111"]
+
+    Q1 -->|"yes"| CALL["complete_structured()<br/>prompt summarize_intake.v1<br/>bounded twice: adapter deadline<br/>AND the whole exchange · D112"]
+
+    CALL --> Q2{"did it answer<br/>in time?"}
+    Q2 -->|"timed out"| N2["return None"]
+    Q2 -->|"provider failed"| N3["return None"]
+    Q2 -->|"something nobody predicted"| N4["return None<br/>a bare except, on purpose:<br/>an AI stage may never take<br/>the call down"]
+
+    Q2 -->|"yes"| Q3{"is_clear?"}
+    Q3 -->|"false"| N5["return None.<br/>A model allowed to say<br/>'they were unclear' invents less<br/>than one obliged to write<br/>three sentences · D13"]
+
+    Q3 -->|"true"| Q4{"does the text state<br/>a FIGURE?"}
+    Q4 -->|"yes"| N6["REFUSED · D16<br/>coverage amounts are read from<br/>the record. The prompt forbids this<br/>and the guard assumes the prompt<br/>will one day fail"]
+
+    Q4 -->|"no"| OK["cached per call<br/>+ hub.send(brief_updated)"]
+    OK --> UP["the screen UPGRADES on the push.<br/>Measured live: 4.5s, $0.0085,<br/>claude-sonnet-5"]
+
+    N1 --> KEEP
+    N2 --> KEEP
+    N3 --> KEEP
+    N4 --> KEEP
+    N5 --> KEEP
+    N6 --> KEEP["the rule-based summary simply stays.<br/><br/>Nothing on the screen changes, nothing<br/>is missing, and nobody waited.<br/>This is the ORDINARY case — on a laptop<br/>with no key it is the only case"]
+
+    classDef live fill:#e6f1ec,stroke:#1f4d3d,color:#0f2a21
+    classDef none fill:#f4f2ec,stroke:#7a7360,color:#2b2820
+    classDef deny fill:#fdeee9,stroke:#a2431f,color:#4a1f0c
+    classDef q fill:#fdf4e0,stroke:#8a6d1f,color:#3a2e08
+    class ACC,CONN,DONE,OK,UP live
+    class N1,N2,N3,N4,N5,KEEP none
+    class N6 deny
+    class Q1,Q2,Q3,Q4 q

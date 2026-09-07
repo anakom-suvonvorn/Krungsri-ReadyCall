@@ -1,0 +1,35 @@
+%% HANDWRITTEN. Checked against D117 + the orientation deck p.30 + config/skills.yaml
+%% Who does what, and therefore which calls are ours to FINISH and which to HAND OVER.
+flowchart TB
+    subgraph INSURER["บริษัทประกันภัย · the insurer"]
+        direction TB
+        I1["รับประกันภัย<br/>underwrite"]
+        I2["ดูแลเรื่องความคุ้มครอง<br/>decide what is covered"]
+        I3["ชดใช้ค่าสินไหม<br/>ADJUDICATE AND PAY CLAIMS"]
+        I4["บริการด้านกรมธรรม์<br/>policy service"]
+    end
+
+    subgraph BROKER["นายหน้าประกันภัย · the broker — us"]
+        direction TB
+        B1["วิเคราะห์ความต้องการ<br/>analyse needs"]
+        B2["คัดสรรแบบประกัน<br/>AND บริษัทฯ ที่ตรงตามความต้องการ<br/>select the plan AND the company"]
+        B3["บริการด้านกรมธรรม์<br/>policy service"]
+        B4["ติดตามการต่ออายุกรมธรรม์<br/>chase renewals"]
+        B5["สร้างความสัมพันธ์กับลูกค้า<br/>hold the relationship"]
+    end
+
+    B1 --> S1["*.advice.quote"]
+    B2 --> S2["*.advice.compare<br/>the mandate, and the brief's biggest leak"]
+    B3 --> S3["*.service.policy"]
+    B4 --> S4["renewal.retention<br/>72.55% of life premium, 84% persistency"]
+    B5 --> S5["general.advice.review"]
+
+    I3 -.->|"a claim call reaches US first"| H["claims.assist<br/>take the notification,<br/>gather what they will ask for,<br/>HAND OVER"]
+    H ==>|"handoff_to_insurer: true"| I3
+
+    classDef ins fill:#fdeee9,stroke:#a2431f,color:#4a1f0c
+    classDef brk fill:#e6f1ec,stroke:#1f4d3d,color:#0f2a21
+    classDef skill fill:#f4f2ec,stroke:#7a7360,color:#2b2820
+    class I1,I2,I3,I4 ins
+    class B1,B2,B3,B4,B5 brk
+    class S1,S2,S3,S4,S5,H skill

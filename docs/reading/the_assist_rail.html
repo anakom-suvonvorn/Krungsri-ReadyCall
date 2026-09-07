@@ -1,0 +1,469 @@
+<title>Stop Describing the Screen</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+  :root {
+    --paper:  #F2F1ED;
+    --card:   #FBFAF8;
+    --sunk:   #E7E5DE;
+    --line:   #D6D3CA;
+    --ink:    #1A1C1F;
+    --muted:  #5D6570;
+    --faint:  #868D97;
+    --ours:   #14524F;
+    --ours-sk:#E0EBEA;
+    --hand:   #9C4020;
+    --hand-sk:#F6E5DE;
+    --gold:   #7E6212;
+    --gold-sk:#F3ECD6;
+
+    --display: "Newsreader", Georgia, serif;
+    --body: "IBM Plex Sans", "IBM Plex Sans Thai", "Noto Sans Thai", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper:  #15171A; --card: #1D2024; --sunk: #24272C; --line: #343941;
+      --ink:    #E9EAEC; --muted: #A4ABB5; --faint: #7C838D;
+      --ours:   #63B8B2; --ours-sk: #16302E;
+      --hand:   #E08A66; --hand-sk: #2E1B12;
+      --gold:   #D2B25C; --gold-sk: #2A2412;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper:  #15171A; --card: #1D2024; --sunk: #24272C; --line: #343941;
+    --ink:    #E9EAEC; --muted: #A4ABB5; --faint: #7C838D;
+    --ours:   #63B8B2; --ours-sk: #16302E;
+    --hand:   #E08A66; --hand-sk: #2E1B12;
+    --gold:   #D2B25C; --gold-sk: #2A2412;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--paper); color: var(--ink);
+    font-family: var(--body); font-size: 16.5px; line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 26px 110px; }
+  .col { max-width: 66ch; }
+
+  header.top { padding: 62px 0 36px; border-bottom: 2px solid var(--ink); margin-bottom: 46px; }
+  .eyebrow {
+    font-family: var(--mono); font-size: 11.5px; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--muted);
+    display: flex; flex-wrap: wrap; gap: 7px 18px; margin-bottom: 24px;
+  }
+  h1 {
+    font-family: var(--display); font-weight: 600;
+    font-size: clamp(36px, 6vw, 64px); line-height: 1.03; letter-spacing: -.02em;
+    margin: 0 0 20px; text-wrap: balance; max-width: 17ch;
+  }
+  .standfirst { font-size: clamp(17px, 2vw, 20px); line-height: 1.5; color: var(--muted); max-width: 60ch; margin: 0; }
+  .standfirst strong { color: var(--ink); font-weight: 600; }
+
+  section { margin: 0 0 68px; }
+  h2 {
+    font-family: var(--display); font-weight: 600;
+    font-size: clamp(24px, 3vw, 32px); line-height: 1.15; letter-spacing: -.012em;
+    margin: 0 0 6px; text-wrap: balance;
+  }
+  .kicker {
+    font-family: var(--mono); font-size: 11.5px; letter-spacing: .13em;
+    text-transform: uppercase; color: var(--ours); margin: 0 0 12px; font-weight: 500;
+  }
+  h3 { font-weight: 600; font-size: 17.5px; margin: 30px 0 7px; }
+  p { margin: 0 0 15px; }
+  .col > p:last-child { margin-bottom: 0; }
+  ul, ol { margin: 0 0 15px; padding-left: 21px; }
+  li { margin-bottom: 7px; }
+  li::marker { color: var(--faint); }
+  strong { font-weight: 600; }
+  .th { font-family: var(--body); }
+
+  code {
+    font-family: var(--mono); font-size: .86em; background: var(--sunk);
+    padding: 1px 5px; border-radius: 3px;
+  }
+  pre {
+    font-family: var(--mono); font-size: 13.2px; line-height: 1.6;
+    background: var(--sunk); border: 1px solid var(--line); border-radius: 6px;
+    padding: 14px 16px; overflow-x: auto; margin: 16px 0;
+  }
+  pre code { background: none; padding: 0; }
+
+  figure { margin: 28px 0; }
+  .scroller { overflow-x: auto; padding-bottom: 4px; }
+  .scroller svg { display: block; min-width: 720px; width: 100%; height: auto; }
+  figcaption { font-size: 14px; color: var(--muted); margin-top: 11px; max-width: 72ch; }
+
+  .tw { overflow-x: auto; margin: 22px 0; }
+  table { border-collapse: collapse; width: 100%; min-width: 520px; font-size: 15px; }
+  th, td { text-align: left; padding: 10px 14px 10px 0; vertical-align: top; border-bottom: 1px solid var(--line); }
+  th {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .11em; text-transform: uppercase;
+    color: var(--faint); font-weight: 500; border-bottom: 1px solid var(--ink); padding-top: 0;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+
+  .tag {
+    display: inline-block; font-family: var(--mono); font-size: 10.5px;
+    letter-spacing: .06em; text-transform: uppercase; padding: 2px 7px;
+    border-radius: 3px; white-space: nowrap; font-weight: 500;
+  }
+  .t-ours { background: var(--ours-sk); color: var(--ours); }
+  .t-hand { background: var(--hand-sk); color: var(--hand); }
+  .t-part { background: var(--gold-sk); color: var(--gold); }
+
+  .note {
+    border-left: 3px solid var(--gold); background: var(--gold-sk);
+    padding: 15px 18px; border-radius: 0 5px 5px 0; margin: 22px 0;
+  }
+  .note p:last-child { margin-bottom: 0; }
+  .note strong { color: var(--gold); }
+
+  .refuse {
+    border: 1px solid var(--hand); background: var(--hand-sk);
+    padding: 17px 19px; border-radius: 5px; margin: 22px 0;
+  }
+  .refuse h3 { margin: 0 0 7px; color: var(--hand); font-size: 16px; }
+  .refuse p:last-child { margin-bottom: 0; }
+
+  .facts {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 1px; background: var(--line); border: 1px solid var(--line); margin: 26px 0;
+  }
+  .facts > div { background: var(--card); padding: 16px 18px; }
+  .facts dt {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--faint); margin-bottom: 6px;
+  }
+  .facts dd { margin: 0; font-size: 15px; line-height: 1.45; }
+  .facts dd b { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  footer { border-top: 2px solid var(--ink); padding-top: 20px; font-size: 14px; color: var(--muted); }
+  a { color: var(--ours); text-underline-offset: 2px; }
+  a:focus-visible { outline: 2px solid var(--ours); outline-offset: 3px; }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+
+<div class="wrap">
+
+<header class="top">
+  <div class="eyebrow">
+    <span>Krungsri ReadyCall</span><span>HACK VIDVA</span>
+    <span>7 September 2026</span><span>D117 · D118 · D119 · D120</span>
+  </div>
+  <h1>Stop Describing the Screen</h1>
+  <p class="standfirst">Four things landed in one day: the domain became a <strong>broker's</strong> instead of an insurer's, the agent's playbooks moved into config, the <strong>AI actually runs</strong>, and a phone call can now be bound to the customer's own phone so the broker pushes a form onto it instead of reading directions aloud.</p>
+</header>
+
+<section>
+  <p class="kicker">The finding underneath all of it</p>
+  <h2>A broker is not a small insurance company</h2>
+
+  <div class="col">
+    <p>Page 30 of the orientation deck is Krungsri's own slide, and it splits the work in two. Read the right column and the left column as two different jobs, because that is what they are.</p>
+  </div>
+
+  <figure>
+    <div class="scroller">
+      <svg viewBox="0 0 880 320" role="img" aria-label="The insurer underwrites, decides coverage, adjudicates and pays claims, and services policies. The broker analyses needs, selects the plan and the company, services policies, chases renewals, and holds the relationship. A claim call reaches the broker first and is handed over to the insurer.">
+        <text x="0" y="14" font-family="IBM Plex Mono, monospace" font-size="10.5" letter-spacing="1.3" fill="var(--faint)">WHO DOES WHAT — ORIENTATION DECK p.30</text>
+
+        <rect x="0" y="34" width="400" height="196" rx="6" fill="var(--hand-sk)" stroke="var(--hand)" stroke-width="1"/>
+        <text x="20" y="60" font-family="IBM Plex Sans, sans-serif" font-size="14" font-weight="600" fill="var(--hand)">บริษัทประกันภัย · the insurer</text>
+        <text x="20" y="88" font-family="IBM Plex Sans, sans-serif" font-size="13" fill="var(--ink)">รับประกันภัย — underwrite</text>
+        <text x="20" y="112" font-family="IBM Plex Sans, sans-serif" font-size="13" fill="var(--ink)">ดูแลเรื่องความคุ้มครอง — decide what is covered</text>
+        <text x="20" y="136" font-family="IBM Plex Sans, sans-serif" font-size="13" font-weight="600" fill="var(--hand)">ชดใช้ค่าสินไหม — adjudicate and pay claims</text>
+        <text x="20" y="160" font-family="IBM Plex Sans, sans-serif" font-size="13" fill="var(--ink)">บริการด้านกรมธรรม์ — policy service</text>
+        <text x="20" y="200" font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="var(--muted)">Everything here is somebody else's decision.</text>
+
+        <rect x="480" y="34" width="400" height="196" rx="6" fill="var(--ours-sk)" stroke="var(--ours)" stroke-width="1"/>
+        <text x="500" y="60" font-family="IBM Plex Sans, sans-serif" font-size="14" font-weight="600" fill="var(--ours)">นายหน้าประกันภัย · the broker — us</text>
+        <text x="500" y="88" font-family="IBM Plex Sans, sans-serif" font-size="13" fill="var(--ink)">วิเคราะห์ความต้องการ — analyse needs</text>
+        <text x="500" y="112" font-family="IBM Plex Sans, sans-serif" font-size="13" font-weight="600" fill="var(--ours)">คัดสรรแบบประกัน และบริษัทฯ — the plan AND the company</text>
+        <text x="500" y="136" font-family="IBM Plex Sans, sans-serif" font-size="13" fill="var(--ink)">บริการด้านกรมธรรม์ — policy service</text>
+        <text x="500" y="160" font-family="IBM Plex Sans, sans-serif" font-size="13" font-weight="600" fill="var(--ours)">ติดตามการต่ออายุ — chase renewals</text>
+        <text x="500" y="184" font-family="IBM Plex Sans, sans-serif" font-size="13" fill="var(--ink)">สร้างความสัมพันธ์ — hold the relationship</text>
+        <text x="500" y="214" font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="var(--muted)">Comparison is the definition, not a feature.</text>
+
+        <rect x="290" y="262" width="300" height="44" rx="6" fill="var(--card)" stroke="var(--line)"/>
+        <text x="440" y="281" font-family="IBM Plex Sans, sans-serif" font-size="12.5" fill="var(--ink)" text-anchor="middle" font-weight="600">a claim call reaches US first</text>
+        <text x="440" y="297" font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="var(--muted)" text-anchor="middle">gather what they will ask for, then hand over</text>
+        <path d="M290 284 L215 284 L215 232" stroke="var(--ours)" stroke-width="1.5" fill="none"/>
+        <path d="M590 284 L665 284 L665 232" stroke="var(--hand)" stroke-width="2" fill="none"/>
+        <polygon points="665,226 661,236 669,236" fill="var(--hand)"/>
+      </svg>
+    </div>
+    <figcaption>The duty split as Krungsri states it. Everything the system changed on 7 September follows from the two bold lines on the right and the one bold line on the left.</figcaption>
+  </figure>
+
+  <div class="col">
+    <p>Before this, the system had <code>motor.claim</code> and <code>health.claim</code> skills and a queue called <em>IPD pre-authorisation</em>. That is a single insurer's call centre wearing a broker's name — and a broker screen that implies it can approve an admission is doing underwriting, which the brief puts explicitly out of scope.</p>
+
+    <p><strong>The whole change was config plus one field.</strong> No routing, matching, presence or transcript logic moved. That is worth saying in the pitch: retargeting this machine is a config swap, and here is the receipt.</p>
+  </div>
+
+  <div class="facts">
+    <div><dt>Intents</dt><dd><b>33</b> — advice and renewal now first-class</dd></div>
+    <div><dt>Skills / queues</dt><dd><b>11 / 11</b> — claims is one desk, not four</dd></div>
+    <div><dt>Playbooks</dt><dd><b>24</b>, moved out of Python into config</dd></div>
+    <div><dt>Service logic changed</dt><dd><b>none</b></dd></div>
+  </div>
+</section>
+
+<section>
+  <p class="kicker">What it changed in practice</p>
+  <h2>Five kinds of call, and where each one ends</h2>
+
+  <div class="col">
+    <p>The endings are the interesting part. Most of them finish with us; one finishes somewhere else entirely, and the system now says so <em>before the broker starts talking</em>.</p>
+  </div>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>The call</th><th>Goes to</th><th>Ends</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong><span class="th">เปรียบเทียบแผน / ขอราคา</span></strong><br><span style="color:var(--muted)">compare plans, get a quote</span></td>
+          <td><code>*.advice.compare</code><br><span style="color:var(--muted)">the advice desks</span></td>
+          <td><span class="tag t-ours">with us</span> quote sent, or placed</td>
+        </tr>
+        <tr>
+          <td><strong><span class="th">ต่ออายุ</span></strong><br><span style="color:var(--muted)">renewal</span></td>
+          <td><code>renewal.retention</code><br><span style="color:var(--muted)">its own desk now</span></td>
+          <td><span class="tag t-ours">with us</span> renewed — or moved to another carrier rather than lapsing</td>
+        </tr>
+        <tr>
+          <td><strong><span class="th">แจ้งเคลม</span></strong><br><span style="color:var(--muted)">notify a claim</span></td>
+          <td><code>claims.assist</code><br><span style="color:var(--muted)">one desk, every line</span></td>
+          <td><span class="tag t-hand">with the insurer</span> we gather and hand over</td>
+        </tr>
+        <tr>
+          <td><strong><span class="th">แก้ไข / สอบถามกรมธรรม์</span></strong><br><span style="color:var(--muted)">policy service</span></td>
+          <td><code>*.service.policy</code></td>
+          <td><span class="tag t-ours">with us</span></td>
+        </tr>
+        <tr>
+          <td><strong><span class="th">ร้องเรียน</span></strong><br><span style="color:var(--muted)">complaint</span></td>
+          <td><code>general.escalation</code></td>
+          <td><span class="tag t-part">with a supervisor</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="col">
+    <h3>The banner that appears before anyone speaks</h3>
+    <p>On a claim call the workstation now shows, above the policy panel:</p>
+    <p style="padding:12px 16px;background:var(--hand-sk);border-left:3px solid var(--hand);border-radius:0 4px 4px 0;color:var(--hand)"><span class="th">เรื่องนี้ต้องส่งต่อบริษัทประกัน — เราช่วยรวบรวมข้อมูลและประสานงานให้</span></p>
+    <p>Because <em>“I'll check and call you back”</em> and <em>“I'm passing you to the insurer now”</em> are different promises, and only one of them is a broker's to make.</p>
+
+    <h3>And the one field that makes any of it possible</h3>
+    <p>Every policy now records <strong>which company underwrote it</strong>. A single insurer's system has no use for that — every policy in it is theirs. A broker's whole record is one customer's cover spread across carriers, and which carrier decides who a claim goes to and whose terms a comparison is against.</p>
+    <p>The demo customer holds three policies from <strong>three different real carriers</strong>, including employer group health capped at <span style="font-variant-numeric:tabular-nums">฿1,500</span>/day — which is the gap the whole health story turns on.</p>
+  </div>
+
+  <div class="note">
+    <p><strong>Deliberate:</strong> the Krungsri-affiliated carrier is one row among several, and sometimes not the recommended one. A broker whose affiliate always wins is not a broker — and that is the version that survives a judge asking about it.</p>
+  </div>
+</section>
+
+<section>
+  <p class="kicker">Your idea, built</p>
+  <h2>Binding the call to the customer's phone</h2>
+
+  <div class="col">
+    <p>The problem you named at the orientation: a broker on the phone saying <em>“go to the website, tap the menu at the top right, then Documents, then Upload.”</em> The brief prices exactly this — step 4 of the journey leaks on <span class="th">เอกสารเยอะ ลูกค้า drop-off กลางทาง</span>.</p>
+    <p><strong>So stop describing the screen and start filling it.</strong> Once the call and a screen are bound, the broker pushes; the customer never navigates.</p>
+  </div>
+
+  <figure>
+    <div class="scroller">
+      <svg viewBox="0 0 900 380" role="img" aria-label="Three entry paths lead to a paired screen. An in-app call pairs implicitly. A phone call gets a link sent to the number already on the call. A signed-in customer is told by the server that a call is live. Once paired the screen is at guest tier and may be shown anything true for anybody; personal content requires signing in.">
+        <text x="0" y="14" font-family="IBM Plex Mono, monospace" font-size="10.5" letter-spacing="1.3" fill="var(--faint)">THREE WAYS IN, ONE GATE</text>
+
+        <rect x="0" y="34" width="250" height="62" rx="6" fill="var(--card)" stroke="var(--line)"/>
+        <text x="14" y="55" font-family="IBM Plex Sans, sans-serif" font-size="12.5" font-weight="600" fill="var(--ink)">In the app, tapped Contact</text>
+        <text x="14" y="74" font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="var(--muted)">Pairing is implicit — the app</text>
+        <text x="14" y="88" font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="var(--muted)">already carries the token.</text>
+
+        <rect x="0" y="110" width="250" height="76" rx="6" fill="var(--card)" stroke="var(--line)"/>
+        <text x="14" y="131" font-family="IBM Plex Sans, sans-serif" font-size="12.5" font-weight="600" fill="var(--ink)">Phoned in, not signed in</text>
+        <text x="14" y="150" font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="var(--muted)">Broker presses ส่งลิงก์. The link</text>
+        <text x="14" y="164" font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="var(--muted)">goes to the number we are</text>
+        <text x="14" y="178" font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="var(--muted)">already talking to. One tap.</text>
+
+        <rect x="0" y="200" width="250" height="76" rx="6" fill="var(--card)" stroke="var(--line)"/>
+        <text x="14" y="221" font-family="IBM Plex Sans, sans-serif" font-size="12.5" font-weight="600" fill="var(--ink)">Signed in, phoned separately</text>
+        <text x="14" y="240" font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="var(--muted)">The server knows a call is live</text>
+        <text x="14" y="254" font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="var(--muted)">for them, so the app is TOLD</text>
+        <text x="14" y="268" font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="var(--muted)">and offers. No hidden button.</text>
+
+        <path d="M250 65 L330 65 L330 150" stroke="var(--muted)" stroke-width="1.2" fill="none"/>
+        <path d="M250 148 L330 148" stroke="var(--muted)" stroke-width="1.2" fill="none"/>
+        <path d="M250 238 L330 238 L330 156" stroke="var(--muted)" stroke-width="1.2" fill="none"/>
+        <polygon points="336,150 326,146 326,154" fill="var(--muted)"/>
+
+        <rect x="342" y="126" width="176" height="46" rx="23" fill="var(--ours-sk)" stroke="var(--ours)" stroke-width="1.5"/>
+        <text x="430" y="146" font-family="IBM Plex Sans, sans-serif" font-size="13" font-weight="600" fill="var(--ours)" text-anchor="middle">PAIRED</text>
+        <text x="430" y="162" font-family="IBM Plex Sans, sans-serif" font-size="11" fill="var(--ours)" text-anchor="middle">tier: guest</text>
+
+        <text x="342" y="196" font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="var(--muted)">Whoever taps the link is holding</text>
+        <text x="342" y="210" font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="var(--muted)">the phone we are on — worth exactly</text>
+        <text x="342" y="224" font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="var(--muted)">what the caller ID is worth.</text>
+
+        <path d="M518 149 L580 149" stroke="var(--muted)" stroke-width="1.2" fill="none"/>
+        <polygon points="586,149 576,145 576,153" fill="var(--muted)"/>
+
+        <rect x="592" y="34" width="308" height="106" rx="6" fill="var(--ours-sk)" stroke="var(--ours)"/>
+        <text x="608" y="56" font-family="IBM Plex Sans, sans-serif" font-size="12.5" font-weight="600" fill="var(--ours)">Anything true for ANYBODY</text>
+        <text x="608" y="76" font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="var(--ink)">plan comparisons · product info</text>
+        <text x="608" y="92" font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="var(--ink)">document checklists · how-to steps</text>
+        <text x="608" y="116" font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="var(--ours)" font-weight="600">No account needed to be helped.</text>
+
+        <rect x="592" y="158" width="308" height="122" rx="6" fill="var(--hand-sk)" stroke="var(--hand)"/>
+        <text x="608" y="180" font-family="IBM Plex Sans, sans-serif" font-size="12.5" font-weight="600" fill="var(--hand)">Anything about THEM — refused</text>
+        <text x="608" y="200" font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="var(--ink)">their policies · a prefilled form</text>
+        <text x="608" y="216" font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="var(--ink)">an upload · a signature</text>
+        <text x="608" y="240" font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="var(--muted)">The broker is told WHY, and asks</text>
+        <text x="608" y="254" font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="var(--muted)">them to sign in. Signing in is the</text>
+        <text x="608" y="268" font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="var(--muted)">only route to that tier.</text>
+
+        <path d="M430 172 L430 300 L746 300 L746 286" stroke="var(--hand)" stroke-width="1.2" fill="none" stroke-dasharray="4 3"/>
+        <polygon points="746,280 742,290 750,290" fill="var(--hand)"/>
+        <text x="440" y="318" font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="var(--muted)">signing in is what moves the gate — nothing else does</text>
+      </svg>
+    </div>
+    <figcaption>The pairing, and the single rule that governs it. A link proves somebody is holding that phone; it does not prove who they are — so the split is between content that is true for anybody and content that is about one person.</figcaption>
+  </figure>
+
+  <div class="col">
+    <h3>Why a link rather than a code</h3>
+    <p>The call is already on a phone number, and caller ID tells us which. So a link <strong>sent to that number</strong> proves as much as the caller ID does, and costs one tap.</p>
+    <p>A code the customer reads back is genuinely stronger — it proves they are looking at the screen <em>and</em> on the call. It is also a chore handed to somebody who rang because they were already stuck. The system takes the link and lets the sign-in carry the rest.</p>
+  </div>
+
+  <div class="refuse">
+    <h3>The refusal is the feature, not an error</h3>
+    <p>Push a form to a screen that has only tapped a link and the broker gets: <em>“form needs a signed-in screen; ask the customer to sign in first.”</em></p>
+    <p>That message exists so the broker asks — instead of a stranger's policy details appearing on whoever happens to be holding that handset. It is the single most important line in the whole feature, and it is worth watching it fire rather than trusting that it does.</p>
+  </div>
+
+  <div class="col">
+    <h3>This is also the answer to “do we have to make them register?”</h3>
+    <p><strong>No — not to be helped.</strong> Somebody comparing plans gets everything they need without an account, because none of it is about them. The wall appears only where the content is personal. Putting registration first would gate the half that has no privacy cost at all, which is the ordinary and wrong design.</p>
+
+    <h3>And the “agent help mode” button</h3>
+    <p>You were right that an always-visible button is odd. But the better answer is that the customer never has to find one: the server knows a call is live for this signed-in person, so the <strong>app is told and offers</strong>. They do not go looking at the exact moment they are least able to.</p>
+    <p>That is also the first time identity resolution does something beyond “how sure are we” — it now also decides whether the app may say <em>“you're on a call — want the agent to fill this in for you?”</em></p>
+  </div>
+</section>
+
+<section>
+  <p class="kicker">The AI</p>
+  <h2>Six ways the summary does nothing, and one where it helps</h2>
+
+  <div class="col">
+    <p>The model now genuinely runs. What matters more is what happens when it does not, because on a laptop with no key that is the only path.</p>
+    <p>The summary is started when the agent presses Accept and <strong>never waited for</strong>. The agent is connected the instant that button returns, already reading the rule-based summary — which quotes the caller word for word and cannot invent anything. If the model answers, the screen quietly upgrades. If it never answers, nothing happens at all.</p>
+  </div>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>What happened</th><th>What the agent sees</th></tr></thead>
+      <tbody>
+        <tr><td>No API key configured</td><td rowspan="6" style="vertical-align:middle"><strong>The rule-based summary, unchanged.</strong><br><span style="color:var(--muted)">Nothing missing, nothing wrong, nobody waited.</span></td></tr>
+        <tr><td>The caller barely spoke — the model isn't even asked</td></tr>
+        <tr><td>The provider timed out</td></tr>
+        <tr><td>The provider failed</td></tr>
+        <tr><td>The model said it couldn't tell</td></tr>
+        <tr><td>The model stated a <strong>coverage figure</strong> — refused outright</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="col">
+    <p>That last row is the one to keep. Coverage amounts are read from the policy record, never written by a model. The prompt forbids stating figures <em>and</em> a guard refuses the output if one appears anyway — because the guard assumes the prompt will one day fail. An invented “คุ้มครองสูงสุด 3,000 บาทต่อวัน” is precisely the plausible, credible, wrong number that makes a brief dangerous.</p>
+  </div>
+
+  <div class="facts">
+    <div><dt>Model</dt><dd><b>claude-sonnet-5</b></dd></div>
+    <div><dt>Time to summarise</dt><dd><b>4.5 s</b></dd></div>
+    <div><dt>Cost per call</dt><dd><b>$0.0085</b></dd></div>
+    <div><dt>Tokens</dt><dd><b>1,561 / 256</b></dd></div>
+  </div>
+
+  <div class="note">
+    <p><strong>Worth knowing:</strong> 4.5 seconds is far outside the one-second budget for the brief. It only works because nobody waits for it. If you ever want the summary to appear <em>before</em> the agent picks up, that measurement says it needs a smaller model or a shorter prompt — and now that is a number rather than a guess.</p>
+  </div>
+</section>
+
+<section>
+  <p class="kicker">Try it</p>
+  <h2>Fifteen minutes, no key, no GPU</h2>
+
+  <div class="col">
+    <p>Start the system and sign in at <code>/workstation</code> as <strong>A006</strong>, then press <span class="th">พร้อมรับสาย</span>.</p>
+  </div>
+
+  <pre><code>uv run python -m readycall.entrypoints.api</code></pre>
+
+  <div class="col">
+    <p>Place a claim call — this is the one that shows the broker/insurer split:</p>
+  </div>
+
+  <pre><code>curl -X POST http://127.0.0.1:8000/v1/demo/calls \
+  -H "Content-Type: application/json" \
+  -d '{"intent_code":"health.claim.notify","caller_number":"0812345678","intake_keys":["2"],"ignore_hours":true}'</code></pre>
+
+  <div class="col">
+    <p>Press Accept. You should see the carrier name under the policy number, the hand-over banner above it, and three recommended actions. Attest the identity and the deeper steps appear — those are the ones that involve acting on the policy.</p>
+
+    <h3>Then the customer's screen</h3>
+    <p>Get the pairing link for that call, open it in another window, and run the sequence in this order:</p>
+    <ol>
+      <li><strong>Push a comparison.</strong> It lands on the other screen within a second, with no sign-in.</li>
+      <li><strong>Push a form.</strong> Refused — read the message.</li>
+      <li><strong>Sign in on the customer screen</strong>, push the form again. It appears, prefilled.</li>
+      <li><strong>Fill it in and submit.</strong> The broker's side shows exactly what was typed.</li>
+    </ol>
+    <p><strong>Step 2 is the one to actually do.</strong> Watching it refuse is far more convincing than reading that it would.</p>
+
+    <h3>To see the real AI</h3>
+    <p>Install the extra, switch the provider, and place a call where the caller actually speaks. Then watch the summary on screen replace itself a few seconds after you are already talking.</p>
+  </div>
+
+  <pre><code>uv sync --extra web --extra llm    # name every extra you want — sync prunes the rest</code></pre>
+
+  <div class="col">
+    <p>And to prove the call is never blocked on AI rather than trusting it: point the provider at a port with nothing on it, and place a call. It connects exactly as fast, the rule-based summary stays, and one warning appears in the log.</p>
+    <p>The step-by-step version, with every command, is in <code>docs/explanations/P4_broker_and_assist.md</code> §5. The drawings are in <code>docs/diagrams/13_broker_and_assist.md</code>.</p>
+  </div>
+</section>
+
+<section>
+  <p class="kicker">Honest list</p>
+  <h2>What is not built</h2>
+
+  <div class="col">
+    <ul>
+      <li><strong>The comparison data.</strong> The table renders and reaches the phone — but what fills it is still hand-written in the demo. Ranking real plans against what the customer already holds is the next track.</li>
+      <li><strong>Sending the link.</strong> No SMS, no LINE yet. The link comes back for the broker to read out — which is also what a rehearsal needs.</li>
+      <li><strong>Signature, OCR, document upload.</strong> The request is recorded; the rest is stubbed. One tool working properly beats five that half-work.</li>
+      <li><strong>One customer app.</strong> The old simulator and the new assist screen are still two separate pages.</li>
+      <li><strong>A labelled set for the AI.</strong> Without one, “85% intent accuracy” stays a claim rather than a measurement.</li>
+    </ul>
+  </div>
+</section>
+
+<footer>
+  <p>Written 7 September 2026, the day the work landed. Decisions <code>D117</code>, <code>D118</code>, <code>D119</code>, <code>D120</code>; bugs <code>B30</code>, <code>B31</code>. Every claim on this page was verified against a running server, not read from the code.</p>
+</footer>
+
+</div>

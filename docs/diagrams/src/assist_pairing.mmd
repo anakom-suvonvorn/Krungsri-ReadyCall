@@ -1,0 +1,39 @@
+%% HANDWRITTEN. Checked against D120 + services/assist/service.py + api/routers/assist.py
+%% The three ways a call and a screen become bound, and the ONE gate between them.
+flowchart TB
+    START(["a customer needs something<br/>doing on a screen"]) --> Q1{"where did the call<br/>start?"}
+
+    Q1 -->|"tapped Contact<br/>IN THE APP"| A1["pairing is IMPLICIT<br/>the app already carries the<br/>correlation token · D6"]
+    Q1 -->|"dialled a phone number"| A2{"are they signed in<br/>to the app right now?"}
+
+    A2 -->|"no"| L1["broker presses ส่งลิงก์<br/>POST /assist/link"]
+    A2 -->|"yes"| N1["the SERVER knows a call is live<br/>for this customer · live_for()<br/><br/>the app is TOLD, and offers.<br/>No permanently visible button<br/>nobody could find"]
+
+    L1 --> L2["a token is minted, bound to<br/>THIS call · idempotent per call"]
+    L2 --> L3["link goes to the number<br/>we are already talking to<br/><br/>P5 sends it. Until then it comes<br/>back for the broker to read out"]
+    L3 --> L4["customer taps it<br/>GET /assist/&lt;token&gt;"]
+
+    A1 --> PAIRED
+    N1 --> PAIRED
+    L4 --> PAIRED{{"PAIRED · tier = GUEST"}}
+
+    PAIRED --> G["whoever taps the link is holding<br/>the phone we are on.<br/>That is worth exactly what the ANI<br/>is worth — L1, probable · D20"]
+
+    G --> GATE{"is the thing being pushed<br/>ABOUT THIS PERSON?"}
+    GATE -->|"no — true for anybody"| OK1["ALLOWED at GUEST<br/><br/>comparison · info<br/>document checklist · how-to<br/><br/>no account needed to be helped"]
+    GATE -->|"yes"| DENY["REFUSED, with the reason<br/><br/>the broker is told WHY and asks<br/>them to sign in — rather than a<br/>stranger's policy appearing on<br/>whoever holds that handset"]
+
+    DENY --> SIGNIN["customer signs in<br/>POST /assist/&lt;token&gt;/sign-in"]
+    SIGNIN --> V{{"tier = VERIFIED"}}
+    V --> OK2["ALLOWED<br/><br/>prefilled form · upload<br/>their policies · signature"]
+
+    classDef implicit fill:#e6f1ec,stroke:#1f4d3d,color:#0f2a21
+    classDef link fill:#f4f2ec,stroke:#7a7360,color:#2b2820
+    classDef gate fill:#fdf4e0,stroke:#8a6d1f,color:#3a2e08
+    classDef deny fill:#fdeee9,stroke:#a2431f,color:#4a1f0c
+    classDef ok fill:#e6f1ec,stroke:#1f4d3d,color:#0f2a21
+    class A1,N1 implicit
+    class L1,L2,L3,L4 link
+    class GATE,Q1,A2,PAIRED,V gate
+    class DENY deny
+    class OK1,OK2 ok

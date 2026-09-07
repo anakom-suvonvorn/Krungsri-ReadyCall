@@ -1,8 +1,8 @@
 # Diagrams — the whole system, visually
 
-_Last updated: 2026-09-06._
+_Last updated: 2026-09-07._
 
-**64 diagrams** covering every part of Krungsri ReadyCall. Written to be read in order the
+**69 diagrams** covering every part of Krungsri ReadyCall. Written to be read in order the
 first time, and dipped into afterwards.
 
 ---
@@ -23,6 +23,7 @@ first time, and dipped into afterwards.
 | 10 | **[Sessions & tokens](10_sessions_and_tokens.md)** | How the system knows who is calling when the client never sends a customer id — and why that is hard to attack |
 | 11 | **[Persistence](11_persistence.md)** | The half with no screen: what survives a restart, what deliberately does not, and why half the state is derived rather than stored |
 | 12 | **[The line](12_the_menu.md)** | What the caller actually hears — where every sentence comes from, why a menu is not one clip, and what happens when they press the wrong key |
+| 13 | **[The broker, and the customer's screen](13_broker_and_assist.md)** | Why a broker is not a small insurer and what that changed, where the AI summary does nothing, and how a phone call gets bound to the customer's phone so the broker can push a form onto it |
 
 Short on time? **[Start here](01_start_here.md)** then **[The call](02_the_call.md)** is about
 fifteen minutes and covers most of it.
@@ -119,7 +120,7 @@ uv run python scripts/render_diagrams.py brief_gating
 docs/diagrams/
 ├─ README.md              ← you are here
 ├─ 01_start_here.md …     ← the twelve explanation pages
-├─ *.svg                  ← 64 rendered diagrams (committed, so no tooling is needed to read them)
+├─ *.svg                  ← 69 rendered diagrams (committed, so no tooling is needed to read them)
 ├─ .render-manifest.json  ← source hash per diagram, so --check compares content not mtimes
 └─ src/*.mmd              ← mermaid sources; GENERATED ones say so in the header
 ```

@@ -72,6 +72,18 @@ of waiting forever.
 
 P0 · P1 · P1b · P2a · P2b · P2c · P3 done. **P4 is next and is not started.**
 
+### The 2026-09-07 work, and where it is written down
+
+`D117` broker domain · `D118` playbooks to config · `D119` the LLM · `D120` the paired
+screen · `B30`, `B31`. **Three places, in the order a fresh session should read them:**
+
+1. `docs/reading/the_assist_rail.html` — plain language, drawn, with a "try it" section.
+   Open it in a browser. This is the shared vocabulary with the user now.
+2. `docs/diagrams/13_broker_and_assist.md` — five diagrams: the duty split, the five call
+   shapes, the pairing gate, the push round trip, and every path through the AI summary.
+3. `docs/explanations/P4_broker_and_assist.md` — the phase write-up, and **§5 is
+   copy-pasteable commands** for all of it.
+
 ### The five slices of 2026-09-06, in one line each
 
 | | what it is | the one thing to know |
@@ -194,9 +206,9 @@ moment in the recording it was said — **and if they consented, their audio is 
 storage encrypted, with the key ref and the retention date on an `audio_recordings` row.**
 If they declined, it is nowhere.
 
-Verified **2026-09-06**: **841 tests** — 829 pass + 12 skipped with Postgres and MinIO both
+Verified **2026-09-06**: **842 tests** — 830 pass + 12 skipped with Postgres and MinIO both
 up. `ruff check` + `ruff format --check` clean over 202 files, `mypy --strict` clean over
-145, all scenarios replay, 64/64 diagrams current, prompt pack fresh (54 clips),
+145, all scenarios replay, 69/69 diagrams current, prompt pack fresh (54 clips),
 `audit_docs.py` clean on the live files. **And verified against a running server with a
 real MinIO container**: the bucket holds `RCE1`-framed ciphertext, the right master key
 returns the original 622,124-byte WAV, a wrong one refuses, and the caller who pressed 2
@@ -1421,7 +1433,7 @@ Facts about *this laptop* rather than the repo, so a fresh session does not redi
 
 ## Diagrams (visual walkthroughs)
 
-`docs/diagrams/` — diagrams with explanations, in themed pages. Start at
+`docs/diagrams/` — 69 diagrams with explanations, in 13 themed pages. Start at
 `docs/diagrams/README.md`. Two pages cover the parts with no screen: **`11_persistence.md`**
 (what survives a restart) and **`12_the_menu.md`** (what the caller actually hears — the
 prompt pipeline, why a menu is not one clip, and every path that does not end in a route).
@@ -1433,7 +1445,7 @@ through: `persistence.html` has a
 **restart simulator**, `the_line.html` has a **working keypad** that walks the real menu and
 shows every press resolving back to canonical. Each must be updated with its diagram page —
 and `the_line.html`'s data is generated (`scripts/build_reading_data.py`), with a test that
-fails when it is stale. **14 of the 60 are generated from source**,
+fails when it is stale. **14 of the 69 are generated from source**,
 so they cannot drift; `tests/unit/test_diagrams.py` fails if a committed one falls behind.
 **`decision_map` was extended to `D1-D109` on 2026-09-06** — it had stopped at `D81`, which is
 what a hand-drawn map does when extending it is a redraw. Its banner now states the rule it
@@ -1466,6 +1478,11 @@ each has a "changes since" section. Write one per phase as it lands.
 - `P3_voice.md` — the prompt pipeline and the IVR: why the guard was written before the
   prompts, the two decisions that only appeared once it was built (`D80`, `D81`), and the two
   test bugs that would have passed review. **§9 says exactly what step 4 has left to do.**
+- `P4_broker_and_assist.md` — **the 2026-09-07 work, in one place**: why the domain was an
+  insurer's and what changed, playbooks moving to config, the LLM seam with its measured
+  4.5 s / $0.0085, and the customer's paired screen. **§5 is a copy-pasteable "try it
+  yourself"** including how to watch a personal push get refused, which is the rule worth
+  seeing rather than reading. Diagrams: `diagrams/13_broker_and_assist.md`.
 - `P2b_workstation_client.md` — **the browser tab itself**: its two channels, the full
   server-owned vs client-owned ledger, every endpoint, the socket contract, and the
   audit that produced `B7`, `B8`, `D68` and `D71`. Read this before changing
@@ -1498,6 +1515,7 @@ URL from another conversation creates a duplicate instead.
 | `reading/the_line.html` — the keypad | https://claude.ai/code/artifact/5953f7a7-d0c4-4829-8cc7-fec2b6f5b856 |
 | `reading/2026-09-03_what_happened.md` — **markdown, not a page.** The 3 September session from zero, with a glossary and the two open decisions. Written for the user after three summaries failed to land | _(a file, no URL)_ |
 | `reading/2026-09-05_the_words_on_the_screen.md` — **markdown, not a page.** How the transcript reached the agent's screen, and the two services that turned out to be running nowhere (`B24`). Ends in three commands that put six Thai sentences on a real screen | _(a file, no URL)_ |
+| `reading/the_assist_rail.html` — **what the 2026-09-07 work actually does**, in plain language: the broker/insurer duty split drawn, the five call shapes and where each ENDS, the pairing and its one gate drawn, the six ways the AI summary does nothing, and a fifteen-minute "try it" that ends with watching a personal push get REFUSED. Written because a terminal summary of `D117`-`D120` tells the reader nothing | _(a file, no URL)_ |
 | `reading/the_broker_turn.html` — **the plan of record from 2026-09-06.** Why the pitch extends from the service call into comparison (step 3, the brief's biggest leak) and document handling (step 4), the broker-vs-agent reframe, the consent correction, the persona recommendation and the seven-day track plan. `D115`/`D116`. **Artifact publishing was blocked, so this one is a file** | _(a file, no URL)_ |
 | `reading/the_recording.html` — **what happens to the caller's voice**: the encrypted recording explained from a phone packet to a file in a bucket (envelope encryption drawn, not asserted), the killable decode worker, `Q31`'s circle-back, and the durable transcript. Written because *"the encrypted recording landed"* tells the reader nothing | https://claude.ai/code/artifact/c51ef926-0a13-45b7-b59f-6731be83255c |
 | `reading/the_audio_path.html` — the wait ceiling, the GPU, and the audio path, in plain language, **ending in commands that verify each claim** | https://claude.ai/code/artifact/722ddf9f-77bc-410b-8057-7f90a693ec4c |

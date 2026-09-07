@@ -1,0 +1,48 @@
+%% HANDWRITTEN. Checked against D117 + config/intents.yaml + config/skills.yaml + config/playbooks.yaml
+%% The five shapes a broker call takes, and where each one ENDS. The endings are the point.
+flowchart LR
+    IVR(["caller reaches a queue<br/>menu · DID · app"]) --> K{"what did they<br/>come for?"}
+
+    K -->|"เปรียบเทียบ / ขอราคา"| ADV
+    K -->|"ต่ออายุ"| REN
+    K -->|"แจ้งเคลม"| CLM
+    K -->|"แก้ไข / สอบถามกรมธรรม์"| SVC
+    K -->|"ร้องเรียน"| ESC
+
+    subgraph ADVICE["ADVICE — the mandate, and the biggest leak"]
+        ADV["*.advice.compare / .quote<br/>q_advice_motor · _health · _life · _travel"]
+        ADV --> ADV2["gap analysis against what they<br/>ALREADY hold, across carriers"]
+        ADV2 --> ADV3["push the comparison to their screen"]
+        ADV3 --> ADVE(["ENDS WITH US<br/>quote sent · placed"])
+    end
+
+    subgraph RENEWAL["RENEWAL — 72.55% of life premium"]
+        REN["*.renew / general.renewal<br/>q_renewal · renewal.retention"]
+        REN --> REN2["confirm the policy and the carrier<br/>review whether it still fits"]
+        REN2 --> REN3["if they hesitate, offer another<br/>carrier BEFORE letting it lapse"]
+        REN3 --> RENE(["ENDS WITH US<br/>renewed"])
+    end
+
+    subgraph CLAIMS["CLAIMS — not ours to decide"]
+        CLM["*.claim.notify · roadside · emergency<br/>q_claims · claims.assist"]
+        CLM --> CLM2["take the notification<br/>gather what the insurer will ask for"]
+        CLM2 --> CLM3["name WHICH carrier — that is why<br/>Policy.insurer exists"]
+        CLM3 --> CLME(["ENDS WITH THE INSURER<br/>handoff_to_insurer: true<br/>disposition: ส่งต่อบริษัทประกัน"])
+    end
+
+    subgraph SERVICE["SERVICE"]
+        SVC["*.service.policy · billing<br/>documents · details"]
+        SVC --> SVCE(["ENDS WITH US"])
+    end
+
+    subgraph ESCALATION["ESCALATION"]
+        ESC["general.complaint<br/>q_escalation"]
+        ESC --> ESCE(["ENDS WITH A SUPERVISOR"])
+    end
+
+    classDef ours fill:#e6f1ec,stroke:#1f4d3d,color:#0f2a21
+    classDef theirs fill:#fdeee9,stroke:#a2431f,color:#4a1f0c
+    classDef step fill:#f4f2ec,stroke:#7a7360,color:#2b2820
+    class ADVE,RENE,SVCE ours
+    class CLME theirs
+    class ADV,ADV2,ADV3,REN,REN2,REN3,CLM,CLM2,CLM3,SVC,ESC,ESCE step

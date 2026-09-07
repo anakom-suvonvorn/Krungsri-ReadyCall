@@ -1,0 +1,47 @@
+%% HANDWRITTEN. Checked against D120 + api/routers/assist.py + apps/customer_assist/index.html
+%% One round trip: the broker stops describing a website and fills it instead.
+sequenceDiagram
+    autonumber
+    actor C as ลูกค้า · customer
+    participant P as customer_assist<br/>(one static page, polls 1s)
+    participant API as ReadyCall API
+    participant W as workstation<br/>(React, socket)
+    actor B as นายหน้า · broker
+
+    Note over C,B: they are already on a call. The brief is on the broker's screen.
+
+    B->>W: presses ส่งลิงก์
+    W->>API: POST /v1/agent/calls/{id}/assist/link
+    API-->>W: token + link (idempotent per call)
+    B-->>C: reads the link out<br/>(P5 sends it by SMS or LINE)
+
+    C->>P: taps the link
+    P->>API: GET /v1/assist/{token}
+    API-->>P: tier=guest · call_active=true
+    Note over P: the header says กำลังสนทนากับเจ้าหน้าที่<br/>so the page never looks like a stray form
+
+    B->>API: push comparison
+    API-->>B: 200
+    P->>API: (next poll, ≤1s)
+    API-->>P: the comparison
+    Note over C: sees their group plan against a top-up,<br/>differences highlighted, both carriers named
+
+    B->>API: push form
+    API-->>B: 400 — form needs a signed-in screen
+    Note over B: the refusal names the reason,<br/>so the broker asks rather than guesses
+
+    B-->>C: asks them to sign in
+    C->>P: signs in
+    P->>API: POST /v1/assist/{token}/sign-in
+    API-->>P: tier=verified
+
+    B->>API: push form (prefilled with what the broker already knows)
+    P->>API: (poll)
+    API-->>P: the form
+    C->>P: types the rest and submits
+    P->>API: POST /v1/assist/{token}/respond
+    API-->>P: 200 · the card now says ส่งข้อมูลเรียบร้อยแล้ว
+
+    W->>API: GET /v1/agent/calls/{id}/assist
+    API-->>W: responded=true + exactly what they typed
+    Note over B: nobody read a field name down a phone line
