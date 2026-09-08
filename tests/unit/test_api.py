@@ -384,3 +384,36 @@ def test_the_app_is_told_when_a_call_is_live_for_it(signed_in: TestClient) -> No
         "in-app needs no link and no second sign-in: the app session is a stronger claim "
         "about who they are than tapping a link ever was (`D4`, `D42`)"
     )
+
+
+def test_a_form_typed_in_the_app_still_sends_after_the_broker_rings_off(
+    signed_in: TestClient,
+) -> None:
+    """`B37`'s second half, found by actually pressing the button.
+
+    The grace window kept the half-typed form on screen and then refused the submit,
+    because `respond` looked only at LIVE calls. That is worse than clearing the form:
+    the customer is told nothing and believes it went.
+    """
+    intent = signed_in.post("/v1/calls/intents", json={"app_intent": "motor.claim.notify"}).json()
+    signed_in.post(
+        "/v1/demo/calls",
+        json={
+            "correlation_token": intent["correlation_token"],
+            "intent_code": "motor.claim.notify",
+            "caller_number": "0812345678",
+            "intake_keys": ["2"],
+            "ignore_hours": True,
+        },
+    )
+    signed_in.get("/v1/app/assist")  # the app pairs itself on first look
+
+    hung_up = signed_in.post("/v1/app/call/hangup")
+    assert hung_up.status_code == 200, hung_up.text
+
+    # Nothing was pushed, so there is no item to respond to — but the endpoint must fail
+    # on "unknown item", not on "no live call". Those are different bugs and only one of
+    # them is the customer's fault.
+    refused = signed_in.post("/v1/app/assist/respond", json={"item_id": "psh_nope", "response": {}})
+    assert refused.status_code == 400, refused.text
+    assert "item" in refused.json()["detail"].lower()

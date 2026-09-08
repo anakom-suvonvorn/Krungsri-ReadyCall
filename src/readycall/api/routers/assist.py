@@ -73,7 +73,11 @@ class AssistRespondRequest(ApiModel):
 #: transcript buffer or the open-offer table, both of which the first version used and
 #: both of which are empty during a live call for their own good reasons - the transcript
 #: is flushed on accept (`D106`) and the offer is resolved by it.
-_LIVE_STATES = {CallState.OFFERED, CallState.IN_CALL, CallState.WRAP_UP}
+#:
+#: ⚠️ `WRAP_UP` is deliberately NOT here (`B37`). After-call work is the agent's paperwork
+#: and can run for minutes; the customer hung up when the media stopped. Counting it as
+#: live left their screen claiming a conversation that had already ended.
+_LIVE_STATES = {CallState.OFFERED, CallState.IN_CALL}
 
 
 async def _screen(container: Any, session: AssistSession) -> AssistScreenOut:

@@ -97,6 +97,45 @@
   .reason { display: flex; gap: 10px; align-items: center; }
   .reason .k { flex: none; width: 26px; height: 26px; border-radius: 7px; background: var(--bg); border: 1px solid var(--line); display: grid; place-items: center; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
   .empty { border: 1px dashed var(--line); border-radius: 10px; padding: 14px; text-align: center; color: var(--muted); font-size: 13px; }
+
+  /* Form controls had NO styling at all, so they fell back to the browser default: a
+     white box with black text, on a dark panel, in dark mode. Every colour here comes
+     from the same tokens as the surface behind it. */
+  label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 4px; }
+  input, textarea, select {
+    font: inherit; width: 100%; padding: 10px 12px; border-radius: 10px;
+    border: 1px solid var(--line); background: var(--bg); color: var(--ink);
+  }
+  input:focus, textarea:focus { outline: 2px solid var(--brand); outline-offset: 1px; border-color: var(--brand); }
+  textarea { resize: vertical; min-height: 74px; }
+
+  /* --- the in-call screen ----------------------------------------------------------
+     A call looks like a call. Before this the app showed its browse and contact controls
+     throughout, so the only sign anything was happening was one line of text. */
+  .call { border-radius: 20px; padding: 16px; background: linear-gradient(160deg, #10233f, #0a1729); color: #eaf1fb; }
+  .call .who { font-size: 19px; font-weight: 600; }
+  .call .state { font-size: 13px; opacity: .75; margin-top: 2px; }
+  .call .timer { font-variant-numeric: tabular-nums; font-size: 30px; font-weight: 700; margin: 12px 0 14px; letter-spacing: .02em; }
+  .call-controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .call-controls button {
+    width: 100%; text-align: center; border-radius: 14px; padding: 12px 6px;
+    background: rgba(255,255,255,.09); border: 1px solid rgba(255,255,255,.16); color: #eaf1fb;
+    font-size: 12px; line-height: 1.3;
+  }
+  .call-controls button .ic { display: block; font-size: 19px; margin-bottom: 3px; }
+  .call-controls button.on { background: #eaf1fb; color: #10233f; border-color: #eaf1fb; }
+  .call-controls button.end { background: #d8443c; border-color: #d8443c; color: #fff; }
+  .call-controls button:hover:not(:disabled) { border-color: rgba(255,255,255,.45); }
+
+  .from-agent { margin-top: 14px; }
+  .from-agent > h2 { color: var(--muted); }
+  .ended-note { border: 1px solid var(--warn); background: var(--warn-bg); color: var(--warn); border-radius: 10px; padding: 10px 12px; font-size: 13px; }
+
+  /* The demo's own instrumentation, foldable so the app can be shown on its own. */
+  details.fold > summary { cursor: pointer; color: var(--muted); font-size: 13px; list-style: none; }
+  details.fold > summary::-webkit-details-marker { display: none; }
+  details.fold > summary::before { content: "▸ "; }
+  details.fold[open] > summary::before { content: "▾ "; }
 </style>
 </head>
 <body>
@@ -122,12 +161,30 @@
 
     <!-- The app's half of the paired screen (`D120`'s first row, built in `D122`).
          Hidden until a call is actually live for this customer - the app is TOLD, it does
-         not show a permanently visible "let an agent help me" button nobody can find. -->
+         not show a permanently visible "let an agent help me" button nobody can find.
+
+         It is a CALL SCREEN, and the browse/contact controls hide behind it: an app that
+         goes on offering "contact us about this plan" while the customer is mid-call is
+         not showing them a call. -->
     <section id="step-live" class="hidden" style="margin-top:16px">
-      <h2 id="live-head">📞 กำลังรอสายเจ้าหน้าที่</h2>
-      <p class="note">เจ้าหน้าที่ส่งข้อมูลมาที่หน้าจอนี้ได้ระหว่างสนทนา
-        — ไม่ต้องเข้าสู่ระบบซ้ำ เพราะคุณเข้าสู่ระบบในแอปอยู่แล้ว</p>
-      <div class="stack" id="live-items"></div>
+      <div class="call">
+        <div class="who">Krungsri ReadyCall</div>
+        <div class="state" id="live-head">กำลังต่อสาย…</div>
+        <div class="timer" id="live-timer">0:00</div>
+        <div class="call-controls">
+          <button id="btn-mute"><span class="ic">🎙️</span>ปิดไมค์</button>
+          <button id="btn-speaker"><span class="ic">🔊</span>ลำโพง</button>
+          <button id="btn-hangup" class="end"><span class="ic">📕</span>วางสาย</button>
+        </div>
+      </div>
+
+      <div class="from-agent">
+        <h2>จากเจ้าหน้าที่</h2>
+        <div id="ended-note" class="ended-note hidden">
+          สายสิ้นสุดแล้ว — ยังส่งข้อมูลที่กรอกค้างไว้ได้อีกสักครู่
+        </div>
+        <div class="stack" id="live-items"></div>
+      </div>
     </section>
 
     <section id="step-contact" class="hidden" style="margin-top:16px">
@@ -142,8 +199,15 @@
     </section>
   </div>
 
-  <!-- ── what the server did ─────────────────────────────────────────────── -->
+  <!-- ── what the server did ─────────────────────────────────────────────────
+       This whole column is the DEMO's instrumentation, not the product. It is what makes
+       the pitch's claim checkable rather than asserted — but on stage it competes with
+       the app for attention, so it folds away and the phone stands alone. -->
   <div>
+    <div style="margin-bottom:10px">
+      <button id="toggle-instr" class="ghost">ซ่อนรายละเอียดเบื้องหลัง · Hide the plumbing</button>
+    </div>
+    <div id="instr">
     <div class="card">
       <h2>What the server did</h2>
       <div id="result-empty" class="sub">Tap <b>Contact</b> to see it.</div>
@@ -176,6 +240,7 @@
       <div class="log" id="log"><div class="m">nothing yet</div></div>
       <p class="note">Every line is a request to the public <code>/v1</code> API — the same
         one the real Krungsri app would call. There is no simulator-only endpoint.</p>
+    </div>
     </div>
   </div>
 </div>
@@ -382,6 +447,13 @@
     void pollAssist();
   }
 
+  let callStartedAt = null;
+
+  function stopAssistWatch() {
+    if (assistTimer) { window.clearInterval(assistTimer); assistTimer = null; }
+    callStartedAt = null;
+  }
+
   async function pollAssist() {
     let state;
     try {
@@ -389,13 +461,36 @@
     } catch {
       return; // a rail that cannot be read must never break the page
     }
-    $("step-live").classList.toggle("hidden", !state.call_active);
-    if (!state.call_active) { lastAssistSig = null; return; }
-    // Say which is actually happening. Claiming "talking to an agent" while the customer
-    // is still holding is the kind of small lie a demo audience notices immediately.
-    $("live-head").textContent = state.connected
-      ? "📞 กำลังสนทนากับเจ้าหน้าที่"
-      : "📞 กำลังรอสายเจ้าหน้าที่";
+
+    const showing = state.call_active || state.ended;
+    $("step-live").classList.toggle("hidden", !showing);
+    // While a call is on screen the browse/contact controls go away. An app still
+    // offering "contact us about this plan" mid-call is not showing you a call.
+    $("step-browse").classList.toggle("hidden", showing);
+    $("step-contact").classList.toggle("hidden", showing);
+
+    if (!showing) {
+      // The call is over AND the grace window has closed, so there is nothing left to
+      // poll for. Polling on forever was harmless but dishonest: the log went on saying
+      // the app was asking about a call that had finished minutes ago.
+      lastAssistSig = null;
+      stopAssistWatch();
+      return;
+    }
+
+    $("ended-note").classList.toggle("hidden", !state.ended);
+    if (state.ended) {
+      $("live-head").textContent = "สายสิ้นสุดแล้ว";
+      $("live-timer").textContent = "—";
+      $("btn-hangup").disabled = true;
+    } else {
+      // Say which is actually happening. Claiming "talking to an agent" while the
+      // customer is still holding is the kind of small lie an audience notices.
+      $("live-head").textContent = state.connected
+        ? "กำลังสนทนากับเจ้าหน้าที่"
+        : "กำลังรอเจ้าหน้าที่รับสาย…";
+      if (callStartedAt === null) callStartedAt = Date.now();
+    }
 
     const sig = JSON.stringify(state.items.map((i) => [i.item_id, i.responded]));
     if (sig === lastAssistSig) return;
@@ -404,9 +499,42 @@
     const box = $("live-items");
     box.innerHTML = state.items.length
       ? ""
-      : '<div class="note">เจ้าหน้าที่ยังไม่ได้ส่งอะไรมา</div>';
+      : '<div class="empty">เจ้าหน้าที่ยังไม่ได้ส่งอะไรมา<br>สิ่งที่ส่งมาจะแสดงที่นี่ทันที</div>';
     for (const item of state.items) box.appendChild(assistCard(item));
+
+    // Once the call has ended, STOP. Nothing new can arrive - the broker has rung off -
+    // so a poll every 1.5s for the rest of the grace window is asking a question whose
+    // answer cannot change. Submitting still works, because that is a POST rather than
+    // something the poll carries.
+    if (state.ended) stopAssistWatch();
   }
+
+  // The call timer ticks locally from when the app first saw the call. It is a duration
+  // on a screen, so it needs an anchor and a ticker rather than a number that only moves
+  // when something else refreshes (`B27`, on the customer's side).
+  window.setInterval(() => {
+    if (callStartedAt === null) return;
+    const secs = Math.floor((Date.now() - callStartedAt) / 1000);
+    $("live-timer").textContent = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}`;
+  }, 1000);
+
+  // Mute and speaker are LOCAL and cosmetic - there is no audio in this simulator, and
+  // pretending otherwise would be the kind of stub `D115` says must be labelled. They are
+  // here because a call screen without them does not read as a call screen.
+  for (const id of ["btn-mute", "btn-speaker"]) {
+    $(id).onclick = () => $(id).classList.toggle("on");
+  }
+
+  $("btn-hangup").onclick = async () => {
+    try {
+      await api("POST", "/v1/app/call/hangup");
+    } catch {
+      // 409 means an agent already has the call, so the handset is no longer what ends
+      // it. Nothing to do but let the poll catch up.
+    }
+    lastAssistSig = null;
+    await pollAssist();
+  };
 
   function assistCard(item) {
     const el = document.createElement("div");
@@ -472,6 +600,15 @@
     $("r-int").textContent = status ? status.interactions_found : "—";
     $("r-prov").textContent = status ? status.provenance_fields : "—";
   }
+
+  // Fold the instrumentation away. Kept in the DOM rather than removed, so the log goes
+  // on recording while it is hidden and is complete when it comes back.
+  $("toggle-instr").onclick = () => {
+    const hidden = $("instr").classList.toggle("hidden");
+    $("toggle-instr").textContent = hidden
+      ? "แสดงรายละเอียดเบื้องหลัง · Show the plumbing"
+      : "ซ่อนรายละเอียดเบื้องหลัง · Hide the plumbing";
+  };
 
   $("logout").onclick = async () => {
     await api("POST", "/v1/demo/logout");

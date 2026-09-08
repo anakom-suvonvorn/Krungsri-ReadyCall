@@ -349,3 +349,49 @@ async def test_the_rail_is_served_from_config_rather_than_built_by_the_client(
         "documents",
         "links",
     ], "groups come back in their configured order, so the rail is not alphabetical"
+
+
+# --- `B37`: the customer's call ends when the media does, not when the paperwork does ---
+
+
+@pytest.mark.asyncio
+async def test_ending_the_call_ends_it_on_the_customers_screen(client: Any) -> None:
+    """`B37`. `D45` separates "the media stopped" from "the agent finished their notes",
+    and the customer is on the far side of that line — they have hung up.
+
+    `WRAP_UP` counted as live, so the customer's screen went on saying
+    *"กำลังสนทนากับเจ้าหน้าที่"* for the whole of after-call work, which can run minutes.
+    """
+    call_id = await on_a_call(client)
+    token = link_for(client, call_id)["token"]
+    client.get(f"/v1/assist/{token}")
+    assert client.get(f"/v1/assist/{token}").json()["call_active"] is True
+
+    ended = client.post(f"/v1/agent/calls/{call_id}/end", json={"reason": "caller_hung_up"})
+    assert ended.status_code == 200, ended.text
+
+    assert client.get(f"/v1/assist/{token}").json()["call_active"] is False, (
+        "after-call work is the agent's paperwork, not a conversation"
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_half_finished_form_still_submits_after_the_call_ends(client: Any) -> None:
+    """The other half of `B37`, and the reason `close()` shortens the pairing rather than
+    deleting it: `PAIRING_GRACE` exists so hanging up does not blank a form under the
+    customer's fingers."""
+    call_id = await on_a_call(client)
+    token = link_for(client, call_id)["token"]
+    client.post(f"/v1/assist/{token}/sign-in", json={"customer_id": "C000001"})
+    item_id = client.post(
+        f"/v1/agent/calls/{call_id}/assist/push", json={"tool_id": "form.claim_notify"}
+    ).json()["item_id"]
+
+    client.post(f"/v1/agent/calls/{call_id}/end", json={"reason": "caller_hung_up"})
+
+    sent = client.post(
+        f"/v1/assist/{token}/respond",
+        json={"item_id": item_id, "response": {"detail": "พิมพ์ค้างไว้ตอนวางสาย"}},
+    )
+    assert sent.status_code == 200, "the grace window is the whole point of close()"
+    assert sent.json()["items"][0]["responded"] is True

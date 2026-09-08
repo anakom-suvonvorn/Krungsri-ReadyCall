@@ -217,17 +217,37 @@ function ToolRailDialog({
   onPush: (toolId: string) => void;
   onClose: () => void;
 }) {
+  // Escape closes it, like every other dismissable surface in the browser. Registered
+  // only while open, so it cannot swallow Escape from anything else.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
   // `.scrim.hidden` rather than unmounting, matching the offer card — and the class must
   // stay two-part, because a single-class `.hidden` loses to `.scrim`'s display:flex and
   // leaves an invisible overlay eating every click.
+  //
+  // Dismissed by clicking the backdrop rather than by a ปิด button: the backdrop is
+  // already there, it is a bigger target than any button, and it is what every dialog on
+  // a phone does. `e.target === e.currentTarget` is load-bearing — without it a click
+  // anywhere INSIDE the dialog bubbles up and closes it, which is the classic version of
+  // this bug and it is infuriating mid-form.
   return (
-    <div className={open ? "scrim" : "scrim hidden"}>
+    <div
+      className={open ? "scrim" : "scrim hidden"}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
       <div className="tool-rail">
         <div className="queue-head">
           <h2>กล่องเครื่องมือ</h2>
-          <button className="ghost" onClick={onClose}>
-            ปิด
-          </button>
+          <span className="faint">คลิกนอกกรอบเพื่อปิด</span>
         </div>
 
         {!verified && (
@@ -236,27 +256,38 @@ function ToolRailDialog({
           </p>
         )}
 
-        {catalogue?.groups.map((group) => (
-          <div key={group.group_id} className="stack">
-            <h3>{group.label_th}</h3>
-            <div className="tool-grid">
-              {group.tools.map((tool) => (
-                <ToolButton
-                  key={tool.tool_id}
-                  tool={tool}
-                  locked={tool.personal && !verified}
-                  busy={busy}
-                  onPush={onPush}
-                />
-              ))}
-            </div>
+        {/* Two columns: what the broker can SEND on the left, what came BACK on the
+            right. Stacking them meant the responses sat below four groups of tools, so
+            the thing the broker is waiting for was the thing furthest off screen. */}
+        <div className="tool-cols">
+          <div className="tool-col">
+            {catalogue?.groups.map((group) => (
+              <div key={group.group_id} className="stack">
+                <h3>{group.label_th}</h3>
+                {/* A horizontal strip rather than a wrapping grid, so adding a fifth tool
+                    to a group makes that ROW scroll instead of making the whole dialog
+                    taller. The dialog's height is the thing worth keeping stable. */}
+                <div className="tool-strip">
+                  {group.tools.map((tool) => (
+                    <ToolButton
+                      key={tool.tool_id}
+                      tool={tool}
+                      locked={tool.personal && !verified}
+                      busy={busy}
+                      onPush={onPush}
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
-        ))}
 
-        {state && state.items.some((i) => i.responded) && (
-          <div className="stack">
+          <div className="tool-col">
             <h3>ลูกค้าตอบกลับ</h3>
-            {state.items
+            {!state?.items.some((i) => i.responded) && (
+              <p className="faint">ยังไม่มีสิ่งที่ลูกค้าส่งกลับมา</p>
+            )}
+            {state?.items
               .filter((i) => i.responded)
               .map((item) => (
                 <div key={item.item_id} className="panel">
@@ -274,7 +305,7 @@ function ToolRailDialog({
                 </div>
               ))}
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

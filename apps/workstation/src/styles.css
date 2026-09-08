@@ -738,12 +738,36 @@ button.on:disabled {
   color: var(--muted);
 }
 
-/* auto-fit rather than a fixed column count: the groups hold between two and four tools
-   today and the rail is explicitly expected to grow. */
-.tool-grid {
+/* Two columns: what the broker can SEND, and what came BACK. */
+.tool-cols {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: 1.35fr 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+.tool-col {
+  min-width: 0; /* without this a wide strip stretches the column instead of scrolling */
+}
+
+/* A horizontal strip, so a fifth tool in a group scrolls that ROW rather than growing the
+   dialog. Each tool keeps a fixed width for the same reason. */
+.tool-strip {
+  display: flex;
   gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  scrollbar-width: thin;
+}
+
+.tool-strip > button.tool {
+  flex: 0 0 190px;
+}
+
+@media (max-width: 900px) {
+  .tool-cols {
+    grid-template-columns: 1fr;
+  }
 }
 
 button.tool {

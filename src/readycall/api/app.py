@@ -83,6 +83,10 @@ async def sweep_once(container: Container) -> None:
         reoffered = await container.intake.reoffer_due()
         recordings = await container.transcription.check_timeouts()
         stored = await container.recording.flush_pending()
+        # Expired pairings. Small, but `sweep()` existed and was called by nothing, which
+        # is the shape that produced `B7`, `B24` and `B37` — a service method is not wired
+        # up because somebody wrote it, only because somebody calls it.
+        container.assist.sweep()
         result = await container.dispatch.tick()
         if expired or dropped or reoffered or recordings or stored or result.offered:
             log.info(

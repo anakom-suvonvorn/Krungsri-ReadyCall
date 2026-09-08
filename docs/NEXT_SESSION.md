@@ -57,6 +57,12 @@ with PyMuPDF at ~110 dpi and read the PNGs. An empty extraction is not an empty 
 | *"the contact options are weird — they already have the plan"* | correct, and `D48` was the cause | **DONE** (`D122`) |
 | *"/sim is completely detached from the call queue"* | correct, and the app branch was **broken** | **DONE** (`D122`, `B36`) |
 | *"the workstation gets into a stuck state if i don't touch it"* | correct, and it was the worst bug yet | **DONE** (`B34`) |
+| *"end call doesn't end it on /sim and /assist"* | correct — and THREE dead methods behind it | **DONE** (`B37`) |
+| tool dialog: no close button, two columns, scrolling groups | all three adopted | **DONE** (`D122` amendment) |
+| `/sim` should look like an actual call screen | correct | **DONE** — call card, timer, mute/speaker/วางสาย, and the customer can now hang up at all |
+| `/sim` instrumentation should be hide-able | correct | **DONE** |
+| *"it keeps calling GET /v1/app/assist after the call ended"* | correct | **DONE** — polling stops once the call ends |
+| free-text tool idea | good, and it is `D44` with a keyboard | **DONE** (`form.free_text`) |
 | *"it feels like a hackathon without AI"* | half a misreading, half a real gap | **NOT STARTED.** See below |
 | transfer button beside วางสาย, two tabs (internal / other company) | correct, and the second tab is new | **NOT STARTED.** Extends `D63` |
 | register the customer via a pushed form, or push the app download? | their own second instinct is right | **DECIDED** in `D121`: push the download, registration belongs to the bank's app |
@@ -249,7 +255,7 @@ moment in the recording it was said — **and if they consented, their audio is 
 storage encrypted, with the key ref and the retention date on an `audio_recordings` row.**
 If they declined, it is nowhere.
 
-Verified **2026-09-08**: **853 tests** — 841 pass + 12 skipped. `ruff check` +
+Verified **2026-09-08**: **856 tests** — 844 pass + 12 skipped. `ruff check` +
 `ruff format --check` clean over 218 files, `mypy --strict` clean over 151, all scenarios
 replay, 69/69 diagrams current, prompt pack fresh, `audit_docs.py` clean on the live files.
 **And by driving the workstation in a browser**: link minted from the panel, tool box
@@ -267,7 +273,7 @@ left nothing behind.
 
 Almost every fault in this list came from somebody driving the screen and reporting what
 looked wrong — not from the suite. The pattern is worth knowing before reading any of it,
-because it is now **nineteen** and they rhyme:
+because it is now **twenty** and they rhyme:
 
 1. **`B6` (2026-08-24)** — six faults, **three of which were decisions the docs already
    contained**. The lesson is about reading `.mmd` sources, not about React.
@@ -308,6 +314,11 @@ because it is now **nineteen** and they rhyme:
    they have" fallback produced correct output for the wrong reason. Found by giving them
    a portfolio, not by a test. **A fixture with one of something tests nothing about
    choosing.**
+17. **`B37` (2026-09-08)** — "end call doesn't end it on the customer's screen", and behind
+   it **three methods called by nothing**: `AssistService.close()`, `AssistService.sweep()`
+   and the `WRAP_UP` state counted as live. Two of the three were written in the same file
+   on the same day as the feature that needed them — `B7`'s family arriving *within* one
+   change rather than across months.
 16. **`B34`/`B35`/`B36` (2026-09-08)** — the second wave from the same session, and `B34`
    is the most damaging fault in the project's history: an agent **on a live call** was
    signed out for not heartbeating, because browsers throttle a hidden tab's timers — and
@@ -316,7 +327,7 @@ because it is now **nineteen** and they rhyme:
    day. `B36` was an entry path that had been **broken since P1b** and that nothing had
    ever executed.
 15. **`B32`/`B33` (2026-09-08)** — both found in ten minutes of *using* the tool rail, and
-   neither visible to 853 tests. The catalogue was fetched on mount, before sign-in, so it
+   neither visible to 856 tests. The catalogue was fetched on mount, before sign-in, so it
    401'd into a defensive `catch` and the rail was empty for the shift. And the dialog's
    2-second poll was rebuilt every render — the workstation re-renders every second — so
    it never fired once, which looked exactly like the server not returning the customer's

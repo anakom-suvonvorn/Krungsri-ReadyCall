@@ -288,6 +288,14 @@ async def end_call(
         )
     except PermanentError as exc:
         raise _bad_request(exc) from exc
+    # The CUSTOMER's call ends here (`B37`). `D45` separates "the media stopped" from "the
+    # agent finished their paperwork", and the customer is on the far side of that line:
+    # they have hung up. Until this call existed, their screen went on saying
+    # *"กำลังสนทนากับเจ้าหน้าที่"* for the whole of after-call work.
+    #
+    # `close()` does not delete the pairing — it shortens it to `PAIRING_GRACE`, so a form
+    # somebody was halfway through when the broker rang off can still be submitted.
+    container.assist.close(call_session_id)
     return await _snapshot(container, who.agent_id)
 
 

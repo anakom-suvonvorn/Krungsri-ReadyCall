@@ -54,7 +54,7 @@ the disclosure gate moves when the agent attests. **What they said while waiting
 screen** (`D106`), and if they consented, **their audio is in object storage encrypted**
 (`D110`) with a key ref and a retention date. If they declined, it is nowhere.
 
-Verified on 2026-09-08: **853 tests** — 841 pass + 12 skipped with Postgres and MinIO both
+Verified on 2026-09-08: **856 tests** — 844 pass + 12 skipped with Postgres and MinIO both
 up (the 12 are foreign-key cases the in-memory backend cannot have, and the `ml`-extra ones).
 Without those containers the count of skips rises and nothing fails.
 `ruff check` and `ruff format --check` clean over **202** files, `mypy --strict`
@@ -461,7 +461,7 @@ performing by hand, i.e. what the next services take over (`D36`).
 | Intent taxonomy | **33 intents** across 5 lines, each with a catch-all — **broker-shaped** since `D117`: advice/compare and renewal are first-class, claims are handoffs (`handoff_to_insurer`), and `health.ipd.preauth` is gone because pre-authorisation is the insurer's decision |
 | Skills / queues | **11 / 11** (`D117`). Advice and service per line, plus `renewal.retention`, `claims.assist`, `general.service`, `general.escalation`. Every skill held by 2+ agents, enforced at startup (`D22`) |
 | Playbooks | **24**, in `config/playbooks.yaml` (`D118`) |
-| Tool rail | **11 tools in 4 groups**, in `config/assist_tools.yaml` (`D121`). 5 personal, 2 visibly stubbed. Reachable from the workstation's right rail since 2026-09-08 — before that the endpoints existed and no control did |
+| Tool rail | **12 tools in 4 groups**, in `config/assist_tools.yaml` (`D121`). 5 personal, 2 visibly stubbed, one free-text catch-all (`D44` with a keyboard). Reachable from the workstation's right rail since 2026-09-08 — before that the endpoints existed and no control did |
 | Generated mock data | 2,000 customers / 2,292 policies / 5,880 interactions (seeded, gitignored) |
 | GPU, measured (`D95`) | RTX 3050 Laptop, sm_86, **4.00 GiB total / ~3.2 GiB free**, torch 2.11+cu128 |
 | STT latency, measured (`B14`) | faster-whisper `tiny` int8_float16: **155 ms** per utterance with speech in it |

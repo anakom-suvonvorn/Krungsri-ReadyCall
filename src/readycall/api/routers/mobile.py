@@ -24,7 +24,7 @@ from readycall.api.schemas import (
 )
 from readycall.domain.enums import CallState, ProductLine
 from readycall.domainpack import MENU_CONTEXTS
-from readycall.errors import PermanentError
+from readycall.errors import IllegalTransition, PermanentError
 from readycall.logging import call_context, get_logger
 from readycall.services.context.store import AppContextEvent
 
@@ -218,6 +218,9 @@ async def record_context_event(
 #: accepted; this one exists so the APP can say "you are on a call", and a customer
 #: holding for ninety seconds is very much on a call. They are two different questions,
 #: so they get two sets rather than one stretched to cover both (`D50`'s argument).
+#:
+#: ⚠️ `WRAP_UP` is NOT here (`B37`): after-call work is the agent's paperwork, and the
+#: customer hung up when the media stopped.
 _LIVE_CALL_STATES = (
     CallState.CONNECTING,
     CallState.IVR,
@@ -225,12 +228,23 @@ _LIVE_CALL_STATES = (
     CallState.MATCHED,
     CallState.OFFERED,
     CallState.IN_CALL,
-    CallState.WRAP_UP,
 )
 
 #: The subset where a human is actually on the line, so the app can say which is happening
 #: instead of claiming a conversation that has not started.
-_CONNECTED_STATES = (CallState.IN_CALL, CallState.WRAP_UP)
+_CONNECTED_STATES = (CallState.IN_CALL,)
+
+
+def _assist_item(i: Any) -> dict[str, Any]:
+    return {
+        "item_id": i.item_id,
+        "kind": str(i.kind),
+        "title_th": i.title_th,
+        "payload": i.payload,
+        "responded": i.response is not None,
+        "response": i.response,
+        "stub": i.stub,
+    }
 
 
 @router.get("/app/assist", summary="Is a call live for me, and what has the broker sent?")
@@ -257,7 +271,18 @@ async def app_assist(principal: PrincipalDep, container: ContainerDep) -> dict[s
         if getattr(call, "customer_id", None) == principal.customer_id
     ]
     if not live:
-        return {"call_active": False, "tier": None, "items": []}
+        # The call is over, but the pairing outlives it briefly (`D120`'s grace). Keep
+        # showing what is on screen so a half-finished form can still be sent — and say
+        # plainly that the call has ended, rather than pretending it has not (`B37`).
+        recent = container.assist.latest_for_customer(principal.customer_id)
+        if recent is None or not recent.items:
+            return {"call_active": False, "ended": False, "tier": None, "items": []}
+        return {
+            "call_active": False,
+            "ended": True,
+            "tier": str(recent.tier),
+            "items": [_assist_item(i) for i in recent.items],
+        }
 
     # Newest first: a customer who somehow has two live calls is looking at the one they
     # just started, not the one that is being wrapped up.
@@ -272,20 +297,42 @@ async def app_assist(principal: PrincipalDep, container: ContainerDep) -> dict[s
         "call_active": True,
         "call_session_id": call.call_session_id,
         "connected": call.state in _CONNECTED_STATES,
+        "ended": False,
         "tier": str(session.tier),
-        "items": [
-            {
-                "item_id": i.item_id,
-                "kind": str(i.kind),
-                "title_th": i.title_th,
-                "payload": i.payload,
-                "responded": i.response is not None,
-                "response": i.response,
-                "stub": i.stub,
-            }
-            for i in session.items
-        ],
+        "items": [_assist_item(i) for i in session.items],
     }
+
+
+@router.post("/app/call/hangup", summary="The customer hangs up")
+async def app_hangup(principal: PrincipalDep, container: ContainerDep) -> dict[str, Any]:
+    """The caller rings off. Until now, nobody could.
+
+    This is not cosmetic. `D113` ships `max_offer_rounds: 0` — a caller the whole floor
+    declines circles **forever** — and the argument for that default is explicitly *"a
+    caller still holding can hang up whenever they choose"*. That was true of a real
+    telephone and false of this system, which had no path for a customer to end a call at
+    all. A queue nobody can leave is a different product from the one that decision
+    describes.
+
+    `ABANDONED` is reachable from every waiting state and from none of the answered ones:
+    once an agent has the call, ending it is the media layer's job (P5) and the agent's
+    `end_call` is what the workstation drives.
+    """
+    live = [
+        call
+        for call in await container.calls.list_in_states(*_LIVE_CALL_STATES)
+        if getattr(call, "customer_id", None) == principal.customer_id
+    ]
+    if not live:
+        raise HTTPException(status_code=404, detail="no live call")
+    call = live[0]
+    try:
+        await container.orchestrator.abandon(call, reason="caller_hung_up")
+    except IllegalTransition:
+        # Already answered: the customer's handset is no longer what ends this call.
+        raise HTTPException(status_code=409, detail="an agent is already on this call") from None
+    container.assist.close(call.call_session_id)
+    return {"ok": True, "call_session_id": call.call_session_id}
 
 
 @router.post("/app/assist/respond", summary="Send a filled form back to the broker")
@@ -303,9 +350,15 @@ async def app_assist_respond(
         for call in await container.calls.list_in_states(*_LIVE_CALL_STATES)
         if getattr(call, "customer_id", None) == principal.customer_id
     ]
-    if not live:
-        raise HTTPException(status_code=404, detail="no live call")
-    pairing = container.assist.for_call(live[0].call_session_id)
+    # The grace window has to cover the SEND, not just the display (`B37`). Looking only
+    # at live calls meant the form survived the broker ringing off, sat there fully typed,
+    # and then 404'd on submit — which is worse than clearing it, because the customer is
+    # told nothing and believes it went.
+    pairing = (
+        container.assist.for_call(live[0].call_session_id)
+        if live
+        else container.assist.latest_for_customer(principal.customer_id)
+    )
     if pairing is None:
         raise HTTPException(status_code=404, detail="no paired screen")
     try:

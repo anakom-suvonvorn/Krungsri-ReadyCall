@@ -4636,3 +4636,50 @@ back **without** *"ซื้อประกันเดินทาง"* — key
 app prefilled with `TR-2026-001204` and `ทิพยประกันภัย` — the *travel* policy, the one they
 tapped. The customer filled in the rest, submitted, and the broker's screen showed every
 field they had typed.
+
+### Amendment, 2026-09-08 (evening): the customer's app looks like a phone on a call
+
+Four presentation corrections from the user driving `/sim` and the tool rail, plus one
+capability that turned out not to exist.
+
+**The tool dialog.** No ปิด button — the backdrop closes it, which is a bigger target and
+what every dialog on a phone does (`e.target === e.currentTarget`, so a click *inside*
+does not bubble out and close it mid-form; Escape works too). And two columns: tools left,
+what the customer sent back right. Stacked, the responses sat below four groups of tools,
+so the thing the broker is waiting for was the thing furthest off screen. Each group is a
+**horizontal strip**, so a fifth tool scrolls that row instead of making the dialog taller.
+
+**`/sim` is a call screen while a call is on.** It was showing its browse and contact
+controls throughout, so the only sign anything was happening was one line of text — an app
+still offering *"contact us about this plan"* mid-call is not showing you a call. It now
+has a call card with the status, a ticking timer, mute, speaker and **วางสาย**, and a
+dedicated *จากเจ้าหน้าที่* area for what the broker pushes. Mute and speaker are local and
+cosmetic, because there is no audio in the simulator and pretending otherwise is the kind
+of stub `D115` says must be labelled.
+
+⚠️ **Form controls had no styling at all**, so they fell back to the browser default —
+a white box with black text on a dark panel. Every control now takes its colours from the
+same tokens as the surface behind it.
+
+**The customer can hang up.** `POST /v1/app/call/hangup`. This is not cosmetic: `D113`
+ships `max_offer_rounds: 0`, meaning a caller the whole floor declines circles **forever**,
+and the stated justification is *"a caller still holding can hang up whenever they
+choose"*. That was true of a telephone and false of this system, which had no path for a
+customer to end a call at all. A queue nobody can leave is a different product from the one
+`D113` describes.
+
+**The demo's instrumentation folds away.** *What the server did* and *API calls made* are
+what make the pitch checkable rather than asserted, and on stage they compete with the app
+for attention. One button hides them; the log keeps recording while hidden.
+
+**And the app stops polling when the call ends.** Nothing new can arrive after the broker
+rings off, so a poll every 1.5 s is asking a question whose answer cannot change.
+Submitting still works, because that is a POST rather than something the poll carries.
+
+**New tool: `form.free_text`.** The user's idea, and it is `D44`'s keypad capture with a
+keyboard instead of a dialpad — deliberately unstructured, deliberately **not personal**
+(an empty box is true for anybody), and useful precisely because it is vague: a spelling,
+an address, a policy number read off a document, a hospital name the broker cannot catch
+over a bad line. The system does not guess what it means, which is the same rule `D44` set
+for captured digits.
+

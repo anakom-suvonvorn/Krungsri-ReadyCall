@@ -1718,3 +1718,34 @@ _Found while wiring `/sim` to the queue (`D122`). It had been broken since P1b._
   was not merely uncalled, it was *unreachable through the only UI that would have called
   it*, because that UI stopped one step short. A branch guarded by an `if` that nothing in
   the repo ever satisfies is dead code wearing a disguise.
+
+## B37. The customer's screen stayed "in a call" for the whole of after-call work
+_Reported by the user: **"pressing end call does not end the call on /sim and /assist —
+only ending acw/save record does"**. Three dead methods behind one symptom._
+
+- **Symptoms.** The broker presses **วางสาย**. The customer's screen goes on saying
+  *"กำลังสนทนากับเจ้าหน้าที่"*, keeps its forms, and only clears when the agent finishes
+  their wrap-up — which `D45` deliberately lets run for as long as the agent needs.
+- **Root cause, in three parts.**
+  1. Both "is this call live" sets counted `WRAP_UP`. But `D45`'s whole point is that
+     after-call work is the **agent's** paperwork; the customer hung up when the media
+     stopped. The customer is on the far side of that line and their screen should say so.
+  2. **`AssistService.close()` was called by nothing.** It exists to shorten the pairing
+     to `PAIRING_GRACE` when a call ends — the documented behaviour in `D120` — and no
+     code path invoked it.
+  3. **`AssistService.sweep()` was called by nothing either**, so expired pairings were
+     never dropped.
+- **Fix.** `end_call` calls `close()`; `sweep_once` calls `sweep()`; `WRAP_UP` comes out of
+  both live sets. The app shows *"สายสิ้นสุดแล้ว"* and keeps what is on screen for the
+  grace window, so a half-typed form is not blanked under the customer's fingers.
+- **And a second fault, found by pressing the button rather than reading the diff.** The
+  grace covered the *display* and not the *send*: `POST /v1/app/assist/respond` looked
+  only at live calls, so the form survived the broker ringing off, sat there fully typed,
+  and then 404'd on submit. **That is worse than clearing it** — the customer is told
+  nothing and believes it went. Both paths use the grace pairing now.
+- **Lesson.** Two of the three causes were methods written in the same file, on the same
+  day, as the feature that needed them — `B7`'s family arriving *within* a single change
+  rather than across months. Writing `close()` and calling `close()` are separate acts, and
+  only the second one does anything. And when you add a grace window, walk every operation
+  it is supposed to cover: a half-covered grace is a promise the UI keeps and the API
+  breaks.

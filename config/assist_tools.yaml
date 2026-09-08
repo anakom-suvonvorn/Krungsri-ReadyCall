@@ -101,6 +101,21 @@ tools:
       - { name: phone, label_th: "เบอร์ติดต่อกลับ", type: tel, required: true }
       - { name: note, label_th: "รายละเอียดเพิ่มเติม", type: textarea, required: false }
 
+  # The keypad capture's twin (`D44`), with a keyboard instead of a dialpad. Deliberately
+  # unstructured and deliberately NOT personal: an empty box is true for anybody, the
+  # customer chooses what goes in it, and the system does not guess what it means — which
+  # is exactly the rule `D44` set for captured digits. Useful precisely because it is
+  # vague: a spelling, an address, a policy number read off a document, a hospital name
+  # the broker cannot catch over a bad line.
+  form.free_text:
+    group: forms
+    label_th: "ให้ลูกค้าพิมพ์ข้อความ"
+    hint_th: "ช่องข้อความเปล่า ใช้ได้กับทุกเรื่อง เช่น สะกดชื่อ เลขที่เอกสาร ที่อยู่"
+    kind: form
+    personal: false
+    fields:
+      - { name: text, label_th: "พิมพ์ข้อความที่ต้องการส่งให้เจ้าหน้าที่", type: textarea, required: true }
+
   form.claim_notify:
     group: forms
     label_th: "แจ้งเคลม"

@@ -200,6 +200,24 @@ class AssistService:
         log.info("assist screen verified", call_session_id=session.call_session_id)
         return session
 
+    def latest_for_customer(self, customer_id: str) -> AssistSession | None:
+        """This customer's most recent pairing that has not expired yet.
+
+        Used for the grace window after the broker rings off (`B37`): the call is over,
+        the screen must stop claiming a conversation — and a form they were halfway
+        through must still submit. Without this, ending the call would blank the form
+        under their fingers, which is `D120`'s poll-wipe hazard arriving by another route.
+        """
+        now = self._clock.now()
+        candidates = [
+            s
+            for s in self._by_token.values()
+            if s.customer_id == customer_id and s.expires_at > now
+        ]
+        if not candidates:
+            return None
+        return max(candidates, key=lambda s: s.created_at)
+
     def for_call(self, call_session_id: str) -> AssistSession | None:
         token = self._by_call.get(call_session_id)
         return self._by_token.get(token) if token else None
