@@ -1,10 +1,11 @@
-%% HANDWRITTEN. Checked against DECISIONS.md D1-D109 (every one is here, exactly once).
+%% HANDWRITTEN. Checked against DECISIONS.md D1-D123 (every one is here, exactly once).
 %% A reversed or superseded decision is NOT drawn as though it still stands: it gets a leaf
 %% at the end of its branch naming what replaced it (D1, D62, D83, D89, D102, D103). D50 is
 %% amended in place by D108, which also has its own leaf; D86 is amended by D90 and both
-%% still stand. Reverse a decision and this file is part of that commit.
+%% still stand; D48 is amended by D122 and again by D123, and all three still stand.
+%% Reverse a decision and this file is part of that commit.
 mindmap
-  root((109 decisions))
+  root((123 decisions))
     Shape
       D2 modular monolith
       D3 ports and adapters
@@ -26,6 +27,8 @@ mindmap
       D53 no domain model at a permission boundary
       D97 real call audio stays OUTSIDE the repo
       D105 a second driver drains the bus
+      D110 one wrapper encrypts every backend
+      D114 the transcript is written down as it happens
     Identity
       D4 identity bound server-side
       D20 the L0-L3 ladder
@@ -81,6 +84,7 @@ mindmap
       D93 the wait ceiling runs BEFORE the solver
       D94 a ceiling per urgency tier
       D108 extends D50 to FOUR outcomes
+      D113 a caller the whole floor declined goes round again
     The agent
       D27 both sides rate
       D32 the workstation IS the phone
@@ -98,6 +102,7 @@ mindmap
       D85 remaining ACW is log-normal and conditional
       D87 an unfiled wrap-up becomes a backlog
       D109 decline and pause is ONE click
+      D118 playbooks live in config guarded both ways
     Voice and AI
       D9 STT streaming-first
       D10 IntakeStrategy seam
@@ -110,6 +115,9 @@ mindmap
       D100 falling behind drops the OLDEST loudly
       D101 batch what already waits pack to a MINIMUM
       D104 Typhoon ASR is the engine
+      D111 an engine failure reaches the SCREEN
+      D112 the decode timeout needs a killable process
+      D119 the LLM seam and six ways it does nothing
       D102 accuracy half superseded by D103
       D103 superseded by D104 kept as the fallback
     Persistence
@@ -121,6 +129,14 @@ mindmap
     Trust and demo
       D13 calibrated confidence or none
       D14 PDPA consent per scope
+      D116 consent gates RECOMMENDING not holding
       D36 the runner hands lifecycle steps over
       D47 the simulator is one static page
       D107 the demo endpoint OPENS the recording
+    The broker turn
+      D115 the pitch extends into comparison and closing
+      D117 the domain is a BROKER's not an insurer's
+      D120 the call is bound to the customer's screen
+      D121 the tier gate asks PURPOSE not kind
+      D122 the app is not a keypad and it joins the call
+      D123 something else asks WHICH COVER first

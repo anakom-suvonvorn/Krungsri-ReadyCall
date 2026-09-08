@@ -302,6 +302,94 @@ def test_unknown_product_line_falls_back_to_the_general_menu(signed_in: TestClie
     assert any(r["intent_code"].startswith("general.") for r in reasons["reasons"])
 
 
+def test_contact_lines_is_the_keypads_own_first_question(signed_in: TestClient) -> None:
+    """`D123`. The "something else" branch asks step 1, and it is the SAME step 1.
+
+    Adding a line means editing `menus.yaml`, exactly as it does for the IVR. A
+    hand-written list here would fork the taxonomy at the one question the whole rest of
+    the walk depends on — a customer would reach a different set of lines depending on
+    which door they came through, and `D48` exists to stop precisely that.
+    """
+    pack = DomainPack.load(REPO_ROOT / "config")
+    root = pack.menus["product_line"]
+    expected = [
+        (o.key, o.label_th, str(o.product_line or ProductLine.UNKNOWN))
+        for o in root.options
+        if o.next_menu
+    ]
+
+    lines = signed_in.get("/v1/app/contact-lines").json()["lines"]
+    assert [(x["key"], x["label_th"], x["product_line"]) for x in lines] == expected
+    assert any(x["product_line"] == "unknown" for x in lines), (
+        "the keypad's own 'เรื่องอื่นๆ' is a row, not a special case — following it lands "
+        "on `general_reason`, which is where this branch used to start"
+    )
+
+
+def test_the_app_can_finally_ask_about_cover_the_customer_does_not_hold(
+    signed_in: TestClient,
+) -> None:
+    """`D123`, and the gap `D122` left behind — journey step 3, the brief's biggest leak.
+
+    `D122` filtered the *"about this plan"* menu correctly. *"Something else"* went
+    straight to `general_reason`, which is account admin: change my details, request a
+    document, complain. So the app could ask about a policy they hold and about their own
+    paperwork, and could **not** ask about buying anything. The new-business options
+    existed the whole time and were reachable only from the keypad.
+
+    `travel.advice.quote` is the specific one: *"ซื้อประกันเดินทาง"*. It is filtered OUT
+    of the plan surface (that is `D122`, tested above) and had nowhere else to be shown.
+    """
+    lines = signed_in.get("/v1/app/contact-lines").json()["lines"]
+
+    reachable: set[str] = set()
+    for line in lines:
+        reasons = signed_in.get(
+            "/v1/app/contact-reasons",
+            params={"product_line": line["product_line"], "context": "general"},
+        ).json()["reasons"]
+        assert reasons, f"{line['product_line']} is a dead end in the app's own step 2"
+        assert any(r["intent_code"].endswith(".other") for r in reasons), (
+            "and every one of them keeps a way out (`D122`'s per-context guard)"
+        )
+        reachable |= {r["intent_code"] for r in reasons}
+
+    assert "travel.advice.quote" in reachable, "the option the user found missing"
+    assert {"motor.advice.compare", "health.advice.compare", "life.advice.mortgage"} <= reachable, (
+        "advice and comparison are the broker's mandate (`D117`) and the app's whole reason "
+        "to have this branch"
+    )
+
+
+def test_a_new_business_enquiry_from_the_app_reaches_an_advice_desk(
+    signed_in: TestClient,
+) -> None:
+    """`D123` end to end, because a list of options nobody can act on is not a path.
+
+    The customer holds no travel policy in this branch — there is no `product_code` at
+    all — so this is the one journey step the system had no entry for: somebody asking
+    for cover they do not have. It must reach an **advice** desk, not a claims one
+    (`D117` made advice a first-class skill per line for exactly this).
+    """
+    intent = signed_in.post("/v1/calls/intents", json={"app_intent": "travel.advice.quote"}).json()
+
+    placed = signed_in.post(
+        "/v1/demo/calls",
+        json={
+            "correlation_token": intent["correlation_token"],
+            "intent_code": "travel.advice.quote",
+            "caller_number": "0812345678",
+            "intake_keys": ["2"],
+            "ignore_hours": True,
+        },
+    )
+    assert placed.status_code == 200, placed.text
+    body = placed.json()
+    assert body["state"] != "intent_created", "the call actually progressed"
+    assert body["assurance"] != "l0_anonymous", "the app session still identifies them (`D4`)"
+    assert body["queue_id"] == "q_advice_travel", "an advice desk, not a claims one"
+
+
 def test_choosing_a_reason_in_the_app_carries_the_intent(signed_in: TestClient) -> None:
     """`D41` + `D48`: both menu questions answered before the call is placed."""
     created = signed_in.post(

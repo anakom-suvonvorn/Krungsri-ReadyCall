@@ -98,6 +98,9 @@
   @keyframes rise { from { transform: translateY(14px); opacity: .6 } to { transform: none; opacity: 1 } }
   .sheet h3 { margin: 0 0 3px; font-size: 17px; }
   .sheet .sub { margin-bottom: 14px; }
+  /* The way back out of the second step (`D123`). A sheet that can go one level deeper
+     needs a way up that is not "tap outside and start again". */
+  .sheet-back { width: auto; padding: 4px 8px; font-size: 12px; color: var(--muted); border-color: transparent; background: transparent; margin: 0 0 6px -8px; }
   .reason { display: flex; gap: 10px; align-items: center; }
   .reason .k { flex: none; width: 26px; height: 26px; border-radius: 7px; background: var(--bg); border: 1px solid var(--line); display: grid; place-items: center; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
   .empty { border: 1px dashed var(--line); border-radius: 10px; padding: 14px; text-align: center; color: var(--muted); font-size: 13px; }
@@ -199,7 +202,9 @@
         <button id="contact-general">📞 Contact us — something else</button>
       </div>
       <p class="note">Tapping opens a list of reasons. Choosing one means this caller can
-        skip the phone menu entirely.</p>
+        skip the phone menu entirely. <b>Something else</b> asks which kind of cover first,
+        because that is the one question the app cannot answer for them — it is how you ask
+        about cover you do not hold yet.</p>
       <button class="ghost" id="logout" style="margin-top:10px">Sign out</button>
     </section>
   </div>
@@ -255,10 +260,11 @@
 
 <div class="scrim hidden" id="scrim">
   <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+    <button class="sheet-back hidden" id="sheet-back">← ย้อนกลับ</button>
     <h3 id="sheet-title">เรื่องที่ต้องการติดต่อ</h3>
     <div class="sub" id="sheet-sub">What is this about?</div>
     <div class="stack" id="reasons"></div>
-    <p class="note">These are the <b>same options the phone menu offers</b> — one
+    <p class="note" id="sheet-note">These are the <b>same options the phone menu offers</b> — one
       <code>menus.yaml</code>, two surfaces. Tap outside to cancel.</p>
   </div>
 </div>
@@ -363,40 +369,87 @@
     box.firstChild.click();
   }
 
-  // --- 3. tap Contact -> pick a reason (D48) -----------------------------------------
+  // --- 3. tap Contact -> pick a reason (D48, D122, D123) -----------------------------
   function closeSheet() { $("scrim").classList.add("hidden"); }
   $("scrim").onclick = (e) => { if (e.target === $("scrim")) closeSheet(); };
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSheet(); });
 
-  async function openReasons(plan) {
-    // `context` is the whole of `D122`. "About THIS plan" is a different question from
-    // "something else": the app knows they HOLD this cover, so offering them "buy travel
-    // insurance" — which is what the unfiltered phone menu did — is nonsense. The phone
-    // menu is written for somebody we know nothing about.
-    const line = plan ? plan.product_line : "unknown";
-    const context = plan ? "plan" : "general";
-    const data = await api(
+  function showSheet({ sub, note, back }) {
+    $("sheet-sub").textContent = sub;
+    $("sheet-note").innerHTML = note;
+    // The back button is a step-2 thing only, and it must be REWIRED every time rather
+    // than left holding whichever line was picked first.
+    $("sheet-back").classList.toggle("hidden", !back);
+    $("sheet-back").onclick = back || null;
+    $("reasons").innerHTML = "";
+    $("scrim").classList.remove("hidden");
+    return $("reasons");
+  }
+
+  function addRow(box, key, label, onPick) {
+    const b = document.createElement("button");
+    b.className = "reason";
+    b.innerHTML = `<span class="k">${key ?? "•"}</span><span>${label}</span>`;
+    b.onclick = onPick;
+    box.appendChild(b);
+  }
+
+  async function loadReasons(line, context) {
+    return api(
       "GET",
       `/v1/app/contact-reasons?product_line=${encodeURIComponent(line)}&context=${context}`,
     );
-    $("sheet-sub").textContent = plan
-      ? `${plan.name_th} — what is this about?`
-      : "Not about a specific plan — what is this about?";
-
-    const box = $("reasons");
-    box.innerHTML = "";
-    for (const r of data.reasons) {
-      const b = document.createElement("button");
-      b.className = "reason";
-      b.innerHTML = `<span class="k">${r.key ?? "•"}</span><span>${r.label_th}</span>`;
-      b.onclick = () => { closeSheet(); placeCall(plan, r); };
-      box.appendChild(b);
-    }
-    $("scrim").classList.remove("hidden");
   }
 
-  $("contact").onclick = () => openReasons(state.plan);
-  $("contact-general").onclick = () => openReasons(null);
+  // Step 2 for a plan they HOLD. `context=plan` is the whole of `D122`: the app knows they
+  // own this cover, so offering them "buy travel insurance" — which is what the unfiltered
+  // phone menu did — is nonsense. The phone menu is written for somebody we know nothing
+  // about.
+  async function openReasons(plan) {
+    const data = await loadReasons(plan.product_line, "plan");
+    const box = showSheet({
+      sub: `${plan.name_th} — what is this about?`,
+      note: `These are the phone menu's options for this line, <b>filtered to what makes
+        sense for somebody who already holds it</b> — one <code>menus.yaml</code>, two
+        surfaces (<code>D122</code>). Tap outside to cancel.`,
+    });
+    for (const r of data.reasons) addRow(box, r.key, r.label_th, () => { closeSheet(); placeCall(plan, r); });
+  }
+
+  // Step 1 of the "something else" branch (`D123`). This is the keypad's OWN first
+  // question, and it is deliberately unfiltered: a customer who has not tapped a policy
+  // has told us exactly as little as somebody who has just dialled. Until this existed,
+  // "something else" went straight to `general_reason` — account admin — so there was no
+  // way to ask about cover they do not have yet, which is journey step 3.
+  async function openLines() {
+    const data = await api("GET", "/v1/app/contact-lines");
+    const box = showSheet({
+      sub: "Not about a plan you hold — what kind of cover?",
+      note: `The <b>same step-1 menu the phone asks first</b>. Picking one shows that
+        line's reasons filtered to <code>general</code> — where "buy travel insurance"
+        finally lives (<code>D123</code>).`,
+    });
+    for (const line of data.lines) {
+      addRow(box, line.key, line.label_th, () => openGeneralReasons(line));
+    }
+  }
+
+  // Step 2 of that branch. `unknown` is not special-cased: it is the keypad's own
+  // "เรื่องอื่นๆ", and it lands on `general_reason`, which is exactly where this branch
+  // used to start.
+  async function openGeneralReasons(line) {
+    const data = await loadReasons(line.product_line, "general");
+    const box = showSheet({
+      sub: `${line.label_th} — what is this about?`,
+      note: `Filtered to <code>context=general</code>: cover they do <b>not</b> hold yet.
+        Same taxonomy, different list.`,
+      back: openLines,
+    });
+    for (const r of data.reasons) addRow(box, r.key, r.label_th, () => { closeSheet(); placeCall(null, r); });
+  }
+
+  $("contact").onclick = () => { if (state.plan) openReasons(state.plan); };
+  $("contact-general").onclick = () => openLines();
 
   async function placeCall(plan, reason) {
     try {

@@ -120,6 +120,25 @@ class ContactReasonsResponse(ApiModel):
     reasons: tuple[ContactReason, ...]
 
 
+class ContactLine(ApiModel):
+    """One kind of cover the customer can ask about, for the "something else" branch.
+
+    The same step-1 menu the keypad asks first (`menus.yaml` -> `product_line`), because a
+    customer asking about cover they do NOT hold has told us exactly as little as a caller
+    on a keypad has (`D123`). The app can filter the *reason* list that follows, since it
+    knows the situation; it cannot filter this one, because this is the question that
+    establishes the situation.
+    """
+
+    key: str
+    label_th: str
+    product_line: str
+
+
+class ContactLinesResponse(ApiModel):
+    lines: tuple[ContactLine, ...]
+
+
 # --- demo only ---------------------------------------------------------------------------
 
 

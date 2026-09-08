@@ -4698,3 +4698,79 @@ having failed to load rather than as a deliberate view.
 **And the customer's วางสาย had to become real**, which turned out to be `B38` rather than
 a wiring job.
 
+
+## D123. "Something else" asks which kind of cover, because that is how you ask for cover you do not have
+_Taken 2026-09-08. Completes the half of `D122` that was filtered correctly and then left
+with nowhere to go. Journey step 3, which `D115` calls the brief's biggest leak._
+
+- **Problem.** `D122` split the app's contact menu in two and got the *"about this plan"*
+  half right: an option that only makes sense for somebody **without** the cover is
+  filtered out, so a customer holding a travel policy is no longer offered
+  *"ซื้อประกันเดินทาง"*.
+
+  The other half — *"something else"* — went straight to `general_reason`, which is
+  account admin: change my details, request a document, pay a premium, complain. So the
+  app could ask about **a policy they hold** and about **their own paperwork**, and could
+  not ask about **cover they do not have yet.** The new-business options were not missing;
+  they were sitting in the per-line reason menus, in the `general` context, reachable from
+  the keypad and from nothing else. `travel.advice.quote` is the clean example: filtered
+  out of the plan surface by `D122`, and shown on no other surface.
+
+  That is not a small gap. Journey step 3 — แนะนำสินค้า — is the leak the brief marks
+  **สูงสุด**, `*.advice.compare` is the broker's actual mandate (`D117`), and the app is
+  the channel with the most context. It was the one thing the app could not do.
+
+- **Decision.** Put the keypad's **own first question** in front of that branch:
+  `GET /v1/app/contact-lines` returns the `product_line` menu, the app shows it, and
+  picking a line fetches that line's reasons at `context=general`.
+
+### Why this is the step-1 menu rather than a new one
+
+Adding a line means editing `menus.yaml`, exactly as it does for the IVR. A hand-written
+list of lines in the app would fork the taxonomy at the one question the entire rest of the
+walk depends on — the failure `D48` exists to prevent, at the worst possible node.
+
+### And why this list is deliberately NOT filtered
+
+`contexts` describes **reasons**. This question is the thing that *establishes* the
+context: a customer who has not tapped a policy has told us exactly as little as somebody
+who has just dialled, so there is nothing to filter on — which is `D122`'s own argument for
+why the IVR is never filtered, arriving one level up. Filtering here would mean guessing
+what they want before asking, and the guess we could make (hide lines they already hold) is
+backwards: a second car and a top-up over group cover are both real.
+
+### `unknown` is a row, not a special case
+
+The keypad's own *"เรื่องอื่นๆ"* is one of the options, and following it lands on
+`general_reason` — which is exactly where this branch used to start. Nothing was taken
+away; a step was put in front of it. That also means the endpoint has no bespoke fallback
+logic to disagree with `reason_menu_for`'s.
+
+### What this did NOT change
+
+No config, no menu, no intent, no service logic. One read-only endpoint over the pack the
+app was already reading, plus the app's own second step. The per-context startup guards
+from `D122` are what make it safe to iterate the lines blindly: a reason menu that is empty
+in either context, or that loses its catch-all in either, already refuses to boot — so
+"every line the app offers leads somewhere with a way out" is guaranteed by the loader
+rather than by this endpoint remembering to check.
+
+⚠️ **Noticed while doing it, and deliberately not acted on:** `motor.advice.quote`,
+`health.advice.quote` and `life.advice.quote` exist as intents, with slots and playbooks,
+and **no menu reaches any of them** — only `travel.advice.quote` is on a menu. It is not
+dead config exactly (a client may name any intent, and a future "get a quote" tool would
+raise one), but on every human surface those three lines answer "I want to buy" with
+*"เปรียบเทียบแผนและขอราคา"* — compare plans and ask a price — which is a reasonable label
+for the same conversation. Splitting them would add a seventh option to three phone menus,
+and that is a domain call rather than an engineering one. Recorded as `Q36`.
+
+### Verified in a browser, not from the tests
+
+On a running server: signed in to `/sim` as คุณภัทธีรา (C000001, who holds two health
+policies and a motor one and **no travel cover**), pressed *Contact us — something else*, got the four lines plus เรื่องอื่นๆ
+(`GET /v1/app/contact-lines`), chose ประกันเดินทาง, and the reason list came back carrying
+**ซื้อประกันเดินทาง** — the option the user found missing —
+(`GET /v1/app/contact-reasons?product_line=travel&context=general`). Choosing it placed a
+real call: `POST /v1/calls/intents` 201, `POST /v1/demo/calls` 200, the app turned into a
+call screen with a ticking timer, and the call routed to **`q_advice_travel`** at
+**`l3_verified`** — an advice desk, from a customer holding no travel policy at all.

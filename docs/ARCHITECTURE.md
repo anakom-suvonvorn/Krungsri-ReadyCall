@@ -6,7 +6,7 @@ the STT engine chosen on measurements (`D104`), the live transcript on the agent
 (`D106`) and the encrypted recording in object storage (`D110`). The analysis passes and
 the telephony integration are still design.
 Each section says what is real where it matters. See `PLAN.md` for the build order._
-_Last updated: 2026-09-07._
+_Last updated: 2026-09-08._
 
 ---
 
@@ -194,6 +194,11 @@ agent's browser tab and the ringtone plays through their headset (§9, `D32`).
 2. **Tap Contact** on a plan → `POST /v1/calls/intents` `{product_code, plan_id, entry_screen,
    preferred_channel, consent_flags}`. The customer is identified from the **app session token,
    server-side**; the client never asserts identity. (`D4`)
+   ⚠️ **Or tap Contact without a plan** (`D123`): the app asks which kind of cover first
+   (`GET /v1/app/contact-lines`) and then that line's reasons at `context=general`, which
+   is how somebody asks about cover they do not hold. Same endpoint afterwards, with no
+   `product_code` — journey step 3 rather than step 5.
+
 3. A `CallIntent` is created (`PENDING`, `expires_at` ≈ 15 min) returning
    `{intent_id, correlation_token, dial_target}`.
 4. **Context prefetch fires immediately**, asynchronously, off the request path:
@@ -293,14 +298,21 @@ customer (if any), product, snapshot and queue.
 > they differ, so every press is resolved back to canonical before anything records it
 > (`D81`).
 
-> **An app caller skips all of this (`D48`, amended by `D122`).** Tapping Contact opens a
-> reason sheet in the app, populated from the *same `menus.yaml` this IVR reads*, so both
-> menu questions are answered before the phone rings. One menu, two surfaces — but **not
-> the same list**: the app knows whether the customer tapped a policy they hold or asked
-> about something else, and each option declares which of those it belongs to
-> (`contexts: [plan, general]`). The IVR is never filtered, because a keypad caller has
-> told us nothing yet. Offering *"buy travel insurance"* under a travel policy somebody
-> already owns is the bug that forced the distinction.
+> **An app caller skips all of this (`D48`, amended by `D122` and `D123`).** Tapping
+> Contact opens a reason sheet in the app, populated from the *same `menus.yaml` this IVR
+> reads*, so both menu questions are answered before the phone rings. One menu, two
+> surfaces — but **not the same list**: the app knows whether the customer tapped a policy
+> they hold or asked about something else, and each option declares which of those it
+> belongs to (`contexts: [plan, general]`). The IVR is never filtered, because a keypad
+> caller has told us nothing yet. Offering *"buy travel insurance"* under a travel policy
+> somebody already owns is the bug that forced the distinction.
+>
+> **And the other branch asks step 1 first** (`D123`). *"Something else"* used to go
+> straight to `general_reason` — account admin — so the app could not ask about cover the
+> customer does **not** hold, which is journey step 3 and the brief's biggest leak. It now
+> asks the keypad's own first question (`GET /v1/app/contact-lines`, the `product_line`
+> menu, deliberately unfiltered because this is the question that establishes the context)
+> and then shows that line's reasons at `context=general`.
 
 ### The spoken flow
 

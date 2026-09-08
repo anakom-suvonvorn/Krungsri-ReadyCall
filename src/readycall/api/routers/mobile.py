@@ -14,6 +14,8 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, status
 from readycall.api.deps import ContainerDep, PrincipalDep
 from readycall.api.schemas import (
     AssistRespondFromApp,
+    ContactLine,
+    ContactLinesResponse,
     ContactReason,
     ContactReasonsResponse,
     ContextEventRequest,
@@ -180,6 +182,46 @@ async def contact_reasons(
             )
         )
     return ContactReasonsResponse(product_line=str(line), reasons=tuple(reasons))
+
+
+@router.get(
+    "/app/contact-lines",
+    response_model=ContactLinesResponse,
+    summary="Which kind of cover is this about (the 'something else' branch)",
+)
+async def contact_lines(principal: PrincipalDep, container: ContainerDep) -> ContactLinesResponse:
+    """The step-1 menu, for a customer asking about cover they do not hold (`D123`).
+
+    `D122` filtered the *"about this plan"* list correctly and left the other branch —
+    *"something else"* — showing only `general_reason`, which is account admin. So the app
+    could ask about a policy the customer holds and about their own details, and could not
+    ask about **cover they do not have yet**. That is journey step 3, the brief's biggest
+    leak (`D115`), reachable from the keypad and from nothing else.
+
+    The fix is not a new menu. It is the one the keypad already asks first: *which kind of
+    cover?* An app customer who has not tapped a policy has told us exactly as little as a
+    caller who has just dialled, so this list is **not filtered** — `contexts` describes
+    reasons, and the situation this question establishes is the thing a context names. The
+    per-line reason menu that follows is then fetched at `context=general`, where the
+    options that only make sense for somebody *without* the cover finally become reachable
+    (`travel.advice.quote` — *"ซื้อประกันเดินทาง"* — is the one the user found missing).
+
+    `product_line: unknown` is one of the rows rather than a special case: it is the
+    keypad's own *"เรื่องอื่นๆ"*, and following it lands on `general_reason`, which is
+    exactly where this branch used to start. Nothing was taken away; a step was put in
+    front of it.
+    """
+    root = container.pack.menus.get("product_line")
+    lines = tuple(
+        ContactLine(
+            key=option.key,
+            label_th=option.label_th,
+            product_line=str(option.product_line or ProductLine.UNKNOWN),
+        )
+        for option in (root.options if root else ())
+        if option.next_menu
+    )
+    return ContactLinesResponse(lines=lines)
 
 
 @router.post(

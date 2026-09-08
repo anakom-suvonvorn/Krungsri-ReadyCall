@@ -54,11 +54,11 @@ the disclosure gate moves when the agent attests. **What they said while waiting
 screen** (`D106`), and if they consented, **their audio is in object storage encrypted**
 (`D110`) with a key ref and a retention date. If they declined, it is nowhere.
 
-Verified on 2026-09-08: **859 tests** — 847 pass + 12 skipped with Postgres and MinIO both
+Verified on 2026-09-08: **862 tests** — 850 pass + 12 skipped with Postgres and MinIO both
 up (the 12 are foreign-key cases the in-memory backend cannot have, and the `ml`-extra ones).
 Without those containers the count of skips rises and nothing fails.
-`ruff check` and `ruff format --check` clean over **202** files, `mypy --strict`
-clean over **145** source files, 69/69 diagrams current, the prompt pack fresh, and all three
+`ruff check` and `ruff format --check` clean over **217** files, `mypy --strict`
+clean over **153** source files, 69/69 diagrams current, the prompt pack fresh, and all three
 scenarios replay byte-identically. The database suites ran against a **live Postgres** on
 2026-09-02, and a restart was verified outside pytest with two real uvicorn processes.
 
@@ -341,9 +341,9 @@ Postgres · ☑ Alembic no longer churns foreign keys, and the suite has its own
 (`D79`)
 
 **P3 — voice, IVR & intake v1** (steps 1-3 and step 4a done; the audio is what remains)
-☑ `config/voice_prompts.yaml` — **27 prompts**, 15 flow roles, declared slots · ☑ the guard that
+☑ `config/voice_prompts.yaml` — **28 prompts**, 15 flow roles, declared slots · ☑ the guard that
 every referenced prompt id resolves, **in both directions**, as a startup gate and a test · ☑
-`scripts/build_prompts.py` — hash-cached by (text, voice, engine), deduped to **54 clips**,
+`scripts/build_prompts.py` — hash-cached by (text, voice, engine), deduped to **59 clips**,
 committed manifest asserted fresh (`D24`) · ☑ **`services/ivr/`**: greeting + notice, menu-first
 routing, one reserved key, unlimited wrong presses (`D82`), silence bounded, personalised ordering
 with its evidence (`D37`) · ☑ a menu is composed, not one clip (`D80`) · ☑ `menu_path` is canonical
@@ -378,8 +378,13 @@ closing `Q7`) · ☐ intent classifier wired to the blend · ☐ entity extracti
 **Not in any phase — the customer's paired screen** (`D120`, 2026-09-07)
 ☑ pairing a call to a screen, three entry paths · ☑ the guest/verified tier gate ·
 ☑ push comparison / info / navigate · ☑ **push a form and get the answer back**, end to end ·
-☑ `apps/customer_assist/`, one static page · ☐ sending the link (P5's `NotifierPort`) ·
-☐ signature, OCR, document upload · ☐ merging with `customer_sim`
+☑ `apps/customer_assist/`, one static page · ☑ **the tool rail on the workstation**, with
+the gate read per TOOL from `config/assist_tools.yaml` rather than per kind (`D121`) ·
+☑ **the app places a real call and becomes the paired screen** (`D122`, `B36`) ·
+☑ **contact menus filtered per context**, and the *"something else"* branch asking which
+kind of cover first so new business is reachable at all (`D122`, `D123`) ·
+☐ sending the link (P5's `NotifierPort`) · ☐ signature, OCR, document upload ·
+☐ merging with `customer_sim` · ☐ **transfer** (`D63` + the second tab; next up)
 
 **P5 — real telephony** ☐ Asterisk + ARI adapter · ☐ TLS/WSS certs · ☐ **in-browser softphone
 (SIP.js, devices, self-test, reconnect)** · ☐ customer WebRTC path · ☐ PSTN/ANI identification ·
@@ -456,7 +461,7 @@ performing by hand, i.e. what the next services take over (`D36`).
 | Process entrypoints | **2** of `D2`'s four: `api.py` and `stt.py` (`D112`). `worker.py` and `media.py` are still one process with the API |
 | Persisted tables | **11** + Alembic, verified on a live Postgres - `audio_recordings` (`D110`) and `transcript_turns` (`D114`) added 2026-09-06. Presence, the waiting pool and the live identity are deliberately **not** among them (`D78`) |
 | Adapters | 9 fakes/nulls + two decorators (`CachingCoreDataProvider`, `EncryptingBlobStorage`), **plus seven real ones**: `SileroVad`, `EnergyVad`, `TyphoonAsrEngine`, `FasterWhisperEngine`, `ThonburianHfEngine`, `LocalFsBlobStorage`, `S3BlobStorage` |
-| Spoken lines | 27 prompts + 15 flow roles -> **54 distinct clips** after dedupe (`D80`); rendered by the null engine, so a manifest rather than audio |
+| Spoken lines | 28 prompts + 15 flow roles -> **59 distinct clips** after dedupe (`D80`); rendered by the null engine, so a manifest rather than audio |
 | Call states | 15, transition table self-validated (the rating is an event, not a state — `D46`) |
 | Event types | 19 |
 | Scenarios | 3 (in-app happy path, cold-call motor claim, fully degraded) |

@@ -23,7 +23,7 @@ somebody calls it.** `grep -rn "\.method_name(" src/` is thirty seconds and it h
 been the answer nine times.
 
 The second pattern, worth equal weight: **every one of these was found by the user
-pressing a button, never by the suite.** 859 tests pass and did not see any of it. When
+pressing a button, never by the suite.** 862 tests pass and did not see any of it. When
 they report something, believe the report before believing the tests.
 
 ⚠️ **And `B39`'s specific lesson, because it cost a whole round trip:** when the user
@@ -78,16 +78,19 @@ with PyMuPDF at ~110 dpi and read the PNGs. An empty extraction is not an empty 
 | folding the plumbing should CENTRE the app | correct | **DONE** |
 | *"the วางสาย button STILL doesn't work during a call"* | correct — I had fixed only the edge case | **DONE** (`B39`) |
 
-**Two things from those notes are still NOT started, and they are the next work:**
+**One of those two is now done; the other is the next work:**
 
-1. **"Contact us — something else" has no new-business path.** `D122` filtered the
-   *"about this plan"* menu correctly, but *"something else"* still shows only the general
-   admin menu. A customer who wants a **new** travel policy from the app cannot ask for
-   one — the new-business options exist and are reachable only per line, which the app
-   never requests. That is journey step 3, the brief's biggest leak, so it matters.
+1. ~~**"Contact us — something else" has no new-business path.**~~ **DONE 2026-09-08
+   (`D123`).** The branch now asks the keypad's own step 1 — *which kind of cover?* —
+   from `GET /v1/app/contact-lines`, and then that line's reasons at `context=general`.
+   `travel.advice.quote` (*"ซื้อประกันเดินทาง"*) is reachable from the app at last;
+   before this it existed only on the keypad. Verified in a browser: the call placed from
+   that path routed to `q_advice_travel` at `l3_verified`, from a customer holding no
+   travel cover.
 2. **Transfer** (the user's two-tab design: internal roster + hand to another company with
    a reason). Extends `D63`, which was designed at P2b and never built. The second tab is
    new and is `D117`'s handoff becoming a thing the broker *does* rather than reads.
+   **This is the next item.**
 | *"it feels like a hackathon without AI"* | half a misreading, half a real gap | **NOT STARTED.** See below |
 | transfer button beside วางสาย, two tabs (internal / other company) | correct, and the second tab is new | **NOT STARTED.** Extends `D63` |
 | register the customer via a pushed form, or push the app download? | their own second instinct is right | **DECIDED** in `D121`: push the download, registration belongs to the bank's app |
@@ -280,9 +283,13 @@ moment in the recording it was said — **and if they consented, their audio is 
 storage encrypted, with the key ref and the retention date on an `audio_recordings` row.**
 If they declined, it is nowhere.
 
-Verified **2026-09-08**: **859 tests** — 847 pass + 12 skipped. `ruff check` +
-`ruff format --check` clean over 218 files, `mypy --strict` clean over 151, all scenarios
-replay, 69/69 diagrams current, prompt pack fresh, `audit_docs.py` clean on the live files.
+Verified **2026-09-08 (evening)**: **862 tests** — 850 pass + 12 skipped, with Postgres
+and MinIO both up. `ruff check` + `ruff format --check` clean over 217 files,
+`mypy --strict` clean over 153, 69/69 diagrams current, prompt pack fresh, `audit_docs.py`
+clean on the live files. **And by driving `/sim` in a browser** (`D123`): *Contact us —
+something else* asked which kind of cover, ประกันเดินทาง returned **ซื้อประกันเดินทาง** —
+the option that had existed only on the keypad — and choosing it placed a real call that
+routed to `q_advice_travel` at `l3_verified` from a customer holding no travel policy.
 **And by driving the workstation in a browser**: link minted from the panel, tool box
 opened (11 tools, exactly the 5 personal ones locked), a blank quote form pushed to a
 GUEST screen at 375 px, filled in, submitted, and read back on the broker's screen; then
@@ -362,7 +369,7 @@ because it is now **twenty-two** and they rhyme:
    day. `B36` was an entry path that had been **broken since P1b** and that nothing had
    ever executed.
 15. **`B32`/`B33` (2026-09-08)** — both found in ten minutes of *using* the tool rail, and
-   neither visible to 859 tests. The catalogue was fetched on mount, before sign-in, so it
+   neither visible to 862 tests. The catalogue was fetched on mount, before sign-in, so it
    401'd into a defensive `catch` and the rail was empty for the shift. And the dialog's
    2-second poll was rebuilt every render — the workstation re-renders every second — so
    it never fired once, which looked exactly like the server not returning the customer's
@@ -419,7 +426,8 @@ event bus.
 `services/context/assembler.py` (parallel fan-out, per-field provenance, frozen snapshot) ·
 `services/brief/builder.py` · `adapters/core_data/caching.py` (TTL + serve-stale + breaker).
 
-**P1b — the HTTP layer.** `POST /v1/calls/intents` · app context events · contact reasons ·
+**P1b — the HTTP layer.** `POST /v1/calls/intents` · app context events · contact reasons
+(filtered per context since `D122`, preceded by the line question since `D123`) ·
 **customer simulator** at `/sim`, one HTML file, no build step (`D47`). Identity comes from
 a `SessionResolver`, never the request body (`D4`).
 
@@ -445,11 +453,11 @@ write durably, restore at startup · presence, the waiting pool and the live ide
 **derived, never stored twice** (`D76`, `D78`) · `Container` reads `STORAGE_BACKEND` ·
 a restart is proved by **ending a process**, in pytest and again with real uvicorn.
 
-**P3 (steps 1–3) — the line.** `config/voice_prompts.yaml`: **27 prompts**, declared slots,
+**P3 (steps 1–3) — the line.** `config/voice_prompts.yaml`: **28 prompts**, declared slots,
 and a `flow:` table mapping **15 roles** to ids so `services/` holds no prompt literals
 (`D28`) · the guard that every referenced id resolves, **both directions**, as a startup
 gate *and* a test · `scripts/build_prompts.py` hash-cached by (text, voice, engine), deduped
-by rendered text to **54 clips**, committed manifest asserted fresh · **`services/ivr/`** —
+by rendered text to **59 clips**, committed manifest asserted fresh · **`services/ivr/`** —
 greeting + notice → product menu (skipped when the DID or app said) → reason menu → queue,
 with `0` the only reserved key (`D86`, `D90`), a wrong press never a strike (`D82`), and every
 failure path ending in a queue rather than a hang-up · personalised ordering with its
@@ -618,12 +626,13 @@ for its estimates and its "if the week collapses" line, not as a to-do list._
 
 ### The actual queue, in order
 
-1. **"Contact us — something else" needs a new-business path.** Half-finished by `D122`:
-   the *"about this plan"* menu is filtered correctly, and *"something else"* still shows
-   only general admin. A customer cannot ask about cover they do not have yet, which is
-   journey step 3 — the brief's biggest leak. Wants a line-selection step in the app
-   feeding the per-line menus filtered to `general`. **The config already supports it**
-   (`contexts:`); this is app UI plus one endpoint call.
+1. ~~**"Contact us — something else" needs a new-business path.**~~ ✅ **DONE
+   2026-09-08 (`D123`)** — and it was exactly what this said it was: one read-only
+   endpoint (`GET /v1/app/contact-lines`, the `product_line` menu) plus a second step in
+   `/sim`. No config, no menu, no intent, no service logic. ⚠️ It left one thing behind,
+   recorded as **`Q36`**: `motor.advice.quote`, `health.advice.quote` and
+   `life.advice.quote` exist with slots and playbooks and **no menu reaches any of them**
+   — only travel's does.
 2. **Transfer** — the user's design: a button beside วางสาย, a dialog with **two tabs**,
    internal (roster, filtered) and **to another company** (pick the insurer, pick a
    reason). Extends `D63` (designed at P2b, never built); the second tab is new and is
@@ -783,6 +792,7 @@ GPU should own the demo machine. Typhoon uses 1068 MB, so P4's model is the ques
 | Q15 | Matching weights are guesses | Tune against real volumes; `--compare` exists to re-measure |
 | **Q34** ⚠️ **NEW 2026-09-07** | **What the customer submits through a pushed form is not stored anywhere** (`D120`). The broker reads it off their screen and types it into the wrap-up. That is honest for a demo and wrong for a product: the customer filled in a form and the system kept no record of it. It wants a real table and a retention rule (`D14`), not a longer-lived dict — and the moment a signature or an upload lands, it stops being optional. | In memory, dies with the call |
 | **Q35** ⚠️ **NEW 2026-09-07** | **The AI summary takes 4.5 s, against a 1 s brief budget** (`D119`, `ARCHITECTURE` §15). Survivable only because it is fire-and-forget after Accept, so nobody waits. But the pitch says "the agent has the brief before they speak", and 4.5 s is after. Options: accept it and describe it accurately, move to a smaller model, shorten the prompt, or stream. **Do not quietly restate the budget as met.** | Accepted, because nobody waits |
+| **Q36** ⚠️ **NEW 2026-09-08** | **Three `*.advice.quote` intents are reachable from no menu.** `motor.advice.quote`, `health.advice.quote` and `life.advice.quote` have labels, slots (`vehicle`/`usage`/`coverage_level`, `age`/`budget`/`hospital_preference`, …) and playbooks, and no option in `menus.yaml` names them — only `travel.advice.quote` is on a menu. Found while building `D123`. On every human surface those three lines answer *"I want to buy"* with **เปรียบเทียบแผนและขอราคา** (`*.advice.compare`), whose own required slots include `current_policy_no` — a field a brand-new customer does not have, so the routed brief asks the broker for something that cannot exist. Splitting them adds a **seventh** option to three phone menus, which is a real cost on a keypad and none at all in the app. Options: (a) leave it — one option covers both conversations and the label says so; (b) add the quote options to all three reason menus, accepting seven-option phone menus; (c) add them with `contexts: [general]`… which does **not** help, because the IVR ignores `contexts` by design (`D122`), so the phone menu grows either way. This is a domain call, not an engineering one. | **Not acted on.** `D123` records the reasoning |
 | **Q16** | **A keypad lookup confirms a policy number at L1.** The caller supplied the digits and the agent must not read them aloud below L2 — but it is a confirmation oracle. Designed this way in `D44`; worth a second look. | Allowed |
 | **Q17** | **Commit `apps/workstation/dist/`?** It is gitignored, so a fresh clone has no workstation until `npm run build` runs — and on a venue with no internet, `npm install` is what fails. | Not committed |
 | **Q18** | **"Not this person" is a one-way door.** It clears the customer exactly as `D42` asks, but leaves the agent with nobody to attach the call to, and customer search does not exist (`D32` defers lookup). A rejected call stays anonymous for its duration. A test asserts this so it fails the day search lands. **Now visible rather than silent (`D61`)**: the two forward outcomes are disabled with the reason in the tooltip instead of answering 400. | Accepted for now |
