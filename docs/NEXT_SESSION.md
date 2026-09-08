@@ -54,6 +54,27 @@ Three constraints from `MARKET_FACTS` that shape every plan:
 ⚠️ Half those slides are images with no text layer, so `pypdf` returns empty pages. Render
 with PyMuPDF at ~110 dpi and read the PNGs. An empty extraction is not an empty slide.
 
+### What landed on 2026-09-08 (evening), in four commits
+
+Read this before the queue below — the queue reflects it, but this is the shape of it.
+
+| | what it is | the one thing to know |
+|---|---|---|
+| `D123` | *"something else"* asks **which kind of cover** first | the keypad's own step 1, unfiltered on purpose: that question is what *establishes* the context, so `contexts` cannot filter it. `travel.advice.quote` is reachable from the app at last |
+| `D124` | handing the call to the insurer is an **action** | `D117`'s banner became a button beside วางสาย. ⚠️ It does **not** use `CallState.TRANSFERRED` — see `Q37`. The **internal** transfer tab is a labelled stub and is **a scope call waiting on you** |
+| `D125` | the plan catalogue is **live data behind the port**, not a yaml | your correction, and it was a category error about to be made. Found two quiet faults: two policies pointed at product codes in no catalogue, and one carrier was spelled two ways |
+| `D126` | compare & best-fit, **ranked on facts** | the model writes only the reason sentence. ⚠️ Found a real leak: the table's first column is the customer's own cover on a tool declared `personal: false`. The **column** is gated now, not the tool |
+
+**Two things want your decision**, and both are written up where they belong:
+
+1. **The internal transfer tab** (`D124`'s last section). It needs a transfer offer
+   distinct from a queue offer, plus a rework of *"which call is mine"* inside
+   `services/agents/` — where `B7`, `B25` and `B28` all lived — four days before the
+   pitch. The external half is complete and is the one that expresses `D117`.
+2. **`Q36`** — three `*.advice.quote` intents that no menu reaches. Splitting *"buy"* from
+   *"compare"* adds a seventh option to three phone menus. A domain call, not an
+   engineering one.
+
 ### The 2026-09-08 notes, and what each became
 
 | the note | verdict | state |
