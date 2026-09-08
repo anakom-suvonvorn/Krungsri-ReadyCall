@@ -7,10 +7,13 @@ the real app later changes nothing on this side.
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, BackgroundTasks, HTTPException, status
 
 from readycall.api.deps import ContainerDep, PrincipalDep
 from readycall.api.schemas import (
+    AssistRespondFromApp,
     ContactReason,
     ContactReasonsResponse,
     ContextEventRequest,
@@ -19,7 +22,9 @@ from readycall.api.schemas import (
     CreateIntentResponse,
     IntentStatusResponse,
 )
-from readycall.domain.enums import ProductLine
+from readycall.domain.enums import CallState, ProductLine
+from readycall.domainpack import MENU_CONTEXTS
+from readycall.errors import PermanentError
 from readycall.logging import call_context, get_logger
 from readycall.services.context.store import AppContextEvent
 
@@ -127,17 +132,28 @@ async def contact_reasons(
     principal: PrincipalDep,
     container: ContainerDep,
     product_line: str = "unknown",
+    context: str = "general",
 ) -> ContactReasonsResponse:
-    """The reasons the app shows after the customer taps Contact (`D48`).
+    """The reasons the app shows after the customer taps Contact (`D48`, `D122`).
 
-    Read from the **same `menus.yaml` the IVR reads**. That is the whole point: the app and
-    the keypad offer one menu through two surfaces, so a customer sees the same options
-    whichever door they came through, and the taxonomy cannot fork.
+    Read from the **same `menus.yaml` the IVR reads**. One taxonomy, two surfaces, so the
+    options cannot fork — and answering here is strictly better UX than answering on the
+    phone, because reading five options takes a second on a screen and thirty in an
+    earpiece (`D41`).
 
-    Answering here is also strictly better UX than answering on the phone — reading five
-    options takes a second on a screen and thirty in an earpiece — and it means an app
-    caller can skip the IVR entirely (`D41`).
+    **But not the same LIST** (`D122`). `context` says which situation the customer is in:
+
+    * `plan` — they tapped a policy they hold. The line is known *and so is the fact that
+      they own cover on it*, so options that only make sense for somebody without it are
+      filtered out. This is the surface that was offering *"ซื้อประกันเดินทาง"* — buy
+      travel insurance — to a customer holding a travel policy.
+    * `general` — "something else": account-level admin, or cover they do not have yet.
+
+    The IVR does not pass a context and is not filtered: a keypad caller has told us
+    nothing about what they hold, so there is nothing to filter on.
     """
+    if context not in MENU_CONTEXTS:
+        raise HTTPException(status_code=400, detail=f"unknown context {context!r}")
     try:
         line = ProductLine(product_line)
     except ValueError:
@@ -151,13 +167,15 @@ async def contact_reasons(
 
     reasons: list[ContactReason] = []
     for option in menu.options if menu else ():
-        if not option.intent:
+        if not option.intent or not option.shown_in(context):
             continue
-        spec = container.pack.intents.get(option.intent)
+        # The OPTION's label, not the intent's: the same intent is a different
+        # conversation depending on where it is offered from, which is what
+        # `label_plan_th` exists for (`D122`).
         reasons.append(
             ContactReason(
                 intent_code=option.intent,
-                label_th=spec.label_th if spec else option.label_th,
+                label_th=option.label_for(context),
                 key=option.key,
             )
         )
@@ -190,3 +208,108 @@ async def record_context_event(
         )
     )
     return ContextEventResponse(accepted=True, events_held=held)
+
+
+# --- the in-app call, and the screen the broker can fill (D122, D120's third path) --------
+
+#: A call the CUSTOMER is on — which starts the moment they dial, not when somebody
+#: answers. Deliberately wider than the token-paired screen's set, and the difference is
+#: the point: that screen exists so a BROKER can push, which needs somebody to have
+#: accepted; this one exists so the APP can say "you are on a call", and a customer
+#: holding for ninety seconds is very much on a call. They are two different questions,
+#: so they get two sets rather than one stretched to cover both (`D50`'s argument).
+_LIVE_CALL_STATES = (
+    CallState.CONNECTING,
+    CallState.IVR,
+    CallState.QUEUED,
+    CallState.MATCHED,
+    CallState.OFFERED,
+    CallState.IN_CALL,
+    CallState.WRAP_UP,
+)
+
+#: The subset where a human is actually on the line, so the app can say which is happening
+#: instead of claiming a conversation that has not started.
+_CONNECTED_STATES = (CallState.IN_CALL, CallState.WRAP_UP)
+
+
+@router.get("/app/assist", summary="Is a call live for me, and what has the broker sent?")
+async def app_assist(principal: PrincipalDep, container: ContainerDep) -> dict[str, Any]:
+    """The in-app half of the paired screen (`D120`'s first and third rows).
+
+    `D120` described three ways a call and a screen become bound and shipped one: the
+    link. This is the other two, and they are the same code path — the app **is** the
+    paired screen, so there is no token to tap and nothing to send.
+
+    **The tier is `VERIFIED` without a sign-in step, and that is not a shortcut.** The
+    customer is already authenticated to the app; `D4`'s session is a far stronger claim
+    about who they are than tapping a link ever was. Asking them to sign in *again*, on
+    the device they are already signed in on, is the "log in to be helped" pattern the
+    link page just stopped doing.
+
+    Returns `call_active: false` when nothing is live, which is what lets the app **offer**
+    help rather than show a permanently visible button nobody can find — the reasoning
+    `AssistService.live_for` was written for and, until now, had no caller at all.
+    """
+    live = [
+        call
+        for call in await container.calls.list_in_states(*_LIVE_CALL_STATES)
+        if getattr(call, "customer_id", None) == principal.customer_id
+    ]
+    if not live:
+        return {"call_active": False, "tier": None, "items": []}
+
+    # Newest first: a customer who somehow has two live calls is looking at the one they
+    # just started, not the one that is being wrapped up.
+    call = max(live, key=lambda c: getattr(c, "started_at", None) or container.clock.now())
+    pairing = container.assist.for_call(call.call_session_id)
+    if pairing is None:
+        pairing = container.assist.open_for_call(
+            call.call_session_id, customer_id=principal.customer_id
+        )
+    session = container.assist.sign_in(pairing.token, customer_id=principal.customer_id)
+    return {
+        "call_active": True,
+        "call_session_id": call.call_session_id,
+        "connected": call.state in _CONNECTED_STATES,
+        "tier": str(session.tier),
+        "items": [
+            {
+                "item_id": i.item_id,
+                "kind": str(i.kind),
+                "title_th": i.title_th,
+                "payload": i.payload,
+                "responded": i.response is not None,
+                "response": i.response,
+                "stub": i.stub,
+            }
+            for i in session.items
+        ],
+    }
+
+
+@router.post("/app/assist/respond", summary="Send a filled form back to the broker")
+async def app_assist_respond(
+    body: AssistRespondFromApp, principal: PrincipalDep, container: ContainerDep
+) -> dict[str, Any]:
+    """The app's own respond path. Same service, no token in the URL.
+
+    The token stays server-side deliberately: on this surface it is not a credential the
+    customer holds, it is an internal handle, and putting it in a request the app has to
+    remember would invite it being treated as one.
+    """
+    live = [
+        call
+        for call in await container.calls.list_in_states(*_LIVE_CALL_STATES)
+        if getattr(call, "customer_id", None) == principal.customer_id
+    ]
+    if not live:
+        raise HTTPException(status_code=404, detail="no live call")
+    pairing = container.assist.for_call(live[0].call_session_id)
+    if pairing is None:
+        raise HTTPException(status_code=404, detail="no paired screen")
+    try:
+        container.assist.respond(pairing.token, item_id=body.item_id, response=body.response)
+    except PermanentError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True}

@@ -226,6 +226,18 @@ async def place_call(
                 else ProductLine.UNKNOWN
             ),
         )
+        # THEN DIAL (`B36`). `start_from_intent` leaves the call in `INTENT_CREATED`,
+        # which is right: tapping Contact in the app produces a dial target, and the
+        # customer has not yet rung. Only `CONNECTING` may enter the IVR, so this line is
+        # the simulated dial — the thing telephony does at P5.
+        #
+        # Its absence meant the app path through this endpoint raised
+        # `IllegalTransition: intent_created -> ivr` **every time**. Nothing had ever
+        # driven it: the simulator minted a token and stopped, and every scenario and test
+        # that reaches an agent comes in as a cold call.
+        session = await container.orchestrator.transition(
+            session, CallState.CONNECTING, reason="caller_dialled"
+        )
     else:
         session = await container.orchestrator.start_cold_call(
             caller_number=body.caller_number,

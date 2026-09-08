@@ -185,13 +185,59 @@ class DidSpec:
     assumed_intent: str | None = None
 
 
+#: The two situations an APP contact can be in (`D122`). Not used by the IVR, which shows
+#: every option because a keypad caller has told us nothing yet.
+MENU_CONTEXTS = ("plan", "general")
+
+
+def _menu_contexts(menu_id: str, option: dict[str, Any]) -> frozenset[str]:
+    raw = option.get("contexts")
+    if raw is None:
+        return frozenset(MENU_CONTEXTS)
+    values = frozenset(str(v) for v in raw)
+    unknown = values - set(MENU_CONTEXTS)
+    if unknown:
+        raise ConfigError(
+            f"menu {menu_id!r} option {option.get('key')!r} names unknown "
+            f"context(s) {sorted(unknown)}; valid are {list(MENU_CONTEXTS)}"
+        )
+    if not values:
+        raise ConfigError(
+            f"menu {menu_id!r} option {option.get('key')!r} has an empty `contexts` - "
+            "an option nobody can ever see is dead config, not a hidden option"
+        )
+    return values
+
+
 @dataclass(frozen=True, slots=True)
 class MenuOption:
+    """One option a caller can pick, on the keypad or in the app.
+
+    `contexts` is what stops the app rendering the phone's menu verbatim (`D122`). The
+    IVR ignores it entirely and always offers everything — a caller on a keypad has told
+    us nothing about what they hold, so there is nothing to filter on. The app knows
+    whether the customer tapped a policy they own or asked about something else, and those
+    are genuinely different menus: offering *"buy travel insurance"* under a travel policy
+    somebody already holds is the bug this exists to prevent.
+    """
+
     key: str
     label_th: str
     intent: str | None = None
     product_line: ProductLine | None = None
     next_menu: str | None = None
+    contexts: frozenset[str] = frozenset(MENU_CONTEXTS)
+    #: Wording for the "about a policy I hold" surface, when the same intent is a
+    #: different conversation there. Falls back to `label_th`.
+    label_plan_th: str | None = None
+
+    def label_for(self, context: str) -> str:
+        if context == "plan" and self.label_plan_th:
+            return self.label_plan_th
+        return self.label_th
+
+    def shown_in(self, context: str) -> bool:
+        return context in self.contexts
 
 
 @dataclass(frozen=True, slots=True)
@@ -618,6 +664,8 @@ class DomainPack:
                             else None
                         ),
                         next_menu=option.get("next"),
+                        contexts=_menu_contexts(menu_id, option),
+                        label_plan_th=option.get("label_plan_th"),
                     )
                     for option in body["options"]
                 ),
@@ -721,6 +769,25 @@ class DomainPack:
                 if option.intent in self.intents
             ):
                 problems.append(f"menu {menu_id!r} has no catch-all option")
+
+            # And it must survive the FILTER, in every context (`D122`). A menu whose
+            # catch-all is narrowed to one surface leaves the other with no way out for a
+            # customer whose problem is not on the list — which is exactly the failure
+            # `test_every_reason_menu_still_ends_in_a_catch_all` exists to prevent, moved
+            # one layer down by making the list depend on where it is rendered.
+            if menu_id.endswith("_reason"):
+                for context in MENU_CONTEXTS:
+                    shown = [o for o in menu.options if o.shown_in(context)]
+                    if not shown:
+                        problems.append(f"menu {menu_id!r} is empty in context {context!r}")
+                    elif not any(
+                        o.intent and self.intents[o.intent].is_catch_all
+                        for o in shown
+                        if o.intent in self.intents
+                    ):
+                        problems.append(
+                            f"menu {menu_id!r} has no catch-all left in context {context!r}"
+                        )
 
         for line in (ProductLine.MOTOR, ProductLine.HEALTH, ProductLine.TRAVEL, ProductLine.LIFE):
             if not any(s.is_catch_all and s.line is line for s in self.intents.values()):

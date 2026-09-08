@@ -227,20 +227,72 @@ def test_plan_list_masks_policy_numbers(client: TestClient) -> None:
 
 
 def test_contact_reasons_come_from_the_same_menu_as_the_ivr(signed_in: TestClient) -> None:
-    """`D48`: one `menus.yaml`, two surfaces.
+    """`D48`: one `menus.yaml`, two surfaces — amended by `D122`.
 
-    If the app offered a different list from the keypad, a customer would see different
-    options depending which door they came through and the taxonomy would fork in two.
+    The app no longer returns the keypad's list *verbatim*; it returns a filtered view of
+    it. What must still hold, and what `D48` was actually protecting, is that the taxonomy
+    cannot **fork**: every option the app offers is an option the menu defines, in the
+    menu's own order, with the menu's own key. A second hand-written list is what would
+    let a customer see options that depend on which door they came through.
     """
     pack = DomainPack.load(REPO_ROOT / "config")
     menu = pack.reason_menu_for(ProductLine.MOTOR)
     assert menu is not None
+    from_menu = [(o.key, o.intent) for o in menu.options if o.intent]
 
-    reasons = signed_in.get("/v1/app/contact-reasons", params={"product_line": "motor"}).json()
-    assert [r["intent_code"] for r in reasons["reasons"]] == [
-        o.intent for o in menu.options if o.intent
-    ]
-    assert [r["key"] for r in reasons["reasons"]] == [o.key for o in menu.options if o.intent]
+    for context in ("plan", "general"):
+        reasons = signed_in.get(
+            "/v1/app/contact-reasons", params={"product_line": "motor", "context": context}
+        ).json()["reasons"]
+        offered = [(r["key"], r["intent_code"]) for r in reasons]
+        assert offered, f"context {context} must not be empty"
+        assert offered == [pair for pair in from_menu if pair in offered], (
+            "the app's list is a SUBSET of the menu, in the menu's order"
+        )
+
+
+def test_a_plan_the_customer_holds_is_never_offered_a_buy_it_option(
+    signed_in: TestClient,
+) -> None:
+    """`D122`, and the exact thing the user reported.
+
+    Tapping a travel policy they already hold and being offered *"ซื้อประกันเดินทาง"* —
+    buy travel insurance — was the app rendering the phone's menu verbatim. The phone's
+    menu is written for somebody we know nothing about; the app knows they own it.
+    """
+    on_a_plan = signed_in.get(
+        "/v1/app/contact-reasons", params={"product_line": "travel", "context": "plan"}
+    ).json()["reasons"]
+    codes = [r["intent_code"] for r in on_a_plan]
+
+    assert "travel.advice.quote" not in codes
+    assert "travel.claim.notify" in codes, "claiming on it is exactly what this surface is for"
+    assert any(r["intent_code"].endswith(".other") for r in on_a_plan), (
+        "and there is always a way out (`D122` guards this per context)"
+    )
+
+    # The same option is still right on the other surface, which is why it is filtered
+    # rather than deleted.
+    general = signed_in.get(
+        "/v1/app/contact-reasons", params={"product_line": "travel", "context": "general"}
+    ).json()["reasons"]
+    assert "travel.advice.quote" in [r["intent_code"] for r in general]
+
+
+def test_the_same_intent_can_be_worded_for_the_surface_it_is_offered_from(
+    signed_in: TestClient,
+) -> None:
+    """Comparing plans is legitimate in both situations and is not the same conversation:
+    a stranger is shopping, a policyholder is deciding whether to renew (`D117`)."""
+
+    def label(context: str) -> str:
+        reasons = signed_in.get(
+            "/v1/app/contact-reasons", params={"product_line": "motor", "context": context}
+        ).json()["reasons"]
+        return next(r["label_th"] for r in reasons if r["intent_code"] == "motor.advice.compare")
+
+    assert label("plan") != label("general")
+    assert "ต่ออายุ" in label("plan"), "the policyholder's version is framed around renewal"
 
 
 def test_unknown_product_line_falls_back_to_the_general_menu(signed_in: TestClient) -> None:
@@ -257,3 +309,78 @@ def test_choosing_a_reason_in_the_app_carries_the_intent(signed_in: TestClient) 
         json={"product_code": "KS-HEALTH-A", "app_intent": "health.claim.notify"},
     )
     assert created.status_code == 201
+
+
+# --- the app path, end to end (`B36`, `D122`) -------------------------------------------
+
+
+def test_tapping_contact_in_the_app_actually_puts_a_caller_in_a_queue(
+    signed_in: TestClient,
+) -> None:
+    """`B36`. The app path through `POST /v1/demo/calls` had never once been run.
+
+    `start_from_intent` leaves the call in `INTENT_CREATED` — correct, because tapping
+    Contact produces a dial target and the customer has not rung yet — and only
+    `CONNECTING` may enter the IVR. So every app-originated call raised
+    `IllegalTransition: intent_created -> ivr`. Nothing noticed because the simulator
+    minted a token and stopped there, and every other test and scenario arrives as a cold
+    call, which starts in `CONNECTING` already.
+
+    This is the test that makes the two halves of the demo one system: without it, the app
+    and the call centre are two things that have never met.
+    """
+    intent = signed_in.post(
+        "/v1/calls/intents",
+        json={"product_code": "KS-MOTOR-1ST", "app_intent": "motor.claim.notify"},
+    ).json()
+
+    placed = signed_in.post(
+        "/v1/demo/calls",
+        json={
+            "correlation_token": intent["correlation_token"],
+            "intent_code": "motor.claim.notify",
+            "caller_number": "0812345678",
+            "intake_keys": ["2"],
+            "ignore_hours": True,
+        },
+    )
+
+    assert placed.status_code == 200, placed.text
+    body = placed.json()
+    assert body["queue_id"] == "q_claims", "routed by the reason the app already knew"
+    assert body["state"] != "intent_created", "the call actually progressed"
+    # And the identity came from the token, not from the request body (`D4`).
+    assert body["assurance"] != "l0_anonymous"
+
+
+def test_the_app_is_told_when_a_call_is_live_for_it(signed_in: TestClient) -> None:
+    """`D120`'s third row, and the first caller `AssistService.live_for` has ever had.
+
+    The app must not carry a permanently visible "let an agent help me" button — on a
+    screen nobody is calling from it is noise, and the customer would have to go looking
+    for it at exactly the moment they are least able to. The server knows, so the app is
+    told.
+    """
+    assert signed_in.get("/v1/app/assist").json()["call_active"] is False
+
+    intent = signed_in.post("/v1/calls/intents", json={"app_intent": "motor.claim.notify"}).json()
+    signed_in.post(
+        "/v1/demo/calls",
+        json={
+            "correlation_token": intent["correlation_token"],
+            "intent_code": "motor.claim.notify",
+            "caller_number": "0812345678",
+            "intake_keys": ["2"],
+            "ignore_hours": True,
+        },
+    )
+
+    live = signed_in.get("/v1/app/assist").json()
+    assert live["call_active"] is True
+    # Waiting in a queue IS being on a call, from the customer's side — but it is not a
+    # conversation, and the app says which.
+    assert live["connected"] is False
+    assert live["tier"] == "verified", (
+        "in-app needs no link and no second sign-in: the app session is a stronger claim "
+        "about who they are than tapping a link ever was (`D4`, `D42`)"
+    )

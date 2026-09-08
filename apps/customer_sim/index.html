@@ -120,6 +120,16 @@
         agent's screen uses. Opening one posts a context event.</p>
     </section>
 
+    <!-- The app's half of the paired screen (`D120`'s first row, built in `D122`).
+         Hidden until a call is actually live for this customer - the app is TOLD, it does
+         not show a permanently visible "let an agent help me" button nobody can find. -->
+    <section id="step-live" class="hidden" style="margin-top:16px">
+      <h2 id="live-head">📞 กำลังรอสายเจ้าหน้าที่</h2>
+      <p class="note">เจ้าหน้าที่ส่งข้อมูลมาที่หน้าจอนี้ได้ระหว่างสนทนา
+        — ไม่ต้องเข้าสู่ระบบซ้ำ เพราะคุณเข้าสู่ระบบในแอปอยู่แล้ว</p>
+      <div class="stack" id="live-items"></div>
+    </section>
+
     <section id="step-contact" class="hidden" style="margin-top:16px">
       <h2>3 · Need help?</h2>
       <div class="stack">
@@ -286,8 +296,16 @@
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSheet(); });
 
   async function openReasons(plan) {
+    // `context` is the whole of `D122`. "About THIS plan" is a different question from
+    // "something else": the app knows they HOLD this cover, so offering them "buy travel
+    // insurance" — which is what the unfiltered phone menu did — is nonsense. The phone
+    // menu is written for somebody we know nothing about.
     const line = plan ? plan.product_line : "unknown";
-    const data = await api("GET", `/v1/app/contact-reasons?product_line=${encodeURIComponent(line)}`);
+    const context = plan ? "plan" : "general";
+    const data = await api(
+      "GET",
+      `/v1/app/contact-reasons?product_line=${encodeURIComponent(line)}&context=${context}`,
+    );
     $("sheet-sub").textContent = plan
       ? `${plan.name_th} — what is this about?`
       : "Not about a specific plan — what is this about?";
@@ -328,9 +346,101 @@
         await new Promise((r) => setTimeout(r, 60));
       }
       render(intent, status, roundTrip, reason);
+
+      // AND ACTUALLY PLACE THE CALL (`D122`). Until now this page minted a correlation
+      // token and stopped, so tapping Contact produced a lovely API trace and **no caller
+      // in any queue** — the app and the call centre were two demos that had never met.
+      //
+      // `POST /v1/demo/calls` has accepted a `correlation_token` since P1b and resolves
+      // the intent behind it, so the call arrives carrying everything this page just
+      // assembled. That is `D6`'s app path, finally joined up.
+      await api("POST", "/v1/demo/calls", {
+        correlation_token: intent.correlation_token,
+        intent_code: reason ? reason.intent_code : null,
+        caller_number: "0812345678",
+        intake_keys: ["2"],
+        ignore_hours: true,
+      });
+      startAssistWatch();
     } catch (err) {
       alert("Failed: " + err.message);
     }
+  }
+
+  // --- the in-app paired screen (`D122`) -------------------------------------------
+  //
+  // Polls, like the link page and for the same reasons (`D120`): this is a VIEW of what
+  // the broker pushed, a one-second poll is invisible to a human, and it needs no socket
+  // infrastructure. The signature check is not optional - a re-render mid-typing wipes a
+  // form the customer is halfway through, which is the one place it would be infuriating.
+  let assistTimer = null;
+  let lastAssistSig = null;
+
+  function startAssistWatch() {
+    if (assistTimer) return;
+    assistTimer = window.setInterval(pollAssist, 1500);
+    void pollAssist();
+  }
+
+  async function pollAssist() {
+    let state;
+    try {
+      state = await api("GET", "/v1/app/assist");
+    } catch {
+      return; // a rail that cannot be read must never break the page
+    }
+    $("step-live").classList.toggle("hidden", !state.call_active);
+    if (!state.call_active) { lastAssistSig = null; return; }
+    // Say which is actually happening. Claiming "talking to an agent" while the customer
+    // is still holding is the kind of small lie a demo audience notices immediately.
+    $("live-head").textContent = state.connected
+      ? "📞 กำลังสนทนากับเจ้าหน้าที่"
+      : "📞 กำลังรอสายเจ้าหน้าที่";
+
+    const sig = JSON.stringify(state.items.map((i) => [i.item_id, i.responded]));
+    if (sig === lastAssistSig) return;
+    lastAssistSig = sig;
+
+    const box = $("live-items");
+    box.innerHTML = state.items.length
+      ? ""
+      : '<div class="note">เจ้าหน้าที่ยังไม่ได้ส่งอะไรมา</div>';
+    for (const item of state.items) box.appendChild(assistCard(item));
+  }
+
+  function assistCard(item) {
+    const el = document.createElement("div");
+    el.className = "card";
+    const stub = item.stub
+      ? '<div class="note">ส่วนนี้เป็นการสาธิต ยังไม่ได้เชื่อมต่อระบบจริง</div>'
+      : "";
+    if (item.responded) {
+      el.innerHTML = `<h2>${item.title_th}</h2>${stub}<div class="note">ส่งข้อมูลเรียบร้อยแล้ว ขอบคุณค่ะ</div>`;
+      return el;
+    }
+    const fields = item.payload.fields || [];
+    const filled = item.payload.prefill || {};
+    if (item.kind === "form" && fields.length) {
+      el.innerHTML = `<h2>${item.title_th}</h2>${stub}` + fields.map((f) => {
+        const v = filled[f.name] == null ? "" : String(filled[f.name]);
+        const input = f.type === "textarea"
+          ? `<textarea id="af_${f.name}" rows="3">${v}</textarea>`
+          : `<input id="af_${f.name}" type="${f.type || "text"}" value="${v}">`;
+        return `<label for="af_${f.name}">${f.label_th}</label>${input}`;
+      }).join("") + '<button class="primary af-send">ส่งให้เจ้าหน้าที่</button>';
+      el.querySelector(".af-send").onclick = async () => {
+        const response = {};
+        for (const f of fields) response[f.name] = ($(`af_${f.name}`) || {}).value || "";
+        await api("POST", "/v1/app/assist/respond", { item_id: item.item_id, response });
+        lastAssistSig = null;
+        await pollAssist();
+      };
+      return el;
+    }
+    el.innerHTML = `<h2>${item.title_th}</h2>${stub}`
+      + (item.payload.text_th ? `<p>${item.payload.text_th}</p>` : "")
+      + '<div class="note">ดูรายละเอียดกับเจ้าหน้าที่ได้เลย</div>';
+    return el;
   }
 
   function render(intent, status, roundTrip, reason) {

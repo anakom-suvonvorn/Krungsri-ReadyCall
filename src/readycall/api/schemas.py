@@ -302,6 +302,17 @@ class EndCallRequest(ApiModel):
     reason: str = Field(default="caller_hung_up", max_length=64)
 
 
+class AssistRespondFromApp(ApiModel):
+    """A form the customer filled in inside the app rather than on a link page (`D122`).
+
+    No token: on this surface the pairing is derived from the app session, which is a
+    stronger claim than a token and is one the customer cannot mislay.
+    """
+
+    item_id: str = Field(max_length=64)
+    response: dict[str, Any] = Field(default_factory=dict)
+
+
 class AssistPushRequest(ApiModel):
     """One thing the broker puts on the customer's screen (`D120`, `D121`).
 

@@ -52,6 +52,11 @@ with PyMuPDF at ~110 dpi and read the PNGs. An empty extraction is not an empty 
 | *"there's no tool rail on the workstation at all"* | correct, and it was `B24`'s family | **DONE** (`D121`) |
 | *"forms needs to be signed in is only half true — look at the purpose, not the type"* | correct, and wrong in BOTH directions | **DONE** (`D121`) |
 | *"shouldn't the comparison data come from the company's database, not a yaml?"* | **correct, and it was a category error about to be made** | **NOT STARTED.** See below — this reshapes Track B |
+| *"the tool rail doesn't unlock when i open the link"* | correct — a deadlock I built | **DONE** (`B35`) |
+| *"why is there a เข้าสู่ระบบ on the link page?"* | correct; it read as mandatory | **DONE** (`D121` amendment) + `D122` moves the verified tier to the app, where it belongs |
+| *"the contact options are weird — they already have the plan"* | correct, and `D48` was the cause | **DONE** (`D122`) |
+| *"/sim is completely detached from the call queue"* | correct, and the app branch was **broken** | **DONE** (`D122`, `B36`) |
+| *"the workstation gets into a stuck state if i don't touch it"* | correct, and it was the worst bug yet | **DONE** (`B34`) |
 | *"it feels like a hackathon without AI"* | half a misreading, half a real gap | **NOT STARTED.** See below |
 | transfer button beside วางสาย, two tabs (internal / other company) | correct, and the second tab is new | **NOT STARTED.** Extends `D63` |
 | register the customer via a pushed form, or push the app download? | their own second instinct is right | **DECIDED** in `D121`: push the download, registration belongs to the bank's app |
@@ -244,7 +249,7 @@ moment in the recording it was said — **and if they consented, their audio is 
 storage encrypted, with the key ref and the retention date on an `audio_recordings` row.**
 If they declined, it is nowhere.
 
-Verified **2026-09-08**: **847 tests** — 835 pass + 12 skipped. `ruff check` +
+Verified **2026-09-08**: **853 tests** — 841 pass + 12 skipped. `ruff check` +
 `ruff format --check` clean over 218 files, `mypy --strict` clean over 151, all scenarios
 replay, 69/69 diagrams current, prompt pack fresh, `audit_docs.py` clean on the live files.
 **And by driving the workstation in a browser**: link minted from the panel, tool box
@@ -262,7 +267,7 @@ left nothing behind.
 
 Almost every fault in this list came from somebody driving the screen and reporting what
 looked wrong — not from the suite. The pattern is worth knowing before reading any of it,
-because it is now **sixteen** and they rhyme:
+because it is now **nineteen** and they rhyme:
 
 1. **`B6` (2026-08-24)** — six faults, **three of which were decisions the docs already
    contained**. The lesson is about reading `.mmd` sources, not about React.
@@ -303,8 +308,15 @@ because it is now **sixteen** and they rhyme:
    they have" fallback produced correct output for the wrong reason. Found by giving them
    a portfolio, not by a test. **A fixture with one of something tests nothing about
    choosing.**
+16. **`B34`/`B35`/`B36` (2026-09-08)** — the second wave from the same session, and `B34`
+   is the most damaging fault in the project's history: an agent **on a live call** was
+   signed out for not heartbeating, because browsers throttle a hidden tab's timers — and
+   nothing picked the call up, so it became unendable and resurfaced after every later
+   call. It would have fired on stage. `B35` was a deadlock I built into `D121` the same
+   day. `B36` was an entry path that had been **broken since P1b** and that nothing had
+   ever executed.
 15. **`B32`/`B33` (2026-09-08)** — both found in ten minutes of *using* the tool rail, and
-   neither visible to 847 tests. The catalogue was fetched on mount, before sign-in, so it
+   neither visible to 853 tests. The catalogue was fetched on mount, before sign-in, so it
    401'd into a defensive `catch` and the rail was empty for the shift. And the dialog's
    2-second poll was rebuilt every render — the workstation re-renders every second — so
    it never fired once, which looked exactly like the server not returning the customer's

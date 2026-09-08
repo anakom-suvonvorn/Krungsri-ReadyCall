@@ -1694,3 +1694,27 @@ doesn't unlock the tool rail … it just continues to say ยังไม่ไ�
   find out — and check that the answer is not gated on the state itself.** This is the
   third client-side fault in two days (`B32`, `B33`) where the server was entirely correct
   and the screen simply never asked again.
+
+## B36. The app path could not place a call at all, and nothing had ever tried
+_Found while wiring `/sim` to the queue (`D122`). It had been broken since P1b._
+
+- **Symptoms.** `POST /v1/demo/calls` with a `correlation_token` returned **500**, every
+  time. `IllegalTransition: intent_created -> ivr`.
+- **Root cause.** `start_from_intent` leaves the call in `INTENT_CREATED`, which is
+  correct: tapping Contact in the app produces a dial target, and the customer has not
+  rung yet. The only legal move from there is `CONNECTING` — the dial. The demo endpoint
+  went straight on to run the IVR, which requires `CONNECTING`, so the app branch could
+  never complete.
+- **Why nothing caught it.** Every scenario, every test and every manual demo that reaches
+  an agent arrives as a **cold call**, and `start_cold_call` begins in `CONNECTING`
+  already. The one caller who would have used the app branch — the simulator — minted a
+  token and stopped, so the branch was written, reviewed, committed, and executed by
+  nobody for six phases.
+- **Fix.** Transition to `CONNECTING` after `start_from_intent`, with a comment saying it
+  is the simulated dial that telephony performs at P5.
+- **Verified** by disabling the fix: the new test fails, and passes with it.
+- **Lesson.** **Two entry paths need two tests, and the one with no demo behind it is the
+  one that rots.** This is `B7`/`B24`'s family again, with a twist worth naming: the code
+  was not merely uncalled, it was *unreachable through the only UI that would have called
+  it*, because that UI stopped one step short. A branch guarded by an `if` that nothing in
+  the repo ever satisfies is dead code wearing a disguise.

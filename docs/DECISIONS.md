@@ -4561,3 +4561,78 @@ already simulates the signed-in app?* That is the right question and it is answe
 `D122` — the verified tier's natural home is the app, and the web sign-in survives only as
 the fallback for a customer who taps a link and then wants their own details filled in.
 
+
+## D122. The app is not a keypad: contact menus are filtered, and the app joins the call
+_Taken 2026-09-08 from the user's own walkthrough of `/sim`. Amends `D48`, and builds the
+two rows of `D120`'s pairing table that were designed and never implemented._
+
+- **Problem one, and it was visible on screen.** Tapping a travel policy the customer
+  **already holds** and choosing *"contact us about this plan"* offered them
+  **"ซื้อประกันเดินทาง"** — buy travel insurance. Tapping their motor policy offered
+  *"เปรียบเทียบแผนและขอราคา"*, new-business wording for cover they own.
+
+  The cause is `D48` taken too literally. *One `menus.yaml`, two surfaces* is right about
+  the **taxonomy** and wrong about the **list**: the IVR's menu is written for somebody we
+  know nothing about, because a keypad caller has told us nothing yet. The app knows which
+  policy they tapped, and therefore knows they hold it.
+
+  The user put it better than the decision did: *"call numpad starts with what kind of plan
+  … from app you click on A plan (NOT a kind of plan) they HAVE"*.
+
+- **Problem two.** `/sim` minted a correlation token and stopped. Tapping Contact produced
+  a clean API trace and **no caller in any queue** — the app and the call centre were two
+  demos that had never met. The user spotted this unprompted.
+
+### The decision
+
+**`contexts:` on a menu option**, in `menus.yaml`, naming which situations it belongs to:
+
+| context | what it is |
+|---|---|
+| `plan` | *"about THIS plan"*, tapped from a policy they hold |
+| `general` | *"something else"*: account admin, or cover they do not have yet |
+
+Default is **both**, so an unmarked option behaves exactly as before, and **the IVR ignores
+the field entirely** — there is nothing to filter on when the caller has told us nothing.
+`label_plan_th` does the same job for wording rather than presence: comparing plans is
+legitimate in both places and is not the same conversation, so a policyholder sees
+*"เปรียบเทียบกับแผนอื่น ก่อนต่ออายุ"* — which is `D117`'s renewal-retention desk in a label.
+
+⚠️ **Guarded per context at startup:** a reason menu that is *empty* in either context, or
+that loses its catch-all in either, refuses to boot. That is
+`test_every_reason_menu_still_ends_in_a_catch_all` moved one layer down — filtering is
+exactly how a menu acquires a dead end without anybody noticing.
+
+### `/sim` places a real call, and the app becomes the paired screen
+
+`POST /v1/demo/calls` has accepted a `correlation_token` since P1b and resolves the intent
+behind it. `/sim` now uses it, so an app contact **arrives in a real queue carrying the
+context the app already assembled** — `D6`'s app path, joined up at last.
+
+That also builds `D120`'s first and third rows, which were drawn in a diagram and shipped
+as nothing. `GET /v1/app/assist` tells the app whether a call is live for this customer,
+and pairs the screen **at `VERIFIED` with no link and no sign-in**. That is not a shortcut:
+the customer is already authenticated to the app, and `D4`'s session is a far stronger
+claim about who they are than tapping a link ever was. Asking them to sign in again, on the
+device they are signed in on, is the pattern the link page stopped doing an hour earlier.
+
+It is also the first caller `AssistService.live_for` has ever had — written for exactly
+this, documented, drawn, and reachable by nothing.
+
+**The two "is this call live" sets are deliberately different.** The token screen counts
+`OFFERED`/`IN_CALL`/`WRAP_UP`, because a broker can only push once somebody has accepted.
+The app counts from `CONNECTING`, because a customer holding for ninety seconds is very
+much on a call — and the app says **which**, rather than claiming a conversation that has
+not started. Two questions, two sets, rather than one stretched over both (`D50`'s
+argument).
+
+### Verified end to end, in two browser tabs
+
+Signed in to `/sim` as คุณปัณณธัช, tapped their **travel** policy, and the reason list came
+back **without** *"ซื้อประกันเดินทาง"* — keys 1, 3 and 4, keeping their IVR numbering
+(`D81`). Chose แจ้งเคลม; the call appeared in `คิวช่วยเหลือด้านเคลม` on the workstation as
+`travel.claim.notify` and was offered to A005. On accept the pairing was **already
+`verified`** with no link minted. The broker pushed `form.claim_notify`; it arrived in the
+app prefilled with `TR-2026-001204` and `ทิพยประกันภัย` — the *travel* policy, the one they
+tapped. The customer filled in the rest, submitted, and the broker's screen showed every
+field they had typed.

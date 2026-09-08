@@ -104,42 +104,69 @@ menus:
       - { key: "5", label_th: "เรื่องอื่นๆ",      product_line: unknown, next: general_reason }
 
   # Step 2: why are you calling? One menu per line, so the options stay short.
+  # ---------------------------------------------------------------------------------------
+  # `contexts:` — WHO this option makes sense FOR (`D122`, amending `D48`)
+  # ---------------------------------------------------------------------------------------
+  #
+  # The IVR shows every option, always: a caller on the keypad has told us nothing about
+  # what they hold, so nothing can be filtered out. `contexts` exists for the APP, which
+  # knows a great deal more, and it names the two situations an app contact can be in:
+  #
+  #   plan     — "contact us about THIS plan", tapped from a policy they HOLD
+  #   general  — "contact us about something else": account-level admin, or cover they do
+  #              not have yet
+  #
+  # Default is BOTH, so an option with no `contexts:` behaves exactly as before.
+  #
+  # The bug this fixes was visible and silly: tapping a travel policy the customer already
+  # holds and being offered *"ซื้อประกันเดินทาง"* — buy travel insurance. The app was
+  # rendering the phone menu verbatim, and the phone menu is written for somebody we know
+  # nothing about.
+  #
+  # `label_plan_th:` is the same idea for wording rather than presence. Comparing plans is
+  # legitimate in both situations, but it is a different conversation: for a stranger it is
+  # *"เปรียบเทียบแผนและขอราคา"*, and for somebody holding cover it is the renewal-retention
+  # conversation `D117` gave its own desk to. Same intent, same routing, honest label.
+
   motor_reason:
     prompt: menu.motor_reason
     options:
-      - { key: "1", label_th: "แจ้งเหตุหรือเปิดเคลม",        intent: motor.claim.notify }
-      - { key: "2", label_th: "ขอความช่วยเหลือฉุกเฉิน",      intent: motor.roadside_assist }
-      - { key: "3", label_th: "ต่ออายุกรมธรรม์",             intent: motor.renew }
-      - { key: "4", label_th: "เปรียบเทียบแผนและขอราคา",     intent: motor.advice.compare }
-      - { key: "5", label_th: "แก้ไขหรือสอบถามกรมธรรม์",     intent: motor.service.policy }
+      - { key: "1", label_th: "แจ้งเหตุหรือเปิดเคลม",        intent: motor.claim.notify, contexts: [plan] }
+      - { key: "2", label_th: "ขอความช่วยเหลือฉุกเฉิน",      intent: motor.roadside_assist, contexts: [plan] }
+      - { key: "3", label_th: "ต่ออายุกรมธรรม์",             intent: motor.renew, contexts: [plan] }
+      - { key: "4", label_th: "เปรียบเทียบแผนและขอราคา",     intent: motor.advice.compare,
+          label_plan_th: "เปรียบเทียบกับแผนอื่น ก่อนต่ออายุ" }
+      - { key: "5", label_th: "แก้ไขหรือสอบถามกรมธรรม์",     intent: motor.service.policy, contexts: [plan] }
       - { key: "6", label_th: "เรื่องอื่นๆ",                  intent: motor.other }
 
   health_reason:
     prompt: menu.health_reason
     options:
-      - { key: "1", label_th: "แจ้งเคลมหรือเข้ารักษา",       intent: health.claim.notify }
-      - { key: "2", label_th: "ต่ออายุกรมธรรม์",             intent: health.renew }
-      - { key: "3", label_th: "เปรียบเทียบแผนและขอราคา",     intent: health.advice.compare }
-      - { key: "4", label_th: "แก้ไขหรือสอบถามกรมธรรม์",     intent: health.service.policy }
+      - { key: "1", label_th: "แจ้งเคลมหรือเข้ารักษา",       intent: health.claim.notify, contexts: [plan] }
+      - { key: "2", label_th: "ต่ออายุกรมธรรม์",             intent: health.renew, contexts: [plan] }
+      - { key: "3", label_th: "เปรียบเทียบแผนและขอราคา",     intent: health.advice.compare,
+          label_plan_th: "เปรียบเทียบกับแผนอื่น ก่อนต่ออายุ" }
+      - { key: "4", label_th: "แก้ไขหรือสอบถามกรมธรรม์",     intent: health.service.policy, contexts: [plan] }
       - { key: "5", label_th: "โรงพยาบาลในเครือ",            intent: health.network.hospital }
       - { key: "6", label_th: "เรื่องอื่นๆ",                  intent: health.other }
 
   travel_reason:
     prompt: menu.travel_reason
     options:
-      - { key: "1", label_th: "เหตุฉุกเฉินระหว่างเดินทาง",    intent: travel.emergency.overseas }
-      - { key: "2", label_th: "ซื้อประกันเดินทาง",           intent: travel.advice.quote }
-      - { key: "3", label_th: "แจ้งเคลม",                    intent: travel.claim.notify }
+      - { key: "1", label_th: "เหตุฉุกเฉินระหว่างเดินทาง",    intent: travel.emergency.overseas, contexts: [plan] }
+      - { key: "2", label_th: "ซื้อประกันเดินทาง",           intent: travel.advice.quote, contexts: [general] }
+      - { key: "3", label_th: "แจ้งเคลม",                    intent: travel.claim.notify, contexts: [plan] }
       - { key: "4", label_th: "เรื่องอื่นๆ",                  intent: travel.other }
 
   life_reason:
     prompt: menu.life_reason
     options:
-      - { key: "1", label_th: "ชำระเบี้ยหรือต่ออายุ",         intent: life.renew }
-      - { key: "2", label_th: "มูลค่ากรมธรรม์และผู้รับผลประโยชน์", intent: life.service.policy }
-      - { key: "3", label_th: "ขอคำแนะนำและเปรียบเทียบแผน",  intent: life.advice.compare }
-      - { key: "4", label_th: "ประกันคุ้มครองสินเชื่อบ้าน",     intent: life.advice.mortgage }
-      - { key: "5", label_th: "แจ้งเคลมกรณีเสียชีวิต",         intent: life.claim.notify }
+      - { key: "1", label_th: "ชำระเบี้ยหรือต่ออายุ",         intent: life.renew, contexts: [plan] }
+      - { key: "2", label_th: "มูลค่ากรมธรรม์และผู้รับผลประโยชน์", intent: life.service.policy, contexts: [plan] }
+      - { key: "3", label_th: "ขอคำแนะนำและเปรียบเทียบแผน",  intent: life.advice.compare,
+          label_plan_th: "ทบทวนและเปรียบเทียบกับแผนอื่น" }
+      - { key: "4", label_th: "ประกันคุ้มครองสินเชื่อบ้าน",     intent: life.advice.mortgage, contexts: [general] }
+      - { key: "5", label_th: "แจ้งเคลมกรณีเสียชีวิต",         intent: life.claim.notify, contexts: [plan] }
       - { key: "6", label_th: "เรื่องอื่นๆ",                  intent: life.other }
 
   general_reason:
