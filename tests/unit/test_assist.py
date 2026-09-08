@@ -455,3 +455,31 @@ async def test_hanging_up_while_a_desk_is_ringing_frees_the_agent(client: Any) -
     me = client.get("/v1/agent/me").json()
     assert me["offer"] is None, "the offer card must clear"
     assert me["presence"]["system_state"] != "offering", "and the agent must be free again"
+
+
+@pytest.mark.asyncio
+async def test_hanging_up_mid_conversation_ends_the_call_and_starts_acw(client: Any) -> None:
+    """`B39`, and the ORDINARY case — which is the one I did not test.
+
+    `B38` was fixed only for a caller still waiting, because the user mentioned that as an
+    edge case to remember and I treated it as the whole case. During an actual
+    conversation, hanging up returned **409**: `IN_CALL` cannot reach `ABANDONED` at all,
+    and the code fell through to `orchestrator.abandon`.
+
+    That transition is correctly forbidden — a conversation that happened is not an
+    abandoned call — so the ending is the same one the agent's own วางสาย uses:
+    `end_call`, which moves the call to `WRAP_UP` and starts after-call work. The agent
+    still owes a wrap-up for a call that happened, whoever put the phone down.
+    """
+    call_id = await on_a_call(client)
+    client.post("/v1/demo/session", json={"customer_id": "C000001"})
+
+    hung_up = client.post("/v1/app/call/hangup")
+
+    assert hung_up.status_code == 200, hung_up.text
+    assert hung_up.json()["call_session_id"] == call_id
+    me = client.get("/v1/agent/me").json()
+    assert me["presence"]["system_state"] == "after_call_work", (
+        "the agent is owed their ACW even though the customer rang off"
+    )
+    assert me["wrapup_call_session_id"] == call_id

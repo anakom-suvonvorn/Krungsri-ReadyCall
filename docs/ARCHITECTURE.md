@@ -203,6 +203,15 @@ agent's browser tab and the ringtone plays through their headset (§9, `D32`).
    By the time the phone rings, the non-speech half of the brief already exists. (`D6`)
 5. **The app places the call** carrying the token — WebRTC preferred (token in the SIP header / room
    metadata, so identity is bound to the media session), PSTN as fallback.
+   ⚠️ **The simulator does step 5 for real since `D122`** (`POST /v1/demo/calls` with the
+   correlation token, standing in for telephony). Until then it stopped at step 4, so the
+   app and the call centre were two demos that had never met — and the app branch of that
+   endpoint turned out to have been broken since P1b (`B36`).
+6. **While the call is live, the app IS the paired screen** (`D120`'s first row, built in
+   `D122`): `GET /v1/app/assist` tells it a call is live and pairs at `VERIFIED` with no
+   link and no second sign-in, because the app session is a stronger identity claim than
+   tapping a link. The customer can also hang up (`POST /v1/app/call/hangup`), which has
+   three endings depending on whether anybody is ringing or talking (`B38`, `B39`).
 
 ### Cold-call path (base case)
 
@@ -284,9 +293,14 @@ customer (if any), product, snapshot and queue.
 > they differ, so every press is resolved back to canonical before anything records it
 > (`D81`).
 
-> **An app caller skips all of this (`D48`).** Tapping Contact opens a reason sheet in the app,
-> populated from the *same `menus.yaml` this IVR reads*, so both menu questions are answered
-> before the phone rings. One menu, two surfaces.
+> **An app caller skips all of this (`D48`, amended by `D122`).** Tapping Contact opens a
+> reason sheet in the app, populated from the *same `menus.yaml` this IVR reads*, so both
+> menu questions are answered before the phone rings. One menu, two surfaces — but **not
+> the same list**: the app knows whether the customer tapped a policy they hold or asked
+> about something else, and each option declares which of those it belongs to
+> (`contexts: [plan, general]`). The IVR is never filtered, because a keypad caller has
+> told us nothing yet. Offering *"buy travel insurance"* under a travel policy somebody
+> already owns is the bug that forced the distinction.
 
 ### The spoken flow
 

@@ -54,7 +54,7 @@ the disclosure gate moves when the agent attests. **What they said while waiting
 screen** (`D106`), and if they consented, **their audio is in object storage encrypted**
 (`D110`) with a key ref and a retention date. If they declined, it is nowhere.
 
-Verified on 2026-09-08: **858 tests** — 846 pass + 12 skipped with Postgres and MinIO both
+Verified on 2026-09-08: **859 tests** — 847 pass + 12 skipped with Postgres and MinIO both
 up (the 12 are foreign-key cases the in-memory backend cannot have, and the `ml`-extra ones).
 Without those containers the count of skips rises and nothing fails.
 `ruff check` and `ruff format --check` clean over **202** files, `mypy --strict`
@@ -138,7 +138,10 @@ FullProject/
 │  ├─ skills.yaml*           # skill codes, queues, intent→skill mapping
 │  ├─ queue_hours.yaml*      # opening hours + holidays per queue
 │  ├─ dids.yaml*             # printed phone numbers → product line + queue (D19)
-│  ├─ menus.yaml*            # the IVR tree. ALSO served to the app (D48) - one menu, two surfaces
+│  ├─ menus.yaml*            # the IVR tree. ALSO served to the app (D48) - one menu, two
+│  │                         #   surfaces, but NOT the same list (D122): options declare
+│  │                         #   `contexts: [plan, general]` so the app can filter to the
+│  │                         #   situation the customer is in. The IVR is never filtered.
 │  ├─ voice_prompts.yaml*    # every spoken line, Thai text + slots + flow roles (D24, D80)
 │  ├─ challenges.yaml*       # how an agent may verify a caller. Served, never hardcoded twice (D72)
 │  ├─ stt_vocabulary.yaml*   # jargon the ASR is nudged toward. READ B14 BEFORE EDITING

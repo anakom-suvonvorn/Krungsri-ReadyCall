@@ -6,20 +6,30 @@ _Last updated: 2026-09-08._
 ---
 
 ## If you have just been compacted, read this first
+_Rewritten 2026-09-08 (late), after two full days of the user driving the screens. What
+follows is what a fresh session needs and nothing it does not._
 
-_Rewritten 2026-09-07, after `D117`–`D120`. Everything settled before this block is in the
-sections below; what follows is what a fresh session needs and nothing it does not._
+### ⚠️ FIRST: what this project keeps getting wrong
 
-### ⚠️ FIRST: the notes arrived, and they are being worked through
+**Nine of the last eleven faults were code that was written, correct, tested — and called
+by nothing.** Not stale code: *new* code, sometimes written the same day as the feature
+that needed it. `B37` had three in one symptom (`assist.close`, `assist.sweep`, and a
+state counted as live). `B38` had two more (`dispatch.release` with a single caller,
+`assignments.cancel` with none). `B36` was an entire entry path broken since P1b because
+the only UI that would have used it stopped one step short.
 
-The user gave a long set of notes on 2026-09-08. What they produced so far is `D121` (the
-tool rail's screen, and the tier gate moving from KIND to PURPOSE), `B32`, `B33`, and a
-corrected README credit. **The rest of the list is not done and is written down below** —
-see *"The 2026-09-08 notes, and what each became"*. Read that before picking anything up.
+**So before building anything: grep for the method you are about to rely on and check
+somebody calls it.** `grep -rn "\.method_name(" src/` is thirty seconds and it has now
+been the answer nine times.
 
-The pattern held again: **the user's first two sentences of feedback contained one thing
-that could not be reached at all (`D120`'s rail had no UI) and one rule that was wrong in
-both directions (the kind-based gate).** Neither was visible to 830 passing tests.
+The second pattern, worth equal weight: **every one of these was found by the user
+pressing a button, never by the suite.** 859 tests pass and did not see any of it. When
+they report something, believe the report before believing the tests.
+
+⚠️ **And `B39`'s specific lesson, because it cost a whole round trip:** when the user
+flags an edge case, they are **adding to** the main case, not replacing it. I built only
+the case they mentioned in parentheses and shipped the ordinary one broken.
+
 
 ### ⚠️ ZEROTH: two files carry facts you must not re-derive
 
@@ -66,6 +76,18 @@ with PyMuPDF at ~110 dpi and read the PNGs. An empty extraction is not an empty 
 | *"the วางสาย button doesn't stop the call"* | correct — and TWO more dead methods | **DONE** (`B38`) |
 | tool dialog should be twice as wide, not half each | correct, I misread "keep the size" | **DONE** |
 | folding the plumbing should CENTRE the app | correct | **DONE** |
+| *"the วางสาย button STILL doesn't work during a call"* | correct — I had fixed only the edge case | **DONE** (`B39`) |
+
+**Two things from those notes are still NOT started, and they are the next work:**
+
+1. **"Contact us — something else" has no new-business path.** `D122` filtered the
+   *"about this plan"* menu correctly, but *"something else"* still shows only the general
+   admin menu. A customer who wants a **new** travel policy from the app cannot ask for
+   one — the new-business options exist and are reachable only per line, which the app
+   never requests. That is journey step 3, the brief's biggest leak, so it matters.
+2. **Transfer** (the user's two-tab design: internal roster + hand to another company with
+   a reason). Extends `D63`, which was designed at P2b and never built. The second tab is
+   new and is `D117`'s handoff becoming a thing the broker *does* rather than reads.
 | *"it feels like a hackathon without AI"* | half a misreading, half a real gap | **NOT STARTED.** See below |
 | transfer button beside วางสาย, two tabs (internal / other company) | correct, and the second tab is new | **NOT STARTED.** Extends `D63` |
 | register the customer via a pushed form, or push the app download? | their own second instinct is right | **DECIDED** in `D121`: push the download, registration belongs to the bank's app |
@@ -258,7 +280,7 @@ moment in the recording it was said — **and if they consented, their audio is 
 storage encrypted, with the key ref and the retention date on an `audio_recordings` row.**
 If they declined, it is nowhere.
 
-Verified **2026-09-08**: **858 tests** — 846 pass + 12 skipped. `ruff check` +
+Verified **2026-09-08**: **859 tests** — 847 pass + 12 skipped. `ruff check` +
 `ruff format --check` clean over 218 files, `mypy --strict` clean over 151, all scenarios
 replay, 69/69 diagrams current, prompt pack fresh, `audit_docs.py` clean on the live files.
 **And by driving the workstation in a browser**: link minted from the panel, tool box
@@ -276,7 +298,7 @@ left nothing behind.
 
 Almost every fault in this list came from somebody driving the screen and reporting what
 looked wrong — not from the suite. The pattern is worth knowing before reading any of it,
-because it is now **twenty-one** and they rhyme:
+because it is now **twenty-two** and they rhyme:
 
 1. **`B6` (2026-08-24)** — six faults, **three of which were decisions the docs already
    contained**. The lesson is about reading `.mmd` sources, not about React.
@@ -317,6 +339,11 @@ because it is now **twenty-one** and they rhyme:
    they have" fallback produced correct output for the wrong reason. Found by giving them
    a portfolio, not by a test. **A fixture with one of something tests nothing about
    choosing.**
+19. **`B39` (2026-09-08)** — and the one worth reading twice, because *I* caused it. The
+   user's note flagged an edge case as an aside; I built only that case, tested only that
+   case, and wrote the gap into the docstring as though describing it settled it. The
+   ORDINARY case — hanging up mid-conversation — returned 409 the whole time. Every
+   hangup test I had written set up a waiting call and none accepted the offer first.
 18. **`B38` (2026-09-08)** — giving the customer a hang-up button immediately exposed that
    `dispatch.release()` had **one** caller (accept) and `assignments.cancel()` had none, so
    an abandoned caller stayed in the waiting pool and went on being offered to desks. The
@@ -335,7 +362,7 @@ because it is now **twenty-one** and they rhyme:
    day. `B36` was an entry path that had been **broken since P1b** and that nothing had
    ever executed.
 15. **`B32`/`B33` (2026-09-08)** — both found in ten minutes of *using* the tool rail, and
-   neither visible to 858 tests. The catalogue was fetched on mount, before sign-in, so it
+   neither visible to 859 tests. The catalogue was fetched on mount, before sign-in, so it
    401'd into a defensive `catch` and the rail was empty for the shift. And the dialog's
    2-second poll was rebuilt every render — the workstation re-renders every second — so
    it never fired once, which looked exactly like the server not returning the customer's
@@ -586,15 +613,46 @@ is handed.
 
 ## What to do next (in order)
 
-_Rewritten 2026-09-07, after `D117`–`D120`. Tracks A, D and most of C are done; do not
-redo them._
+_Rewritten 2026-09-08 (late). Tracks A, C and D are done; the track table below is kept
+for its estimates and its "if the week collapses" line, not as a to-do list._
 
-⚠️ **The user has notes waiting** (see the top of this file). Read them before starting
-Track B or E — twelve of the last fourteen faults came from them driving the screen.
+### The actual queue, in order
 
-**0. DONE — the orientation notes became `D115`/`D116`, and Tracks A, C and D became
-`D117`–`D120`.** The plan is `docs/reading/the_broker_turn.html`; what was built against it
-is `docs/reading/the_assist_rail.html`.
+1. **"Contact us — something else" needs a new-business path.** Half-finished by `D122`:
+   the *"about this plan"* menu is filtered correctly, and *"something else"* still shows
+   only general admin. A customer cannot ask about cover they do not have yet, which is
+   journey step 3 — the brief's biggest leak. Wants a line-selection step in the app
+   feeding the per-line menus filtered to `general`. **The config already supports it**
+   (`contexts:`); this is app UI plus one endpoint call.
+2. **Transfer** — the user's design: a button beside วางสาย, a dialog with **two tabs**,
+   internal (roster, filtered) and **to another company** (pick the insurer, pick a
+   reason). Extends `D63` (designed at P2b, never built); the second tab is new and is
+   `D117`'s handoff becoming something the broker *does* rather than reads. Visible on
+   screen, which is what a 5-minute pitch needs.
+3. **Track B — comparison data from `CoreDataProvider`, NOT a `config/products.yaml`.**
+   The user caught this and they are right: a plan catalogue is live data owned by someone
+   else, and `config/` is not reachable by the hackathon-day swap. The port **already has
+   `get_product()`** and `mock/bank_core/fixtures/products.json` **already exists** — it is
+   just still insurer-shaped (all `KS-` codes, no carrier). Work: `list_products(line=…)`
+   on the port + every adapter + the contract suite, `insurer` and comparable `Coverage`
+   rows on `Product`, refill the fixtures with the real carriers from `MARKET_FACTS` §8.
+4. **The AI story.** `scripts/compare_llm.py` does not exist and is a named P4 exit
+   criterion. ⚠️ **The cost table in `adapters/llm/anthropic.py` is WRONG** — it carries
+   Opus at $15/$75 and Sonnet at $3/$15; current published rates are **$5/$25 and $2/$10**,
+   so the "$0.0085 per call" figure in `D119` is ~1.5x too high (really ≈ $0.0057), and the
+   Haiku key has a date suffix so the correct model id never matches it. Fix the table,
+   then measure Haiku 4.5 against `Q35`'s 4.5 s.
+5. **The lapse-propensity model.** Agreed scope: **one** model, trained on a **real public
+   dataset** (Kaggle/UCI/OpenML) — the user was explicit that synthetic data is circular
+   and a judge can dismantle it in one question. ⚠️ **Verify the dataset actually
+   downloads before building anything on it.**
+6. **Track E — package, freeze, rehearse.** Ship the container on `STT_ENGINE=scripted`;
+   run the real engine on our own box for the pitch and the recorded video.
+
+**0. DONE — the orientation notes became `D115`/`D116`, Tracks A, C and D became
+`D117`–`D120`, and the 8 September notes became `D121`, `D122` and `B32`–`B39`.** The plan
+is `docs/reading/the_broker_turn.html`; what was built against it is
+`docs/reading/the_assist_rail.html`.
 
 | track | days | what | who |
 |---|---|---|---|

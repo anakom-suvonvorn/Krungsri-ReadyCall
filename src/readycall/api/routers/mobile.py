@@ -314,9 +314,20 @@ async def app_hangup(principal: PrincipalDep, container: ContainerDep) -> dict[s
     all. A queue nobody can leave is a different product from the one that decision
     describes.
 
-    `ABANDONED` is reachable from every waiting state and from none of the answered ones:
-    once an agent has the call, ending it is the media layer's job (P5) and the agent's
-    `end_call` is what the workstation drives.
+    A caller can ring off at any point, and there are **three** different endings
+    depending on what the rest of the system is doing (`B38`, `B39`):
+
+    | when | what ending it is |
+    |---|---|
+    | waiting, nobody rung yet | `orchestrator.abandon` |
+    | a desk is ringing | `assignments.cancel` — frees that agent, resolves the offer |
+    | **an agent is talking to them** | `assignments.end_call` — media disconnect, ACW starts |
+
+    The third is the ordinary case and the one that was missing. `IN_CALL` cannot go to
+    `ABANDONED` at all — the only ways out are `WRAP_UP`, `TRANSFERRED` and `FAILED` —
+    because a conversation that happened is not an abandoned call, and the agent is owed
+    their after-call work either way. Hanging up mid-conversation is *exactly* what the
+    agent's own **วางสาย** does; the difference is only which end of the line pressed it.
     """
     live = [
         call
@@ -333,17 +344,24 @@ async def app_hangup(principal: PrincipalDep, container: ContainerDep) -> dict[s
     # `ABANDONED`, frees the agent's presence and publishes the resolution. It was written
     # for exactly this and had no caller at all.
     offer = container.assignments.open_offer_for(call.call_session_id)
+    accepted = container.assignments.accepted_for_call(call.call_session_id)
     try:
-        if offer is not None:
+        if accepted is not None:
+            # The ordinary case: they are mid-conversation and they hang up. Same ending
+            # as the agent pressing วางสาย — the media stops, the call moves to `WRAP_UP`
+            # and the agent's after-call work begins (`D45`). They still owe a wrap-up for
+            # a call that happened.
+            await container.assignments.end_call(
+                call, assignment_id=accepted.assignment_id, reason="caller_hung_up"
+            )
+        elif offer is not None:
             await container.assignments.cancel(
                 call, assignment_id=offer.assignment_id, reason="caller_hung_up"
             )
         else:
             await container.orchestrator.abandon(call, reason="caller_hung_up")
-    except IllegalTransition:
-        # Already answered: the customer's handset is no longer what ends this call, and
-        # the agent's `end_call` is.
-        raise HTTPException(status_code=409, detail="an agent is already on this call") from None
+    except (IllegalTransition, PermanentError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     # AND TAKE THEM OUT OF THE QUEUE. `dispatch.release` had exactly one caller — the
     # ACCEPT path — so a caller who hung up stayed in the waiting pool and went on being
@@ -351,7 +369,11 @@ async def app_hangup(principal: PrincipalDep, container: ContainerDep) -> dict[s
     # which is `D78`'s hazard exactly: a projection that nothing updates.
     container.dispatch.release(call.call_session_id)
     container.assist.close(call.call_session_id)
-    log.info("caller hung up", call_session_id=call.call_session_id, was_ringing=offer is not None)
+    log.info(
+        "caller hung up",
+        call_session_id=call.call_session_id,
+        ending="in_call" if accepted else ("ringing" if offer else "waiting"),
+    )
     return {"ok": True, "call_session_id": call.call_session_id}
 
 

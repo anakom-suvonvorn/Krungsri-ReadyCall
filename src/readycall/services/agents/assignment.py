@@ -162,6 +162,23 @@ class AssignmentService:
         assignment_id = self._open_by_call.get(call_session_id)
         return self._assignments.get(assignment_id) if assignment_id else None
 
+    def accepted_for_call(self, call_session_id: str) -> Assignment | None:
+        """The assignment an agent is actually ON this call under.
+
+        Takes the **newest ACCEPTED** one, never simply the first match: since `D113` a
+        caller who went round the floor can be declined by an agent in round 1 and
+        accepted by the same agent in round 2, so one agent may hold two assignments for
+        one call. Answering "the first" is `B28` exactly.
+        """
+        accepted = [
+            a
+            for a in self._assignments.values()
+            if a.call_session_id == call_session_id and a.outcome is OfferOutcome.ACCEPTED
+        ]
+        if not accepted:
+            return None
+        return max(accepted, key=lambda a: a.offered_at)
+
     def for_agent(self, agent_id: str) -> list[Assignment]:
         return [a for a in self._assignments.values() if a.agent_id == agent_id]
 

@@ -1776,3 +1776,33 @@ pressed it: **"the end call button on /sim doesn't stop the call"**._
   succeeded and looked right — but "the call is over" is a fact several structures hold
   independently, and only one of them heard it. When adding an exit, list every place that
   believes the thing is still happening.
+
+## B39. The ordinary way to hang up was the one case I never tested
+_Reported by the user, correcting me: **"i don't mean to JUST look at the edge case … it
+seems you ONLY looked at the edge case and didn't even try to see how it works normally"**.
+They were right._
+
+- **Symptoms.** During an actual conversation, the customer pressing **วางสาย** got
+  `POST /v1/app/call/hangup 409`. Only the *waiting* cases worked.
+- **Root cause.** `IN_CALL` cannot reach `ABANDONED` — its only exits are `WRAP_UP`,
+  `TRANSFERRED` and `FAILED` — and the handler fell through to `orchestrator.abandon()`.
+  That restriction is **correct**: a conversation that happened is not an abandoned call,
+  and the agent is owed their after-call work either way. So the ending was never
+  `abandon`; it is `assignments.end_call`, exactly what the agent's own วางสาย uses. The
+  difference between the two buttons is only which end of the line pressed it.
+- **How I introduced it.** The user's note said *"keep in mind the edge case where no agent
+  has taken the call yet"* — an aside, asking me not to forget it. I built **only** that
+  case, wrote a test for **only** that case, and put the limitation in the docstring
+  (*"once an agent has the call, ending it is the media layer's job"*) as though describing
+  it settled it. Documenting a gap is not closing one, and a docstring is a very effective
+  way to stop yourself noticing that you left it open.
+- **Fix.** Three endings, chosen by what the rest of the system is doing: `end_call` when
+  an agent is on the call, `cancel` when a desk is ringing, `abandon` when neither.
+  `AssignmentService.accepted_for_call` takes the **newest ACCEPTED** assignment, never
+  simply the first — `B28`'s rule, because `D113` lets one agent hold two for one call.
+- **Verified** in the browser mid-conversation: 200, the customer's screen closes, and the
+  agent lands in `after_call_work` owing a wrap-up.
+- **Lesson.** **When someone flags an edge case, they are adding to the main case, not
+  replacing it.** The reading that cost this bug was treating a parenthetical as the whole
+  brief. And the honest tell was there in my own test file: every hangup test set up a
+  *waiting* call, and none of them accepted the offer first.
