@@ -8,6 +8,7 @@ that is a bug worth finding before demo day rather than during it.
 
 from __future__ import annotations
 
+from readycall.domain.enums import ProductLine
 from readycall.domain.models import (
     Claim,
     Customer,
@@ -55,6 +56,11 @@ class NullCoreDataProvider:
 
     async def get_product(self, product_code: str) -> Product | None:
         return None
+
+    async def list_products(
+        self, *, line: ProductLine | None = None, active_only: bool = True
+    ) -> list[Product]:
+        return []
 
     async def health_check(self) -> bool:
         return self._healthy

@@ -4894,3 +4894,90 @@ menu, and all six reasons live because this caller holds a policy. Choosing *ก
 จ่ายค่าสินไหม* and pressing ส่งต่อและวางสาย ended the call, closed the dialog, raised the
 toast, and left the wrap-up form carrying `handed_to_insurer` and
 **"ส่งต่อ เมืองไทยประกันภัย — การพิจารณาและจ่ายค่าสินไหม"** — with the ACW clock running.
+
+## D125. The plan catalogue is live data behind `CoreDataProvider`, not a file in `config/`
+_Taken 2026-09-08. Track B's first slice, and it exists because **the user caught a
+category error before it was made.** The plan of record said `config/products.yaml`._
+
+- **Problem.** `D115` extends the pitch into the broker's own job: compare plans across
+  carriers and recommend the one that fits. That needs a **catalogue** — and every earlier
+  note about Track B said to put it in `config/products.yaml`, beside the intents, the
+  menus and the playbooks.
+
+  The user's question was the whole correction: *"shouldn't the comparison data come from
+  the company's database, not a yaml?"*
+
+- **They are right, and the reasoning generalises.** `config/` holds the **domain pack** —
+  taxonomy that describes how *we* work: what intents exist, which skill takes them, what
+  the menu says, what steps a playbook has. It ships with the code and changes when we
+  change.
+
+  A plan catalogue is none of those things. It is **live data owned by somebody else**: new
+  plans appear, plans are withdrawn, cover is repriced, and none of it involves us. It is
+  the same kind of fact as a policy or a claim, and it belongs behind the same seam.
+
+  And the practical half is sharper: **`config/` is not reachable by the hackathon-day data
+  swap.** `DATA_MODEL` §4 and `D3` exist so that "the data is not what we assumed" is a
+  config line and a green contract suite rather than a rewrite. Putting the one thing the
+  comparison feature reads *outside* that seam would have meant the feature the pitch leans
+  on hardest was the one feature the swap could not fix.
+
+  ⚠️ The port **already had `get_product()`** and `mock/bank_core/fixtures/products.json`
+  **already existed**. The catalogue was never missing; it was insurer-shaped and nobody
+  could list it.
+
+### What landed
+
+**`list_products(line=…, active_only=…)` on the port, and on every adapter** — fixtures,
+null, and the caching decorator, which keys on **both** arguments because a decorator
+keying on the method name alone would serve the motor catalogue to a health call.
+
+**`Product` gained `insurer` and typed `coverages`.** The same field `D117` added to
+`Policy`, for the same reason: a single company's catalogue has no use for it, and a
+broker's mandate is *"คัดสรรแบบประกันและบริษัทฯ"* — select the plan **and the company**.
+The figures are `Coverage` rows, the same model `Policy` already uses, read by **one
+parser**: a gap analysis compares what the customer HOLDS against what a plan OFFERS, and
+two shapes for one concept is two mapping bugs that would disagree exactly where the
+comparison is drawn.
+
+⚠️ **There is no premium field, and that is the decision, not an omission.** The brief puts
+premium pricing and underwriting explicitly out of scope. A `Product` says what a plan
+*covers*; what it costs this customer depends on their age, their risk and the insurer's own
+underwriting. Surface and compare, never quote (`D115`).
+
+**`None` means not stated, never zero.** A plan silent on outpatient cover and a plan that
+excludes it are different products, and a table rendering both as `0` makes a claim the data
+does not support — `D16` in the place a customer reads it.
+
+**Ordering is the adapter's and means nothing.** Ranking is a decision, it happens in
+`services/` on real attributes, and it is explicitly not "the order the file happened to be
+in" — which is exactly how an affiliated carrier ends up silently first.
+
+### The fixtures, and two things that were quietly broken
+
+19 plans across 6 carriers with real 2025 market share (`MARKET_FACTS` §8), including a
+**withdrawn** one so `active_only` has something to exclude — `B30`'s rule: a filter with
+nothing to filter has never run.
+
+Two faults surfaced by writing the contract test rather than by using anything:
+
+1. **`EMP-GROUP-HEALTH` and `KS-MOTOR-2ND` were on policies and in no catalogue at all.**
+   `get_product` returned `None` for two of the demo customer's three policies, and the
+   only symptom would have been an empty column on the customer's phone.
+2. **The same carrier was spelled two ways.** A policy said *"อลิอันซ์ อยุธยา"* and the
+   catalogue *"อลิอันซ์ อยุธยา ประกันภัย"* — and the suffix is what separates the general
+   arm from the life company. A comparison cannot group a customer's cover by carrier if
+   the two halves spell it differently. The test asserts they agree, per policy.
+
+⚠️ **The affiliated carrier is deliberately not the best row**, and a test now asserts it —
+because that is a property of the *demo* rather than of the code, and it is exactly the kind
+of thing a later fixture edit reverses without anyone noticing. A broker whose affiliate
+always wins is not a broker, and the honest version survives a judge asking about it.
+
+### What this slice does NOT do
+
+**No ranking, no gap analysis, no comparison on screen yet.** The transport has existed
+since `D120` — the broker can already push a comparison to the customer's phone and it
+renders. What is now available is the *data* it should be built from. The next slice is the
+gap analysis: the customer's cover against each candidate, differences **ranked by size**,
+with the model writing only the reason sentence (`D16`, `D115`).

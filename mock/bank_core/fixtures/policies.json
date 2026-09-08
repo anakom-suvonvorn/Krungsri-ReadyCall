@@ -125,14 +125,14 @@
       }
     ],
     "riders": [],
-    "insurer": "อลิอันซ์ อยุธยา"
+    "insurer": "อลิอันซ์ อยุธยา ประกันภัย"
   },
   {
     "policy_no": "GRP-2023-114502",
     "customer_id": "C000001",
     "product_code": "EMP-GROUP-HEALTH",
     "line": "health",
-    "insurer": "อลิอันซ์ อยุธยา",
+    "insurer": "อลิอันซ์ อยุธยา ประกันภัย",
     "status": "active",
     "effective_date": "2023-04-01",
     "expiry_date": "2027-03-31",

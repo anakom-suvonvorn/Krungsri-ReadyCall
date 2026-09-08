@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
+from readycall.domain.enums import ProductLine
 from readycall.domain.models import (
     Claim,
     Customer,
@@ -62,6 +63,27 @@ class CoreDataProvider(Protocol):
     async def list_life_events(self, customer_id: str) -> list[LifeEvent]: ...
 
     async def get_product(self, product_code: str) -> Product | None: ...
+
+    async def list_products(
+        self, *, line: ProductLine | None = None, active_only: bool = True
+    ) -> list[Product]:
+        """The plan catalogue, for comparison (`D125`).
+
+        The broker's actual mandate — *"คัดสรรแบบประกันและบริษัทฯ ที่ตรงตามความต้องการ"*,
+        select the plan **and the company** (`D117`) — needs a list of plans to select
+        from, and a plan catalogue is **live data owned by somebody else**: it changes
+        without us, and it therefore belongs behind this port rather than in `config/`,
+        which the hackathon-day swap cannot reach.
+
+        Ordering is the adapter's own and carries no meaning. **Ranking is a decision and
+        it happens in `services/`, on real attributes** — never here, and never as "the
+        order the file happened to be in", which is exactly how an affiliated carrier ends
+        up silently first (`D117`).
+
+        An adapter with no catalogue returns `[]`, never `None`: a broker with nothing to
+        compare is an ordinary state, not an error.
+        """
+        ...
 
     async def health_check(self) -> bool:
         """Cheap liveness probe. Drives the degradation ladder, never a render path."""

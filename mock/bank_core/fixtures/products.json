@@ -1,10 +1,83 @@
 [
   {
+    "product_code": "EMP-GROUP-HEALTH",
+    "line": "health",
+    "name_th": "ประกันสุขภาพกลุ่มพนักงาน",
+    "name_en": "Employer Group Health",
+    "short_desc": "สวัสดิการสุขภาพกลุ่มจากนายจ้าง วงเงินจำกัด",
+    "insurer": "อลิอันซ์ อยุธยา ประกันภัย",
+    "coverages": [
+      {
+        "kind": "ipd_room_board",
+        "label_th": "ค่าห้องและค่าอาหาร",
+        "amount": 1500,
+        "currency": "THB",
+        "unit": "per_day"
+      },
+      {
+        "kind": "ipd_annual_limit",
+        "label_th": "วงเงินผู้ป่วยในต่อปี",
+        "amount": 200000,
+        "currency": "THB",
+        "unit": "per_year"
+      },
+      {
+        "kind": "opd_limit",
+        "label_th": "ค่ารักษาผู้ป่วยนอก",
+        "amount": 800,
+        "currency": "THB",
+        "unit": "per_visit"
+      },
+      {
+        "kind": "deductible",
+        "label_th": "ค่าใช้จ่ายส่วนแรก",
+        "amount": 0,
+        "currency": "THB"
+      }
+    ],
+    "features": {
+      "ipd": true,
+      "opd": true,
+      "group": true
+    },
+    "is_active": true
+  },
+  {
     "product_code": "KS-HEALTH-A",
     "line": "health",
     "name_th": "กรุงศรี เฮลท์ แพลน เอ",
     "name_en": "Krungsri Health Plan A",
     "short_desc": "ประกันสุขภาพเหมาจ่าย ครอบคลุมผู้ป่วยในและผู้ป่วยนอก",
+    "insurer": "เมืองไทยประกันภัย",
+    "coverages": [
+      {
+        "kind": "ipd_room_board",
+        "label_th": "ค่าห้องและค่าอาหาร",
+        "amount": 3000,
+        "currency": "THB",
+        "unit": "per_day"
+      },
+      {
+        "kind": "ipd_annual_limit",
+        "label_th": "วงเงินผู้ป่วยในต่อปี",
+        "amount": 1000000,
+        "currency": "THB",
+        "unit": "per_year"
+      },
+      {
+        "kind": "opd_limit",
+        "label_th": "ค่ารักษาผู้ป่วยนอก",
+        "amount": 1500,
+        "currency": "THB",
+        "unit": "per_visit"
+      },
+      {
+        "kind": "deductible",
+        "label_th": "ค่าใช้จ่ายส่วนแรก",
+        "amount": 0,
+        "currency": "THB"
+      }
+    ],
     "features": {
       "ipd": true,
       "opd": true
@@ -12,13 +85,480 @@
     "is_active": true
   },
   {
+    "product_code": "MT-HEALTH-PLUS",
+    "line": "health",
+    "name_th": "เมืองไทย เฮลท์ พลัส",
+    "name_en": "Muang Thai Health Plus",
+    "short_desc": "เหมาจ่ายวงเงินสูง ไม่มีส่วนร่วมจ่าย",
+    "insurer": "เมืองไทยประกันภัย",
+    "coverages": [
+      {
+        "kind": "ipd_room_board",
+        "label_th": "ค่าห้องและค่าอาหาร",
+        "amount": 5000,
+        "currency": "THB",
+        "unit": "per_day"
+      },
+      {
+        "kind": "ipd_annual_limit",
+        "label_th": "วงเงินผู้ป่วยในต่อปี",
+        "amount": 5000000,
+        "currency": "THB",
+        "unit": "per_year"
+      },
+      {
+        "kind": "opd_limit",
+        "label_th": "ค่ารักษาผู้ป่วยนอก",
+        "amount": 2000,
+        "currency": "THB",
+        "unit": "per_visit"
+      },
+      {
+        "kind": "deductible",
+        "label_th": "ค่าใช้จ่ายส่วนแรก",
+        "amount": 0,
+        "currency": "THB"
+      },
+      {
+        "kind": "copay_rate",
+        "label_th": "ส่วนร่วมจ่าย",
+        "amount": 0,
+        "currency": "THB",
+        "unit": "percent"
+      }
+    ],
+    "features": {
+      "ipd": true,
+      "opd": true,
+      "top_up": true
+    },
+    "is_active": true
+  },
+  {
+    "product_code": "BKI-HEALTH-ELITE",
+    "line": "health",
+    "name_th": "กรุงเทพ เฮลท์ อีลิท",
+    "name_en": "Bangkok Insurance Health Elite",
+    "short_desc": "วงเงินสูงสุดในกลุ่ม แลกกับค่าใช้จ่ายส่วนแรกและส่วนร่วมจ่าย",
+    "insurer": "กรุงเทพประกันภัย",
+    "coverages": [
+      {
+        "kind": "ipd_room_board",
+        "label_th": "ค่าห้องและค่าอาหาร",
+        "amount": 6000,
+        "currency": "THB",
+        "unit": "per_day"
+      },
+      {
+        "kind": "ipd_annual_limit",
+        "label_th": "วงเงินผู้ป่วยในต่อปี",
+        "amount": 10000000,
+        "currency": "THB",
+        "unit": "per_year"
+      },
+      {
+        "kind": "opd_limit",
+        "label_th": "ค่ารักษาผู้ป่วยนอก",
+        "amount": 2500,
+        "currency": "THB",
+        "unit": "per_visit"
+      },
+      {
+        "kind": "deductible",
+        "label_th": "ค่าใช้จ่ายส่วนแรก",
+        "amount": 30000,
+        "currency": "THB",
+        "unit": "per_year"
+      },
+      {
+        "kind": "copay_rate",
+        "label_th": "ส่วนร่วมจ่าย",
+        "amount": 10,
+        "currency": "THB",
+        "unit": "percent"
+      }
+    ],
+    "features": {
+      "ipd": true,
+      "opd": true,
+      "top_up": true
+    },
+    "is_active": true
+  },
+  {
+    "product_code": "DHP-HEALTH-CARE",
+    "line": "health",
+    "name_th": "ทิพย เฮลท์ แคร์",
+    "name_en": "Dhipaya Health Care",
+    "short_desc": "เหมาจ่าย ไม่มีค่าใช้จ่ายส่วนแรก",
+    "insurer": "ทิพยประกันภัย",
+    "coverages": [
+      {
+        "kind": "ipd_room_board",
+        "label_th": "ค่าห้องและค่าอาหาร",
+        "amount": 4000,
+        "currency": "THB",
+        "unit": "per_day"
+      },
+      {
+        "kind": "ipd_annual_limit",
+        "label_th": "วงเงินผู้ป่วยในต่อปี",
+        "amount": 3000000,
+        "currency": "THB",
+        "unit": "per_year"
+      },
+      {
+        "kind": "opd_limit",
+        "label_th": "ค่ารักษาผู้ป่วยนอก",
+        "amount": 1200,
+        "currency": "THB",
+        "unit": "per_visit"
+      },
+      {
+        "kind": "deductible",
+        "label_th": "ค่าใช้จ่ายส่วนแรก",
+        "amount": 0,
+        "currency": "THB"
+      },
+      {
+        "kind": "copay_rate",
+        "label_th": "ส่วนร่วมจ่าย",
+        "amount": 0,
+        "currency": "THB",
+        "unit": "percent"
+      }
+    ],
+    "features": {
+      "ipd": true,
+      "opd": true,
+      "top_up": true
+    },
+    "is_active": true
+  },
+  {
+    "product_code": "AZAY-HEALTH-SMART",
+    "line": "health",
+    "name_th": "อลิอันซ์ สมาร์ท เฮลท์",
+    "name_en": "Allianz Smart Health",
+    "short_desc": "วงเงินผู้ป่วยในสูง มีค่าใช้จ่ายส่วนแรก",
+    "insurer": "อลิอันซ์ อยุธยา ประกันภัย",
+    "coverages": [
+      {
+        "kind": "ipd_room_board",
+        "label_th": "ค่าห้องและค่าอาหาร",
+        "amount": 4000,
+        "currency": "THB",
+        "unit": "per_day"
+      },
+      {
+        "kind": "ipd_annual_limit",
+        "label_th": "วงเงินผู้ป่วยในต่อปี",
+        "amount": 5000000,
+        "currency": "THB",
+        "unit": "per_year"
+      },
+      {
+        "kind": "deductible",
+        "label_th": "ค่าใช้จ่ายส่วนแรก",
+        "amount": 20000,
+        "currency": "THB",
+        "unit": "per_year"
+      },
+      {
+        "kind": "copay_rate",
+        "label_th": "ส่วนร่วมจ่าย",
+        "amount": 0,
+        "currency": "THB",
+        "unit": "percent"
+      }
+    ],
+    "features": {
+      "ipd": true,
+      "opd": false,
+      "top_up": true
+    },
+    "is_active": true
+  },
+  {
+    "product_code": "TKM-HEALTH-SIMPLE",
+    "line": "health",
+    "name_th": "โตเกียวมารีน เฮลท์ ซิมเปิล",
+    "name_en": "Tokio Marine Health Simple",
+    "short_desc": "แผนกลาง เหมาจ่าย ไม่มีส่วนร่วมจ่าย",
+    "insurer": "โตเกียวมารีนประกันภัย",
+    "coverages": [
+      {
+        "kind": "ipd_room_board",
+        "label_th": "ค่าห้องและค่าอาหาร",
+        "amount": 4500,
+        "currency": "THB",
+        "unit": "per_day"
+      },
+      {
+        "kind": "ipd_annual_limit",
+        "label_th": "วงเงินผู้ป่วยในต่อปี",
+        "amount": 4000000,
+        "currency": "THB",
+        "unit": "per_year"
+      },
+      {
+        "kind": "opd_limit",
+        "label_th": "ค่ารักษาผู้ป่วยนอก",
+        "amount": 1500,
+        "currency": "THB",
+        "unit": "per_visit"
+      },
+      {
+        "kind": "deductible",
+        "label_th": "ค่าใช้จ่ายส่วนแรก",
+        "amount": 0,
+        "currency": "THB"
+      },
+      {
+        "kind": "copay_rate",
+        "label_th": "ส่วนร่วมจ่าย",
+        "amount": 0,
+        "currency": "THB",
+        "unit": "percent"
+      }
+    ],
+    "features": {
+      "ipd": true,
+      "opd": true,
+      "top_up": true
+    },
+    "is_active": true
+  },
+  {
+    "product_code": "AIA-HEALTH-SAVER",
+    "line": "health",
+    "name_th": "เอไอเอ เฮลท์ เซฟเวอร์",
+    "name_en": "AIA Health Saver",
+    "short_desc": "ค่าใช้จ่ายส่วนแรกสูงเพื่อแลกเบี้ยที่ถูกลง",
+    "insurer": "เอไอเอ",
+    "coverages": [
+      {
+        "kind": "ipd_room_board",
+        "label_th": "ค่าห้องและค่าอาหาร",
+        "amount": 3500,
+        "currency": "THB",
+        "unit": "per_day"
+      },
+      {
+        "kind": "ipd_annual_limit",
+        "label_th": "วงเงินผู้ป่วยในต่อปี",
+        "amount": 5000000,
+        "currency": "THB",
+        "unit": "per_year"
+      },
+      {
+        "kind": "opd_limit",
+        "label_th": "ค่ารักษาผู้ป่วยนอก",
+        "amount": 1000,
+        "currency": "THB",
+        "unit": "per_visit"
+      },
+      {
+        "kind": "deductible",
+        "label_th": "ค่าใช้จ่ายส่วนแรก",
+        "amount": 50000,
+        "currency": "THB",
+        "unit": "per_year"
+      },
+      {
+        "kind": "copay_rate",
+        "label_th": "ส่วนร่วมจ่าย",
+        "amount": 20,
+        "currency": "THB",
+        "unit": "percent"
+      }
+    ],
+    "features": {
+      "ipd": true,
+      "opd": true,
+      "top_up": true
+    },
+    "is_active": true
+  },
+  {
+    "product_code": "MT-HEALTH-CLASSIC",
+    "line": "health",
+    "name_th": "เมืองไทย เฮลท์ คลาสสิก (ปิดการขาย)",
+    "name_en": "Muang Thai Health Classic (withdrawn)",
+    "short_desc": "แผนเดิมที่ปิดการขายแล้ว ยังมีผลกับผู้ถือกรมธรรม์เดิม",
+    "insurer": "เมืองไทยประกันภัย",
+    "coverages": [
+      {
+        "kind": "ipd_room_board",
+        "label_th": "ค่าห้องและค่าอาหาร",
+        "amount": 2000,
+        "currency": "THB",
+        "unit": "per_day"
+      },
+      {
+        "kind": "ipd_annual_limit",
+        "label_th": "วงเงินผู้ป่วยในต่อปี",
+        "amount": 500000,
+        "currency": "THB",
+        "unit": "per_year"
+      }
+    ],
+    "features": {
+      "ipd": true
+    },
+    "is_active": false
+  },
+  {
     "product_code": "KS-MOTOR-1ST",
     "line": "motor",
     "name_th": "ประกันรถยนต์ชั้น 1",
     "name_en": "Motor Class 1",
     "short_desc": "คุ้มครองรถยนต์ชั้น 1 พร้อมบริการช่วยเหลือฉุกเฉิน 24 ชั่วโมง",
+    "insurer": "วิริยะประกันภัย",
+    "coverages": [
+      {
+        "kind": "own_damage",
+        "label_th": "ความเสียหายต่อรถยนต์",
+        "amount": 750000,
+        "currency": "THB"
+      },
+      {
+        "kind": "third_party_property",
+        "label_th": "ทรัพย์สินบุคคลภายนอก",
+        "amount": 1000000,
+        "currency": "THB"
+      },
+      {
+        "kind": "deductible",
+        "label_th": "ค่าเสียหายส่วนแรก",
+        "amount": 2000,
+        "currency": "THB"
+      },
+      {
+        "kind": "roadside_assist",
+        "label_th": "บริการช่วยเหลือฉุกเฉิน",
+        "currency": "THB",
+        "note": "24 ชั่วโมง"
+      }
+    ],
     "features": {
-      "roadside": true
+      "roadside": true,
+      "class": 1
+    },
+    "is_active": true
+  },
+  {
+    "product_code": "KS-MOTOR-2ND",
+    "line": "motor",
+    "name_th": "ประกันรถยนต์ชั้น 2+",
+    "name_en": "Motor Class 2+",
+    "short_desc": "คุ้มครองการชนกับยานพาหนะทางบก เบี้ยต่ำกว่าชั้น 1",
+    "insurer": "ธนชาตประกันภัย",
+    "coverages": [
+      {
+        "kind": "own_damage",
+        "label_th": "ความเสียหายต่อรถยนต์",
+        "amount": 480000,
+        "currency": "THB",
+        "note": "เฉพาะกรณีชนกับยานพาหนะ"
+      },
+      {
+        "kind": "third_party_property",
+        "label_th": "ทรัพย์สินบุคคลภายนอก",
+        "amount": 1000000,
+        "currency": "THB"
+      },
+      {
+        "kind": "deductible",
+        "label_th": "ค่าเสียหายส่วนแรก",
+        "amount": 5000,
+        "currency": "THB"
+      }
+    ],
+    "features": {
+      "roadside": false,
+      "class": 2
+    },
+    "is_active": true
+  },
+  {
+    "product_code": "VRY-MOTOR-EV",
+    "line": "motor",
+    "name_th": "วิริยะ ประกันรถยนต์ไฟฟ้า ชั้น 1",
+    "name_en": "Viriyah EV Class 1",
+    "short_desc": "ชั้น 1 สำหรับรถยนต์ไฟฟ้า คุ้มครองแบตเตอรี่และระบบ ADAS",
+    "insurer": "วิริยะประกันภัย",
+    "coverages": [
+      {
+        "kind": "own_damage",
+        "label_th": "ความเสียหายต่อรถยนต์",
+        "amount": 900000,
+        "currency": "THB"
+      },
+      {
+        "kind": "third_party_property",
+        "label_th": "ทรัพย์สินบุคคลภายนอก",
+        "amount": 1000000,
+        "currency": "THB"
+      },
+      {
+        "kind": "deductible",
+        "label_th": "ค่าเสียหายส่วนแรก",
+        "amount": 3000,
+        "currency": "THB"
+      },
+      {
+        "kind": "ev_battery",
+        "label_th": "ความคุ้มครองแบตเตอรี่",
+        "amount": 400000,
+        "currency": "THB"
+      },
+      {
+        "kind": "roadside_assist",
+        "label_th": "บริการช่วยเหลือฉุกเฉิน",
+        "currency": "THB",
+        "note": "รวมรถลากกรณีแบตเตอรี่หมด"
+      }
+    ],
+    "features": {
+      "roadside": true,
+      "class": 1,
+      "ev": true,
+      "adas": true
+    },
+    "is_active": true
+  },
+  {
+    "product_code": "TVI-MOTOR-USAGE",
+    "line": "motor",
+    "name_th": "ไทยวิวัฒน์ ประกันรถยนต์ตามการใช้งาน",
+    "name_en": "Thaivivat Usage-Based Motor",
+    "short_desc": "ชั้น 1 คิดตามระยะทางที่ขับจริง",
+    "insurer": "ไทยวิวัฒน์ประกันภัย",
+    "coverages": [
+      {
+        "kind": "own_damage",
+        "label_th": "ความเสียหายต่อรถยนต์",
+        "amount": 700000,
+        "currency": "THB"
+      },
+      {
+        "kind": "third_party_property",
+        "label_th": "ทรัพย์สินบุคคลภายนอก",
+        "amount": 1000000,
+        "currency": "THB"
+      },
+      {
+        "kind": "deductible",
+        "label_th": "ค่าเสียหายส่วนแรก",
+        "amount": 0,
+        "currency": "THB"
+      }
+    ],
+    "features": {
+      "roadside": true,
+      "class": 1,
+      "usage_based": true
     },
     "is_active": true
   },
@@ -28,7 +568,100 @@
     "name_th": "ประกันเดินทางเอเชีย",
     "name_en": "Travel Asia",
     "short_desc": "ประกันการเดินทางระยะสั้นในเอเชีย",
-    "features": {},
+    "insurer": "ทิพยประกันภัย",
+    "coverages": [
+      {
+        "kind": "medical_overseas",
+        "label_th": "ค่ารักษาพยาบาลต่างประเทศ",
+        "amount": 2000000,
+        "currency": "THB"
+      },
+      {
+        "kind": "trip_cancellation",
+        "label_th": "การยกเลิกการเดินทาง",
+        "amount": 50000,
+        "currency": "THB"
+      },
+      {
+        "kind": "baggage",
+        "label_th": "สัมภาระเสียหายหรือสูญหาย",
+        "amount": 20000,
+        "currency": "THB"
+      }
+    ],
+    "features": {
+      "region": "asia"
+    },
+    "is_active": true
+  },
+  {
+    "product_code": "MSIG-TRAVEL-WW",
+    "line": "travel",
+    "name_th": "เอ็มเอสไอจี เดินทางทั่วโลก",
+    "name_en": "MSIG Travel Worldwide",
+    "short_desc": "คุ้มครองทั่วโลก วงเงินค่ารักษาสูง",
+    "insurer": "เอ็มเอสไอจีประกันภัย",
+    "coverages": [
+      {
+        "kind": "medical_overseas",
+        "label_th": "ค่ารักษาพยาบาลต่างประเทศ",
+        "amount": 5000000,
+        "currency": "THB"
+      },
+      {
+        "kind": "trip_cancellation",
+        "label_th": "การยกเลิกการเดินทาง",
+        "amount": 100000,
+        "currency": "THB"
+      },
+      {
+        "kind": "baggage",
+        "label_th": "สัมภาระเสียหายหรือสูญหาย",
+        "amount": 40000,
+        "currency": "THB"
+      },
+      {
+        "kind": "flight_delay",
+        "label_th": "เที่ยวบินล่าช้า",
+        "amount": 20000,
+        "currency": "THB"
+      }
+    ],
+    "features": {
+      "region": "worldwide"
+    },
+    "is_active": true
+  },
+  {
+    "product_code": "AXA-TRAVEL-ASIA",
+    "line": "travel",
+    "name_th": "แอกซ่า เดินทางเอเชีย",
+    "name_en": "AXA Travel Asia",
+    "short_desc": "แผนเอเชีย เบี้ยประหยัด",
+    "insurer": "แอกซ่าประกันภัย",
+    "coverages": [
+      {
+        "kind": "medical_overseas",
+        "label_th": "ค่ารักษาพยาบาลต่างประเทศ",
+        "amount": 1500000,
+        "currency": "THB"
+      },
+      {
+        "kind": "trip_cancellation",
+        "label_th": "การยกเลิกการเดินทาง",
+        "amount": 30000,
+        "currency": "THB"
+      },
+      {
+        "kind": "baggage",
+        "label_th": "สัมภาระเสียหายหรือสูญหาย",
+        "amount": 15000,
+        "currency": "THB"
+      }
+    ],
+    "features": {
+      "region": "asia"
+    },
     "is_active": true
   },
   {
@@ -37,6 +670,22 @@
     "name_th": "ประกันอุบัติเหตุส่วนบุคคล",
     "name_en": "Personal Accident Basic",
     "short_desc": "ความคุ้มครองอุบัติเหตุพื้นฐาน",
+    "insurer": "อลิอันซ์ อยุธยา ประกันภัย",
+    "coverages": [
+      {
+        "kind": "accidental_death",
+        "label_th": "การเสียชีวิตจากอุบัติเหตุ",
+        "amount": 300000,
+        "currency": "THB"
+      },
+      {
+        "kind": "medical_accident",
+        "label_th": "ค่ารักษาพยาบาลจากอุบัติเหตุ",
+        "amount": 30000,
+        "currency": "THB",
+        "unit": "per_accident"
+      }
+    ],
     "features": {},
     "is_active": true
   },
@@ -46,7 +695,39 @@
     "name_th": "ออมทรัพย์ 10 ปี",
     "name_en": "Savings 10",
     "short_desc": "ประกันชีวิตแบบสะสมทรัพย์ 10 ปี",
-    "features": {},
+    "insurer": "อลิอันซ์ อยุธยา ประกันชีวิต",
+    "coverages": [
+      {
+        "kind": "sum_assured",
+        "label_th": "ทุนประกันชีวิต",
+        "amount": 500000,
+        "currency": "THB"
+      }
+    ],
+    "features": {
+      "term_years": 10
+    },
+    "is_active": true
+  },
+  {
+    "product_code": "MTL-LIFE-MORTGAGE",
+    "line": "life",
+    "name_th": "เมืองไทย คุ้มครองสินเชื่อบ้าน",
+    "name_en": "Muang Thai Mortgage Protection",
+    "short_desc": "ประกันชีวิตคุ้มครองยอดหนี้บ้านที่เหลือ",
+    "insurer": "เมืองไทยประกันชีวิต",
+    "coverages": [
+      {
+        "kind": "sum_assured",
+        "label_th": "ทุนประกันชีวิต",
+        "amount": 2500000,
+        "currency": "THB",
+        "note": "ลดลงตามยอดหนี้คงเหลือ"
+      }
+    ],
+    "features": {
+      "mortgage_linked": true
+    },
     "is_active": true
   }
 ]

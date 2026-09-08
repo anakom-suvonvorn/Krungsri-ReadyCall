@@ -195,8 +195,15 @@ class FixtureFileProvider:
             is_vulnerable=bool(row.get("is_vulnerable", False)),
         )
 
-    def _to_policy(self, row: dict[str, Any]) -> Policy:
-        coverages = tuple(
+    @staticmethod
+    def _coverages(rows: list[dict[str, Any]]) -> tuple[Coverage, ...]:
+        """One parser for both a policy's figures and a product's (`D125`).
+
+        A gap analysis compares what the customer HOLDS against what a plan OFFERS, so the
+        two must be the same shape read the same way — two parsers for one concept is two
+        mapping bugs, and they would disagree exactly where the comparison is drawn.
+        """
+        return tuple(
             Coverage(
                 kind=c["kind"],
                 label_th=c.get("label_th", c["kind"]),
@@ -205,8 +212,11 @@ class FixtureFileProvider:
                 unit=c.get("unit"),
                 note=c.get("note"),
             )
-            for c in (row.get("coverages") or [])
+            for c in rows
         )
+
+    def _to_policy(self, row: dict[str, Any]) -> Policy:
+        coverages = self._coverages(row.get("coverages") or [])
         return Policy(
             policy_no=str(row["policy_no"]),
             customer_id=str(row["customer_id"]),
@@ -324,19 +334,35 @@ class FixtureFileProvider:
             if str(row["customer_id"]) == customer_id
         ]
 
+    def _product(self, row: dict[str, Any]) -> Product:
+        return Product(
+            product_code=str(row["product_code"]),
+            line=ProductLine(row.get("line", "unknown")),
+            name_th=row.get("name_th", ""),
+            name_en=row.get("name_en"),
+            short_desc=row.get("short_desc"),
+            insurer=row.get("insurer"),
+            coverages=self._coverages(row.get("coverages") or []),
+            features=row.get("features") or {},
+            is_active=bool(row.get("is_active", True)),
+        )
+
     async def get_product(self, product_code: str) -> Product | None:
         for row in self._rows("products"):
             if str(row["product_code"]) == product_code:
-                return Product(
-                    product_code=str(row["product_code"]),
-                    line=ProductLine(row.get("line", "unknown")),
-                    name_th=row.get("name_th", ""),
-                    name_en=row.get("name_en"),
-                    short_desc=row.get("short_desc"),
-                    features=row.get("features") or {},
-                    is_active=bool(row.get("is_active", True)),
-                )
+                return self._product(row)
         return None
+
+    async def list_products(
+        self, *, line: ProductLine | None = None, active_only: bool = True
+    ) -> list[Product]:
+        """File order, and it means nothing (`D125`). Ranking happens in `services/`."""
+        out = [self._product(row) for row in self._rows("products")]
+        if line is not None:
+            out = [p for p in out if p.line is line]
+        if active_only:
+            out = [p for p in out if p.is_active]
+        return out
 
     async def health_check(self) -> bool:
         try:

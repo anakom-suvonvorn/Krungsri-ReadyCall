@@ -26,6 +26,7 @@ from dataclasses import dataclass
 from typing import Any, TypeVar
 
 from readycall.clock import Clock, SystemClock
+from readycall.domain.enums import ProductLine
 from readycall.domain.models import (
     Claim,
     Customer,
@@ -203,6 +204,18 @@ class CachingCoreDataProvider:
     async def get_product(self, product_code: str) -> Product | None:
         return await self._call(
             "get_product", (product_code,), None, lambda: self._inner.get_product(product_code)
+        )
+
+    async def list_products(
+        self, *, line: ProductLine | None = None, active_only: bool = True
+    ) -> list[Product]:
+        # Both arguments are part of the key: they return different lists, and a decorator
+        # that keys on the method name alone serves the motor catalogue to a health call.
+        return await self._call(
+            "list_products",
+            (line, active_only),
+            [],
+            lambda: self._inner.list_products(line=line, active_only=active_only),
         )
 
     async def health_check(self) -> bool:

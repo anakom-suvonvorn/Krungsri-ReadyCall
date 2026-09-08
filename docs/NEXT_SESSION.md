@@ -23,7 +23,7 @@ somebody calls it.** `grep -rn "\.method_name(" src/` is thirty seconds and it h
 been the answer nine times.
 
 The second pattern, worth equal weight: **every one of these was found by the user
-pressing a button, never by the suite.** 871 tests pass and did not see any of it. When
+pressing a button, never by the suite.** 878 tests pass and did not see any of it. When
 they report something, believe the report before believing the tests.
 
 ⚠️ **And `B39`'s specific lesson, because it cost a whole round trip:** when the user
@@ -285,7 +285,7 @@ moment in the recording it was said — **and if they consented, their audio is 
 storage encrypted, with the key ref and the retention date on an `audio_recordings` row.**
 If they declined, it is nowhere.
 
-Verified **2026-09-08 (evening)**: **871 tests** — 859 pass + 12 skipped, with Postgres
+Verified **2026-09-08 (evening)**: **878 tests** — 866 pass + 12 skipped, with Postgres
 and MinIO both up. `ruff check` + `ruff format --check` clean over 220 files,
 `mypy --strict` clean over 155, 69/69 diagrams current, prompt pack fresh, `audit_docs.py`
 clean on the live files. **And by driving `/sim` in a browser** (`D123`): *Contact us —
@@ -296,7 +296,10 @@ routed to `q_advice_travel` at `l3_verified` from a customer holding no travel p
 call, the dialog carries `D117`'s banner plus **เมืองไทยประกันภัย** — the carrier on this
 customer's own policy — above a 14-carrier menu, and choosing *การพิจารณาและจ่ายค่าสินไหม*
 ended the call into after-call work with the wrap-up already reading
-**"ส่งต่อ เมืองไทยประกันภัย — การพิจารณาและจ่ายค่าสินไหม"**.
+**"ส่งต่อ เมืองไทยประกันภัย — การพิจารณาและจ่ายค่าสินไหม"**. **And through the real
+adapter** (`D125`): 19 plans, 18 active, 8 health plans across 6 carriers, every policy's
+`product_code` resolving to a catalogue entry whose carrier matches the policy's — two
+things that were both false before.
 **And by driving the workstation in a browser**: link minted from the panel, tool box
 opened (11 tools, exactly the 5 personal ones locked), a blank quote form pushed to a
 GUEST screen at 375 px, filled in, submitted, and read back on the broker's screen; then
@@ -376,7 +379,7 @@ because it is now **twenty-two** and they rhyme:
    day. `B36` was an entry path that had been **broken since P1b** and that nothing had
    ever executed.
 15. **`B32`/`B33` (2026-09-08)** — both found in ten minutes of *using* the tool rail, and
-   neither visible to 871 tests. The catalogue was fetched on mount, before sign-in, so it
+   neither visible to 878 tests. The catalogue was fetched on mount, before sign-in, so it
    401'd into a defensive `catch` and the rail was empty for the shift. And the dialog's
    2-second poll was rebuilt every render — the workstation re-renders every second — so
    it never fired once, which looked exactly like the server not returning the customer's
@@ -657,13 +660,20 @@ for its estimates and its "if the week collapses" line, not as a to-do list._
    is a day inside `services/agents/`, where `B7`, `B25` and `B28` all lived, four days
    before the pitch. **Say the word and it gets built; otherwise the stub is honest and
    the risk stays where it is.**
-3. **Track B — comparison data from `CoreDataProvider`, NOT a `config/products.yaml`.**
-   The user caught this and they are right: a plan catalogue is live data owned by someone
-   else, and `config/` is not reachable by the hackathon-day swap. The port **already has
-   `get_product()`** and `mock/bank_core/fixtures/products.json` **already exists** — it is
-   just still insurer-shaped (all `KS-` codes, no carrier). Work: `list_products(line=…)`
-   on the port + every adapter + the contract suite, `insurer` and comparable `Coverage`
-   rows on `Product`, refill the fixtures with the real carriers from `MARKET_FACTS` §8.
+3. **Track B — compare & best-fit.** ◐ **The DATA half is done (`D125`).**
+   `list_products(line=…, active_only=…)` is on the port and every adapter, `Product` has
+   `insurer` and typed `Coverage` rows, and the fixtures are 19 plans across 6 real
+   carriers with a withdrawn one so `active_only` has something to exclude. Two quiet
+   faults fell out: two policies pointed at product codes in no catalogue at all, and the
+   same carrier was spelled two ways between a policy and the catalogue.
+
+   **Next slice — the ranking, and it is the one the pitch leans on:** gap analysis
+   (the customer's cover against each candidate, differences **ranked by size**), the
+   comparison rendered on the workstation, and the push to the customer's phone filled
+   with it. The transport has worked since `D120`; only the content was missing.
+   ⚠️ **Rank on facts, explain with the model** (`D16`, `D115`): the ordering comes from
+   real attributes, the model writes only the reason sentence, and a figure that cannot be
+   traced to a field does not render. Surface and compare — never quote or underwrite.
 4. **The AI story.** `scripts/compare_llm.py` does not exist and is a named P4 exit
    criterion. ⚠️ **The cost table in `adapters/llm/anthropic.py` is WRONG** — it carries
    Opus at $15/$75 and Sonnet at $3/$15; current published rates are **$5/$25 and $2/$10**,

@@ -1,7 +1,7 @@
 # DATA_MODEL
 
 _The two databases, every table, and — most importantly — how the bank's half gets swapped out for the real thing on hackathon day._
-_Status: **partly built as of P2c, plus `audio_recordings` (`D110`)**. Last updated: 2026-09-07._
+_Status: **partly built as of P2c, plus `audio_recordings` (`D110`)**. Last updated: 2026-09-08._
 
 > **What is real today:** **eleven tables** with Alembic migrations, verified against a live
 > Postgres — `call_sessions`, `call_state_transitions`, `agent_state_log`, `assignments`,
@@ -75,7 +75,7 @@ seeded by `mock/bank_core/generate.py`, exposed only via the port.
 ### Insurance
 | Table | Key columns |
 |---|---|
-| `products` | `product_code` PK, `line` (health/life/motor/travel/pa/savings), `name_th/en`, `short_desc`, `target_segment`, `features_json`, `is_active` |
+| `products` | `product_code` PK, `line` (health/life/motor/travel/pa/savings), `name_th/en`, `short_desc`, **`insurer`**, **`coverages_json`** (typed `Coverage` rows — the same shape a policy's figures use, read by the same parser, because a gap analysis compares one against the other), `target_segment`, `features_json`, `is_active`. ⚠️ **No premium**: pricing and underwriting are out of scope, and a plan says what it *covers* (`D125`, `D115`) |
 | `policies` | `policy_no` PK, `customer_id`, `product_code`, **`insurer`** (`D117` — which carrier underwrote it; meaningless for one insurer, first-class for a broker), `status` (active/lapsed/pending/cancelled), `effective_date`, `expiry_date`, `sum_insured`, `premium`, `payment_frequency`, `next_due_date`, `coverage_json` (IPD room & board, OPD, deductible, co-pay, exclusions…), `riders_json`, `beneficiaries_json`, `channel_sold`, `agent_id_of_record` |
 | `claims` | `claim_id` PK, `policy_no`, `type`, `status`, `submitted_at`, `incident_date`, `amount_claimed`, `amount_paid`, `hospital_name`, `documents_required_json`, `last_update_at` |
 | `policy_documents` | `doc_id`, `policy_no`, `kind`, `url_ref` (metadata only, no binaries) |
@@ -241,7 +241,16 @@ class CoreDataProvider(Protocol):
     async def list_holdings(self, customer_id: str) -> list[Holding]: ...
     async def list_life_events(self, customer_id: str) -> list[LifeEvent]: ...
     async def get_product(self, product_code: str) -> Product | None: ...
+    async def list_products(                      # D125
+        self, *, line: ProductLine | None = None, active_only: bool = True
+    ) -> list[Product]: ...
 ```
+
+⚠️ **`list_products` is here rather than in `config/` on purpose** (`D125`). A plan
+catalogue is **live data owned by somebody else** — plans appear, are withdrawn and are
+repriced without us — so it is the same kind of fact as a policy, and it must be reachable
+by the hackathon-day swap. `config/` is not. Putting it there would have left the one thing
+the comparison feature reads outside the seam this whole section exists to describe.
 
 It returns **domain objects**, never rows. Every adapter is responsible for its own mapping, so the
 rest of the system is blind to the upstream shape.

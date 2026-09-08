@@ -54,7 +54,7 @@ the disclosure gate moves when the agent attests. **What they said while waiting
 screen** (`D106`), and if they consented, **their audio is in object storage encrypted**
 (`D110`) with a key ref and a retention date. If they declined, it is nowhere.
 
-Verified on 2026-09-08: **871 tests** — 859 pass + 12 skipped with Postgres and MinIO both
+Verified on 2026-09-08: **878 tests** — 866 pass + 12 skipped with Postgres and MinIO both
 up (the 12 are foreign-key cases the in-memory backend cannot have, and the `ml`-extra ones).
 Without those containers the count of skips rises and nothing fails.
 `ruff check` and `ruff format --check` clean over **220** files, `mypy --strict`
@@ -475,7 +475,7 @@ performing by hand, i.e. what the next services take over (`D36`).
 | Call states | 15, transition table self-validated (the rating is an event, not a state — `D46`) |
 | Event types | **20** — `call.handed_off` added by `D124`, its own event rather than a flavour of `CallEnded`: *"the media stopped"* and *"this went to Muang Thai because they have to rule on the coverage"* answer different questions, and counting handoffs per carrier is one a broker actually has |
 | Scenarios | 3 (in-app happy path, cold-call motor claim, fully degraded) |
-| Mock core | 3 customers, **6 policies across 5 carriers** (`D117` — the demo customer holds a real broker portfolio: employer group health, a second health policy, and motor, from three different insurers), 5 products, 5 interactions, 2 claims |
+| Mock core | 3 customers, **6 policies across 5 carriers** and a **19-plan catalogue across 6 carriers** (`D125`) — the policies are one customer's real broker portfolio (employer group health, a second health policy, and motor, from three insurers); the catalogue is what they are compared against, and it carries a **withdrawn** plan so `active_only` has something to exclude (`B30`). ⚠️ The affiliated carrier is deliberately not the best row, and a test asserts it |
 | Intent taxonomy | **33 intents** across 5 lines, each with a catch-all — **broker-shaped** since `D117`: advice/compare and renewal are first-class, claims are handoffs (`handoff_to_insurer`), and `health.ipd.preauth` is gone because pre-authorisation is the insurer's decision |
 | Skills / queues | **11 / 11** (`D117`). Advice and service per line, plus `renewal.retention`, `claims.assist`, `general.service`, `general.escalation`. Every skill held by 2+ agents, enforced at startup (`D22`) |
 | Playbooks | **24**, in `config/playbooks.yaml` (`D118`) |

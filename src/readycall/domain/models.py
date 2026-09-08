@@ -53,16 +53,6 @@ class DomainModel(BaseModel):
 # --------------------------------------------------------------------------------------
 
 
-class Product(DomainModel):
-    product_code: str
-    line: ProductLine
-    name_th: str
-    name_en: str | None = None
-    short_desc: str | None = None
-    features: dict[str, Any] = Field(default_factory=dict)
-    is_active: bool = True
-
-
 class Coverage(DomainModel):
     """Coverage figures. **Always data, never model output** (`D16`).
 
@@ -76,6 +66,54 @@ class Coverage(DomainModel):
     currency: str = "THB"
     unit: str | None = None  # "per_day", "per_year", "per_visit"
     note: str | None = None
+
+
+class Product(DomainModel):
+    """A plan a broker can put in front of a customer (`D125`).
+
+    ⚠️ **This is live data owned by somebody else, not domain taxonomy.** A plan catalogue
+    changes without us — new plans, withdrawn plans, repriced cover — so it reaches the
+    system through `CoreDataProvider` like every other fact about the outside world, and
+    **not** through `config/`. That distinction was nearly got wrong: a `config/products.yaml`
+    would have put the one thing the comparison feature reads outside the seam built for
+    exactly this, and `config/` is not reachable by the hackathon-day data swap (`D3`).
+
+    ``insurer`` is the same field, and the same argument, as `Policy.insurer` (`D117`): a
+    single company's catalogue has no use for it, and a broker's whole job is *"คัดสรรแบบ
+    ประกันและบริษัทฯ"* — selecting the plan **and the company**.
+
+    ⚠️ **There is no premium field, and that is deliberate.** The brief puts premium pricing
+    and underwriting explicitly **out of scope**. A `Product` says what a plan *covers*, and
+    comparison ranks on those figures; what it costs this particular customer depends on
+    their age, their risk and the insurer's own underwriting, and inventing it here is the
+    one thing a broker's screen must not do. Surface and compare; never quote (`D115`).
+    """
+
+    product_code: str
+    line: ProductLine
+    name_th: str
+    name_en: str | None = None
+    short_desc: str | None = None
+    #: The carrier that writes this plan. `None` only for a single-insurer deployment.
+    insurer: str | None = None
+    #: The comparable figures, as **typed rows** rather than free text (`D16`). Same model
+    #: `Policy` uses, on purpose: a gap analysis compares what the customer holds against
+    #: what a plan offers, and two shapes for one concept is two mapping bugs waiting.
+    coverages: tuple[Coverage, ...] = ()
+    features: dict[str, Any] = Field(default_factory=dict)
+    is_active: bool = True
+
+    def coverage(self, kind: str) -> Coverage | None:
+        """One figure by kind, or `None` when this plan does not state it.
+
+        `None` means *not stated*, never *zero* — a plan that is silent on outpatient
+        cover and a plan that explicitly excludes it are different products, and a
+        comparison that renders both as `0` is making a claim the data does not support.
+        """
+        for row in self.coverages:
+            if row.kind == kind:
+                return row
+        return None
 
 
 class Policy(DomainModel):
