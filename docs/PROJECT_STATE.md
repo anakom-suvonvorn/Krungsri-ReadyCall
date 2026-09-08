@@ -54,7 +54,7 @@ the disclosure gate moves when the agent attests. **What they said while waiting
 screen** (`D106`), and if they consented, **their audio is in object storage encrypted**
 (`D110`) with a key ref and a retention date. If they declined, it is nowhere.
 
-Verified on 2026-09-08: **878 tests** — 866 pass + 12 skipped with Postgres and MinIO both
+Verified on 2026-09-08: **896 tests** — 884 pass + 12 skipped with Postgres and MinIO both
 up (the 12 are foreign-key cases the in-memory backend cannot have, and the `ml`-extra ones).
 Without those containers the count of skips rises and nothing fails.
 `ruff check` and `ruff format --check` clean over **220** files, `mypy --strict`
@@ -389,6 +389,10 @@ the gate read per TOOL from `config/assist_tools.yaml` rather than per kind (`D1
 ☑ **the app places a real call and becomes the paired screen** (`D122`, `B36`) ·
 ☑ **contact menus filtered per context**, and the *"something else"* branch asking which
 kind of cover first so new business is reachable at all (`D122`, `D123`) ·
+☑ **compare & best-fit** (`D125`, `D126`) — the catalogue behind `CoreDataProvider`,
+ranked on facts with weights in `config/comparison.yaml`, a panel on the workstation, and
+a table **composed on the server** and pushed to the customer's phone. The customer's own
+column is gated on the screen's tier, not the tool's `personal` flag ·
 ☑ **handing the call to the insurer** (`D124`) — `insurers.yaml` with the real carriers,
 the customer's own carrier offered first and never missing, closed reasons, the wrap-up
 prefilled, a `call.handed_off` event, and no new call state ·

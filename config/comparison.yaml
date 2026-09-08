@@ -1,0 +1,139 @@
+# comparison.yaml — which figures matter when comparing plans, and which way is better
+#
+# `D126`. This is the broker's actual mandate — *"คัดสรรแบบประกันและบริษัทฯ ที่ตรงตามความ
+# ต้องการ"*, select the plan **and the company** (`D117`) — and the brief marks it as the
+# journey's **LEAK สูงสุด**.
+#
+# ---------------------------------------------------------------------------------------
+# WHY THIS IS CONFIG AND THE CATALOGUE IS NOT
+# ---------------------------------------------------------------------------------------
+#
+# `D125` moved the plan *catalogue* behind `CoreDataProvider`, because a list of plans is
+# live data owned by somebody else. This file is the opposite kind of thing: *"a higher
+# room-and-board rate is better, and it matters three times as much as an outpatient
+# limit"* is **insurance knowledge about how to compare**, not a fact about the market. It
+# ships with us, it changes when our thinking changes, and `D28` says it may not live in
+# `services/`.
+#
+# The test of the distinction: if the answer changes because an insurer launched a plan,
+# it is data (`D125`). If it changes because we decided differently, it is config (here).
+#
+# ---------------------------------------------------------------------------------------
+# THE RULE THIS FILE ENFORCES
+# ---------------------------------------------------------------------------------------
+#
+# **Ranking is on facts; the model only ever writes the reason sentence** (`D16`, `D115`).
+# Every position in the table is arithmetic over the weights below, applied to figures read
+# from `Product.coverages`. Nothing here is a judgement a model made, and a figure that
+# cannot be traced to a field does not render at all — a plan that is *silent* on a cover
+# shows "—", never "0", because a plan that does not mention outpatient cover and a plan
+# that excludes it are different products.
+#
+# ⚠️ **No premium, anywhere.** Pricing and underwriting are out of scope for this
+# hackathon, and what a plan costs THIS customer depends on their age, their risk and the
+# insurer's own underwriting. Surface and compare; never quote (`D115`).
+
+version: 1
+
+settings:
+  # A phone table with eight columns is unreadable, and the customer is looking at it for
+  # four minutes while a human talks to them. Three alternatives beside their own plan is
+  # a table, more is a spreadsheet.
+  max_candidates: 3
+  # Below this, "better" is noise rather than a finding: a 2% higher room rate is not a
+  # reason to move carrier, and presenting it as one is how a comparison becomes a sales
+  # script.
+  min_material_improvement: 0.05
+
+lines:
+  health:
+    label_th: "ประกันสุขภาพ"
+    attributes:
+      - kind: ipd_room_board
+        label_th: "ค่าห้องและค่าอาหาร (ต่อวัน)"
+        better: higher
+        weight: 3.0
+        # The headline for this line, and the demo story: a group plan capped at ฿1,500 a
+        # day against a private room that costs more (`MARKET_FACTS` §7 — medical costs
+        # rising 8-10% a year). The brief's framing is MISMATCH, not absence.
+      - kind: ipd_annual_limit
+        label_th: "วงเงินผู้ป่วยในต่อปี"
+        better: higher
+        weight: 3.0
+      - kind: opd_limit
+        label_th: "ค่ารักษาผู้ป่วยนอก (ต่อครั้ง)"
+        better: higher
+        weight: 1.0
+      - kind: deductible
+        label_th: "ค่าใช้จ่ายส่วนแรก"
+        better: lower
+        weight: 2.0
+      - kind: copay_rate
+        label_th: "ส่วนร่วมจ่าย"
+        better: lower
+        weight: 2.0
+        # Copayment and deductible are named focus areas in the 2569 health slides
+        # (`MARKET_FACTS` §7), and they are where a "cheaper" plan hides its cost.
+
+  motor:
+    label_th: "ประกันรถยนต์"
+    attributes:
+      - kind: own_damage
+        label_th: "ความเสียหายต่อรถยนต์"
+        better: higher
+        weight: 3.0
+      - kind: third_party_property
+        label_th: "ทรัพย์สินบุคคลภายนอก"
+        better: higher
+        weight: 2.0
+      - kind: deductible
+        label_th: "ค่าเสียหายส่วนแรก"
+        better: lower
+        weight: 2.0
+      - kind: ev_battery
+        label_th: "ความคุ้มครองแบตเตอรี่ (EV)"
+        better: higher
+        weight: 1.0
+        # EV cover genuinely differs between carriers - battery and ADAS - which makes it
+        # the strongest worked example for comparison, and it is the business mentor's own
+        # patch (`MARKET_FACTS` §7).
+
+  travel:
+    label_th: "ประกันเดินทาง"
+    attributes:
+      - kind: medical_overseas
+        label_th: "ค่ารักษาพยาบาลต่างประเทศ"
+        better: higher
+        weight: 3.0
+      - kind: trip_cancellation
+        label_th: "การยกเลิกการเดินทาง"
+        better: higher
+        weight: 1.0
+      - kind: baggage
+        label_th: "สัมภาระเสียหายหรือสูญหาย"
+        better: higher
+        weight: 1.0
+      - kind: flight_delay
+        label_th: "เที่ยวบินล่าช้า"
+        better: higher
+        weight: 1.0
+
+  life:
+    label_th: "ประกันชีวิต"
+    attributes:
+      - kind: sum_assured
+        label_th: "ทุนประกันชีวิต"
+        better: higher
+        weight: 3.0
+
+  pa:
+    label_th: "ประกันอุบัติเหตุ"
+    attributes:
+      - kind: accidental_death
+        label_th: "การเสียชีวิตจากอุบัติเหตุ"
+        better: higher
+        weight: 3.0
+      - kind: medical_accident
+        label_th: "ค่ารักษาพยาบาลจากอุบัติเหตุ"
+        better: higher
+        weight: 1.0

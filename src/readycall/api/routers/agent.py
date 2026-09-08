@@ -51,12 +51,13 @@ from readycall.api.schemas import (
 )
 from readycall.api.security import AgentPrincipal, AuthenticationRequired
 from readycall.domain import events as ev
-from readycall.domain.enums import AgentIntent, CallState, OfferOutcome
+from readycall.domain.enums import AgentIntent, CallState, OfferOutcome, ProductLine
 from readycall.domain.models import Assignment, CallWrapup
 from readycall.errors import PermanentError
 from readycall.logging import get_logger
 from readycall.services.agents.dispatch import sole_candidate
 from readycall.services.capture.keypad import Capture
+from readycall.services.comparison import to_push_payload
 from readycall.services.identity.attestation import AttestationOutcome
 
 log = get_logger(__name__)
@@ -300,6 +301,99 @@ async def end_call(
     # somebody was halfway through when the broker rang off can still be submitted.
     container.assist.close(call_session_id)
     return await _snapshot(container, who.agent_id)
+
+
+# --- compare & best-fit (D126) -------------------------------------------------------------
+
+
+async def _relevant_policy_for(container: Any, call_session_id: str) -> Any:
+    """The policy this call is about, from the FROZEN snapshot.
+
+    The snapshot rather than the bank core, for `_prefill_for`'s reason: it is what the
+    system knew when it decided, it needs no round trip, and it cannot move underneath the
+    call while the broker is reading a table built from it.
+    """
+    snapshot_id = container.snapshot_for_call.get(call_session_id)
+    if snapshot_id is None:
+        return None
+    snapshot = await container.snapshots.get(snapshot_id)
+    return snapshot.payload.relevant_policy if snapshot is not None else None
+
+
+async def _build_comparison(container: Any, call_session_id: str, line: str | None) -> Any:
+    """The ranked comparison for this call, or `None` when there is nothing to compare.
+
+    Two ordinary reasons to get `None`, and neither is an error: the line has no
+    comparable attributes configured, or the catalogue has nothing for it. A broker with
+    nothing to compare is a state, not a failure (`D125`).
+    """
+    held = await _relevant_policy_for(container, call_session_id)
+    chosen = line or (str(held.line) if held is not None else None)
+    if chosen is None:
+        session = await container.calls.get(call_session_id)
+        chosen = str(session.product_line) if session is not None else None
+    if chosen is None:
+        return None
+    spec = container.pack.comparison_for(chosen)
+    if spec is None:
+        return None
+
+    try:
+        product_line = ProductLine(chosen)
+    except ValueError:  # pragma: no cover - guarded by comparison_for above
+        return None
+    catalogue = await container.core.list_products(line=product_line)
+    if not catalogue:
+        return None
+    # Only compare against what they hold when it is the SAME line. A motor policy is not
+    # a baseline for a health plan, and subtracting one from the other would produce a
+    # table of confident nonsense rather than an empty one.
+    baseline = held if (held is not None and str(held.line) == chosen) else None
+    return container.comparison.build(line=chosen, spec=spec, held=baseline, catalogue=catalogue)
+
+
+@router.get("/calls/{call_session_id}/comparison")
+async def comparison(
+    call_session_id: str,
+    who: AgentDep,
+    container: ContainerDep,
+    line: str | None = None,
+) -> dict[str, Any]:
+    """What the broker sees before they push anything (`D126`).
+
+    Ranked here rather than in the client for the reason every other list on this screen
+    is: the ordering is a **decision**, made from real figures with weights from
+    `config/comparison.yaml`, and a client that ranks would eventually disagree with the
+    reason sentence sitting beside it.
+    """
+    await _require_active_call(container, call_session_id, who)
+    result = await _build_comparison(container, call_session_id, line)
+    if result is None:
+        return {"available": False, "line": line, "candidates": []}
+
+    return {
+        "available": True,
+        "line": result.line,
+        "line_label_th": result.line_label_th,
+        "held_label_th": result.held_label_th,
+        "held_policy_no": result.held.policy_no if result.held else None,
+        "held_insurer": result.held.insurer if result.held else None,
+        "candidates": [
+            {
+                "product_code": c.product.product_code,
+                "name_th": c.product.name_th,
+                "insurer": c.product.insurer,
+                "score": round(c.score, 3),
+                "reason_th": c.reason_th,
+                "better_on": [d.label_th for d in c.better_on],
+                "worse_on": [d.label_th for d in c.worse_on],
+            }
+            for c in result.candidates
+        ],
+        # The same table the customer would be shown, so the broker is looking at what
+        # they are about to send rather than at a summary of it.
+        "table": to_push_payload(result),
+    }
 
 
 # --- handing the call to another company (D124) -------------------------------------------
@@ -559,6 +653,28 @@ async def push_to_customer(
     if tool is None:
         raise HTTPException(status_code=400, detail=f"unknown tool {body.tool_id!r}")
     payload = dict(body.payload)
+    if tool.kind == "comparison":
+        # ⚠️ **Built here, never taken from the request** (`D126`). Until now this pushed
+        # whatever payload the client sent, so the coverage figures on a customer's phone
+        # would have been composed in a browser — `D16` says a coverage figure is data
+        # read from the record, and "the client assembled it" is not that. Same argument
+        # as `D121`'s `personal` flag, applied to content instead of permission.
+        result = await _build_comparison(container, call_session_id, body.payload.get("line"))
+        if result is None or result.is_empty:
+            raise _bad_request(
+                PermanentError(
+                    "ไม่มีข้อมูลแผนสำหรับเปรียบเทียบในสายนี้ "
+                    "(no catalogue for this line, so there is nothing to compare)"
+                )
+            )
+        # ⚠️ The tool is guest-safe and stays that way — comparing what the market offers
+        # is true for anybody. The customer's OWN column is not, so it is the column that
+        # moves rather than the tool (`D126`, `D121`, `D120`). Read from the session, never
+        # from the request: a client able to ask for the held column would be this gate's
+        # own bypass, exactly as it would be for `personal`.
+        screen = container.assist.for_call(call_session_id)
+        verified = screen is not None and str(screen.tier) == "verified"
+        payload = to_push_payload(result, include_held=verified)
     if tool.fields:
         # The field list is the tool's, not the request's. A client that could send its
         # own field set could put any label it liked in front of the customer.

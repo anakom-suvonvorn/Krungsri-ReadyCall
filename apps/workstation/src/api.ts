@@ -245,6 +245,35 @@ export type AssistTool = {
   stub: boolean;
 };
 
+export type ComparisonTable = {
+  columns_th: string[];
+  rows: { cells: string[]; best_index?: number }[];
+  note_th: string;
+};
+
+/** What the broker sees before pushing. **Ranked and composed by the server** (`D126`):
+ *  the order is a decision made from real figures with weights from config, and the
+ *  figures are read from the record — a browser assembling either would be `D16` with
+ *  extra steps. */
+export type ComparisonView = {
+  available: boolean;
+  line: string | null;
+  line_label_th?: string;
+  held_label_th?: string;
+  held_policy_no?: string | null;
+  held_insurer?: string | null;
+  candidates: {
+    product_code: string;
+    name_th: string;
+    insurer: string | null;
+    score: number;
+    reason_th: string;
+    better_on: string[];
+    worse_on: string[];
+  }[];
+  table: ComparisonTable;
+};
+
 export type HandoffOptions = {
   /** The carrier that underwrote the policy this call is about. Offered first and never
    *  missing, because the record beats the menu (`D124`). */
@@ -418,6 +447,15 @@ export const api = {
       note?: string;
     },
   ) => call<Snapshot>("POST", `/v1/agent/calls/${callId}/handoff`, body),
+
+  /** Compare & best-fit (`D126`). Ranked server-side; the client renders and never
+   *  re-orders. `line` overrides the call's own product line for a broker comparing
+   *  something else. */
+  comparison: (callId: string, line?: string) =>
+    call<ComparisonView>(
+      "GET",
+      `/v1/agent/calls/${callId}/comparison` + (line ? `?line=${encodeURIComponent(line)}` : ""),
+    ),
 
   /** DEMO: a caller arrives. Stands in for telephony until P5. */
   placeCall: (payload: Record<string, unknown>) =>

@@ -386,6 +386,40 @@ walkthrough transcribes real Thai speech for real.
 > longest line in the script and warns if you force it below the floor; if you bring your
 > own recording, that is the arithmetic to do.
 
+### Compare plans across carriers, which is the broker's actual mandate
+
+Journey step 3, and the brief marks it as the biggest leak. **No extra setup: §1 and §2.**
+
+Sign in at `/workstation` as **A006**, press **พร้อมรับสาย**, then place an *advice* call
+rather than a claim:
+
+```bash
+curl -X POST http://127.0.0.1:8000/v1/demo/calls -H "Content-Type: application/json" -d "{\"intent_code\": \"health.advice.compare\", \"caller_number\": \"0812345678\", \"intake_keys\": [\"2\"], \"ignore_hours\": true}"
+```
+
+Press **Accept**. The **เปรียบเทียบแผน** panel ranks three plans against what this customer
+already holds, each with a sentence and green ↑ / red ↓ chips for what is better and what
+is worse. Read the second row: it usually has the **best figure in most columns** and still
+ranks below the first, because of a deductible. That is the ranking doing real work rather
+than sorting by the biggest number.
+
+Everything about that order is arithmetic — weights live in `config/comparison.yaml`, the
+figures come from `Product.coverages` through `CoreDataProvider`. **The model, when one is
+wired in, rewrites only the reason sentence** (`D16`, `D126`).
+
+Then press **สร้างลิงก์ให้ลูกค้า** in the tool panel, open the link, and press
+**ส่งตารางนี้ให้ลูกค้า**. The table appears on the other screen — and note what it does
+*not* contain:
+
+⚠️ **A guest screen gets the market comparison without the customer's own column**, and
+says why. Tapping a link proves somebody is holding that phone, not who they are (`D42`).
+Sign in on the customer's screen and push again: **แผนปัจจุบันของคุณ** appears as the first
+column. Same tool, same button — the *column* is gated, not the tool, because comparing what
+the market offers is true for anybody (`D126`, `D121`).
+
+- **Needs set up:** §1 and §2.
+- **Needs running:** the API server. Nothing else.
+
 ### Hand a claim to the insurer, which is what a broker actually does
 
 A broker does not adjudicate claims — the insurer does (`D117`, from Krungsri's own duty

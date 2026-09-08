@@ -19,12 +19,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, api } from "./api";
-import type { AssistCatalogue, AssistState, HandoffOptions } from "./api";
+import type { AssistCatalogue, AssistState, ComparisonView, HandoffOptions } from "./api";
 import type { Capture, Snapshot, TranscriptTurn } from "./api";
 import { useSocket } from "./useSocket";
 import type { SocketMessage } from "./useSocket";
 import { AssistPanel } from "./assist";
 import { TransferButton, TransferDialog } from "./transfer";
+import { ComparisonPanel } from "./comparison";
 import {
   BacklogPanel,
   BriefPanel,
@@ -63,6 +64,7 @@ export default function App() {
   const [tools, setTools] = useState<AssistCatalogue | null>(null);
   const [transferOpen, setTransferOpen] = useState(false);
   const [handoffOptions, setHandoffOptions] = useState<HandoffOptions | null>(null);
+  const [comparison, setComparison] = useState<ComparisonView | null>(null);
 
   useEffect(() => {
     if (toast === null) return;
@@ -149,6 +151,27 @@ export default function App() {
    *  cannot be fetched once per sign-in the way the tool catalogue is; and fetching them
    *  on every call would be a round trip per call for a dialog nobody may open. */
   const activeCallId = snapshot?.active_call_session_id ?? null;
+
+  /** Re-read the comparison. Keyed to the CALL rather than fetched once per sign-in: the
+   *  ranking depends on which policy this caller holds, so it is a different answer for
+   *  every call and a stale one is a table about somebody else. */
+  const refreshComparison = useCallback(async () => {
+    if (!activeCallId) {
+      setComparison(null);
+      return;
+    }
+    try {
+      setComparison(await api.comparison(activeCallId));
+    } catch {
+      // A panel that cannot load must never break the call screen (`D12`'s shape).
+      setComparison(null);
+    }
+  }, [activeCallId]);
+
+  useEffect(() => {
+    void refreshComparison();
+  }, [refreshComparison]);
+
   useEffect(() => {
     if (!transferOpen || !activeCallId) return;
     void api
@@ -434,6 +457,23 @@ export default function App() {
               )
             }
           />
+          {/* The broker's mandate, above the tool rail because it is the thing they are
+              on the call to do — and because the rail's own "push a comparison" button
+              sends what this panel is showing (`D126`). */}
+          <ComparisonPanel
+            view={callId ? comparison : null}
+            busy={busy}
+            paired={Boolean(assist?.paired)}
+            onRefresh={() => void refreshComparison()}
+            onPush={() =>
+              callId &&
+              run(() => api.assistPush(callId, "compare.plans")).then(() => {
+                void refreshAssist();
+                setToast("ส่งตารางเปรียบเทียบไปที่หน้าจอลูกค้าแล้ว");
+              })
+            }
+          />
+
           {/* Under the keypad, because it is the same idea one step further out: a
               control the broker triggers that changes what the customer's device is
               doing, with the result landing back here (`D44` -> `D120`). */}

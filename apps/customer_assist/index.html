@@ -230,6 +230,13 @@ function comparison(p) {
     ).join("") + "</tr>";
   }
   html += "</tbody></table></div>";
+  // Why their own plan is not in the table (`D126`). An absence explains nothing: a guest
+  // would otherwise conclude we do not hold their policy, when the truth is that this
+  // screen has only proved somebody is holding a phone (`D42`).
+  if (p.held_hidden) {
+    html += '<div class="lock" style="margin-top:10px">'
+      + "เข้าสู่ระบบเพื่อเทียบกับแผนปัจจุบันของคุณเอง</div>";
+  }
   if (p.note_th) html += '<div class="lock" style="margin-top:10px">' + esc(p.note_th) + "</div>";
   return html;
 }

@@ -23,7 +23,7 @@ somebody calls it.** `grep -rn "\.method_name(" src/` is thirty seconds and it h
 been the answer nine times.
 
 The second pattern, worth equal weight: **every one of these was found by the user
-pressing a button, never by the suite.** 878 tests pass and did not see any of it. When
+pressing a button, never by the suite.** 896 tests pass and did not see any of it. When
 they report something, believe the report before believing the tests.
 
 ⚠️ **And `B39`'s specific lesson, because it cost a whole round trip:** when the user
@@ -285,7 +285,7 @@ moment in the recording it was said — **and if they consented, their audio is 
 storage encrypted, with the key ref and the retention date on an `audio_recordings` row.**
 If they declined, it is nowhere.
 
-Verified **2026-09-08 (evening)**: **878 tests** — 866 pass + 12 skipped, with Postgres
+Verified **2026-09-08 (evening)**: **896 tests** — 884 pass + 12 skipped, with Postgres
 and MinIO both up. `ruff check` + `ruff format --check` clean over 220 files,
 `mypy --strict` clean over 155, 69/69 diagrams current, prompt pack fresh, `audit_docs.py`
 clean on the live files. **And by driving `/sim` in a browser** (`D123`): *Contact us —
@@ -299,7 +299,11 @@ ended the call into after-call work with the wrap-up already reading
 **"ส่งต่อ เมืองไทยประกันภัย — การพิจารณาและจ่ายค่าสินไหม"**. **And through the real
 adapter** (`D125`): 19 plans, 18 active, 8 health plans across 6 carriers, every policy's
 `product_code` resolving to a catalogue entry whose carrier matches the policy's — two
-things that were both false before.
+things that were both false before. **And on a live `health.advice.compare` call**
+(`D126`): the panel ranked เมืองไทย เฮลท์ พลัส first and กรุงเทพ เฮลท์ อีลิท second
+*despite the best figure in three of five rows*, because of its ฿30,000 deductible; a push
+to a **guest** screen carried the market table with `held_hidden: true`, and signing in
+added แผนปัจจุบันของคุณ as column 1.
 **And by driving the workstation in a browser**: link minted from the panel, tool box
 opened (11 tools, exactly the 5 personal ones locked), a blank quote form pushed to a
 GUEST screen at 375 px, filled in, submitted, and read back on the broker's screen; then
@@ -379,7 +383,7 @@ because it is now **twenty-two** and they rhyme:
    day. `B36` was an entry path that had been **broken since P1b** and that nothing had
    ever executed.
 15. **`B32`/`B33` (2026-09-08)** — both found in ten minutes of *using* the tool rail, and
-   neither visible to 878 tests. The catalogue was fetched on mount, before sign-in, so it
+   neither visible to 896 tests. The catalogue was fetched on mount, before sign-in, so it
    401'd into a defensive `catch` and the rail was empty for the shift. And the dialog's
    2-second poll was rebuilt every render — the workstation re-renders every second — so
    it never fired once, which looked exactly like the server not returning the customer's
@@ -667,13 +671,20 @@ for its estimates and its "if the week collapses" line, not as a to-do list._
    faults fell out: two policies pointed at product codes in no catalogue at all, and the
    same carrier was spelled two ways between a policy and the catalogue.
 
-   **Next slice — the ranking, and it is the one the pitch leans on:** gap analysis
-   (the customer's cover against each candidate, differences **ranked by size**), the
-   comparison rendered on the workstation, and the push to the customer's phone filled
-   with it. The transport has worked since `D120`; only the content was missing.
-   ⚠️ **Rank on facts, explain with the model** (`D16`, `D115`): the ordering comes from
-   real attributes, the model writes only the reason sentence, and a figure that cannot be
-   traced to a field does not render. Surface and compare — never quote or underwrite.
+   ✅ **And the RANKING landed too (`D126`).** `services/comparison/` ranks on facts with
+   weights from `config/comparison.yaml`, the workstation has a panel showing the ranked
+   candidates with their trade-offs, and pushing sends a table **composed on the server** —
+   `compare.plans` used to push whatever payload the client sent, so coverage figures would
+   have been assembled in a browser.
+
+   ⚠️ **It also found a disclosure leak by looking at the output**: the table's first
+   column is the customer's own cover, and the tool is `personal: false`, so it landed on a
+   guest screen. Fixed the way `D121` reasons — the tool stays guest-safe and the **column**
+   moves: guest sees the market, signed-in sees the market against their own plan.
+
+   **What is left of Track B:** the model writing the reason sentence (`Candidate.reason_th`
+   is the seam; the ranking is untouched by filling it), and gap analysis against a
+   customer's *whole portfolio* rather than one policy per line.
 4. **The AI story.** `scripts/compare_llm.py` does not exist and is a named P4 exit
    criterion. ⚠️ **The cost table in `adapters/llm/anthropic.py` is WRONG** — it carries
    Opus at $15/$75 and Sonnet at $3/$15; current published rates are **$5/$25 and $2/$10**,

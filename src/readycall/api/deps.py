@@ -78,6 +78,7 @@ from readycall.services.capture.matching import (
     best_digit_match,
     match_date,
 )
+from readycall.services.comparison import ComparisonService
 from readycall.services.context.assembler import ContextAssembler
 from readycall.services.context.store import AppContextEvent, InMemoryAppContextStore
 from readycall.services.identity.attestation import AttestationService
@@ -443,6 +444,10 @@ class Container:
         #: for the length of the call so the wrap-up can be prefilled; the durable record
         #: is the `call_wrapups` row the broker actually files (`D45`).
         self.transfer = TransferService(clock=self.clock)
+        #: Compare & best-fit (`D126`). No I/O of its own: the catalogue is read through
+        #: `CoreDataProvider` by the caller and handed in, which is what lets the thing
+        #: that DECIDES be tested with a list of plans and no adapter at all.
+        self.comparison = ComparisonService(settings=self.pack.comparison_settings)
         self.transcript_delivery.subscribe(self.bus)
 
         #: The FOURTH consumer of `transcript.turn` (`D114`), and its own subscriber

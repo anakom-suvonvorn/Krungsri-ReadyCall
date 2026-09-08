@@ -926,3 +926,106 @@ button.tool:disabled {
 .stub-panel p {
   margin: 0 0 8px;
 }
+
+/* --- compare & best-fit (`D126`) ----------------------------------------------------- */
+
+.candidates {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 10px;
+}
+
+.candidates li {
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+}
+
+/* The first row is the ranked recommendation, so it earns the emphasis — but nothing
+   here hides the trade-offs underneath it. */
+.candidates li:first-child {
+  background: rgba(255, 199, 44, 0.06);
+}
+
+.cand-head {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+/* ⚠️ `.chip.ok` and `.chip.bad` are deliberately the SAME size and weight. A panel whose
+   downsides are quieter than its upsides is a sales script, and the plan ranked first is
+   frequently the one with a deductible attached (`D126`). */
+.chip {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+}
+
+.chip.ok {
+  color: var(--ok);
+  border-color: rgba(52, 211, 153, 0.35);
+  background: rgba(52, 211, 153, 0.1);
+}
+
+.chip.bad {
+  color: var(--bad);
+  border-color: rgba(248, 113, 113, 0.35);
+  background: rgba(248, 113, 113, 0.1);
+}
+
+/* The table scrolls inside its own box: a wide comparison must not push the whole
+   workstation sideways. */
+.tw {
+  overflow-x: auto;
+  margin-top: 12px;
+}
+
+table.cmp {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 12px;
+}
+
+table.cmp th,
+table.cmp td {
+  border: 1px solid var(--line);
+  padding: 6px 8px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+table.cmp th:first-child,
+table.cmp td:first-child {
+  text-align: left;
+}
+
+table.cmp th {
+  color: var(--ink-dim);
+  font-weight: 600;
+}
+
+/* The best figure in a row, decided by the SERVER from the attribute's own direction —
+   the client only paints what it is told (`D126`). */
+table.cmp td.best {
+  background: rgba(255, 199, 44, 0.14);
+  font-weight: 700;
+}
+
+button.small {
+  width: auto;
+  padding: 4px 10px;
+  font-size: 12px;
+}

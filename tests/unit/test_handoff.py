@@ -274,3 +274,122 @@ async def test_only_the_agent_on_the_call_can_hand_it_over(client: Any) -> None:
         json={"reason_code": "claim_adjudication", "use_policy_insurer": True},
     )
     assert refused.status_code == 404
+
+
+# --- compare & best-fit over HTTP (D126) ------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_the_comparison_is_ranked_and_composed_by_the_server(client: Any) -> None:
+    """`D126`. The broker sees the table before pushing it, and neither the order nor the
+    figures were decided in a browser."""
+    call_id = await on_a_claim_call(client)
+    view = client.get(f"/v1/agent/calls/{call_id}/comparison").json()
+
+    assert view["available"] is True
+    assert view["line"] == "health"
+    assert view["held_policy_no"], "this caller holds health cover to compare against"
+    assert 1 <= len(view["candidates"]) <= 3, "capped so a phone can render it"
+
+    scores = [c["score"] for c in view["candidates"]]
+    assert scores == sorted(scores, reverse=True), "ranked, not catalogue order"
+    assert all(c["reason_th"] for c in view["candidates"])
+    assert view["table"]["columns_th"][1] == "แผนปัจจุบันของคุณ", (
+        "the gap is what the customer should see first"
+    )
+    assert "ไม่ใช่ใบเสนอราคา" in view["table"]["note_th"], (
+        "pricing is out of scope and the table says so (`D115`)"
+    )
+
+
+@pytest.mark.anyio
+async def test_a_pushed_comparison_is_built_here_never_taken_from_the_request(
+    client: Any,
+) -> None:
+    """`D126`, and it is the rule worth protecting.
+
+    Until this landed, `compare.plans` pushed whatever payload the client sent — so the
+    coverage figures on a customer's phone would have been composed in a browser. `D16`
+    says a coverage figure is data read from the record; "the client assembled it" is not
+    that. A client that sends a table of its own gets the server's table instead.
+    """
+    call_id = await on_a_claim_call(client)
+    link = client.post(f"/v1/agent/calls/{call_id}/assist/link").json()
+    client.get(f"/v1/assist/{link['token']}")  # the customer taps it
+    # Signed in, so the held column is in play too — otherwise this would be asserting
+    # the guest table and would miss half of what the server composes (`D126`).
+    client.post(f"/v1/assist/{link['token']}/sign-in", json={"customer_id": "C000001"})
+
+    pushed = client.post(
+        f"/v1/agent/calls/{call_id}/assist/push",
+        json={
+            "tool_id": "compare.plans",
+            "payload": {
+                "columns_th": ["ของปลอม"],
+                "rows": [{"cells": ["คุ้มครอง 999,999,999 บาท"]}],
+            },
+        },
+    )
+    assert pushed.status_code == 200, pushed.text
+
+    screen = client.get(f"/v1/assist/{link['token']}").json()
+    item = screen["items"][-1]
+    assert item["kind"] == "comparison"
+    payload = item["payload"]
+    assert payload["columns_th"] != ["ของปลอม"], "the client's table was discarded"
+    assert "999,999,999" not in str(payload)
+    assert payload["columns_th"][1] == "แผนปัจจุบันของคุณ"
+
+
+@pytest.mark.anyio
+async def test_comparing_a_line_with_no_catalogue_says_so_rather_than_failing(
+    client: Any,
+) -> None:
+    """A broker with nothing to compare is an ordinary state, not an error (`D125`)."""
+    call_id = await on_a_claim_call(client)
+    view = client.get(f"/v1/agent/calls/{call_id}/comparison", params={"line": "savings"}).json()
+    assert view["available"] is False
+    assert view["candidates"] == []
+
+
+@pytest.mark.anyio
+async def test_a_guest_screen_gets_the_market_not_the_customers_own_cover(
+    client: Any,
+) -> None:
+    """`D126`, and it was a live leak until it was looked at.
+
+    `compare.plans` is `personal: false` and should be: comparing what the market offers
+    is true for anybody, and gating it would wall off the one part of this journey with no
+    privacy cost at all (`D120`). But the table gained a column headed
+    *"แผนปัจจุบันของคุณ"* carrying real coverage figures — and that column is about ONE
+    person, on a screen that has only proved somebody is holding a phone (`D42`).
+
+    So the tool stays guest-safe and the COLUMN is what moves. This is `D121`'s
+    correction — look at the purpose, not the shape — inside a single push.
+    """
+    call_id = await on_a_claim_call(client)
+    link = client.post(f"/v1/agent/calls/{call_id}/assist/link").json()
+    token = link["token"]
+    client.get(f"/v1/assist/{token}")  # tapped, not signed in
+
+    client.post(f"/v1/agent/calls/{call_id}/assist/push", json={"tool_id": "compare.plans"})
+    guest = client.get(f"/v1/assist/{token}").json()
+    assert guest["tier"] == "guest"
+    payload = guest["items"][-1]["payload"]
+
+    assert "แผนปัจจุบันของคุณ" not in payload["columns_th"]
+    assert payload["held_hidden"] is True, (
+        "and it says so, so a guest does not conclude we simply do not hold their policy"
+    )
+    # The market comparison itself is still there — that is the half with no privacy cost.
+    assert len(payload["columns_th"]) >= 2
+    assert payload["rows"]
+
+    # Signing in unlocks their own column, on the same tool with the same push.
+    client.post(f"/v1/assist/{token}/sign-in", json={"customer_id": "C000001"})
+    client.post(f"/v1/agent/calls/{call_id}/assist/push", json={"tool_id": "compare.plans"})
+    verified = client.get(f"/v1/assist/{token}").json()
+    assert verified["tier"] == "verified"
+    unlocked = verified["items"][-1]["payload"]
+    assert unlocked["columns_th"][1] == "แผนปัจจุบันของคุณ"
+    assert unlocked["held_hidden"] is False

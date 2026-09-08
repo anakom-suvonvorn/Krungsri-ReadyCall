@@ -84,6 +84,7 @@ Three hard architectural rules follow from that picture:
 | **Agent Delivery** (`api/ws/agent_ws.py`) | Agent presence, the offer/accept handshake, push of the `CaseBrief` bundle, live updates, acknowledgements. | Hold business state. |
 | **Agent Workstation** (`apps/agent_desktop/`) | **The agent's entire job in one browser tab: the softphone itself (WebRTC audio through their headset), the brief, the queue, their status.** There is no separate desk phone. | Be "just a screen". |
 | **Consent/PDPA** (`services/consent/`) | Consent capture, scope (incl. separate health-data consent), redaction policy, retention, audit. | Be optional. |
+| **Comparison** (`services/comparison/`) | Compare & best-fit (`D126`): ranking candidate plans on real figures against what the customer holds, and composing the table the customer's screen renders. | Rank with a model, quote a premium, or let a client supply the figures. |
 | **Transfer** (`services/transfer/`) | Where a call goes when it is not staying with us (`D124`): which company, why, the disposition it prefills, and the `call.handed_off` event. | Invent a call state. A handoff ends the call the ordinary way; the *record* is what makes it a handoff (`Q37`). |
 | **Wrap-up** (`services/wrapup/`) | Post-call summary + disposition + follow-ups, human-confirmed, written to our store. | Auto-write unverified content. |
 

@@ -129,6 +129,40 @@ class PlaybookSpec:
 
 
 @dataclass(frozen=True, slots=True)
+class ComparisonAttribute:
+    """One figure a comparison ranks on, and which way is better (`D126`).
+
+    `better` is the whole reason this is config rather than code: *"a higher room rate is
+    better and a higher deductible is worse"* is insurance knowledge, and getting it
+    backwards is silent — every plan still renders, in the wrong order, with a confident
+    reason sentence attached.
+    """
+
+    kind: str
+    label_th: str
+    better: str  # "higher" | "lower"
+    weight: float = 1.0
+
+    @property
+    def higher_is_better(self) -> bool:
+        return self.better == "higher"
+
+
+@dataclass(frozen=True, slots=True)
+class ComparisonLine:
+    label_th: str
+    attributes: tuple[ComparisonAttribute, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ComparisonSettings:
+    #: A phone table with eight columns is unreadable (`D126`).
+    max_candidates: int = 3
+    #: Below this, "better" is noise rather than a finding.
+    min_material_improvement: float = 0.05
+
+
+@dataclass(frozen=True, slots=True)
 class InsurerSpec:
     """A company a broker can hand a call TO (`D124`).
 
@@ -358,6 +392,8 @@ class DomainPack:
     assist_groups: dict[str, AssistToolGroup]
     insurers: dict[str, InsurerSpec]
     handoff_reasons: dict[str, HandoffReasonSpec]
+    comparison_lines: dict[str, ComparisonLine]
+    comparison_settings: ComparisonSettings
     menu_settings: MenuSettings
     #: Words the ASR is nudged toward (`D9`). Config, not code, because they are
     #: insurance-specific and `services/` may not hold a policy concept (`D28`).
@@ -481,6 +517,9 @@ class DomainPack:
         playbooks = cls._load_playbooks(_read(directory / "playbooks.yaml"))
         assist_tools, assist_groups = cls._load_assist_tools(_read(directory / "assist_tools.yaml"))
         insurers, handoff_reasons = cls._load_insurers(_read(directory / "insurers.yaml"))
+        comparison_lines, comparison_settings = cls._load_comparison(
+            _read(directory / "comparison.yaml")
+        )
         vocabulary = cls._load_stt_vocabulary(directory)
 
         pack = cls(
@@ -495,6 +534,8 @@ class DomainPack:
             assist_groups=assist_groups,
             insurers=insurers,
             handoff_reasons=handoff_reasons,
+            comparison_lines=comparison_lines,
+            comparison_settings=comparison_settings,
             menu_settings=settings,
             stt_vocabulary=vocabulary,
             language_menu=language_menu,
@@ -601,6 +642,61 @@ class DomainPack:
             # playbook would render an empty action list, which reads as "nothing to do".
             raise ConfigError("playbooks.yaml must define `generic`")
         return out
+
+    @staticmethod
+    def _load_comparison(
+        raw: dict[str, Any],
+    ) -> tuple[dict[str, ComparisonLine], ComparisonSettings]:
+        """`comparison.yaml` — which figures matter, and which way is better (`D126`)."""
+        lines: dict[str, ComparisonLine] = {}
+        for line_id, body in (raw.get("lines") or {}).items():
+            attributes: list[ComparisonAttribute] = []
+            for entry in body.get("attributes") or []:
+                better = str(entry.get("better", "")).lower()
+                if better not in {"higher", "lower"}:
+                    # Silent if wrong: every plan still renders, in the wrong order, with a
+                    # confident reason attached. So it refuses to boot instead.
+                    raise ConfigError(
+                        f"comparison.yaml: {line_id}.{entry.get('kind')!r} has "
+                        f"better={better!r}; must be 'higher' or 'lower'"
+                    )
+                weight = float(entry.get("weight", 1.0))
+                if weight <= 0:
+                    raise ConfigError(
+                        f"comparison.yaml: {line_id}.{entry.get('kind')!r} has weight "
+                        f"{weight}; an attribute nobody weights is one nobody compares on"
+                    )
+                attributes.append(
+                    ComparisonAttribute(
+                        kind=str(entry["kind"]),
+                        label_th=str(entry["label_th"]),
+                        better=better,
+                        weight=weight,
+                    )
+                )
+            if not attributes:
+                raise ConfigError(f"comparison.yaml: line {line_id!r} has no attributes")
+            kinds = [a.kind for a in attributes]
+            if len(kinds) != len(set(kinds)):
+                raise ConfigError(f"comparison.yaml: line {line_id!r} names a kind twice")
+            lines[str(line_id)] = ComparisonLine(
+                label_th=str(body.get("label_th", line_id)), attributes=tuple(attributes)
+            )
+
+        if not lines:
+            raise ConfigError("comparison.yaml defines no lines")
+
+        settings_raw = raw.get("settings") or {}
+        settings = ComparisonSettings(
+            max_candidates=int(settings_raw.get("max_candidates", 3)),
+            min_material_improvement=float(settings_raw.get("min_material_improvement", 0.05)),
+        )
+        if settings.max_candidates < 1:
+            raise ConfigError("comparison.yaml: max_candidates must be at least 1")
+        return lines, settings
+
+    def comparison_for(self, line: ProductLine | str) -> ComparisonLine | None:
+        return self.comparison_lines.get(str(line))
 
     @staticmethod
     def _load_insurers(

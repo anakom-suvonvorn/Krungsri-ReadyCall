@@ -4981,3 +4981,107 @@ since `D120` — the broker can already push a comparison to the customer's phon
 renders. What is now available is the *data* it should be built from. The next slice is the
 gap analysis: the customer's cover against each candidate, differences **ranked by size**,
 with the model writing only the reason sentence (`D16`, `D115`).
+
+## D126. Compare & best-fit: the ranking is arithmetic, and the model only writes the sentence
+_Taken 2026-09-08, on top of `D125`'s catalogue. Track B's second slice, and the first
+time the broker's actual mandate appears on a screen. Journey step 3 — the brief's
+**LEAK สูงสุด**._
+
+- **Problem.** `D120` built the transport in September and it has worked ever since: the
+  broker presses a button and a comparison table appears on the customer's phone. What
+  filled it was **hand-written in the demo**. `D125` then put a real catalogue behind the
+  port. What was still missing is the thing in between — deciding *which* plans, in *what
+  order*, and *why*.
+
+- **Decision.** `services/comparison/`, a no-I/O service that takes the customer's policy
+  and a catalogue and returns a ranked answer, with `config/comparison.yaml` saying which
+  figures matter and which way is better.
+
+### The rule, and why the split is where it is
+
+**Rank on facts, explain with the model** (`D16`, `D115`). Every position in the table is
+arithmetic over weights in config, applied to figures read from `Product.coverages`. A
+model — when one is wired in — rewrites only the **reason sentence**, on top of an ordering
+it did not choose. A model that ranks is a model that can be argued into putting a plan
+first; a model that explains an arithmetic ranking cannot.
+
+⚠️ **The model is not wired in yet.** The sentence is generated from the same differences
+the ranking used — duller, and it cannot invent anything. `Candidate.reason_th` is the
+seam and the ranking is untouched by filling it.
+
+### Why the weights are config and the catalogue is not
+
+`D125` moved the *catalogue* behind `CoreDataProvider` because a list of plans is live data
+owned by somebody else. This file is the opposite kind of thing: *"a higher room rate is
+better, and it matters three times as much as an outpatient limit"* is **insurance
+knowledge about how to compare**. The test of the distinction, written into the file: **if
+the answer changes because an insurer launched a plan it is data; if it changes because we
+decided differently it is config.**
+
+`better: higher|lower` refuses to boot on anything else, because getting it backwards is
+silent — every plan still renders, in the wrong order, with a confident sentence attached.
+
+### Four rules the arithmetic obeys, each of which was a way to lie to somebody
+
+1. **`None` means NOT STATED, never zero.** A plan silent on outpatient cover and a plan
+   that excludes it are different products; a table rendering both as `0` makes a claim the
+   data does not support. An unstated figure contributes nothing in either direction and
+   renders as "—" — and it can never win its row.
+2. **Improvement is clipped.** A hundred-million-baht annual limit must not carry a plan
+   that is worse on everything else. A comparison whose order is decided by one outlier is
+   a sales script with a table around it.
+3. **Below a floor, "better" is not reported as better.** A 2% higher room rate is not a
+   reason to change carrier. The figure still renders — the customer sees both numbers —
+   it simply is not called an improvement.
+4. **The plan they already hold is never a candidate.** It is the column everything else is
+   measured against. Offering it back is a table recommending the status quo it was asked
+   to challenge.
+
+And a fifth that only appeared when the output was looked at: **with no policy to improve
+on, every weighted improvement is exactly zero.** That is not a tie, it is *no ranking at
+all*, and the order then falls back to whatever the catalogue happened to be in — which is
+precisely how an affiliated carrier ends up silently first. New business is ranked against
+the candidate set instead, min-max per attribute. `D123` had just made that path reachable
+from the app, so it was a live case rather than a hypothetical.
+
+### The table is composed on the server, and that is `D16` rather than tidiness
+
+Until now `compare.plans` pushed **whatever payload the client sent**, so the coverage
+figures on a customer's phone would have been assembled in a browser. A coverage number is
+data read from the record; *"the client built it"* is not that. The push endpoint now
+discards the request's payload for `kind: comparison` and builds it, and a test sends a
+fake table to prove it is thrown away.
+
+### ⚠️ A disclosure leak, found by reading the output rather than the code
+
+The table's first column is headed **"แผนปัจจุบันของคุณ"** and carries the customer's real
+coverage figures — and `compare.plans` is `personal: false`, so the first push landed all
+of it on a **guest** screen. Tapping a link proves possession of a phone, not identity
+(`D42`).
+
+Both obvious fixes are wrong. Marking the tool `personal` walls off the one part of this
+journey with no privacy cost at all, which is the ordinary and wrong design `D120` argued
+against at length. Leaving it is a stranger's cover on whoever holds the handset.
+
+**So the tool stays guest-safe and the COLUMN moves.** A guest sees the market; a signed-in
+customer sees the market *against their own cover*. Same tool, same button, and the page
+says **why** the column is missing rather than leaving an absence a guest would read as
+*"they do not have my policy"*. That is `D121`'s correction — look at the purpose of what
+is being pushed, not its shape — arriving **inside** a single push rather than between two
+tools. The flag comes from the session and never from the request, for `personal`'s reason.
+
+### What it must never do
+
+Quote a premium or imply approval. Pricing and underwriting are out of scope (`D115`,
+`D117`) — `Product` has no premium field to read even if this wanted one — and every
+pushed table carries the sentence saying so, because a customer reading a comparison will
+assume a price is implied unless told otherwise.
+
+### Verified by driving the workstation
+
+On a running server, on a live `health.advice.compare` call: the panel ranked **เมืองไทย
+เฮลท์ พลัส** first, **กรุงเทพ เฮลท์ อีลิท** second *despite the best figure in three of
+five rows* — because of its ฿30,000 deductible, shown as a red chip beside the green ones —
+and **โตเกียวมารีน** third. Pushing to a guest screen produced a four-column market table
+with `held_hidden: true`; signing in and pushing again added **แผนปัจจุบันของคุณ** as
+column 1. 14 unit tests on the rules, 4 over HTTP.
