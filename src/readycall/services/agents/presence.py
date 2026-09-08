@@ -503,12 +503,40 @@ class PresenceService:
 
         Returns the ids that went offline, so the caller can decide what to do about any
         call they were holding — this service will not guess.
+
+        ⚠️ **An agent who is ON A CALL is never dropped** (`B34`). Two reasons, and the
+        second is the one that made this a real fault rather than a tidy rule:
+
+        1. A missing heartbeat is a claim about the *browser tab*, not about the person.
+           Browsers throttle background timers hard — a hidden tab's 10-second heartbeat
+           becomes roughly one a minute — so a broker who simply looked at another window
+           while talking to a customer was being marked absent mid-conversation.
+        2. **Nothing would pick the call back up.** `sweep`'s caller only logs the ids it
+           gets back, so the call stayed `IN_CALL` with an ACCEPTED assignment while its
+           agent was `OFFLINE`: a workstation showing the customer, no way to end the
+           call, and the stale call resurfacing every time a later one closed. That is
+           `B10`'s shape reached by a different road. Real teardown belongs to the phone
+           leg (P5), and until that exists the browser must not be allowed to invent it.
+
+        ACW is deliberately still droppable: the customer is already gone, and an unfiled
+        wrap-up lands in `D87`'s backlog rather than being lost.
         """
         now = self._clock.now()
         cutoff = now - timedelta(seconds=self._ttl_s)
         dropped: list[str] = []
         for agent_id, presence in list(self._presence.items()):
             if presence.system_state is AgentSystemState.OFFLINE:
+                continue
+            if presence.system_state is AgentSystemState.ON_CALL:
+                # Log once per sweep rather than silently skipping: a genuinely dead tab
+                # on a live call is a thing somebody has to notice eventually.
+                last_beat = presence.heartbeat_at or presence.since
+                if last_beat < cutoff:
+                    log.warning(
+                        "agent is on a call and not heartbeating; NOT dropping them",
+                        agent_id=agent_id,
+                        silent_for_s=round((now - last_beat).total_seconds(), 1),
+                    )
                 continue
             last = presence.heartbeat_at or presence.since
             if last < cutoff:

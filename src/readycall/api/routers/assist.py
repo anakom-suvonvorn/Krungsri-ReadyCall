@@ -82,7 +82,11 @@ async def _screen(container: Any, session: AssistSession) -> AssistScreenOut:
     if session.tier is AssistTier.VERIFIED:
         prompt = "เจ้าหน้าที่สามารถส่งข้อมูลและแบบฟอร์มมาที่หน้าจอนี้ได้แล้ว"
     else:
-        prompt = "เข้าสู่ระบบเพื่อให้เจ้าหน้าที่ช่วยกรอกข้อมูลและส่งเอกสารให้ได้"
+        # Phrased as an OPTION, not an instruction. The guest tier is a full experience -
+        # comparisons, product information, checklists and a blank quote form all arrive
+        # without an account (`D120`, `D121`) - so a prompt that reads "log in to be
+        # helped" describes a product we deliberately did not build.
+        prompt = "ถ้าเข้าสู่ระบบ เจ้าหน้าที่จะช่วยกรอกข้อมูลของคุณล่วงหน้าได้ ไม่เข้าสู่ระบบก็รับข้อมูลทั่วไปได้ตามปกติ"
     return AssistScreenOut(
         call_active=active,
         tier=str(session.tier),

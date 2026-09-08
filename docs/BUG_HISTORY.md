@@ -1632,3 +1632,65 @@ _Found in the same session, one screen later, and it looked exactly like a serve
   where the timer machinery is correct and something upstream stops it advancing — and
   where the visible symptom points at the server, because the data really is right there
   and really is not on screen.
+
+## B34. An agent talking to a customer was signed out for not moving their mouse
+_Reported by the user on 2026-09-08: **"i don't even interact with the workstation … is
+there a timer that forces you out?"** There was, in effect. This is the most damaging bug
+found so far, because it fires hardest in exactly the situation a demo creates._
+
+- **Symptoms.** Leave the workstation on a live call and look at another window for a
+  minute. Come back to a screen showing `ออกจากระบบ`, `พร้อมรับสาย`, `ยังไม่รับสาย` and
+  `เชื่อมต่อแล้ว` **at the same time**; the caller's brief, identity panel and keypad all
+  still rendered; the state buttons greyed out; and **no End call button**, so the call
+  could not be ended at all. A reload changed nothing. Signing out and back in fixed the
+  badges but left the dead call's panels on screen — and the moment a *later* call ended,
+  the stale one came back and stuck.
+- **Root cause, in two halves.**
+  1. `PresenceService.sweep()` dropped **any** agent whose heartbeat was older than
+     `agent_presence_ttl_s` (30 s), including one whose `system_state` was `ON_CALL`. The
+     client heartbeats every 10 s from a `setInterval` — and **browsers throttle a hidden
+     tab's timers to roughly one a minute**, so backgrounding the workstation for a minute
+     silently exceeded the TTL. The "timer that forces you out" was the browser's.
+  2. `sweep()`'s docstring says it returns the dropped ids *"so the caller can decide what
+     to do about any call they were holding"*. Its one caller, `sweep_once` in
+     `api/app.py`, **only logs the count**. So the call stayed `IN_CALL` with an ACCEPTED
+     assignment belonging to an `OFFLINE` agent: unendable, unroutable, and permanently
+     attached to that desk. `B10`'s exact shape reached by a different road.
+- **The sharpest detail.** `test_signing_out_mid_call_is_refused` has asserted since P2b
+  that an agent *may not* sign out mid-call. The rule existed, was tested, and was enforced
+  only on the path the human drives. The platform's own path had no such check — so the
+  system refused to let a person do the very thing it then did to them automatically.
+- **Fix.** `sweep()` never drops an agent who is `ON_CALL`, and logs a warning naming how
+  long they have been silent. ACW stays droppable on purpose: the customer has already
+  gone and an unfiled wrap-up lands in `D87`'s backlog. Client-side, the workstation now
+  also beats on `visibilitychange`, so a returning tab is correct at once.
+- **Verified** by disabling the fix: the new test fails, and passes with it.
+- **Lesson.** **A missing heartbeat is a claim about the tab, not about the person** — and
+  browsers actively make that claim false. More generally: when a rule is worth enforcing
+  against the user's own action, check whether the platform's automatic path enforces it
+  too. Half the bug was the missing guard; the other half was a function that hands back
+  a consequence its only caller drops on the floor.
+
+## B35. The pairing status could only be learned by a poll the pairing had to unlock first
+_Found by the user two minutes after `D121` shipped: **"when i open the generated link, it
+doesn't unlock the tool rail … it just continues to say ยังไม่ได้เชื่อมหน้าจอ"**._
+
+- **Symptoms.** The broker mints the link, the customer opens it and is looking at the
+  page — and the workstation goes on saying the screen is not connected, so
+  *เปิดกล่องเครื่องมือ* stays disabled and nothing can be pushed. Only a full page reload
+  broke it.
+- **Root cause.** The customer tapping the link is an event on **their** device, so the
+  only way the broker's screen learns of it is by polling. The poll ran
+  `if (!open || !callId) return;` — i.e. **only while the tool dialog was open** — and the
+  button that opens that dialog is `disabled` until `paired` is true. Each half is
+  defensible alone; together they are a deadlock, and I wrote both.
+- **Why my own browser walkthrough missed it.** Every push I verified came after a reload
+  or a fresh navigation, each of which re-runs the one-shot refresh. The deadlock needs
+  somebody to *sit and wait* on a screen that never updates — which is what a real user
+  does and a scripted walkthrough never does.
+- **Fix.** Poll whenever a link exists **or** the dialog is open. A workstation that has
+  minted no link still polls for nothing, which is the case the condition preserves.
+- **Lesson.** **When state changes on somebody else's device, ask what makes this screen
+  find out — and check that the answer is not gated on the state itself.** This is the
+  third client-side fault in two days (`B32`, `B33`) where the server was entirely correct
+  and the screen simply never asked again.

@@ -397,6 +397,48 @@ async def test_a_closed_laptop_signs_itself_out(
     assert presence.get("A001").system_state is AgentSystemState.OFFLINE  # type: ignore[union-attr]
 
 
+async def test_an_agent_on_a_call_is_never_dropped_for_a_missing_heartbeat(
+    presence: PresenceService, clock: ManualClock
+) -> None:
+    """`B34`. The bug the user hit by looking at another window mid-call.
+
+    A missing heartbeat is a claim about the browser TAB, and browsers throttle a hidden
+    tab's timers to roughly one a minute — so a broker reading something else while
+    talking to a customer was being marked absent. Nothing then picked the call up:
+    `sweep`'s caller only logs what it returns, so the call stayed IN_CALL with an
+    ACCEPTED assignment and an OFFLINE agent, which is unendable.
+
+    Note this rule already existed for the agent's OWN action —
+    `test_signing_out_mid_call_is_refused` — and the platform path simply did not have it.
+    """
+    await presence.sign_in("A001", session_id="s1")
+    await presence.declare("A001", AgentIntent.READY)
+    await presence.begin_call("A001", call_session_id="call_1")
+
+    clock.advance(3600)  # an hour of silence from the tab
+
+    assert await presence.sweep() == []
+    assert presence.get("A001").system_state is AgentSystemState.ON_CALL  # type: ignore[union-attr]
+
+
+async def test_after_call_work_is_still_droppable(
+    presence: PresenceService, clock: ManualClock
+) -> None:
+    """The exemption is deliberately narrow: it covers a LIVE call, not the paperwork.
+
+    In ACW the customer has already gone, so a genuinely closed laptop should free the
+    desk — and the unfiled wrap-up lands in `D87`'s backlog rather than being lost.
+    """
+    await presence.sign_in("A001", session_id="s1")
+    await presence.declare("A001", AgentIntent.READY)
+    await presence.begin_call("A001", call_session_id="call_1")
+    await presence.begin_after_call_work("A001", call_session_id="call_1")
+
+    clock.advance(3600)
+
+    assert await presence.sweep() == ["A001"]
+
+
 async def test_signing_out_mid_call_is_refused(
     presence: PresenceService,
 ) -> None:

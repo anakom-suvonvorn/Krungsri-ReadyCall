@@ -77,13 +77,23 @@ export function AssistPanel({
   const latestRefresh = useRef(onRefresh);
   latestRefresh.current = onRefresh;
 
-  // Poll only while the dialog is open. The broker needs to see a form come back, but a
-  // background poll on every workstation for a rail nobody has opened is load for nothing.
+  // Poll once a link exists, OR while the dialog is open — not only while it is open
+  // (`B35`).
+  //
+  // Polling only on `open` deadlocked: the customer tapping the link is an event that
+  // happens on THEIR device, so the only way the broker learns of it is a poll — and the
+  // button that starts the polling is itself disabled until `paired` is true. The panel
+  // therefore sat on "ยังไม่ได้เชื่อมหน้าจอ" forever while the customer stared at an open
+  // page, and only a full page reload broke the tie.
+  //
+  // A workstation with no link minted still polls for nothing, which is the case this
+  // condition is careful to exclude.
+  const watching = open || Boolean(state?.link);
   useEffect(() => {
-    if (!open || !callId) return;
+    if (!watching || !callId) return;
     const timer = window.setInterval(() => latestRefresh.current(), 2000);
     return () => window.clearInterval(timer);
-  }, [open, callId]);
+  }, [watching, callId]);
 
   if (!callId) {
     return (

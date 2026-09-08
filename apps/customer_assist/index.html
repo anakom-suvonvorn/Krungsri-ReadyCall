@@ -70,6 +70,12 @@
   }
   .card h2 { margin: 0 0 4px; font-size: 16px; }
   .req { color: #d33; }
+  .signin-fold {
+    margin-top: 18px; padding: 12px 14px; border: 1px solid #d8d8d8;
+    border-radius: 12px; background: #fafafa;
+  }
+  .signin-fold summary { cursor: pointer; font-size: 14px; color: #555; }
+  .signin-fold[open] summary { margin-bottom: 10px; }
   .kind {
     font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
     color: var(--dim); margin-bottom: 8px;
@@ -162,22 +168,27 @@ function render(s) {
   lastSignature = signature;
 
   const parts = [];
-  if (s.tier !== "verified") parts.push(signInCard(s.prompt_th));
   if (!s.items.length) {
     parts.push('<div class="empty">เจ้าหน้าที่ยังไม่ได้ส่งอะไรมา<br>สิ่งที่ส่งมาจะแสดงที่นี่ทันที</div>');
   }
   for (const item of s.items) parts.push(card(item));
+  // LAST, and collapsed. This link is for somebody who ALREADY has an account and wants
+  // their own details filled in for them; it is not a step in receiving help. Rendered
+  // first and expanded — as it was until 2026-09-08 — the page read as "log in to
+  // continue", which is the exact opposite of the design (`D120`: no account is needed
+  // to be helped, and the wall appears only where the content is personal).
+  if (s.tier !== "verified") parts.push(signInCard(s.prompt_th));
   el("body").innerHTML = parts.join("");
   wire(s);
 }
 
 function signInCard(prompt) {
-  return '<div class="card"><h2>เข้าสู่ระบบ</h2>'
+  return '<details class="signin-fold"><summary>เป็นลูกค้าอยู่แล้ว? เข้าสู่ระบบ (ไม่บังคับ)</summary>'
     + '<div class="lock">' + esc(prompt) + "</div>"
     + '<label for="cid">รหัสลูกค้า (เดโม)</label>'
     + '<input id="cid" type="text" inputmode="text" value="C000001" autocomplete="off">'
     + '<button id="signin">เข้าสู่ระบบ</button>'
-    + '<div id="signinErr" class="err"></div></div>';
+    + '<div id="signinErr" class="err"></div></details>';
 }
 
 function card(item) {

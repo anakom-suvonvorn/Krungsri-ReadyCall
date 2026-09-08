@@ -103,16 +103,28 @@ export function useSocket(
     // is the whole point of the outbox (`D68`).
     lastSeq.current = 0;
     connect();
-    const beat = window.setInterval(() => {
+    const sendBeat = () => {
       const socket = socketRef.current;
       if (socket?.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({ type: "heartbeat" }));
       }
-    }, HEARTBEAT_MS);
+    };
+    const beat = window.setInterval(sendBeat, HEARTBEAT_MS);
+
+    // Browsers throttle a hidden tab's timers to roughly one a minute, so this interval
+    // is NOT a promise about a backgrounded workstation — an agent who looks at another
+    // window stops heartbeating on the server's terms (`B34`). The server no longer drops
+    // an agent who is on a call because of it, and this beats immediately on return so
+    // presence is correct at once rather than up to ten seconds later.
+    const onVisible = () => {
+      if (document.visibilityState === "visible") sendBeat();
+    };
+    document.addEventListener("visibilitychange", onVisible);
 
     return () => {
       stopped.current = true;
       window.clearInterval(beat);
+      document.removeEventListener("visibilitychange", onVisible);
       socketRef.current?.close();
     };
   }, [enabled, connect]);

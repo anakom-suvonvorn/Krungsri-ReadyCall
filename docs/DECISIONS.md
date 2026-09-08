@@ -4541,3 +4541,23 @@ phone, watched all 5 unlock, and pushed the claim form — which arrived carryin
 `HL-2024-000811`, `เมืองไทยประกันภัย` and the holder's name from the frozen snapshot, with
 the two fields we do not hold left blank. Two client bugs were found doing it (`B32`, `B33`),
 neither of which any test could see.
+
+### Amendment, 2026-09-08: the sign-in stops being the first thing on the page
+
+The customer's link page opened with a full-width **เข้าสู่ระบบ** card above everything
+else, and the guest prompt read *"เข้าสู่ระบบเพื่อให้เจ้าหน้าที่ช่วยกรอกข้อมูลและส่งเอกสารให้ได้"*.
+The user's reaction on first opening a real link was *"it made it seem like a customer HAVE
+TO login when they receive the link"* — and it did, which contradicts the whole argument
+three sections up: **no account is needed to be helped**, and the wall exists only where
+the content is personal.
+
+It is now the **last** element on the page, collapsed, labelled *(ไม่บังคับ)* — not
+required — and the guest prompt says what guests still get rather than what they are
+missing. The tier logic is untouched; this was a presentation bug that argued against the
+design it was implementing.
+
+The user also asked the sharper question: *why is there a web sign-in at all, when `/sim`
+already simulates the signed-in app?* That is the right question and it is answered by
+`D122` — the verified tier's natural home is the app, and the web sign-in survives only as
+the fallback for a customer who taps a link and then wants their own details filled in.
+
