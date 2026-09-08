@@ -303,15 +303,16 @@ class EndCallRequest(ApiModel):
 
 
 class AssistPushRequest(ApiModel):
-    """One thing the broker puts on the customer's screen (`D120`).
+    """One thing the broker puts on the customer's screen (`D120`, `D121`).
 
-    `kind` is validated against a CLOSED set in the router, for the same reason the intent
-    taxonomy is closed: the customer's page renders known shapes, and an unknown kind is a
-    blank panel on somebody's phone mid-call.
+    The client names a **tool id**, and the server resolves it in `assist_tools.yaml`.
+    It deliberately cannot send the kind, the title or the `personal` flag: those are
+    properties of the tool, and a request able to state its own would be the tier gate's
+    own bypass. An unknown id is refused rather than rendered, for the reason the intent
+    taxonomy is closed — an unknown shape is a blank panel on somebody's phone mid-call.
     """
 
-    kind: str = Field(max_length=32)
-    title_th: str = Field(max_length=120)
+    tool_id: str = Field(max_length=64)
     payload: dict[str, Any] = Field(default_factory=dict)
 
 

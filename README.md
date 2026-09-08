@@ -74,7 +74,7 @@ Three front ends come up with it:
 |---|---|---|
 | **`/sim`** | the customer simulator | one static page, no build step (`D47`) |
 | **`/workstation`** | the broker's desk | React bundle — needs the one-off `npm run build` in §2 |
-| **`/assist/<token>`** | the customer's **paired screen** (`D120`) | one static page. You do not open this directly — a broker mints the link with `POST /v1/agent/calls/<id>/assist/link` during a live call, and the token in the path is what authorises it |
+| **`/assist/<token>`** | the customer's **paired screen** (`D120`, `D121`) | one static page. You do not open this directly — during a live call the broker presses **สร้างลิงก์ให้ลูกค้า** in the *เครื่องมือช่วยลูกค้า* panel on the workstation's right rail, and the token in the path is what authorises it. (`POST /v1/agent/calls/<id>/assist/link` is the same thing without the screen.) |
 
 Then open **<http://127.0.0.1:8000/sim>**. The agent workstation at `/workstation` needs one extra
 build step — see [§2](#2-the-agent-workstation-react-bundle).
@@ -897,7 +897,7 @@ the same reason.
 | [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md) | Stack, folder map, feature status, constraints |
 | [`docs/DECISIONS.md`](docs/DECISIONS.md) | Why it is built this way (`D1`…) |
 | [`docs/BUG_HISTORY.md`](docs/BUG_HISTORY.md) | Solved bugs (`B1`…) — search here first |
-| [`docs/diagrams/`](docs/diagrams/README.md) | 61 diagrams across 12 themed pages; 14 generated from source |
+| [`docs/diagrams/`](docs/diagrams/README.md) | 69 diagrams across 13 themed pages; 14 generated from source |
 | [`docs/explanations/`](docs/explanations/) | One plain-language walkthrough per phase |
 | [`docs/reading/`](docs/reading/) | Interactive pages — open in a browser, no build step |
 
@@ -916,6 +916,15 @@ The rule of thumb: if a teammate on a fresh clone would get stuck, it goes in a 
 
 ## Credits
 
-Thai speech recognition uses **Thonburian Whisper** by Looloo Technology and the Biomedical and Data
-Lab, Mahidol University — <https://github.com/biodatlab/thonburian-whisper> (ICNLSP 2024), fine-tuned
-from OpenAI Whisper. Voice activity detection uses **Silero VAD**.
+Thai speech recognition ships on **Typhoon ASR** by SCB 10X — <https://huggingface.co/scb10x> — a
+Thai NeMo transducer, chosen on measured latency and accuracy over the alternatives (`D104`; the
+bake-off table is in `docs/NEXT_SESSION.md`).
+
+**Thonburian Whisper** by Looloo Technology and the Biomedical and Data Lab, Mahidol University —
+<https://github.com/biodatlab/thonburian-whisper> (ICNLSP 2024), fine-tuned from OpenAI Whisper —
+remains a supported engine and the documented fallback for a machine where NeMo will not install
+(`STT_ENGINE=thonburian_ct2` / `thonburian_hf`). It is also the engine every accuracy number in this
+project was first measured against.
+
+Voice activity detection uses **Silero VAD**. Summarisation runs on **Claude** (Anthropic) or any
+OpenAI-compatible endpoint, and on neither by default — the shipped provider is rule-based.

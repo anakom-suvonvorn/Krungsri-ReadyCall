@@ -327,5 +327,32 @@ around the import is then guarding an empty room.**
 
 ## Changes since
 
-_Nothing yet — this file was written on 2026-09-07, the day the work landed. Add dated
-entries here rather than editing the body above._
+_This file was written on 2026-09-07, the day the work landed. Add dated entries here
+rather than editing the body above._
+
+### 2026-09-08 — `D121`: the rail got a screen, and the gate moved from kind to purpose
+
+Two corrections, both from the user trying to use what §4 describes.
+
+**§4 describes a feature no broker could reach.** Every endpoint in it worked and none of
+them had a control. The walkthrough in §5.3 is `curl`-only for exactly that reason, and I
+did not notice while writing it — "verified end to end in a browser" was true of a browser
+I drove through the API by hand. There is now a *เครื่องมือช่วยลูกค้า* panel on the
+workstation's right rail, under the keypad: pairing state, mint-link with an SMS/LINE
+picker, and a **กล่องเครื่องมือ** dialog holding 11 tools in 4 groups from
+`config/assist_tools.yaml`. §5.3's curl commands still work and are no longer the only way.
+
+**The tier table in §4 is right; the implementation under it was not.** The gate read the
+push's *kind* (`{FORM, DOCUMENT_REQUEST}`), so a blank "please quote me" form needed an
+account — which is precisely the "gate the half with no privacy cost" design this section
+argues against two paragraphs earlier. It is `personal`, per tool, in config now. Read
+"a prefilled form" in the tier table as "a personal tool".
+
+**Two client bugs found by using it**, neither visible to the suite: `B32` (the catalogue
+was fetched before sign-in, 401'd into a defensive catch, and the rail was empty for the
+shift) and `B33` (a 2-second poll rebuilt on every render, on a screen that re-renders
+every second, so it never fired once — and it looked exactly like a server fault).
+
+**Still true from the body above, and worth re-reading before Track B:** the LLM's 4.5 s,
+the six ways the summary does nothing, and `Q34` — a submitted form is still stored
+nowhere, which the rail now makes much easier to hit.

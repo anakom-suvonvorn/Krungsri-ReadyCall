@@ -173,6 +173,15 @@ help. Somebody comparing plans gets everything they need without an account, bec
 of it is about them. The wall appears only where the content is personal. Registering first
 would gate the half with no privacy cost at all.
 
+> **⚠️ Amended by `D121` (2026-09-08).** The tier gate below was originally written on the
+> push's **kind** — every `form` and every `document_request` needed a signed-in screen.
+> That is now per **tool**, declared as `personal` in `config/assist_tools.yaml`, because
+> the risk is a property of what a tool is FOR: a blank *"please quote me"* form is true
+> for anybody and now reaches a guest screen, while a prefilled claim form does not. The
+> table below is still right about the two tiers; read "a prefilled form" as "a personal
+> tool" throughout. `D121` also gave the rail a UI — until 2026-09-08 none of this was
+> reachable from the workstation at all.
+
 **A personal push to a link-only screen is refused, and the refusal is the feature.** The
 broker is told *why* and asks the customer to sign in, instead of a stranger's policy
 appearing on whoever is holding that handset.

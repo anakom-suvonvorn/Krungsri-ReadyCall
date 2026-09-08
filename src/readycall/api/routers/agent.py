@@ -53,7 +53,6 @@ from readycall.domain.models import Assignment, CallWrapup
 from readycall.errors import PermanentError
 from readycall.logging import get_logger
 from readycall.services.agents.dispatch import sole_candidate
-from readycall.services.assist import PushKind
 from readycall.services.capture.keypad import Capture
 from readycall.services.identity.attestation import AttestationOutcome
 
@@ -295,6 +294,41 @@ async def end_call(
 # --- the tool rail: what the broker can put on the customer's screen (D120) ---------------
 
 
+async def _prefill_for(
+    container: Any, call_session_id: str, wanted: tuple[str, ...]
+) -> dict[str, Any]:
+    """Fill a personal form from the frozen context snapshot (`D121`).
+
+    Only ever reached for a tool declared `personal`, which `AssistService.push` has
+    already refused unless the screen is signed in — so the customer seeing these values
+    has proved who they are, not merely that they are holding a phone.
+
+    Reads the **frozen snapshot** rather than the bank core, for `render_brief`'s reason:
+    it is what the system knew when it decided, it needs no round trip, and it cannot
+    move underneath the call.
+    """
+    snapshot_id = container.snapshot_for_call.get(call_session_id)
+    if snapshot_id is None:
+        return {}
+    snapshot = await container.snapshots.get(snapshot_id)
+    if snapshot is None:
+        return {}
+    payload = snapshot.payload
+    policy = payload.relevant_policy
+    customer = payload.customer
+    available: dict[str, Any] = {}
+    if policy is not None:
+        available["policy_no"] = policy.policy_no
+        available["insurer"] = policy.insurer
+    if customer is not None:
+        available["holder_name"] = " ".join(
+            part for part in (customer.first_name_th, customer.last_name_th) if part
+        )
+    # Only what the tool asked for, and only what we actually hold. A field we cannot
+    # fill is left for the customer rather than guessed at.
+    return {k: v for k, v in available.items() if k in wanted and v}
+
+
 @router.post("/calls/{call_session_id}/assist/link")
 async def open_assist_link(
     call_session_id: str, who: AgentDep, container: ContainerDep
@@ -339,8 +373,11 @@ async def assist_state(
         "items": [
             {
                 "item_id": i.item_id,
+                "tool_id": i.tool_id,
                 "kind": str(i.kind),
                 "title_th": i.title_th,
+                "personal": i.personal,
+                "stub": i.stub,
                 "responded": i.response is not None,
                 "response": i.response,
             }
@@ -362,17 +399,65 @@ async def push_to_customer(
     own screen rather than to the agent's.
     """
     await _require_active_call(container, call_session_id, who)
+    tool = container.pack.assist_tools.get(body.tool_id)
+    if tool is None:
+        raise HTTPException(status_code=400, detail=f"unknown tool {body.tool_id!r}")
+    payload = dict(body.payload)
+    if tool.fields:
+        # The field list is the tool's, not the request's. A client that could send its
+        # own field set could put any label it liked in front of the customer.
+        payload["fields"] = [
+            {"name": f.name, "label_th": f.label_th, "type": f.type, "required": f.required}
+            for f in tool.fields
+        ]
+    if tool.prefill:
+        payload["prefill"] = await _prefill_for(container, call_session_id, tool.prefill)
     try:
-        kind = PushKind(body.kind)
-    except ValueError:
-        raise HTTPException(status_code=400, detail=f"unknown push kind {body.kind!r}") from None
-    try:
-        item = container.assist.push(
-            call_session_id, kind=kind, title_th=body.title_th, payload=body.payload
-        )
+        item = container.assist.push(call_session_id, tool=tool, payload=payload)
     except PermanentError as exc:
         raise _bad_request(exc) from exc
-    return {"item_id": item.item_id, "kind": str(item.kind), "title_th": item.title_th}
+    return {
+        "item_id": item.item_id,
+        "tool_id": item.tool_id,
+        "kind": str(item.kind),
+        "title_th": item.title_th,
+        "personal": item.personal,
+        "stub": item.stub,
+    }
+
+
+@router.get("/assist/tools")
+async def assist_tools(who: AgentDep, container: ContainerDep) -> dict[str, Any]:
+    """The tool rail's catalogue, grouped, from `assist_tools.yaml` (`D121`).
+
+    Served rather than hardcoded in the client, the same reason `D72` served the
+    challenge list: a rail that renders its own list will eventually offer a tool the
+    server would refuse, and the client is the copy that is wrong.
+    """
+    groups = sorted(container.pack.assist_groups.values(), key=lambda g: (g.order, g.group_id))
+    return {
+        "groups": [
+            {
+                "group_id": g.group_id,
+                "label_th": g.label_th,
+                "tools": [
+                    {
+                        "tool_id": t.tool_id,
+                        "label_th": t.label_th,
+                        "hint_th": t.hint_th,
+                        "kind": t.kind,
+                        # The client greys a personal tool on a guest screen and says why.
+                        # The SERVER still refuses it — this is the label, not the gate.
+                        "personal": t.personal,
+                        "stub": t.stub,
+                    }
+                    for t in container.pack.assist_tools.values()
+                    if t.group == g.group_id
+                ],
+            }
+            for g in groups
+        ]
+    }
 
 
 @router.post("/calls/{call_session_id}/wrapup", response_model=WorkstationSnapshot)

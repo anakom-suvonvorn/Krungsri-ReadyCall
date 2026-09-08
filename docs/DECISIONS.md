@@ -1,7 +1,7 @@
 # DECISIONS
 
 _Significant engineering decisions and their rationale. Append new ones at the bottom; never silently reverse one without a new entry explaining why._
-_Last updated: 2026-09-07._
+_Last updated: 2026-09-08._
 
 Format per entry: **Problem → Decision → Reasoning → Alternatives → Tradeoffs → Future.**
 
@@ -4448,3 +4448,96 @@ two carriers named), a **form push was refused at guest tier with the reason**, 
 unlocked it, the prefilled form appeared, the customer typed into it and submitted — and
 `GET /v1/agent/calls/{id}/assist` showed the broker exactly what they had written. Journey
 steps 3 and 4, on one call, without anybody reading a field name down a phone line.
+
+## D121. The tool rail gets a screen, and the tier gate moves from KIND to PURPOSE
+_Taken 2026-09-08, after the user tried to use `D120` and could not. Two changes that
+turned out to be one: the rail became reachable, and the gate became right._
+
+- **Problem, part one — nobody could press it.** `D120` shipped three working endpoints, a
+  customer page, fifteen passing tests and a verified browser walkthrough. It shipped with
+  **no control anywhere in the workstation**. The only way a broker could mint a link or
+  push anything was `curl`, and the user's report was simply *"there's no tool rail or
+  anything at all on the workstation"* — which was exactly true.
+
+  That is `B24`'s family with a new member: written, correct, tested, and reachable by no
+  user. It is worth naming the specific self-deception, because the previous session's
+  verification note says *"verified end to end, in a browser"* and that was **true** — of a
+  browser I drove by hand through the API. A feature is not reachable because a browser
+  reached it; it is reachable when the person it was built for can find the button.
+
+- **Problem, part two — the gate was asking the wrong question.** `_NEEDS_VERIFIED` was
+  `{FORM, DOCUMENT_REQUEST}`: a gate on the *shape* of the push. The user's correction:
+
+  > *"forms needs to be signed in is only like half true — it will depend on what kind of
+  > form it is too … we need to look at the purpose/use of that tool, not just the type"*
+
+  They are right, and it is wrong in **both** directions. A blank *"please quote me"* form
+  is true for anybody, and gating it walled off the one part of the journey with no privacy
+  cost at all — the ordinary and wrong design `D120` itself argued against, three
+  paragraphs before implementing it. And it would have waved through the first personal
+  `info` panel anybody wrote, because `INFO` was not on the list.
+
+  ⚠️ **`diagrams/src/assist_pairing.mmd` was already drawing the right rule** — its gate
+  node asks *"is the thing being pushed ABOUT THIS PERSON?"* — while the code asked about
+  the kind. The drawing described the intent and the implementation did not, which is the
+  reverse of this project's usual drift and is why this is a correction, not a redesign.
+
+### The decision
+
+**`config/assist_tools.yaml`** holds the rail: 4 groups, 11 tools, each declaring
+`personal`, its `kind`, its fields, and whether it is a labelled `stub`. Domain content in
+`config/`, which is `D28` — and the same move `D118` made for playbooks.
+
+**`personal` is read from the file and never from the request.** `AssistService.push` takes
+the whole `AssistToolSpec` rather than a `personal` argument, so a caller *cannot* supply
+its own flag; the client sends a `tool_id` and nothing else. A workstation able to declare
+its own push non-personal would be this gate's own bypass, and the workstation renders
+permissions rather than computing them.
+
+**Two startup guards**, in `D118`'s both-directions style:
+
+- a tool naming a group that does not exist is refused;
+- a tool declaring `prefill` while not `personal` is refused — **prefilling is what turns a
+  form that is true for anybody into a statement about one customer**, so a tool claiming
+  both is claiming something incoherent about its own disclosure.
+
+### Greying is the courtesy; the refusal is still the gate
+
+A personal tool renders `disabled` with its reason on a guest screen, so the broker learns
+why *before* clicking rather than by collecting a 400 — `D71`'s pattern, where the two
+forward outcomes are disabled with the reason in the tooltip. The server refuses
+independently and the test that matters asserts the **server's** refusal, never the
+client's `disabled` attribute.
+
+This does change what the demo shows: the earlier "watch the personal push get refused"
+moment is now "watch the personal tool be unavailable, and watch it unlock when they sign
+in." That is the better product and the weaker theatre, and the product wins.
+
+### Registration is the app's job, and the rail only points at it
+
+The user asked whether an unregistered customer should be pushed a registration form or the
+app download. **The download**, and their own reasoning is the argument: rebuilding
+registration means owning credential handling for a demo, and it makes the customer sign up
+on the web and then log in again in the app. `link.app_download` is a guest-tier tool.
+
+### What the channel picker may and may not claim
+
+The link is not sent — `NotifierPort` is P5 — so the picker records the choice and the UI
+says plainly that nothing was sent. **LINE renders disabled with its reason**: the LINE
+Messaging API cannot push to a phone number, only to a user id that exists after the
+customer has added the official account or passed through LINE Login. Showing it greyed
+with that sentence is honest where a picker that silently only ever does one thing is not.
+⚠️ LINE's separate *Notification Messages* product does reach a phone number without
+friendship; it needs formal approval and is restricted to transactional templates, and
+whether Krungsri holds it is **not verified** and must not be claimed in the pitch.
+
+### Verified, by driving the screen rather than the API
+
+On a running server: signed in as A006, took a real call, minted the link **from the panel**,
+opened it on a 375-wide viewport, opened the tool box (11 tools, exactly the 5 personal ones
+disabled), pushed the blank quote form **to a guest screen**, filled it in on the phone,
+submitted, and read the four typed values back on the broker's screen. Then signed in on the
+phone, watched all 5 unlock, and pushed the claim form — which arrived carrying
+`HL-2024-000811`, `เมืองไทยประกันภัย` and the holder's name from the frozen snapshot, with
+the two fields we do not hold left blank. Two client bugs were found doing it (`B32`, `B33`),
+neither of which any test could see.

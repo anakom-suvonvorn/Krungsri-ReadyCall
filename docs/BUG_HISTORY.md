@@ -1,7 +1,7 @@
 # BUG_HISTORY
 
 _Solved bugs and the lessons they bought. **Search this file FIRST when debugging** — the answer may already be here._
-_Last updated: 2026-09-07._
+_Last updated: 2026-09-08._
 
 Format per entry:
 
@@ -1590,3 +1590,45 @@ extra.
   `import torch` into a constructor is right — it keeps the module importable on a CI box
   — but it relocates the error from import time to construction time, and every `except
   ImportError` written around the import is then guarding an empty room.
+
+## B32. The tool catalogue was fetched once, before there was anybody to fetch it for
+_Found on 2026-09-08 by opening the tool box and seeing four empty headings._
+
+- **Symptoms.** The rail dialog opened, drew its four group headings, and contained no
+  tools at all. `GET /v1/agent/assist/tools` returned all 11 correctly when called by hand
+  from the same browser, with the same cookie.
+- **Root cause.** The catalogue is static for the life of the process, so it was fetched in
+  a `useEffect` with an empty dependency array — once, on mount. On mount the agent has not
+  signed in yet, so the request went out with no session cookie, came back **401**, and hit
+  a `.catch(() => setTools(null))` written to keep a rail failure from breaking the call
+  screen. The catch worked exactly as designed and swallowed the only attempt that would
+  ever be made. The rail was then empty for the whole shift.
+- **Fix.** Key the effect to the signed-in agent (`[agentId]`) instead of to mount. The
+  catalogue is still fetched once per sign-in rather than per call.
+- **Lesson.** **"Fetch once" has to mean once *after the precondition*, not once ever.** An
+  empty dependency array encodes "as early as possible", which is the wrong moment for
+  anything needing authentication — and pairing it with a defensive `catch` converts a
+  loud 401 into a permanently empty panel. When a swallow-and-continue is right, ask what
+  makes the *next* attempt happen; here there was no next attempt.
+
+## B33. A 2-second poll that was destroyed every second, so it never fired
+_Found in the same session, one screen later, and it looked exactly like a server bug._
+
+- **Symptoms.** The customer filled in the pushed form and submitted it; the page confirmed
+  it had been sent, and `GET /v1/agent/calls/{id}/assist` showed `responded: true` with the
+  values. The broker's dialog never updated. Everything server-side was correct, which is
+  what made it look like the response was not reaching the API.
+- **Root cause.** The dialog polls with `setInterval(onRefresh, 2000)` in an effect
+  depending on `[open, callId, onRefresh]`. The parent passes an **inline arrow**, so
+  `onRefresh` has a new identity on every render — and the workstation re-renders **once a
+  second** to drive its call timers (`B8`'s ticker). So the effect tore the interval down
+  and rebuilt it every second, and a 2000 ms interval that is destroyed at 1000 ms **never
+  fires at all**.
+- **Fix.** Hold the callback in a ref, have the interval read the ref, and depend on
+  `[open, callId]` alone.
+- **Lesson.** **An interval whose effect depends on a callback identity is a bet that the
+  component re-renders more slowly than the interval.** This one re-renders every second
+  *by design*, so the bet was always lost. It belongs with `B8` and `B27`: a whole family
+  where the timer machinery is correct and something upstream stops it advancing — and
+  where the visible symptom points at the server, because the data really is right there
+  and really is not on screen.

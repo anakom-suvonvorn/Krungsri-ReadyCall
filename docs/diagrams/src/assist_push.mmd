@@ -1,5 +1,10 @@
-%% HANDWRITTEN. Checked against D120 + api/routers/assist.py + apps/customer_assist/index.html
+%% HANDWRITTEN. Checked against D120 + D121 + api/routers/agent.py + services/assist/service.py
+%% + apps/workstation/src/assist.tsx + apps/customer_assist/index.html
 %% One round trip: the broker stops describing a website and fills it instead.
+%% REWRITTEN 2026-09-08 for D121. The previous version drew `push form -> 400`, which was
+%% D120's KIND-based gate and is now wrong in both directions: a blank quote form reaches a
+%% guest screen, and the personal one never gets as far as a 400 because the control is
+%% disabled with its reason.
 sequenceDiagram
     autonumber
     actor C as ลูกค้า · customer
@@ -10,38 +15,42 @@ sequenceDiagram
 
     Note over C,B: they are already on a call. The brief is on the broker's screen.
 
-    B->>W: presses ส่งลิงก์
+    B->>W: presses สร้างลิงก์ให้ลูกค้า
     W->>API: POST /v1/agent/calls/{id}/assist/link
     API-->>W: token + link (idempotent per call)
-    B-->>C: reads the link out<br/>(P5 sends it by SMS or LINE)
+    Note over W: SMS / LINE picker. LINE is DISABLED with its reason:<br/>its API needs a user id, not a phone number
+    B-->>C: reads the link out<br/>(nothing is sent — NotifierPort is P5)
 
     C->>P: taps the link
     P->>API: GET /v1/assist/{token}
     API-->>P: tier=guest · call_active=true
     Note over P: the header says กำลังสนทนากับเจ้าหน้าที่<br/>so the page never looks like a stray form
 
-    B->>API: push comparison
-    API-->>B: 200
+    B->>W: opens กล่องเครื่องมือ
+    W->>API: GET /v1/agent/assist/tools
+    API-->>W: 11 tools in 4 groups, each with `personal`
+    Note over W: the 5 personal tools render DISABLED with the reason.<br/>Greying is the courtesy. The server refuses independently
+
+    B->>API: push compare.plans (personal=false)
     P->>API: (next poll, ≤1s)
     API-->>P: the comparison
-    Note over C: sees their group plan against a top-up,<br/>differences highlighted, both carriers named
 
-    B->>API: push form
-    API-->>B: 400 — form needs a signed-in screen
-    Note over B: the refusal names the reason,<br/>so the broker asks rather than guesses
+    B->>API: push form.quote_request (personal=false)
+    API-->>P: a FORM, on a screen with no account
+    Note over C,P: D121: a blank quote request is true for anybody.<br/>Gating it on `kind: form` walled off the one part<br/>of the journey with no privacy cost at all
+    C->>P: fills it in and submits
+    P->>API: POST /v1/assist/{token}/respond
+    W->>API: GET /v1/agent/calls/{id}/assist
+    API-->>W: responded=true + exactly what they typed
 
-    B-->>C: asks them to sign in
+    B-->>C: asks them to sign in, to go further
     C->>P: signs in
     P->>API: POST /v1/assist/{token}/sign-in
     API-->>P: tier=verified
+    Note over W: the 5 locked tools become pressable
 
-    B->>API: push form (prefilled with what the broker already knows)
-    P->>API: (poll)
-    API-->>P: the form
+    B->>API: push form.claim_notify (personal=true)
+    API->>API: prefill from the FROZEN snapshot<br/>policy_no · insurer · holder_name
+    API-->>P: the form, already filled in
     C->>P: types the rest and submits
-    P->>API: POST /v1/assist/{token}/respond
-    API-->>P: 200 · the card now says ส่งข้อมูลเรียบร้อยแล้ว
-
-    W->>API: GET /v1/agent/calls/{id}/assist
-    API-->>W: responded=true + exactly what they typed
     Note over B: nobody read a field name down a phone line

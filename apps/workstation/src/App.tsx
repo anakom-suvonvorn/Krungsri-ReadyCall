@@ -19,9 +19,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, api } from "./api";
+import type { AssistCatalogue, AssistState } from "./api";
 import type { Capture, Snapshot, TranscriptTurn } from "./api";
 import { useSocket } from "./useSocket";
 import type { SocketMessage } from "./useSocket";
+import { AssistPanel } from "./assist";
 import {
   BacklogPanel,
   BriefPanel,
@@ -53,6 +55,11 @@ export default function App() {
   const [held, setHeld] = useState(false);
   /** `server - browser`, in ms, sampled once per snapshot. See `B8`. */
   const [skew, setSkew] = useState(0);
+  // The tool rail's own state (`D121`). Kept beside the snapshot rather than inside it:
+  // the rail is a second, slower conversation about the customer's screen, and folding it
+  // into `/me` would put it on the hot path that every socket push already walks.
+  const [assist, setAssist] = useState<AssistState | null>(null);
+  const [tools, setTools] = useState<AssistCatalogue | null>(null);
 
   useEffect(() => {
     if (toast === null) return;
@@ -112,6 +119,40 @@ export default function App() {
     // on the call rather than at a login form (`D32`'s resilience clause).
     void quietRefresh();
   }, [quietRefresh]);
+
+  /** Re-read the customer's screen. Safe to call often; it is a small payload and it is
+   *  the only way the broker learns a form came back. */
+  const refreshAssist = useCallback(async () => {
+    const id = snapshot?.active_call_session_id ?? null;
+    if (!id) {
+      setAssist(null);
+      return;
+    }
+    try {
+      setAssist(await api.assistState(id));
+    } catch {
+      // A rail that cannot be read must never break the call screen (`D12`'s shape): the
+      // panel simply shows its "not connected" state.
+      setAssist(null);
+    }
+  }, [snapshot?.active_call_session_id]);
+
+  useEffect(() => {
+    void refreshAssist();
+  }, [refreshAssist]);
+
+  const agentId = snapshot?.presence.agent_id ?? null;
+  useEffect(() => {
+    // Fetched once per SIGN-IN, not once per mount. On mount there is no agent cookie
+    // yet, so the request 401s, the catch swallows it, and the rail renders empty for
+    // the whole shift — a one-shot fetch whose precondition had not happened yet.
+    // The catalogue itself is static, so keying it to the agent is enough.
+    if (!agentId) return;
+    void api
+      .assistTools()
+      .then(setTools)
+      .catch(() => setTools(null));
+  }, [agentId]);
 
   const onSocketMessage = useCallback(
     (message: SocketMessage) => {
@@ -375,6 +416,23 @@ export default function App() {
                 () => void quietRefresh(),
               )
             }
+          />
+          {/* Under the keypad, because it is the same idea one step further out: a
+              control the broker triggers that changes what the customer's device is
+              doing, with the result landing back here (`D44` -> `D120`). */}
+          <AssistPanel
+            callId={callId}
+            state={assist}
+            catalogue={tools}
+            busy={busy}
+            onMintLink={() =>
+              callId && run(() => api.assistLink(callId)).then(() => void refreshAssist())
+            }
+            onPush={(toolId) =>
+              callId &&
+              run(() => api.assistPush(callId, toolId)).then(() => void refreshAssist())
+            }
+            onRefresh={() => void refreshAssist()}
           />
         </div>
       </div>

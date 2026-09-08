@@ -1,7 +1,7 @@
 # NEXT_SESSION
 
 _The live working state. READ THIS FIRST every session. Keep it short and current._
-_Last updated: 2026-09-07._
+_Last updated: 2026-09-08._
 
 ---
 
@@ -10,15 +10,16 @@ _Last updated: 2026-09-07._
 _Rewritten 2026-09-07, after `D117`–`D120`. Everything settled before this block is in the
 sections below; what follows is what a fresh session needs and nothing it does not._
 
-### ⚠️ FIRST: the user has notes waiting
+### ⚠️ FIRST: the notes arrived, and they are being worked through
 
-The session ended with the user saying **"i have a bunch of stuff to say / notes to give
-you from reading/trying"** and asking for this save *before* saying it. So:
+The user gave a long set of notes on 2026-09-08. What they produced so far is `D121` (the
+tool rail's screen, and the tier gate moving from KIND to PURPOSE), `B32`, `B33`, and a
+corrected README credit. **The rest of the list is not done and is written down below** —
+see *"The 2026-09-08 notes, and what each became"*. Read that before picking anything up.
 
-- **Expect notes, and read them before building anything.** Twelve of the last fourteen
-  faults in this project were found by the user driving the screen, not by the suite.
-- **Do not start Track B or E.** They are next and they are not started; starting one
-  before hearing them would be exactly the wrong order.
+The pattern held again: **the user's first two sentences of feedback contained one thing
+that could not be reached at all (`D120`'s rail had no UI) and one rule that was wrong in
+both directions (the kind-based gate).** Neither was visible to 830 passing tests.
 
 ### ⚠️ ZEROTH: two files carry facts you must not re-derive
 
@@ -42,6 +43,48 @@ Three constraints from `MARKET_FACTS` that shape every plan:
 
 ⚠️ Half those slides are images with no text layer, so `pypdf` returns empty pages. Render
 with PyMuPDF at ~110 dpi and read the PNGs. An empty extraction is not an empty slide.
+
+### The 2026-09-08 notes, and what each became
+
+| the note | verdict | state |
+|---|---|---|
+| README credits still say Thonburian only | correct | **DONE.** Typhoon credited as the shipped engine, Thonburian kept as supported + the fallback, and named as the engine every accuracy figure was first measured on |
+| *"there's no tool rail on the workstation at all"* | correct, and it was `B24`'s family | **DONE** (`D121`) |
+| *"forms needs to be signed in is only half true — look at the purpose, not the type"* | correct, and wrong in BOTH directions | **DONE** (`D121`) |
+| *"shouldn't the comparison data come from the company's database, not a yaml?"* | **correct, and it was a category error about to be made** | **NOT STARTED.** See below — this reshapes Track B |
+| *"it feels like a hackathon without AI"* | half a misreading, half a real gap | **NOT STARTED.** See below |
+| transfer button beside วางสาย, two tabs (internal / other company) | correct, and the second tab is new | **NOT STARTED.** Extends `D63` |
+| register the customer via a pushed form, or push the app download? | their own second instinct is right | **DECIDED** in `D121`: push the download, registration belongs to the bank's app |
+| where to put an OpenAI key; try several fast models | answered | **NOT STARTED.** `scripts/compare_llm.py` still does not exist |
+| *"is it all still swappable?"* | yes, with two named exceptions | products data (fixed by the note above) and `NotifierPort`, which does not exist |
+
+**The products correction, in one paragraph, because it changes Track B's shape.** A plan
+catalogue is **live data owned by someone else**, not domain taxonomy — it changes without
+us, and `config/` is *not reachable by the hackathon-day data swap*. So a `config/products.yaml`
+would have put the one thing the comparison feature reads outside the seam built for
+exactly this. It belongs behind `CoreDataProvider`, which **already has `get_product()` and
+already has `mock/bank_core/fixtures/products.json`**. Track B's real work: add
+`list_products(line=...)` to the port and every adapter + the contract suite, give `Product`
+an `insurer` and comparable attributes as typed `Coverage` rows (typed precisely so a model
+cannot invent a figure into one, `D16`), and refill the fixtures with the real carriers from
+`MARKET_FACTS` §8 — they are currently all `KS-` codes with no carrier, i.e. still
+insurer-shaped in the one place `D117` did not reach.
+
+**The AI question, and the part of it that is a misreading.** *"Ship the container on
+`STT_ENGINE=scripted`"* is about **one** model — the Thai ASR, which needs CUDA. The LLM is
+an API call and runs fine in a plain container. The demo machine is ours and has the GPU, so
+the honest split is: real engine on our box for the pitch and the recorded video, container
+as the "any judge can run this" story. Nobody has to watch the scripted engine.
+
+The real gap is that the AI already here is **invisible in the story**: a Thai ASR chosen on
+a measured 20-call bake-off, an LLM writing the broker's brief, and a Hungarian solver. The
+user's better idea is predictive models over the bank's own data, and they map one-to-one
+onto the four ที่ใช่ — lapse propensity (right time), gap/next-best-product (right coverage),
+life-event trigger (right customer), channel preference (right channel). **Agreed scope: ONE
+model, lapse propensity, trained on a real public dataset (Kaggle/UCI/OpenML), never on
+synthetic data** — the user was explicit about this and they are right, because "we
+generated the data and then learned it" is circular and a judge can dismantle it in one
+question. ⚠️ **Verify the dataset actually downloads before building anything on it.**
 
 ### Where the machine actually is
 
@@ -201,10 +244,14 @@ moment in the recording it was said — **and if they consented, their audio is 
 storage encrypted, with the key ref and the retention date on an `audio_recordings` row.**
 If they declined, it is nowhere.
 
-Verified **2026-09-07**: **842 tests** — 830 pass + 12 skipped with Postgres and MinIO both
-up. `ruff check` + `ruff format --check` clean over 217 files, `mypy --strict` clean over
-153, all scenarios replay, 69/69 diagrams current, prompt pack fresh (59 clips),
-`audit_docs.py` clean on the live files. **And on a running server**: a broker call routes
+Verified **2026-09-08**: **847 tests** — 835 pass + 12 skipped. `ruff check` +
+`ruff format --check` clean over 218 files, `mypy --strict` clean over 151, all scenarios
+replay, 69/69 diagrams current, prompt pack fresh, `audit_docs.py` clean on the live files.
+**And by driving the workstation in a browser**: link minted from the panel, tool box
+opened (11 tools, exactly the 5 personal ones locked), a blank quote form pushed to a
+GUEST screen at 375 px, filled in, submitted, and read back on the broker's screen; then
+sign-in, all 5 unlocked, and a claim form arriving prefilled with `HL-2024-000811` and
+`เมืองไทยประกันภัย`. **And on a running server**: a broker call routes
 to `q_claims` carrying its carrier and handoff banner, a real `claude-sonnet-5` summary
 came back in 4.5 s for $0.0085, and a form pushed to a customer's phone came back filled. **And verified against a running server with a
 real MinIO container**: the bucket holds `RCE1`-framed ciphertext, the right master key
@@ -215,7 +262,7 @@ left nothing behind.
 
 Almost every fault in this list came from somebody driving the screen and reporting what
 looked wrong — not from the suite. The pattern is worth knowing before reading any of it,
-because it is now **fourteen** and they rhyme:
+because it is now **sixteen** and they rhyme:
 
 1. **`B6` (2026-08-24)** — six faults, **three of which were decisions the docs already
    contained**. The lesson is about reading `.mmd` sources, not about React.
@@ -256,6 +303,12 @@ because it is now **fourteen** and they rhyme:
    they have" fallback produced correct output for the wrong reason. Found by giving them
    a portfolio, not by a test. **A fixture with one of something tests nothing about
    choosing.**
+15. **`B32`/`B33` (2026-09-08)** — both found in ten minutes of *using* the tool rail, and
+   neither visible to 847 tests. The catalogue was fetched on mount, before sign-in, so it
+   401'd into a defensive `catch` and the rail was empty for the shift. And the dialog's
+   2-second poll was rebuilt every render — the workstation re-renders every second — so
+   it never fired once, which looked exactly like the server not returning the customer's
+   answer.
 14. **`B31` (2026-09-07)** — `uv sync` prunes, so installing the LLM extra removed the GPU
    stack and instantly exposed five suite errors and five mypy errors that had been latent
    for weeks and **would have been red on CI**. A deferred import relocates the failure,
@@ -776,11 +829,20 @@ Facts about *this laptop* rather than the repo, so a fresh session does not redi
   branch was unreachable and a missing `product_line` argument produced correct output
   for the wrong reason from P1b until 2026-09-07. They hold three now, from three
   carriers. Cardinality is part of a fixture's design.
-- **A PERSONAL PUSH TO A LINK-ONLY SCREEN MUST STAY REFUSED** (`D120`, `D42`). Tapping a
-  link proves somebody holds that phone; it is not identity. `_NEEDS_VERIFIED` is the
-  list, and widening it to make a demo smoother would put a stranger's policy on whoever
-  is holding the handset. The refusal names the reason so the broker can ask them to sign
-  in — that message is the feature, not an error string.
+- **A PERSONAL PUSH TO A LINK-ONLY SCREEN MUST STAY REFUSED** (`D120`, `D121`, `D42`).
+  Tapping a link proves somebody holds that phone; it is not identity. **The gate is
+  `personal` in `config/assist_tools.yaml`, per TOOL, not per kind** (`D121` — the old
+  `_NEEDS_VERIFIED = {FORM, DOCUMENT_REQUEST}` was wrong in both directions). Two rules
+  keep it coherent and both refuse at startup: `personal` is read from the file and
+  **never from a request body**, and a non-personal tool may not declare `prefill` —
+  prefilling is exactly what makes a form a statement about one customer. Widening it to
+  make a demo smoother would put a stranger's policy on whoever holds the handset.
+- **THE RAIL'S `disabled` ATTRIBUTE IS A COURTESY, NOT THE GATE** (`D121`, `D71`). A
+  personal tool renders greyed with its reason so the broker learns why before clicking,
+  which is `D71`'s pattern. The server refuses independently, and the test that matters
+  asserts the **server's** refusal — never the client's `disabled`. If you ever find
+  yourself testing the greying instead, the gate has moved to the wrong side of the wire
+  (`B5`).
 - **THE CUSTOMER SCREEN POLLS AND MUST NOT RE-RENDER ON EVERY POLL** (`D120`). It compares
   a content signature first, because a re-render wipes a form the customer is halfway
   through typing — the optimistic-UI hazard `D44`'s keypad panel already taught, in the
@@ -925,6 +987,16 @@ Facts about *this laptop* rather than the repo, so a fresh session does not redi
   every push below the first agent's high-water mark — including their offer. `lastSeq`
   resets when `enabled` flips true, and **only** then: a reconnect must keep its position
   or the outbox replay in `D68` has nothing to replay against.
+- **AN INTERVAL WHOSE EFFECT DEPENDS ON A CALLBACK IDENTITY NEVER FIRES HERE** (`B33`).
+  The workstation re-renders **once a second** to drive its timers, so any
+  `useEffect(... , [.., onSomething])` holding a `setInterval` longer than 1 s is torn
+  down and rebuilt before it can fire. Hold the callback in a ref and depend on the real
+  inputs. The symptom points at the server: the data is correct, present, and not on
+  screen.
+- **"FETCH ONCE" MUST MEAN ONCE AFTER THE PRECONDITION** (`B32`). An empty dependency
+  array means "as early as possible", which for anything authenticated is *before sign-in*
+  — and a defensive `.catch()` then turns a loud 401 into a permanently empty panel. Key
+  the effect to the thing that had to happen first.
 - **IF THE UI UPDATES ON A TEN-SECOND CADENCE, IT IS THE HEARTBEAT** (`B27`).
   `HEARTBEAT_MS = 10_000` is the only ten in the client, and `heartbeat_ack` falls through
   `onSocketMessage` to `quietRefresh()`. Anything that appears to refresh every ten seconds

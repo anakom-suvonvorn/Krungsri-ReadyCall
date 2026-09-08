@@ -50,12 +50,13 @@ only purpose is one conversation (`D14`).
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Any
 
 from readycall.clock import Clock, SystemClock
+from readycall.domainpack import AssistToolSpec
 from readycall.errors import PermanentError
 from readycall.ids import generate as new_id
 from readycall.logging import get_logger
@@ -89,18 +90,20 @@ class PushKind(StrEnum):
     NAVIGATE = "navigate"
 
 
-#: Which pushes are about *this customer* and therefore need a signed-in screen. A
-#: comparison table and a how-to are true for anybody; a prefilled form is not.
-_NEEDS_VERIFIED = {PushKind.FORM, PushKind.DOCUMENT_REQUEST}
-
-
 @dataclass(frozen=True, slots=True)
 class PushedItem:
     item_id: str
+    tool_id: str
     kind: PushKind
     title_th: str
     payload: dict[str, Any]
     pushed_at: datetime
+    #: Whether this item is about a specific customer, copied from the tool's own spec
+    #: (`D121`). Recorded on the item so the screen and the audit trail agree with the
+    #: gate that let it through.
+    personal: bool = False
+    #: Looks real, is not implemented, and the customer's screen says so (`D115`).
+    stub: bool = False
     #: Filled when the customer sends something back. A form the customer has submitted is
     #: not removed from their screen - they should still be able to see what they sent.
     response: dict[str, Any] | None = None
@@ -223,35 +226,49 @@ class AssistService:
         self,
         call_session_id: str,
         *,
-        kind: PushKind,
-        title_th: str,
+        tool: AssistToolSpec,
         payload: dict[str, Any] | None = None,
     ) -> PushedItem:
         """Put something on the paired screen.
 
-        Refuses a personal push to a screen that has only tapped a link. The refusal is
-        the feature: the broker sees *why* and asks the customer to sign in, instead of a
-        stranger's policy appearing on whoever is holding that phone.
+        Refuses a **personal** push to a screen that has only tapped a link. The refusal
+        is the feature: the broker sees *why* and asks the customer to sign in, instead of
+        a stranger's policy appearing on whoever is holding that phone.
+
+        The gate reads `tool.personal`, which comes from `assist_tools.yaml` (`D121`).
+        It used to read the `kind`, which was wrong in both directions: it walled off a
+        blank quote request that anybody may fill in, and it would have waved through a
+        personal `info` panel the moment one existed. The risk is a property of what the
+        tool is FOR, not of the shape it renders as.
+
+        Taking the whole spec rather than a `personal` argument is deliberate. A caller
+        able to pass its own flag would be this gate's own bypass, and the workstation
+        renders permissions rather than computing them.
         """
         session = self.for_call(call_session_id)
         if session is None or not session.is_paired:
             raise PermanentError("no paired screen for this call")
-        if kind in _NEEDS_VERIFIED and session.tier is not AssistTier.VERIFIED:
+        if tool.personal and session.tier is not AssistTier.VERIFIED:
             raise PermanentError(
-                f"{kind} needs a signed-in screen; ask the customer to sign in first"
+                f"{tool.label_th} เป็นข้อมูลส่วนบุคคล ต้องให้ลูกค้าเข้าสู่ระบบก่อน "
+                "(ask the customer to sign in on their screen first)"
             )
         item = PushedItem(
             item_id=new_id("psh"),
-            kind=kind,
-            title_th=title_th,
+            tool_id=tool.tool_id,
+            kind=PushKind(tool.kind),
+            title_th=tool.label_th,
             payload=payload or {},
             pushed_at=self._clock.now(),
+            personal=tool.personal,
+            stub=tool.stub,
         )
         session.items.append(item)
         log.info(
             "pushed to the customer screen",
             call_session_id=call_session_id,
-            kind=str(kind),
+            tool=tool.tool_id,
+            personal=tool.personal,
             tier=str(session.tier),
         )
         return item
@@ -262,15 +279,7 @@ class AssistService:
         for index, item in enumerate(session.items):
             if item.item_id != item_id:
                 continue
-            updated = PushedItem(
-                item_id=item.item_id,
-                kind=item.kind,
-                title_th=item.title_th,
-                payload=item.payload,
-                pushed_at=item.pushed_at,
-                response=response,
-                responded_at=self._clock.now(),
-            )
+            updated = replace(item, response=response, responded_at=self._clock.now())
             session.items[index] = updated
             log.info(
                 "customer responded",

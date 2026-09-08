@@ -1,0 +1,175 @@
+# The tool rail: what a broker can put on the customer's paired screen (`D120`, `D121`).
+#
+# Part of the domain pack (`D28`) - nothing in `services/` may hardcode any of it. The
+# rail is `D44`'s keypad capture generalised: a control the agent triggers, which changes
+# what the customer's device is doing, with the result landing back on the workstation.
+#
+# ---------------------------------------------------------------------------------------
+# THE `personal` FLAG IS THE WHOLE SECURITY MODEL, AND IT IS PER TOOL, NOT PER KIND
+# ---------------------------------------------------------------------------------------
+#
+# `D120` shipped gating on the *kind* of thing being pushed: every FORM and every
+# DOCUMENT_REQUEST needed a signed-in screen. That is wrong, and `D121` fixes it. Whether
+# something may be shown to a screen that has only tapped a link depends on its PURPOSE,
+# not its shape:
+#
+#   * A blank "please quote me" form is true for anybody. A stranger holding the handset
+#     learns nothing about the customer by seeing it, and requiring an account to fill it
+#     in gates the one part of the journey with no privacy cost at all.
+#   * A claim form prefilled with their policy number is about THEM, and putting it on
+#     whoever happens to be holding that phone is exactly what `D42` refuses.
+#
+# Both are `kind: form`. They are not the same risk, so they do not get the same gate.
+#
+# TWO RULES KEEP THAT COHERENT, both enforced in `AssistService`:
+#
+#   1. `personal` is read from THIS FILE, never from the request body. The workstation
+#      renders permissions, it never computes them - a client that could declare its own
+#      push non-personal would be the gate's own bypass.
+#   2. A tool with `personal: false` may not be prefilled. Prefilling is what turns a
+#      blank form into a statement about a specific customer, so the flag and the prefill
+#      cannot disagree: `prefill` on a non-personal tool refuses at startup.
+#
+# ---------------------------------------------------------------------------------------
+# `stub: true` MEANS "LOOKS REAL, ISN'T" AND THE CUSTOMER'S SCREEN SAYS SO
+# ---------------------------------------------------------------------------------------
+#
+# `D115` allows honest stubs and requires them to be labelled. Signature and OCR are the
+# two here: the flow around them is real - the broker pushes, the customer sees, the
+# broker is told what came back - and the capture itself is not implemented. The page
+# renders a visible notice rather than pretending, because a stub that is indistinguishable
+# from the real thing is how a demo becomes a claim nobody meant to make.
+
+version: 1
+
+groups:
+  compare:
+    label_th: "เปรียบเทียบและข้อมูล"
+    order: 1
+  forms:
+    label_th: "แบบฟอร์ม"
+    order: 2
+  documents:
+    label_th: "เอกสาร"
+    order: 3
+  links:
+    label_th: "ลิงก์และแอป"
+    order: 4
+
+tools:
+  # --- comparison and information: true for anybody, so no sign-in ----------------------
+  #
+  # This group is the broker's actual mandate (คัดสรรแบบประกันและบริษัทฯ, `D117`) and it
+  # is deliberately the group that needs no account. Someone ringing to compare cover gets
+  # everything they need without registering.
+
+  compare.plans:
+    group: compare
+    label_th: "เปรียบเทียบแผนประกัน"
+    hint_th: "ตารางเปรียบเทียบแผนจากหลายบริษัท"
+    kind: comparison
+    personal: false
+
+  info.coverage_explainer:
+    group: compare
+    label_th: "อธิบายความคุ้มครอง"
+    hint_th: "อธิบายศัพท์และเงื่อนไขที่ลูกค้าถาม"
+    kind: info
+    personal: false
+
+  info.claim_checklist:
+    group: compare
+    label_th: "เอกสารที่ต้องเตรียมสำหรับเคลม"
+    # Guest-safe on purpose, and it is worth saying why: a CHECKLIST is a list of what any
+    # insurer asks for. Asking THIS customer to upload THEIR documents is a different tool
+    # (`doc.upload_request`) with a different gate.
+    hint_th: "รายการเอกสารมาตรฐาน ไม่ใช่การขอเอกสารของลูกค้า"
+    kind: info
+    personal: false
+
+  # --- forms: the group where `D121`'s correction actually shows -----------------------
+
+  form.quote_request:
+    group: forms
+    label_th: "ขอใบเสนอราคา"
+    hint_th: "แบบฟอร์มเปล่า ลูกค้าที่ยังไม่มีบัญชีก็กรอกได้"
+    kind: form
+    personal: false
+    fields:
+      - { name: product_line, label_th: "ประเภทประกัน", type: text, required: true }
+      - { name: full_name, label_th: "ชื่อ-นามสกุล", type: text, required: true }
+      - { name: phone, label_th: "เบอร์ติดต่อกลับ", type: tel, required: true }
+      - { name: note, label_th: "รายละเอียดเพิ่มเติม", type: textarea, required: false }
+
+  form.claim_notify:
+    group: forms
+    label_th: "แจ้งเคลม"
+    hint_th: "กรอกล่วงหน้าจากกรมธรรม์ของลูกค้า ต้องเข้าสู่ระบบ"
+    kind: form
+    personal: true
+    prefill: [policy_no, insurer, holder_name]
+    fields:
+      - { name: policy_no, label_th: "เลขที่กรมธรรม์", type: text, required: true }
+      - { name: insurer, label_th: "บริษัทผู้รับประกัน", type: text, required: true }
+      - { name: holder_name, label_th: "ชื่อผู้เอาประกัน", type: text, required: true }
+      - { name: incident_date, label_th: "วันที่เกิดเหตุ", type: date, required: true }
+      - { name: detail, label_th: "รายละเอียดเหตุการณ์", type: textarea, required: true }
+
+  form.update_contact:
+    group: forms
+    label_th: "แก้ไขข้อมูลติดต่อ"
+    hint_th: "ต้องเข้าสู่ระบบ"
+    kind: form
+    personal: true
+    prefill: [holder_name]
+    fields:
+      - { name: holder_name, label_th: "ชื่อ-นามสกุล", type: text, required: true }
+      - { name: phone, label_th: "เบอร์โทรศัพท์", type: tel, required: true }
+      - { name: email, label_th: "อีเมล", type: email, required: false }
+      - { name: address, label_th: "ที่อยู่", type: textarea, required: false }
+
+  # --- documents: all personal, two of them visibly stubbed ---------------------------
+
+  doc.upload_request:
+    group: documents
+    label_th: "ขอเอกสารจากลูกค้า"
+    hint_th: "ต้องเข้าสู่ระบบ"
+    kind: document_request
+    personal: true
+
+  doc.esign:
+    group: documents
+    label_th: "ลงนามอิเล็กทรอนิกส์"
+    hint_th: "สาธิตเท่านั้น ยังไม่เชื่อมระบบลงนามจริง"
+    kind: document_request
+    personal: true
+    stub: true
+
+  doc.ocr_capture:
+    group: documents
+    label_th: "ถ่ายภาพเอกสาร (OCR)"
+    hint_th: "สาธิตเท่านั้น ยังไม่เชื่อมระบบอ่านเอกสารจริง"
+    kind: document_request
+    personal: true
+    stub: true
+
+  # --- links: the answer to "how does an unregistered customer sign up?" ---------------
+  #
+  # We do NOT push a registration form. Registration belongs to the bank's own app, which
+  # already owns credential handling; rebuilding it here would mean owning password
+  # storage for a demo, and it would make the customer register on the web and then log in
+  # again in the app. Push the download instead, and let the real thing do the real job.
+
+  link.app_download:
+    group: links
+    label_th: "ส่งลิงก์ดาวน์โหลดแอป"
+    hint_th: "สำหรับลูกค้าที่ยังไม่มีบัญชี - สมัครในแอปโดยตรง"
+    kind: navigate
+    personal: false
+
+  link.hospital_finder:
+    group: links
+    label_th: "ค้นหาโรงพยาบาลในเครือข่าย"
+    hint_th: "ข้อมูลสาธารณะ ไม่ต้องเข้าสู่ระบบ"
+    kind: navigate
+    personal: false

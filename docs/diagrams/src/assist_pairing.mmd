@@ -1,5 +1,9 @@
-%% HANDWRITTEN. Checked against D120 + services/assist/service.py + api/routers/assist.py
+%% HANDWRITTEN. Checked against D120 + D121 + services/assist/service.py + api/routers/assist.py
 %% The three ways a call and a screen become bound, and the ONE gate between them.
+%% NOTE 2026-09-08: this diagram was already RIGHT before D121 — it drew the gate as
+%% "is this about this person?" while the code gated on the push's KIND. The drawing
+%% described the intended rule and the implementation did not, which is the opposite of
+%% the usual drift and is why D121 reads as a correction rather than a redesign.
 flowchart TB
     START(["a customer needs something<br/>doing on a screen"]) --> Q1{"where did the call<br/>start?"}
 
@@ -19,8 +23,8 @@ flowchart TB
 
     PAIRED --> G["whoever taps the link is holding<br/>the phone we are on.<br/>That is worth exactly what the ANI<br/>is worth — L1, probable · D20"]
 
-    G --> GATE{"is the thing being pushed<br/>ABOUT THIS PERSON?"}
-    GATE -->|"no — true for anybody"| OK1["ALLOWED at GUEST<br/><br/>comparison · info<br/>document checklist · how-to<br/><br/>no account needed to be helped"]
+    G --> GATE{"is the thing being pushed<br/>ABOUT THIS PERSON?<br/>(`personal` in assist_tools.yaml · D121)"}
+    GATE -->|"no — true for anybody"| OK1["ALLOWED at GUEST<br/><br/>comparison · info · how-to<br/>document CHECKLIST<br/>a BLANK quote form<br/>the app download link<br/><br/>no account needed to be helped"]
     GATE -->|"yes"| DENY["REFUSED, with the reason<br/><br/>the broker is told WHY and asks<br/>them to sign in — rather than a<br/>stranger's policy appearing on<br/>whoever holds that handset"]
 
     DENY --> SIGNIN["customer signs in<br/>POST /assist/&lt;token&gt;/sign-in"]

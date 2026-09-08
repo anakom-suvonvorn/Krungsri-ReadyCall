@@ -69,6 +69,7 @@
     padding: 16px; margin-bottom: 14px;
   }
   .card h2 { margin: 0 0 4px; font-size: 16px; }
+  .req { color: #d33; }
   .kind {
     font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
     color: var(--dim); margin-bottom: 8px;
@@ -156,7 +157,7 @@ function render(s) {
   // poll. This is the same hazard as an optimistic UI overwriting a user's input, and
   // on a form the customer is filling mid-call it would be infuriating.
   const signature = JSON.stringify([s.tier, s.prompt_th, s.items.map(
-    (i) => [i.item_id, i.responded])]);
+    (i) => [i.item_id, i.responded, i.stub])]);
   if (signature === lastSignature) return;
   lastSignature = signature;
 
@@ -180,9 +181,14 @@ function signInCard(prompt) {
 }
 
 function card(item) {
+  // A stub says so, on the customer's own screen (`D115`). A demo the person in front of
+  // it cannot tell from the real thing is how a demonstration becomes a claim.
+  const stub = item.stub
+    ? '<div class="lock">ส่วนนี้เป็นการสาธิต ยังไม่ได้เชื่อมต่อระบบจริง</div>'
+    : "";
   const head = '<div class="card" data-item="' + esc(item.item_id) + '">'
     + '<div class="kind">' + esc(item.kind) + "</div>"
-    + "<h2>" + esc(item.title_th) + "</h2>";
+    + "<h2>" + esc(item.title_th) + "</h2>" + stub;
   if (item.kind === "comparison") return head + comparison(item.payload) + "</div>";
   if (item.kind === "form") return head + form(item) + "</div>";
   if (item.kind === "document_request") return head + docRequest(item) + "</div>";
@@ -222,13 +228,21 @@ function form(item) {
     return '<div class="done">ส่งข้อมูลเรียบร้อยแล้ว ขอบคุณค่ะ</div>';
   }
   const fields = item.payload.fields || [];
-  return fields.map((f) =>
-    "<label for=\"f_" + esc(f.name) + "\">" + esc(f.label_th) + "</label>"
-    + (f.multiline
-      ? '<textarea id="f_' + esc(f.name) + '" rows="3"></textarea>'
-      : '<input id="f_' + esc(f.name) + '" type="' + esc(f.type || "text")
-        + '" value="' + esc(f.value || "") + '">')
-  ).join("") + '<button class="submit">ส่งให้เจ้าหน้าที่</button>';
+  // Prefilled values arrive in their own map rather than baked into the field list,
+  // because the field list is the TOOL's (from `assist_tools.yaml`) and the prefill is
+  // this CUSTOMER's. Keeping them apart is what makes a form that carries no prefill
+  // obviously not about anybody (`D121`).
+  const filled = item.payload.prefill || {};
+  return fields.map((f) => {
+    const value = filled[f.name] == null ? "" : String(filled[f.name]);
+    const label = "<label for=\"f_" + esc(f.name) + "\">" + esc(f.label_th)
+      + (f.required ? ' <span class="req">*</span>' : "") + "</label>";
+    if (f.type === "textarea" || f.multiline) {
+      return label + '<textarea id="f_' + esc(f.name) + '" rows="3">' + esc(value) + "</textarea>";
+    }
+    return label + '<input id="f_' + esc(f.name) + '" type="' + esc(f.type || "text")
+      + '" value="' + esc(value) + '">';
+  }).join("") + '<button class="submit">ส่งให้เจ้าหน้าที่</button>';
 }
 
 function docRequest(item) {

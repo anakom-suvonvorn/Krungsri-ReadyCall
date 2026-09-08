@@ -716,3 +716,79 @@ button.on:disabled {
   font-size: 13px;
   border-radius: 0 4px 4px 0;
 }
+
+/* --- the tool rail (`D121`) -------------------------------------------------------- */
+
+.tool-rail {
+  width: min(720px, 94vw);
+  max-height: 88vh;
+  overflow-y: auto;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 20px 24px;
+  box-shadow: var(--shadow);
+}
+
+.tool-rail h3 {
+  margin: 14px 0 6px;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* auto-fit rather than a fixed column count: the groups hold between two and four tools
+   today and the rail is explicitly expected to grow. */
+.tool-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+}
+
+button.tool {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  text-align: left;
+  padding: 12px 14px;
+  height: 100%;
+  white-space: normal;
+  line-height: 1.35;
+}
+
+.tool-label {
+  font-weight: 600;
+}
+
+.tool-tags {
+  display: flex;
+  gap: 6px;
+}
+
+/* A locked tool must still be READABLE — the broker needs to know the tool exists and
+   why they cannot use it, which is the whole point of showing it greyed rather than
+   hiding it. */
+button.tool:disabled {
+  opacity: 0.55;
+}
+
+.kv {
+  margin: 6px 0 0;
+  display: grid;
+  gap: 4px;
+}
+
+.kv div {
+  display: flex;
+  gap: 10px;
+}
+
+.kv dt {
+  min-width: 120px;
+}
+
+.kv dd {
+  margin: 0;
+}

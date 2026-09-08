@@ -41,6 +41,9 @@ class AssistItemOut(ApiModel):
     payload: dict[str, Any]
     responded: bool = False
     response: dict[str, Any] | None = None
+    #: Rendered as a visible notice rather than silently (`D115`): a stub that looks
+    #: exactly like the real thing is how a demo becomes a claim nobody meant to make.
+    stub: bool = False
 
 
 class AssistScreenOut(ApiModel):
@@ -92,6 +95,7 @@ async def _screen(container: Any, session: AssistSession) -> AssistScreenOut:
                 payload=i.payload,
                 responded=i.response is not None,
                 response=i.response,
+                stub=i.stub,
             )
             for i in session.items
         ),

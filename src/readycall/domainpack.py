@@ -129,6 +129,51 @@ class PlaybookSpec:
 
 
 @dataclass(frozen=True, slots=True)
+class AssistFormField:
+    """One field on a form the broker pushes to the customer's screen."""
+
+    name: str
+    label_th: str
+    type: str = "text"
+    required: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class AssistToolGroup:
+    group_id: str
+    label_th: str
+    order: int = 99
+
+
+@dataclass(frozen=True, slots=True)
+class AssistToolSpec:
+    """One tool on the rail (`D120`, `D121`).
+
+    `personal` is the gate, and it lives here rather than being derived from `kind`
+    because the risk is a property of the tool's PURPOSE. A blank quote request and a
+    prefilled claim form are both `kind: form` and are not the same disclosure — the
+    first is true for anybody, the second is a statement about one customer.
+
+    It is read from config and never from a request body: the workstation renders
+    permissions, it never computes them, and a client able to declare its own push
+    non-personal would be this gate's own bypass.
+    """
+
+    tool_id: str
+    group: str
+    label_th: str
+    kind: str
+    personal: bool
+    hint_th: str | None = None
+    #: Fields the server may fill from the customer's record. Only meaningful on a
+    #: personal tool — prefilling is precisely what makes a form about somebody.
+    prefill: tuple[str, ...] = ()
+    fields: tuple[AssistFormField, ...] = ()
+    #: Looks real, is not implemented, and the customer's screen says so (`D115`).
+    stub: bool = False
+
+
+@dataclass(frozen=True, slots=True)
 class DidSpec:
     number: str
     label: str
@@ -227,6 +272,8 @@ class DomainPack:
     menus: dict[str, MenuSpec]
     challenges: dict[str, ChallengeSpec]
     playbooks: dict[str, PlaybookSpec]
+    assist_tools: dict[str, AssistToolSpec]
+    assist_groups: dict[str, AssistToolGroup]
     menu_settings: MenuSettings
     #: Words the ASR is nudged toward (`D9`). Config, not code, because they are
     #: insurance-specific and `services/` may not hold a policy concept (`D28`).
@@ -348,6 +395,7 @@ class DomainPack:
         )
         challenges = cls._load_challenges(_read(directory / "challenges.yaml"))
         playbooks = cls._load_playbooks(_read(directory / "playbooks.yaml"))
+        assist_tools, assist_groups = cls._load_assist_tools(_read(directory / "assist_tools.yaml"))
         vocabulary = cls._load_stt_vocabulary(directory)
 
         pack = cls(
@@ -358,6 +406,8 @@ class DomainPack:
             menus=menus,
             challenges=challenges,
             playbooks=playbooks,
+            assist_tools=assist_tools,
+            assist_groups=assist_groups,
             menu_settings=settings,
             stt_vocabulary=vocabulary,
             language_menu=language_menu,
@@ -374,8 +424,71 @@ class DomainPack:
             menus=len(menus),
             challenges=len(challenges),
             playbooks=len(playbooks),
+            assist_tools=len(assist_tools),
         )
         return pack
+
+    @staticmethod
+    def _load_assist_tools(
+        raw: dict[str, Any],
+    ) -> tuple[dict[str, AssistToolSpec], dict[str, AssistToolGroup]]:
+        """Load the tool rail (`D120`, `D121`).
+
+        Refuses two shapes at startup rather than letting them surface as a wrong gate:
+        a tool in a group that does not exist, and a **non-personal tool declaring
+        `prefill`**. The second is the one that matters — prefilling is what turns a form
+        that is true for anybody into a statement about one customer, so a tool claiming
+        both is claiming something incoherent about its own disclosure.
+        """
+        groups: dict[str, AssistToolGroup] = {}
+        for group_id, entry in (raw.get("groups") or {}).items():
+            groups[str(group_id)] = AssistToolGroup(
+                group_id=str(group_id),
+                label_th=str(entry["label_th"]),
+                order=int(entry.get("order", 99)),
+            )
+
+        tools: dict[str, AssistToolSpec] = {}
+        for tool_id, entry in (raw.get("tools") or {}).items():
+            name = str(tool_id)
+            try:
+                group = str(entry["group"])
+                personal = bool(entry["personal"])
+                spec = AssistToolSpec(
+                    tool_id=name,
+                    group=group,
+                    label_th=str(entry["label_th"]),
+                    kind=str(entry["kind"]),
+                    personal=personal,
+                    hint_th=str(entry["hint_th"]) if entry.get("hint_th") else None,
+                    prefill=tuple(str(f) for f in entry.get("prefill") or ()),
+                    fields=tuple(
+                        AssistFormField(
+                            name=str(f["name"]),
+                            label_th=str(f["label_th"]),
+                            type=str(f.get("type", "text")),
+                            required=bool(f.get("required", False)),
+                        )
+                        for f in entry.get("fields") or ()
+                    ),
+                    stub=bool(entry.get("stub", False)),
+                )
+            except KeyError as exc:
+                raise ConfigError(f"assist tool {name!r} is missing {exc}") from exc
+            if spec.group not in groups:
+                raise ConfigError(f"assist tool {name!r} names unknown group {spec.group!r}")
+            if spec.prefill and not spec.personal:
+                raise ConfigError(
+                    f"assist tool {name!r} declares `prefill` but is not `personal` - "
+                    "prefilling a form is what makes it about a specific customer"
+                )
+            tools[name] = spec
+
+        for group_id in sorted(set(groups) - {t.group for t in tools.values()}):
+            # The same both-directions guard `D118` put on playbooks: a group nothing
+            # reaches renders as an empty heading on the broker's screen.
+            raise ConfigError(f"assist tool group {group_id!r} holds no tools")
+        return tools, groups
 
     @staticmethod
     def _load_playbooks(raw: dict[str, Any]) -> dict[str, PlaybookSpec]:

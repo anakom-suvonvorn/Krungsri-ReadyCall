@@ -227,6 +227,58 @@ export type Snapshot = {
   transcript: TranscriptTurn[];
 };
 
+/** One tool on the rail. `personal` is the server's own label for it (`D121`): the
+ *  client greys the control and says why, and the server still refuses independently —
+ *  this is the explanation, never the gate. */
+export type AssistTool = {
+  tool_id: string;
+  label_th: string;
+  hint_th: string | null;
+  kind: string;
+  personal: boolean;
+  /** Looks real, is not implemented, and the customer's screen says so (`D115`). */
+  stub: boolean;
+};
+
+export type AssistCatalogue = {
+  groups: { group_id: string; label_th: string; tools: AssistTool[] }[];
+};
+
+export type AssistItem = {
+  item_id: string;
+  tool_id: string;
+  kind: string;
+  title_th: string;
+  personal: boolean;
+  stub: boolean;
+  responded: boolean;
+  response: Record<string, unknown> | null;
+};
+
+export type AssistState = {
+  paired: boolean;
+  tier: string | null;
+  link?: string;
+  items: AssistItem[];
+};
+
+export type AssistLink = {
+  token: string;
+  link: string;
+  tier: string;
+  paired: boolean;
+  caller_number: string | null;
+};
+
+export type AssistPushed = {
+  item_id: string;
+  tool_id: string;
+  kind: string;
+  title_th: string;
+  personal: boolean;
+  stub: boolean;
+};
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -298,6 +350,23 @@ export const api = {
     call<Capture>("POST", `/v1/agent/captures/${captureId}/discard`),
   lookupCapture: (captureId: string, kind: string) =>
     call<Capture>("POST", `/v1/agent/captures/${captureId}/lookup`, { kind }),
+
+  /** The tool rail (`D120`, `D121`). The catalogue is SERVED, never built here: a client
+   *  that renders its own list will eventually offer a tool the server would refuse. */
+  assistTools: () => call<AssistCatalogue>("GET", "/v1/agent/assist/tools"),
+  assistState: (callId: string) =>
+    call<AssistState>("GET", `/v1/agent/calls/${callId}/assist`),
+  /** Mints the pairing link. Idempotent per call, so pressing it twice is safe. */
+  assistLink: (callId: string) =>
+    call<AssistLink>("POST", `/v1/agent/calls/${callId}/assist/link`),
+  /** The client sends only a tool id — never the kind, the title or the `personal` flag.
+   *  Those are properties of the tool, and a request able to state its own would be the
+   *  tier gate's own bypass. */
+  assistPush: (callId: string, toolId: string, payload: Record<string, unknown> = {}) =>
+    call<AssistPushed>("POST", `/v1/agent/calls/${callId}/assist/push`, {
+      tool_id: toolId,
+      payload,
+    }),
 
   /** DEMO: a caller arrives. Stands in for telephony until P5. */
   placeCall: (payload: Record<string, unknown>) =>
