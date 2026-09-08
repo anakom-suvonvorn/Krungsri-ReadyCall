@@ -719,8 +719,12 @@ button.on:disabled {
 
 /* --- the tool rail (`D121`) -------------------------------------------------------- */
 
+/* Two columns, each about as wide as the single column used to be — so the dialog is
+   roughly twice the width it was, rather than the same width split in half. Halving it
+   was the wrong reading of "keep the size": what should stay constant is how much room a
+   group of tools gets, which is what makes three tools per row look right. */
 .tool-rail {
-  width: min(720px, 94vw);
+  width: min(1400px, 96vw);
   max-height: 88vh;
   overflow-y: auto;
   background: var(--panel);
@@ -741,8 +745,8 @@ button.on:disabled {
 /* Two columns: what the broker can SEND, and what came BACK. */
 .tool-cols {
   display: grid;
-  grid-template-columns: 1.35fr 1fr;
-  gap: 20px;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
   align-items: start;
 }
 

@@ -34,6 +34,10 @@
     display: flex; justify-content: center; padding: 20px 14px 60px;
   }
   .wrap { width: 100%; max-width: 1040px; display: grid; gap: 18px; grid-template-columns: minmax(0,380px) minmax(0,1fr); align-items: start; }
+  /* Folded away, the app stands ALONE and CENTRED — which is the point of folding it.
+     Leaving the phone pinned to the left of an empty half looks like something failed to
+     load rather than like a deliberate view. */
+  .wrap.solo { max-width: 420px; grid-template-columns: minmax(0,1fr); justify-content: center; }
   @media (max-width: 860px) { .wrap { grid-template-columns: 1fr; } }
 
   h1 { font-size: 20px; margin: 0 0 2px; letter-spacing: -0.01em; }
@@ -142,6 +146,7 @@
 <div class="wrap">
 
   <!-- ── the "phone" ─────────────────────────────────────────────────────── -->
+  <div class="appcol">
   <div class="phone">
     <h1>Krungsri <span style="color:var(--muted);font-weight:400">(simulated app)</span></h1>
     <div class="sub" id="who">Not signed in</div>
@@ -199,15 +204,19 @@
     </section>
   </div>
 
+  <div style="margin-top:12px">
+    <button id="toggle-instr" class="ghost">ซ่อนรายละเอียดเบื้องหลัง · Hide the plumbing</button>
+  </div>
+  </div>
+
   <!-- ── what the server did ─────────────────────────────────────────────────
        This whole column is the DEMO's instrumentation, not the product. It is what makes
        the pitch's claim checkable rather than asserted — but on stage it competes with
-       the app for attention, so it folds away and the phone stands alone. -->
-  <div>
-    <div style="margin-bottom:10px">
-      <button id="toggle-instr" class="ghost">ซ่อนรายละเอียดเบื้องหลัง · Hide the plumbing</button>
-    </div>
-    <div id="instr">
+       the app for attention, so it folds away and the phone stands alone, centred.
+
+       The toggle lives with the PHONE (above), not here, so that hiding this column does
+       not hide the way to bring it back. -->
+  <div id="instr">
     <div class="card">
       <h2>What the server did</h2>
       <div id="result-empty" class="sub">Tap <b>Contact</b> to see it.</div>
@@ -240,7 +249,6 @@
       <div class="log" id="log"><div class="m">nothing yet</div></div>
       <p class="note">Every line is a request to the public <code>/v1</code> API — the same
         one the real Krungsri app would call. There is no simulator-only endpoint.</p>
-    </div>
     </div>
   </div>
 </div>
@@ -605,6 +613,9 @@
   // on recording while it is hidden and is complete when it comes back.
   $("toggle-instr").onclick = () => {
     const hidden = $("instr").classList.toggle("hidden");
+    // The grid collapses to one centred column, and the button — which lives with the
+    // phone rather than with the panel it hides — comes with it.
+    document.querySelector(".wrap").classList.toggle("solo", hidden);
     $("toggle-instr").textContent = hidden
       ? "แสดงรายละเอียดเบื้องหลัง · Show the plumbing"
       : "ซ่อนรายละเอียดเบื้องหลัง · Hide the plumbing";

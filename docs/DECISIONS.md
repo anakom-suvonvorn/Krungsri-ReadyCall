@@ -4683,3 +4683,18 @@ an address, a policy number read off a document, a hospital name the broker cann
 over a bad line. The system does not guess what it means, which is the same rule `D44` set
 for captured digits.
 
+### Amendment, 2026-09-08 (late): three layout corrections from watching it used
+
+**The tool dialog is twice as wide, not the same width halved.** *"Keep the size"* meant
+keep the room a group of tools gets — which is what makes three per row look right — so
+two columns need twice the dialog, not two halves of the old one. `min(1400px, 96vw)`,
+equal columns.
+
+**Folding the plumbing away centres the app.** The toggle lives with the phone rather than
+with the panel it hides (so hiding it cannot hide the way back), and the grid collapses to
+a single centred column. Left pinned to the left of an empty half, it read as something
+having failed to load rather than as a deliberate view.
+
+**And the customer's วางสาย had to become real**, which turned out to be `B38` rather than
+a wiring job.
+

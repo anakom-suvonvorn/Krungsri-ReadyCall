@@ -1749,3 +1749,30 @@ only ending acw/save record does"**. Three dead methods behind one symptom._
   only the second one does anything. And when you add a grace window, walk every operation
   it is supposed to cover: a half-covered grace is a promise the UI keeps and the API
   breaks.
+
+## B38. Hanging up left the caller in the queue, still being offered to desks
+_Found the moment the customer got a **วางสาย** button (`B37`'s design pass) and the user
+pressed it: **"the end call button on /sim doesn't stop the call"**._
+
+- **Symptoms.** The customer presses วางสาย while waiting. The call is marked `ABANDONED`
+  and **the matcher goes on routing them** — the caller stays in the waiting pool, keeps
+  being offered to agents, and a desk that was already ringing goes on ringing for
+  somebody who has gone.
+- **Root cause, two dead things again.**
+  1. **`DispatchService.release()` had exactly one caller: the ACCEPT path.** Nothing
+     removed a caller from the pool for any other reason, because until this session there
+     was no other way for a call to end early. `D78` warns about precisely this shape — the
+     pool is a *projection*, and a projection nothing updates is a second source of truth
+     that quietly disagrees with the first.
+  2. **`AssignmentService.cancel()` was called by nothing**, despite a docstring naming
+     this exact case: *"The caller gave up while it was ringing. Nobody did anything
+     wrong."* It moves the call to `ABANDONED`, frees the agent's presence and publishes
+     the resolution — all three of which the naive `orchestrator.abandon()` skips.
+- **Fix.** Hanging up goes through `cancel()` when a desk is ringing and `abandon()` when
+  none is, then **releases the pool entry** in both cases.
+- **Verified** by disabling the release: the new test fails, and passes with it.
+- **Lesson.** **A new way for something to end is a new set of things that must be told.**
+  The state machine allowed `ABANDONED` from every waiting state, so the transition
+  succeeded and looked right — but "the call is over" is a fact several structures hold
+  independently, and only one of them heard it. When adding an exit, list every place that
+  believes the thing is still happening.

@@ -395,3 +395,63 @@ async def test_a_half_finished_form_still_submits_after_the_call_ends(client: An
     )
     assert sent.status_code == 200, "the grace window is the whole point of close()"
     assert sent.json()["items"][0]["responded"] is True
+
+
+# --- `B38`: hanging up has to actually remove the caller ------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_caller_who_hangs_up_leaves_the_queue(client: Any) -> None:
+    """`B38`. `dispatch.release` had exactly ONE caller — the accept path — so a caller
+    who gave up stayed in the waiting pool: state `ABANDONED`, and the matcher still
+    routing them to desks. `D78`'s hazard exactly, a projection nothing updates."""
+    client.post("/v1/demo/session", json={"customer_id": "C000001"})
+    intent = client.post("/v1/calls/intents", json={"app_intent": "health.claim.notify"}).json()
+    client.post(
+        "/v1/demo/calls",
+        json={
+            "correlation_token": intent["correlation_token"],
+            "intent_code": "health.claim.notify",
+            "caller_number": "0812345678",
+            "intake_keys": ["2"],
+            "ignore_hours": True,
+        },
+    )
+    container = client.app.state.container
+    assert len(container.dispatch.waiting()) == 1
+
+    assert client.post("/v1/app/call/hangup").status_code == 200
+
+    assert container.dispatch.waiting() == [], "an abandoned caller must not still be routable"
+
+
+@pytest.mark.asyncio
+async def test_hanging_up_while_a_desk_is_ringing_frees_the_agent(client: Any) -> None:
+    """The edge case the user named: nobody has accepted yet.
+
+    Abandoning the call alone would leave the agent stuck holding an offer for somebody
+    who is no longer there — so this goes through `AssignmentService.cancel`, which is
+    what frees their presence and resolves the assignment.
+    """
+    client.post("/v1/agent/demo-login", json={"agent_id": "A006"})
+    client.post("/v1/agent/state", json={"agent_intent": "ready"})
+    client.post("/v1/demo/session", json={"customer_id": "C000001"})
+    intent = client.post("/v1/calls/intents", json={"app_intent": "health.advice.compare"}).json()
+    client.post(
+        "/v1/demo/calls",
+        json={
+            "correlation_token": intent["correlation_token"],
+            "intent_code": "health.advice.compare",
+            "caller_number": "0812345678",
+            "intake_keys": ["2"],
+            "ignore_hours": True,
+        },
+    )
+    await sweep_once(client.app.state.container)
+    assert client.get("/v1/agent/me").json()["offer"] is not None, "a desk is ringing"
+
+    assert client.post("/v1/app/call/hangup").status_code == 200
+
+    me = client.get("/v1/agent/me").json()
+    assert me["offer"] is None, "the offer card must clear"
+    assert me["presence"]["system_state"] != "offering", "and the agent must be free again"

@@ -325,13 +325,33 @@ async def app_hangup(principal: PrincipalDep, container: ContainerDep) -> dict[s
     ]
     if not live:
         raise HTTPException(status_code=404, detail="no live call")
-    call = live[0]
+    call = max(live, key=lambda c: getattr(c, "created_at", None) or container.clock.now())
+
+    # If a desk is RINGING for this caller, cancelling the offer is the whole ending, not
+    # a step before it (`B38`). `AssignmentService.cancel` — docstring: *"The caller gave
+    # up while it was ringing. Nobody did anything wrong."* — moves the call to
+    # `ABANDONED`, frees the agent's presence and publishes the resolution. It was written
+    # for exactly this and had no caller at all.
+    offer = container.assignments.open_offer_for(call.call_session_id)
     try:
-        await container.orchestrator.abandon(call, reason="caller_hung_up")
+        if offer is not None:
+            await container.assignments.cancel(
+                call, assignment_id=offer.assignment_id, reason="caller_hung_up"
+            )
+        else:
+            await container.orchestrator.abandon(call, reason="caller_hung_up")
     except IllegalTransition:
-        # Already answered: the customer's handset is no longer what ends this call.
+        # Already answered: the customer's handset is no longer what ends this call, and
+        # the agent's `end_call` is.
         raise HTTPException(status_code=409, detail="an agent is already on this call") from None
+
+    # AND TAKE THEM OUT OF THE QUEUE. `dispatch.release` had exactly one caller — the
+    # ACCEPT path — so a caller who hung up stayed in the waiting pool and went on being
+    # offered to desks. The state said `ABANDONED` while the matcher went on routing them,
+    # which is `D78`'s hazard exactly: a projection that nothing updates.
+    container.dispatch.release(call.call_session_id)
     container.assist.close(call.call_session_id)
+    log.info("caller hung up", call_session_id=call.call_session_id, was_ringing=offer is not None)
     return {"ok": True, "call_session_id": call.call_session_id}
 
 
