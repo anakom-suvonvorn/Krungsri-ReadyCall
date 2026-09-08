@@ -94,6 +94,7 @@ from readycall.services.recording.service import RecordingService
 from readycall.services.transcription.delivery import TranscriptDeliveryService
 from readycall.services.transcription.service import TranscriptionService
 from readycall.services.transcription.store import TranscriptRecorder
+from readycall.services.transfer import TransferService
 from readycall.voiceprompts import load_prompt_pack
 
 log = get_logger(__name__)
@@ -438,6 +439,10 @@ class Container:
         #: with the call, which is the right retention for a token whose only purpose is
         #: one conversation (`D14`).
         self.assist = AssistService(clock=self.clock)
+        #: Where a call goes when it is not staying with us (`D124`). Holds the handoff
+        #: for the length of the call so the wrap-up can be prefilled; the durable record
+        #: is the `call_wrapups` row the broker actually files (`D45`).
+        self.transfer = TransferService(clock=self.clock)
         self.transcript_delivery.subscribe(self.bus)
 
         #: The FOURTH consumer of `transcript.turn` (`D114`), and its own subscriber

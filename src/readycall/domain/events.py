@@ -227,6 +227,25 @@ class WrapupSaved(Event):
     filed_late: bool = False
 
 
+class CallHandedOff(Event):
+    """The call left the brokerage for the company that has to decide it (`D124`).
+
+    Its own event rather than a flavour of `CallEnded`, because the two answer different
+    questions: *"the media stopped"* is an operations fact, *"this went to Muang Thai
+    because they have to rule on the coverage"* is a business one, and the business one is
+    `D117`'s whole point — a broker hands claims over, it does not adjudicate them.
+    Counting handoffs per carrier is a question a broker actually has.
+    """
+
+    name: ClassVar[str] = "call.handed_off"
+    agent_id: str
+    insurer_name_th: str
+    reason_code: str
+    #: `None` when the carrier came from the customer's policy rather than the config
+    #: menu. Absence is meaningful here: it says the record supplied the answer.
+    insurer_code: str | None = None
+
+
 class RatingReceived(Event):
     name: ClassVar[str] = "rating.received"
     source: str
@@ -255,6 +274,7 @@ EVENT_TYPES: tuple[type[Event], ...] = (
     CallOffered,
     OfferResolved,
     WrapupSaved,
+    CallHandedOff,
     RatingReceived,
 )
 

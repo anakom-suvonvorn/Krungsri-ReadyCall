@@ -321,6 +321,23 @@ class EndCallRequest(ApiModel):
     reason: str = Field(default="caller_hung_up", max_length=64)
 
 
+class HandoffRequest(ApiModel):
+    """Hand this call to the company that has to decide it (`D124`, `D117`).
+
+    `insurer_code` names a row in `insurers.yaml`; `insurer_name_th` is for the carrier
+    that came off the customer's own policy and may not be in that file at all. Exactly
+    one is required, and the server re-reads the policy rather than trusting the name —
+    the client may say *which*, never *what it is called* on a record.
+    """
+
+    reason_code: str = Field(max_length=64)
+    insurer_code: str | None = Field(default=None, max_length=64)
+    #: Set instead of `insurer_code` to hand to the carrier on the customer's own policy.
+    #: A flag rather than a name, so a client cannot invent a company.
+    use_policy_insurer: bool = False
+    note: str = Field(default="", max_length=500)
+
+
 class AssistRespondFromApp(ApiModel):
     """A form the customer filled in inside the app rather than on a link page (`D122`).
 
@@ -544,6 +561,22 @@ class PendingWrapupOut(ApiModel):
     assurance: str = "l0_anonymous"
 
 
+class HandoffOut(ApiModel):
+    """What the broker told the customer, on its way to the wrap-up form."""
+
+    insurer_name_th: str
+    reason_code: str
+    reason_label_th: str
+    at: datetime
+    #: Absent when the carrier came off the customer's own policy rather than the config
+    #: menu. That absence is meaningful: it says the record answered, not the list.
+    insurer_code: str | None = None
+    note: str = ""
+    #: The prefill itself, composed server-side so the client is not re-deriving Thai
+    #: wording the server already knows (`D68`).
+    disposition_th: str = ""
+
+
 class WorkstationSnapshot(ApiModel):
     """Everything the workstation needs to render itself from cold.
 
@@ -590,6 +623,13 @@ class WorkstationSnapshot(ApiModel):
     #: flaky (`D32`), so a tab opening mid-call must not have to wait for the caller to
     #: say something else before it shows anything.
     transcript: tuple[TranscriptTurnOut, ...] = ()
+    #: The handoff recorded for the call being wrapped up, if there was one (`D124`).
+    #: A **suggestion** for the disposition field, never an entry: `D45` says nothing is
+    #: saved on the agent's behalf, and the broker is the one who made the promise to the
+    #: customer. It is here rather than returned once from the handoff endpoint because
+    #: the wrap-up form must survive a refresh — `wrapup_saved` and `savedCalls` are the
+    #: same lesson (`D68`).
+    handoff: HandoffOut | None = None
 
 
 class PlaceCallRequest(ApiModel):

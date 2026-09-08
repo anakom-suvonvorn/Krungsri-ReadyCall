@@ -54,11 +54,11 @@ the disclosure gate moves when the agent attests. **What they said while waiting
 screen** (`D106`), and if they consented, **their audio is in object storage encrypted**
 (`D110`) with a key ref and a retention date. If they declined, it is nowhere.
 
-Verified on 2026-09-08: **862 tests** — 850 pass + 12 skipped with Postgres and MinIO both
+Verified on 2026-09-08: **871 tests** — 859 pass + 12 skipped with Postgres and MinIO both
 up (the 12 are foreign-key cases the in-memory backend cannot have, and the `ml`-extra ones).
 Without those containers the count of skips rises and nothing fails.
-`ruff check` and `ruff format --check` clean over **217** files, `mypy --strict`
-clean over **153** source files, 69/69 diagrams current, the prompt pack fresh, and all three
+`ruff check` and `ruff format --check` clean over **220** files, `mypy --strict`
+clean over **155** source files, 69/69 diagrams current, the prompt pack fresh, and all three
 scenarios replay byte-identically. The database suites ran against a **live Postgres** on
 2026-09-02, and a restart was verified outside pytest with two real uvicorn processes.
 
@@ -153,7 +153,13 @@ FullProject/
 │  │                         #   a client able to declare its own push non-personal would
 │  │                         #   be the gate's own bypass. Guarded both ways at startup,
 │  │                         #   including: prefill on a non-personal tool refuses to boot.
-│  └─ playbooks.yaml*        # per-intent recommended actions (D118, closing Q19). The
+│  ├─ insurers.yaml*         # who a call may be handed TO, and why (D124). Real carriers
+  │                         #   from MARKET_FACTS 8. A MENU, not a whitelist: the carrier
+  │                         #   on the customer's own policy is offered whether or not it
+  │                         #   is in here, because the real extract arrives carrying
+  │                         #   carriers nobody typed. Guarded one way only, and that is
+  │                         #   deliberate - see the file's own header.
+  └─ playbooks.yaml*        # per-intent recommended actions (D118, closing Q19). The
 │                            #   chain is intent -> playbook name -> ordered (Thai text,
 │                            #   required assurance) -> filtered by level -> verify-identity
 │                            #   inserted at 0 below L2 (D56). Guarded BOTH ways at startup:
@@ -383,8 +389,12 @@ the gate read per TOOL from `config/assist_tools.yaml` rather than per kind (`D1
 ☑ **the app places a real call and becomes the paired screen** (`D122`, `B36`) ·
 ☑ **contact menus filtered per context**, and the *"something else"* branch asking which
 kind of cover first so new business is reachable at all (`D122`, `D123`) ·
+☑ **handing the call to the insurer** (`D124`) — `insurers.yaml` with the real carriers,
+the customer's own carrier offered first and never missing, closed reasons, the wrap-up
+prefilled, a `call.handed_off` event, and no new call state ·
 ☐ sending the link (P5's `NotifierPort`) · ☐ signature, OCR, document upload ·
-☐ merging with `customer_sim` · ☐ **transfer** (`D63` + the second tab; next up)
+☐ merging with `customer_sim` · ☐ **internal transfer** (`D63`'s consulted handover) —
+a labelled stub on screen, and a scope call awaiting the user (`D124`)
 
 **P5 — real telephony** ☐ Asterisk + ARI adapter · ☐ TLS/WSS certs · ☐ **in-browser softphone
 (SIP.js, devices, self-test, reconnect)** · ☐ customer WebRTC path · ☐ PSTN/ANI identification ·
@@ -463,7 +473,7 @@ performing by hand, i.e. what the next services take over (`D36`).
 | Adapters | 9 fakes/nulls + two decorators (`CachingCoreDataProvider`, `EncryptingBlobStorage`), **plus seven real ones**: `SileroVad`, `EnergyVad`, `TyphoonAsrEngine`, `FasterWhisperEngine`, `ThonburianHfEngine`, `LocalFsBlobStorage`, `S3BlobStorage` |
 | Spoken lines | 28 prompts + 15 flow roles -> **59 distinct clips** after dedupe (`D80`); rendered by the null engine, so a manifest rather than audio |
 | Call states | 15, transition table self-validated (the rating is an event, not a state — `D46`) |
-| Event types | 19 |
+| Event types | **20** — `call.handed_off` added by `D124`, its own event rather than a flavour of `CallEnded`: *"the media stopped"* and *"this went to Muang Thai because they have to rule on the coverage"* answer different questions, and counting handoffs per carrier is one a broker actually has |
 | Scenarios | 3 (in-app happy path, cold-call motor claim, fully degraded) |
 | Mock core | 3 customers, **6 policies across 5 carriers** (`D117` — the demo customer holds a real broker portfolio: employer group health, a second health policy, and motor, from three different insurers), 5 products, 5 interactions, 2 claims |
 | Intent taxonomy | **33 intents** across 5 lines, each with a catch-all — **broker-shaped** since `D117`: advice/compare and renewal are first-class, claims are handoffs (`handoff_to_insurer`), and `health.ipd.preauth` is gone because pre-authorisation is the insurer's decision |

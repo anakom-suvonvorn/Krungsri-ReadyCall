@@ -225,6 +225,11 @@ export type Snapshot = {
    *  a client that accumulates can lose a message and show a transcript with a sentence
    *  silently missing from the middle, which is `D68`'s rule in the place it matters most. */
   transcript: TranscriptTurn[];
+  /** The handoff recorded for the call being wrapped up (`D124`). A **suggestion** for
+   *  the disposition, never an entry — `D45` says nothing saves on the agent's behalf,
+   *  and the broker is the one who made the promise to the customer. Server-owned so it
+   *  survives a refresh, for `wrapup_saved`'s reason (`D68`). */
+  handoff: Handoff | null;
 };
 
 /** One tool on the rail. `personal` is the server's own label for it (`D121`): the
@@ -238,6 +243,34 @@ export type AssistTool = {
   personal: boolean;
   /** Looks real, is not implemented, and the customer's screen says so (`D115`). */
   stub: boolean;
+};
+
+export type HandoffOptions = {
+  /** The carrier that underwrote the policy this call is about. Offered first and never
+   *  missing, because the record beats the menu (`D124`). */
+  policy_insurer: string | null;
+  /** Whether the intent this call was routed on is one the insurer owns (`D117`) — the
+   *  same flag that puts the banner above the policy panel, so the two cannot disagree. */
+  handoff_expected: boolean;
+  insurers: { code: string; name_th: string }[];
+  reasons: {
+    code: string;
+    label_th: string;
+    requires_policy: boolean;
+    /** The client greys an unavailable reason and says why; the server refuses it
+     *  independently (`D121`). This is the label, not the gate. */
+    available: boolean;
+  }[];
+};
+
+export type Handoff = {
+  insurer_name_th: string;
+  insurer_code: string | null;
+  reason_code: string;
+  reason_label_th: string;
+  at: string;
+  note: string;
+  disposition_th: string;
 };
 
 export type AssistCatalogue = {
@@ -367,6 +400,24 @@ export const api = {
       tool_id: toolId,
       payload,
     }),
+
+  /** Where the call goes when it is not staying with us (`D124`). The options are SERVED
+   *  for `assistTools`' reason, and because two of them — the carrier on this customer's
+   *  policy, and whether we hold a policy at all — are facts the client cannot work out. */
+  handoffOptions: (callId: string) =>
+    call<HandoffOptions>("GET", `/v1/agent/calls/${callId}/handoff/options`),
+  /** Records the handoff and ends the call, in that order. The client names WHICH insurer
+   *  (a code, or the policy flag) and never what it is called: a request able to supply a
+   *  company name could file a handoff to a company that never wrote anything. */
+  handOff: (
+    callId: string,
+    body: {
+      reason_code: string;
+      insurer_code?: string | null;
+      use_policy_insurer?: boolean;
+      note?: string;
+    },
+  ) => call<Snapshot>("POST", `/v1/agent/calls/${callId}/handoff`, body),
 
   /** DEMO: a caller arrives. Stands in for telephony until P5. */
   placeCall: (payload: Record<string, unknown>) =>

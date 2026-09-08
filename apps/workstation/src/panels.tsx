@@ -17,6 +17,7 @@ import type {
   Brief,
   Capture,
   Challenge,
+  Handoff,
   Identity,
   Offer,
   PendingWrapup,
@@ -1020,12 +1021,19 @@ export function WrapupPanel({
   busy,
   lateFor = null,
   onCancel,
+  handoff = null,
 }: {
   presence: Presence;
   saved: boolean;
   onSave: (payload: Record<string, unknown>) => void;
   onSaveAndDeclare: (payload: Record<string, unknown>, intent: string) => void;
   busy: boolean;
+  /** The handoff this call ended in, if it did (`D124`). A **suggestion**: it fills the
+   *  disposition and the note once, and the agent edits or replaces it. `D45` says
+   *  nothing is saved on their behalf, and they are the one who made the promise to the
+   *  customer — so `was_edited` still distinguishes a confirmed disposition from an
+   *  accepted default. */
+  handoff?: Handoff | null;
   /** Set when filing a call from the backlog rather than wrapping up the live one
    *  (`D87`). Changes the framing and drops the presence buttons — the agent may be on
    *  another call entirely while they do this. */
@@ -1035,6 +1043,19 @@ export function WrapupPanel({
   const [disposition, setDisposition] = useState("advice_given");
   const [notes, setNotes] = useState("");
   const [followUp, setFollowUp] = useState(false);
+
+  // Applied ONCE per handoff, keyed on its timestamp. Two hazards, and they pull in
+  // opposite directions: initialising `useState` from the prop misses the case where the
+  // panel is already mounted when the handoff lands, and re-applying on every render
+  // would wipe whatever the agent has typed since — the optimistic-UI hazard `D120`'s
+  // customer page already taught, in a form somebody is mid-sentence in.
+  const appliedHandoff = useRef<string | null>(null);
+  useEffect(() => {
+    if (!handoff || appliedHandoff.current === handoff.at) return;
+    appliedHandoff.current = handoff.at;
+    setDisposition("handed_to_insurer");
+    setNotes(handoff.disposition_th);
+  }, [handoff]);
   const payload = () => ({
     disposition,
     notes,

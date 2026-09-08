@@ -4774,3 +4774,123 @@ policies and a motor one and **no travel cover**), pressed *Contact us — somet
 real call: `POST /v1/calls/intents` 201, `POST /v1/demo/calls` 200, the app turned into a
 call screen with a ticking timer, and the call routed to **`q_advice_travel`** at
 **`l3_verified`** — an advice desk, from a customer holding no travel policy at all.
+
+## D124. Handing the call to the insurer is something the broker DOES, not a banner they read
+_Taken 2026-09-08. Builds the external half of the user's two-tab transfer design. `D117`
+made claims a handoff; this is the first code that performs one. The internal half —
+`D63`'s consulted transfer to another desk — is **deliberately not built**, and the last
+section says why._
+
+- **Problem.** `D117` split the duties from Krungsri's own slide: the insurer underwrites,
+  rules on coverage and **pays claims**; the broker analyses needs, selects the plan *and
+  the company*, services the policy and chases renewals. Since `D117` every intent whose
+  work belongs to the insurer carries `handoff_to_insurer: true`, and that reaches the
+  broker's screen as a banner **before they speak** — because *"I'll check and call you
+  back"* and *"I'm passing you to the insurer now"* are different promises and only one of
+  them is a broker's to make.
+
+  And the banner was the whole feature. The broker read it, said the sentence, pressed
+  วางสาย, and typed whatever they remembered into the wrap-up. **Which company, and why,
+  existed nowhere** — a broker cannot count handoffs per carrier, and the customer's
+  record does not say who has their claim.
+
+- **Decision.** A **ส่งต่อ** button beside วางสาย, and a dialog that records who the call
+  is going to and why, prefills the wrap-up, and ends the call.
+
+### The record beats the menu, and that is the whole shape of `insurers.yaml`
+
+The carriers are real, with real 2025 market share from `MARKET_FACTS` §8 — a judge from
+Krungsri Auto Broker recognises them, and "Insurer A / Insurer B" throws away realism that
+costs nothing. ⚠️ Allianz Ayudhya is deliberately one row among several (`D117`).
+
+But the file is a **menu, not a whitelist.** The carrier that underwrote the customer's
+policy comes from `Policy.insurer` and is offered as its own row whether or not it appears
+in config, because on hackathon day the real extract arrives carrying carriers nobody has
+typed in — and a broker who cannot hand a claim to the company that actually wrote the
+policy has no product at all. A startup guard demanding the two agree would refuse to boot
+on exactly the data the `CoreDataProvider` seam exists to absorb (`D3`).
+
+One guard does run, and it is `D122`'s shape: **if every handoff reason required a policy,
+a caller who holds none could never be handed over** — a list that filters to empty is a
+dead end, and it is silent when it happens. That refuses to boot.
+
+### The client names WHICH, never WHAT IT IS CALLED
+
+The request carries a reason code and either an insurer code or the flag
+`use_policy_insurer`. There is no field for a company **name**, so a client cannot file a
+handoff to a company that never wrote anything for this customer — and the wrap-up would
+have recorded that as fact. Same rule as `D121`'s `personal` flag and `D4`'s `customer_id`:
+the client says which of the server's options, and the server supplies the content.
+
+### ⚠️ Why this does **not** use `CallState.TRANSFERRED`
+
+The obvious move, and it is wrong twice.
+
+`TRANSFERRED` is **terminal**, so a call in it can never reach `WRAP_UP` — and after-call
+work on a handoff is real work: what was gathered, what the insurer will need, what the
+customer was told. Making it non-terminal instead would give the system **two states that
+both mean "the media is over and the agent is filing"**, and every reader of *"is this
+agent in after-call work"* would have to check both. That is `B25`/`B26`'s shape exactly —
+two places answering one question, disagreeing later, in silence.
+
+So a handoff ends the call the ordinary way, `IN_CALL -> WRAP_UP`, and what makes it a
+handoff is the **record**: a `handed_to_insurer:<code>` transition reason, a
+`call.handed_off` event, and a disposition the broker confirms. A test asserts
+`TRANSFERRED` is not entered, so this cannot be "tidied" back later without reading why.
+
+That leaves `CallState.TRANSFERRED` entered by nothing, which in this project is normally a
+bug. Here it is a finding rather than an oversight and is recorded as **`Q37`**: the state
+models a *blind* transfer — push the caller into another queue and hang up — which `D63`
+explicitly rejects as "what call centres do today and the reason people hate being
+transferred".
+
+### Nothing is written until the broker files it
+
+The handoff is held for the length of the call and prefills the wrap-up; the durable
+statement is the `call_wrapups` row the broker actually submits. `D45`: nothing saves on
+the person's behalf, and the broker is the one who made the promise to the customer.
+`was_edited` still separates a confirmed disposition from an accepted default.
+
+⚠️ **This is `Q34`'s family and inherits its weakness**: a real product wants a
+`call_handoffs` table with a retention rule (`D14`), and this dies with the call.
+
+### The prefill is applied once, keyed on the handoff's own timestamp
+
+Initialising `useState` from the prop misses the case where the panel is already mounted;
+re-applying every render wipes whatever the broker has typed since. Both were live risks —
+this is `D120`'s optimistic-UI hazard in a form somebody is mid-sentence in.
+
+The **order** in the endpoint is load-bearing for the same reason: record first, end the
+call second. The wrap-up form renders the instant the state changes, so a prefill computed
+afterwards is a prefill nobody ever sees.
+
+### What is NOT built, and why the second tab says so on screen
+
+The user's design has two tabs: this one, and **โอนสายภายใน** — transfer to another broker
+on the floor. The second tab renders as a **labelled stub** naming `D63` and describing
+what it will do, which is the rule for anything that looks real and is not (`D115`).
+
+That is a scope call and it is worth stating plainly rather than burying. `D63` designed
+the internal transfer at P2b as a *consulted* handover: the caller keeps talking to the
+first broker while the second decides, and moves only when the first presses Release. That
+needs a **transfer offer distinct from a queue offer** — `AssignmentService.offer` requires
+`MATCHED` and transitions to `OFFERED`, and neither is true of a call that must stay
+`IN_CALL` — plus a way for one agent to hand an accepted assignment to another, plus a
+rework of *"which call is mine"* from a fact about the **call** into a fact about the
+**assignment** (today `_active_call_id` would leave the first broker's screen showing a
+live call they are no longer on, with a วางสาย button that would end somebody else's).
+
+That is a day of careful work in `services/agents/`, which is where `B7`, `B25` and `B28`
+all lived, four days before the pitch. The external half touches none of it, is complete,
+and is the one that expresses `D117`. **The internal half is the user's call to schedule,
+with that risk stated.**
+
+### Verified by driving the workstation, not from the tests
+
+On a running server, signed in as A006 on a live `health.claim.notify` call: **ส่งต่อ**
+appears in the call bar beside วางสาย; the dialog opens carrying `D117`'s banner, the
+customer's own carrier **เมืองไทยประกันภัย** as its own row above a 14-carrier health
+menu, and all six reasons live because this caller holds a policy. Choosing *การพิจารณาและ
+จ่ายค่าสินไหม* and pressing ส่งต่อและวางสาย ended the call, closed the dialog, raised the
+toast, and left the wrap-up form carrying `handed_to_insurer` and
+**"ส่งต่อ เมืองไทยประกันภัย — การพิจารณาและจ่ายค่าสินไหม"** — with the ACW clock running.

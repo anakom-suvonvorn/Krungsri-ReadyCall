@@ -386,6 +386,39 @@ walkthrough transcribes real Thai speech for real.
 > longest line in the script and warns if you force it below the floor; if you bring your
 > own recording, that is the arithmetic to do.
 
+### Hand a claim to the insurer, which is what a broker actually does
+
+A broker does not adjudicate claims — the insurer does (`D117`, from Krungsri's own duty
+slide). Since `D124` that is an action rather than a banner. **No extra setup: §1 and §2.**
+
+Start the API, sign in at `/workstation` as **A006** (health), press **พร้อมรับสาย**, then:
+
+```bash
+curl -X POST http://127.0.0.1:8000/v1/demo/calls -H "Content-Type: application/json" -d "{\"intent_code\": \"health.claim.notify\", \"caller_number\": \"0812345678\", \"intake_keys\": [\"2\"], \"ignore_hours\": true}"
+```
+
+Press **Accept**, then **ส่งต่อ** in the call bar beside วางสาย. The dialog carries:
+
+- the banner saying this call ends with the insurer — the same `handoff_to_insurer` flag
+  that drew it above the policy panel, so the two cannot disagree;
+- **the carrier that actually wrote this customer's policy, as its own row above the
+  market menu.** `config/insurers.yaml` is a *menu, not a whitelist* — on hackathon day
+  the real extract arrives carrying carriers nobody has typed in, and a broker who cannot
+  hand a claim to the company that wrote the policy has no product;
+- six closed reasons, with the ones that only make sense about cover the customer holds
+  greyed when we hold none. **The server refuses those independently** — the greying is
+  the courtesy, not the gate (`D121`).
+
+Choosing one ends the call and the wrap-up form is already filled in:
+`ส่งต่อ เมืองไทยประกันภัย — การพิจารณาและจ่ายค่าสินไหม`. It is a **suggestion**: nothing is
+saved until the broker presses save, because they are the one who made the promise (`D45`).
+
+⚠️ The dialog's second tab, **โอนสายภายใน** (transfer to another broker), is a **labelled
+stub**. `D63` designed it and it is not built; the tab says so rather than pretending.
+
+- **Needs set up:** §1 and §2.
+- **Needs running:** the API server. Nothing else.
+
 ### Prove the recording is encrypted, and that a refusal is honoured
 
 Two claims worth checking yourself rather than believing: what lands in the bucket cannot be

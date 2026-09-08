@@ -19,11 +19,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, api } from "./api";
-import type { AssistCatalogue, AssistState } from "./api";
+import type { AssistCatalogue, AssistState, HandoffOptions } from "./api";
 import type { Capture, Snapshot, TranscriptTurn } from "./api";
 import { useSocket } from "./useSocket";
 import type { SocketMessage } from "./useSocket";
 import { AssistPanel } from "./assist";
+import { TransferButton, TransferDialog } from "./transfer";
 import {
   BacklogPanel,
   BriefPanel,
@@ -60,6 +61,8 @@ export default function App() {
   // into `/me` would put it on the hot path that every socket push already walks.
   const [assist, setAssist] = useState<AssistState | null>(null);
   const [tools, setTools] = useState<AssistCatalogue | null>(null);
+  const [transferOpen, setTransferOpen] = useState(false);
+  const [handoffOptions, setHandoffOptions] = useState<HandoffOptions | null>(null);
 
   useEffect(() => {
     if (toast === null) return;
@@ -140,6 +143,19 @@ export default function App() {
   useEffect(() => {
     void refreshAssist();
   }, [refreshAssist]);
+
+  /** Fetched when the dialog OPENS, not on every call. The options depend on the call —
+   *  the carrier on this customer's policy, and whether we hold one at all — so they
+   *  cannot be fetched once per sign-in the way the tool catalogue is; and fetching them
+   *  on every call would be a round trip per call for a dialog nobody may open. */
+  const activeCallId = snapshot?.active_call_session_id ?? null;
+  useEffect(() => {
+    if (!transferOpen || !activeCallId) return;
+    void api
+      .handoffOptions(activeCallId)
+      .then(setHandoffOptions)
+      .catch(() => setHandoffOptions(null));
+  }, [transferOpen, activeCallId]);
 
   const agentId = snapshot?.presence.agent_id ?? null;
   useEffect(() => {
@@ -346,6 +362,7 @@ export default function App() {
               presence={presence}
               saved={snapshot.wrapup_saved}
               busy={busy}
+              handoff={snapshot.handoff}
               onSave={(payload) =>
                 run(() => api.saveWrapup(wrapupCallId, payload)).then((next) => {
                   if (!next) return;
@@ -474,6 +491,10 @@ export default function App() {
               {held ? "รับสายต่อ" : "พักสาย"}
             </button>
             <div className="spacer" />
+            {/* Beside วางสาย because it is the same kind of act — this call is ending —
+                and because `D117`'s banner tells the broker so before they speak. Two
+                ways out of a call, one of which records where it went (`D124`). */}
+            <TransferButton disabled={busy} onOpen={() => setTransferOpen(true)} />
             <button
               className="danger"
               disabled={busy}
@@ -488,6 +509,26 @@ export default function App() {
           <span className="faint">{wrapping ? "" : "ไม่มีสายที่กำลังสนทนา"}</span>
         )}
       </footer>
+
+      <TransferDialog
+        open={transferOpen && Boolean(callId)}
+        options={handoffOptions}
+        busy={busy}
+        onClose={() => setTransferOpen(false)}
+        onHandOff={(body) => {
+          if (!callId) return;
+          void run(() => api.handOff(callId, body)).then((next) => {
+            if (!next) return;
+            setSnapshot(next);
+            setTransferOpen(false);
+            // The wrap-up form is already on screen by now, carrying the prefill the
+            // server composed. Saying so is the acknowledgement `B11` asked for: the
+            // only other feedback is a dialog disappearing, which is indistinguishable
+            // from a request that silently failed.
+            setToast("ส่งต่อแล้ว — สรุปถูกกรอกไว้ให้ในงานหลังจบสาย");
+          });
+        }}
+      />
 
       <OfferCard
         offer={offer}

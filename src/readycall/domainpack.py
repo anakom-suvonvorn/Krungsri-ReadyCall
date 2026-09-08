@@ -129,6 +129,42 @@ class PlaybookSpec:
 
 
 @dataclass(frozen=True, slots=True)
+class InsurerSpec:
+    """A company a broker can hand a call TO (`D124`).
+
+    This list is a **menu, not a whitelist.** The carrier that underwrote the customer's
+    policy comes from `Policy.insurer` and is offered whether or not it is here, because
+    the real extract arrives on hackathon day carrying carriers nobody has typed into
+    `insurers.yaml` — and a broker who cannot hand a claim to the company that actually
+    wrote the policy has no product. Validating the two against each other would refuse
+    to boot on exactly the data the `CoreDataProvider` seam exists to absorb (`D3`).
+    """
+
+    code: str
+    name_th: str
+    lines: frozenset[str] = frozenset()
+
+    def covers(self, line: str | None) -> bool:
+        return not self.lines or line is None or line in self.lines
+
+
+@dataclass(frozen=True, slots=True)
+class HandoffReasonSpec:
+    """Why a call is leaving us (`D124`, `D117`).
+
+    Closed, for `IntentCode`'s reason: free text here becomes twelve spellings of "claim"
+    and nothing that can be counted. `requires_policy` means the reason is only coherent
+    about cover the customer holds, so the broker is offered the **policy's own carrier**
+    rather than the market menu — handing a claim to a company that did not write the
+    policy is not a handoff, it is a wrong number.
+    """
+
+    code: str
+    label_th: str
+    requires_policy: bool = False
+
+
+@dataclass(frozen=True, slots=True)
 class AssistFormField:
     """One field on a form the broker pushes to the customer's screen."""
 
@@ -320,6 +356,8 @@ class DomainPack:
     playbooks: dict[str, PlaybookSpec]
     assist_tools: dict[str, AssistToolSpec]
     assist_groups: dict[str, AssistToolGroup]
+    insurers: dict[str, InsurerSpec]
+    handoff_reasons: dict[str, HandoffReasonSpec]
     menu_settings: MenuSettings
     #: Words the ASR is nudged toward (`D9`). Config, not code, because they are
     #: insurance-specific and `services/` may not hold a policy concept (`D28`).
@@ -442,6 +480,7 @@ class DomainPack:
         challenges = cls._load_challenges(_read(directory / "challenges.yaml"))
         playbooks = cls._load_playbooks(_read(directory / "playbooks.yaml"))
         assist_tools, assist_groups = cls._load_assist_tools(_read(directory / "assist_tools.yaml"))
+        insurers, handoff_reasons = cls._load_insurers(_read(directory / "insurers.yaml"))
         vocabulary = cls._load_stt_vocabulary(directory)
 
         pack = cls(
@@ -454,6 +493,8 @@ class DomainPack:
             playbooks=playbooks,
             assist_tools=assist_tools,
             assist_groups=assist_groups,
+            insurers=insurers,
+            handoff_reasons=handoff_reasons,
             menu_settings=settings,
             stt_vocabulary=vocabulary,
             language_menu=language_menu,
@@ -471,6 +512,7 @@ class DomainPack:
             challenges=len(challenges),
             playbooks=len(playbooks),
             assist_tools=len(assist_tools),
+            insurers=len(insurers),
         )
         return pack
 
@@ -559,6 +601,53 @@ class DomainPack:
             # playbook would render an empty action list, which reads as "nothing to do".
             raise ConfigError("playbooks.yaml must define `generic`")
         return out
+
+    @staticmethod
+    def _load_insurers(
+        raw: dict[str, Any],
+    ) -> tuple[dict[str, InsurerSpec], dict[str, HandoffReasonSpec]]:
+        """`insurers.yaml` — who a call may be handed to, and why (`D124`)."""
+        insurers: dict[str, InsurerSpec] = {}
+        for entry in raw.get("insurers", []):
+            spec = InsurerSpec(
+                code=str(entry["code"]),
+                name_th=str(entry["name_th"]),
+                lines=frozenset(str(line) for line in (entry.get("lines") or ())),
+            )
+            if spec.code in insurers:
+                raise ConfigError(f"insurers.yaml: duplicate insurer code {spec.code!r}")
+            insurers[spec.code] = spec
+
+        reasons: dict[str, HandoffReasonSpec] = {}
+        for entry in raw.get("handoff_reasons", []):
+            reason = HandoffReasonSpec(
+                code=str(entry["code"]),
+                label_th=str(entry["label_th"]),
+                requires_policy=bool(entry.get("requires_policy", False)),
+            )
+            if reason.code in reasons:
+                raise ConfigError(f"insurers.yaml: duplicate reason code {reason.code!r}")
+            reasons[reason.code] = reason
+
+        if not insurers:
+            raise ConfigError("insurers.yaml defines no insurers")
+        if not reasons:
+            raise ConfigError("insurers.yaml defines no handoff_reasons")
+        if not any(not r.requires_policy for r in reasons.values()):
+            # Every reason needing a policy would leave a broker with a caller who holds
+            # nothing — a complaint about a carrier's service, say — unable to hand over
+            # at all. The same shape as `menus.yaml` needing a catch-all in every context
+            # (`D122`): a list that can be filtered to empty is a dead end waiting to
+            # happen, and it is silent when it happens.
+            raise ConfigError(
+                "insurers.yaml: every handoff reason requires a policy, so a caller who "
+                "holds none could never be handed over"
+            )
+        return insurers, reasons
+
+    def insurers_for(self, line: str | None = None) -> tuple[InsurerSpec, ...]:
+        """The menu, in file order, narrowed to the ones writing this line."""
+        return tuple(spec for spec in self.insurers.values() if spec.covers(line))
 
     @staticmethod
     def _load_challenges(raw: dict[str, Any]) -> dict[str, ChallengeSpec]:

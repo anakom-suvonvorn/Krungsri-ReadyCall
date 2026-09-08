@@ -39,6 +39,8 @@ from readycall.api.schemas import (
     DeclareStateRequest,
     DeclineOfferRequest,
     EndCallRequest,
+    HandoffOut,
+    HandoffRequest,
     IdentityOut,
     OfferOut,
     PendingWrapupOut,
@@ -48,6 +50,7 @@ from readycall.api.schemas import (
     WrapupRequest,
 )
 from readycall.api.security import AgentPrincipal, AuthenticationRequired
+from readycall.domain import events as ev
 from readycall.domain.enums import AgentIntent, CallState, OfferOutcome
 from readycall.domain.models import Assignment, CallWrapup
 from readycall.errors import PermanentError
@@ -295,6 +298,151 @@ async def end_call(
     #
     # `close()` does not delete the pairing — it shortens it to `PAIRING_GRACE`, so a form
     # somebody was halfway through when the broker rang off can still be submitted.
+    container.assist.close(call_session_id)
+    return await _snapshot(container, who.agent_id)
+
+
+# --- handing the call to another company (D124) -------------------------------------------
+
+
+async def _policy_insurer_for(container: Any, call_session_id: str) -> str | None:
+    """The carrier that underwrote the policy this call is about, from the snapshot.
+
+    The **frozen** snapshot rather than the bank core, for `_prefill_for`'s reason: it is
+    what the system knew when it decided, it needs no round trip, and it cannot move
+    underneath the call. It is also the answer that beats `insurers.yaml` when the two
+    disagree (`D124`).
+    """
+    snapshot_id = container.snapshot_for_call.get(call_session_id)
+    if snapshot_id is None:
+        return None
+    snapshot = await container.snapshots.get(snapshot_id)
+    if snapshot is None:
+        return None
+    policy = snapshot.payload.relevant_policy
+    return policy.insurer if policy is not None else None
+
+
+@router.get("/calls/{call_session_id}/handoff/options")
+async def handoff_options(
+    call_session_id: str, who: AgentDep, container: ContainerDep
+) -> dict[str, Any]:
+    """Who this call may be handed to, and why (`D124`).
+
+    Served rather than built in the client, for `assist_tools`' reason: a rail that
+    renders its own list eventually offers something the server would refuse. It also
+    carries the two facts the client cannot work out — the carrier on this customer's own
+    policy, and whether we hold a policy at all, which is what makes half the reasons
+    available or not.
+    """
+    session, _ = await _require_active_call(container, call_session_id, who)
+    policy_insurer = await _policy_insurer_for(container, call_session_id)
+    line = str(session.product_line) if session.product_line else None
+    return {
+        "policy_insurer": policy_insurer,
+        "handoff_expected": _handoff_expected(container, session),
+        "insurers": [
+            {"code": spec.code, "name_th": spec.name_th}
+            for spec in container.pack.insurers_for(line)
+        ],
+        "reasons": [
+            {
+                "code": spec.code,
+                "label_th": spec.label_th,
+                "requires_policy": spec.requires_policy,
+                # The client greys a reason we cannot support and says why. The server
+                # refuses it independently (`D121`): this is the label, not the gate.
+                "available": bool(policy_insurer) or not spec.requires_policy,
+            }
+            for spec in container.pack.handoff_reasons.values()
+        ],
+    }
+
+
+def _handoff_expected(container: Any, session: Any) -> bool:
+    """Whether the intent this call was routed on is one the insurer owns (`D117`).
+
+    The same `handoff_to_insurer` flag that already puts the banner above the policy
+    panel. Read from the pack rather than re-derived, so the button and the banner can
+    never disagree about whether this call ends with us.
+    """
+    code = session.menu_intent_code
+    spec = container.pack.intents.get(code) if code else None
+    return bool(spec is not None and spec.handoff_to_insurer)
+
+
+@router.post("/calls/{call_session_id}/handoff", response_model=WorkstationSnapshot)
+async def hand_off_call(
+    call_session_id: str,
+    body: HandoffRequest,
+    who: AgentDep,
+    container: ContainerDep,
+) -> WorkstationSnapshot:
+    """Record the handoff, then end the call — in that order, and the order matters.
+
+    The wrap-up form renders the instant the state changes, so a prefill computed
+    afterwards is a prefill nobody sees.
+
+    ⚠️ **This does not use `CallState.TRANSFERRED`** (`D124`). That state is terminal, so
+    a call in it could never reach `WRAP_UP`, and after-call work on a handoff is real
+    work. Making it non-terminal instead would leave two states both meaning "the media is
+    over and the agent is filing", which is `B25`/`B26`'s shape. What makes this a handoff
+    rather than a hang-up is the record, not a state.
+    """
+    session, assignment = await _require_active_call(container, call_session_id, who)
+
+    reason = container.pack.handoff_reasons.get(body.reason_code)
+    if reason is None:
+        raise _bad_request(PermanentError(f"unknown handoff reason {body.reason_code!r}"))
+
+    policy_insurer = await _policy_insurer_for(container, call_session_id)
+    if body.use_policy_insurer:
+        if not policy_insurer:
+            raise _bad_request(
+                PermanentError("this call has no policy, so there is no carrier to hand it to")
+            )
+        insurer_name, insurer_code = policy_insurer, None
+    else:
+        spec = container.pack.insurers.get(body.insurer_code or "")
+        if spec is None:
+            raise _bad_request(PermanentError(f"unknown insurer {body.insurer_code!r}"))
+        insurer_name, insurer_code = spec.name_th, spec.code
+
+    try:
+        record = container.transfer.record_handoff(
+            call_session_id,
+            agent_id=who.agent_id,
+            insurer_name_th=insurer_name,
+            insurer_code=insurer_code,
+            reason=reason,
+            note=body.note,
+            holds_policy=bool(policy_insurer),
+        )
+    except PermanentError as exc:
+        raise _bad_request(exc) from exc
+
+    await container.bus.publish(
+        ev.CallHandedOff(
+            call_session_id=call_session_id,
+            occurred_at=record.at,
+            trace_id=session.trace_id,
+            agent_id=who.agent_id,
+            insurer_name_th=record.insurer_name_th,
+            insurer_code=record.insurer_code,
+            reason_code=record.reason_code,
+        )
+    )
+
+    try:
+        await container.assignments.end_call(
+            session,
+            assignment_id=assignment.assignment_id,
+            reason=f"handed_to_insurer:{record.insurer_code or 'from_policy'}",
+        )
+    except PermanentError as exc:
+        raise _bad_request(exc) from exc
+    # The customer's side ends here exactly as it does on วางสาย (`B37`): they have been
+    # passed on, and their screen must stop saying they are talking to us.
     container.assist.close(call_session_id)
     return await _snapshot(container, who.agent_id)
 
@@ -1014,6 +1162,26 @@ async def _snapshot(container: Any, agent_id: str) -> WorkstationSnapshot:
             TranscriptTurnOut(**turn)
             for turn in container.transcript_delivery.turns_for(active_id or wrapping_id)
         ),
+        # Keyed on the call being WRAPPED UP, not the active one (`D124`). By the time
+        # the form is on screen the handoff has already ended the call, so
+        # `active_call_session_id` is the wrong key and reading it there would produce a
+        # prefill that is never once visible.
+        handoff=_handoff_out(container, wrapping_id),
+    )
+
+
+def _handoff_out(container: Any, call_session_id: str | None) -> HandoffOut | None:
+    record = container.transfer.handoff_for(call_session_id) if call_session_id else None
+    if record is None:
+        return None
+    return HandoffOut(
+        insurer_name_th=record.insurer_name_th,
+        insurer_code=record.insurer_code,
+        reason_code=record.reason_code,
+        reason_label_th=record.reason_label_th,
+        at=record.at,
+        note=record.note,
+        disposition_th=record.disposition_th,
     )
 
 

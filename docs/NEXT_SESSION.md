@@ -23,7 +23,7 @@ somebody calls it.** `grep -rn "\.method_name(" src/` is thirty seconds and it h
 been the answer nine times.
 
 The second pattern, worth equal weight: **every one of these was found by the user
-pressing a button, never by the suite.** 862 tests pass and did not see any of it. When
+pressing a button, never by the suite.** 871 tests pass and did not see any of it. When
 they report something, believe the report before believing the tests.
 
 ⚠️ **And `B39`'s specific lesson, because it cost a whole round trip:** when the user
@@ -87,10 +87,12 @@ with PyMuPDF at ~110 dpi and read the PNGs. An empty extraction is not an empty 
    before this it existed only on the keypad. Verified in a browser: the call placed from
    that path routed to `q_advice_travel` at `l3_verified`, from a customer holding no
    travel cover.
-2. **Transfer** (the user's two-tab design: internal roster + hand to another company with
-   a reason). Extends `D63`, which was designed at P2b and never built. The second tab is
-   new and is `D117`'s handoff becoming a thing the broker *does* rather than reads.
-   **This is the next item.**
+2. **Transfer** — ◐ **HALF DONE 2026-09-08 (`D124`).** The **external** tab is built and
+   verified in a browser: a ส่งต่อ button beside วางสาย, the customer's own carrier
+   offered first, real carriers from `MARKET_FACTS` §8, six reasons, and the wrap-up
+   prefilled. `D117`'s banner is now something the broker *does*.
+   ⚠️ The **internal** tab (`D63`'s consulted transfer to another desk) is a **labelled
+   stub on screen** and is a scope call put to you — see the queue below.
 | *"it feels like a hackathon without AI"* | half a misreading, half a real gap | **NOT STARTED.** See below |
 | transfer button beside วางสาย, two tabs (internal / other company) | correct, and the second tab is new | **NOT STARTED.** Extends `D63` |
 | register the customer via a pushed form, or push the app download? | their own second instinct is right | **DECIDED** in `D121`: push the download, registration belongs to the bank's app |
@@ -283,13 +285,18 @@ moment in the recording it was said — **and if they consented, their audio is 
 storage encrypted, with the key ref and the retention date on an `audio_recordings` row.**
 If they declined, it is nowhere.
 
-Verified **2026-09-08 (evening)**: **862 tests** — 850 pass + 12 skipped, with Postgres
-and MinIO both up. `ruff check` + `ruff format --check` clean over 217 files,
-`mypy --strict` clean over 153, 69/69 diagrams current, prompt pack fresh, `audit_docs.py`
+Verified **2026-09-08 (evening)**: **871 tests** — 859 pass + 12 skipped, with Postgres
+and MinIO both up. `ruff check` + `ruff format --check` clean over 220 files,
+`mypy --strict` clean over 155, 69/69 diagrams current, prompt pack fresh, `audit_docs.py`
 clean on the live files. **And by driving `/sim` in a browser** (`D123`): *Contact us —
 something else* asked which kind of cover, ประกันเดินทาง returned **ซื้อประกันเดินทาง** —
 the option that had existed only on the keypad — and choosing it placed a real call that
 routed to `q_advice_travel` at `l3_verified` from a customer holding no travel policy.
+**And by driving the workstation** (`D124`): ส่งต่อ appears beside วางสาย on a live claim
+call, the dialog carries `D117`'s banner plus **เมืองไทยประกันภัย** — the carrier on this
+customer's own policy — above a 14-carrier menu, and choosing *การพิจารณาและจ่ายค่าสินไหม*
+ended the call into after-call work with the wrap-up already reading
+**"ส่งต่อ เมืองไทยประกันภัย — การพิจารณาและจ่ายค่าสินไหม"**.
 **And by driving the workstation in a browser**: link minted from the panel, tool box
 opened (11 tools, exactly the 5 personal ones locked), a blank quote form pushed to a
 GUEST screen at 375 px, filled in, submitted, and read back on the broker's screen; then
@@ -369,7 +376,7 @@ because it is now **twenty-two** and they rhyme:
    day. `B36` was an entry path that had been **broken since P1b** and that nothing had
    ever executed.
 15. **`B32`/`B33` (2026-09-08)** — both found in ten minutes of *using* the tool rail, and
-   neither visible to 862 tests. The catalogue was fetched on mount, before sign-in, so it
+   neither visible to 871 tests. The catalogue was fetched on mount, before sign-in, so it
    401'd into a defensive `catch` and the rail was empty for the shift. And the dialog's
    2-second poll was rebuilt every render — the workstation re-renders every second — so
    it never fired once, which looked exactly like the server not returning the customer's
@@ -418,7 +425,7 @@ real, wired and optional: `STORAGE_BACKEND=postgres` switches one factory line
 ## What exists (cumulative)
 
 **P0 — foundations.** Config with startup coherence checks · structured logging · injected
-`Clock` + swappable ids (`D35`) · UTF-8 console (`B1`) · **15** call states, 19 event types
+`Clock` + swappable ids (`D35`) · UTF-8 console (`B1`) · **15** call states, **20** event types
 · 8 ports each with a fake (10 now: `vad` from `D96`, `keyring` from `D110`) · call state machine + orchestrator (single writer) · in-memory
 event bus.
 
@@ -633,11 +640,23 @@ for its estimates and its "if the week collapses" line, not as a to-do list._
    recorded as **`Q36`**: `motor.advice.quote`, `health.advice.quote` and
    `life.advice.quote` exist with slots and playbooks and **no menu reaches any of them**
    — only travel's does.
-2. **Transfer** — the user's design: a button beside วางสาย, a dialog with **two tabs**,
-   internal (roster, filtered) and **to another company** (pick the insurer, pick a
-   reason). Extends `D63` (designed at P2b, never built); the second tab is new and is
-   `D117`'s handoff becoming something the broker *does* rather than reads. Visible on
-   screen, which is what a 5-minute pitch needs.
+2. **Transfer** — ◐ **the external half is DONE (`D124`); the internal half is a
+   DECISION FOR YOU.** Built and verified: ส่งต่อ beside วางสาย, `insurers.yaml` with the
+   real carriers, the policy's own carrier offered first and never missing, six reasons,
+   the wrap-up prefilled, a `call.handed_off` event. Not built: **โอนสายภายใน**, which
+   renders as a labelled stub naming `D63`.
+
+   **Why it stopped there, so you can overrule it.** `D63`'s internal transfer is
+   *consulted*: the caller keeps talking to the first broker while the second decides, and
+   moves only when the first presses Release. That needs a transfer offer distinct from a
+   queue offer (`AssignmentService.offer` demands `MATCHED` and transitions to `OFFERED`;
+   the call must stay `IN_CALL`), a way to hand an accepted assignment from one agent to
+   another, and a rework of *"which call is mine"* from a fact about the **call** to a
+   fact about the **assignment** — without which the first broker's screen keeps showing
+   a live call they are no longer on, with a วางสาย that would end somebody else's. That
+   is a day inside `services/agents/`, where `B7`, `B25` and `B28` all lived, four days
+   before the pitch. **Say the word and it gets built; otherwise the stub is honest and
+   the risk stays where it is.**
 3. **Track B — comparison data from `CoreDataProvider`, NOT a `config/products.yaml`.**
    The user caught this and they are right: a plan catalogue is live data owned by someone
    else, and `config/` is not reachable by the hackathon-day swap. The port **already has
@@ -793,6 +812,7 @@ GPU should own the demo machine. Typhoon uses 1068 MB, so P4's model is the ques
 | **Q34** ⚠️ **NEW 2026-09-07** | **What the customer submits through a pushed form is not stored anywhere** (`D120`). The broker reads it off their screen and types it into the wrap-up. That is honest for a demo and wrong for a product: the customer filled in a form and the system kept no record of it. It wants a real table and a retention rule (`D14`), not a longer-lived dict — and the moment a signature or an upload lands, it stops being optional. | In memory, dies with the call |
 | **Q35** ⚠️ **NEW 2026-09-07** | **The AI summary takes 4.5 s, against a 1 s brief budget** (`D119`, `ARCHITECTURE` §15). Survivable only because it is fire-and-forget after Accept, so nobody waits. But the pitch says "the agent has the brief before they speak", and 4.5 s is after. Options: accept it and describe it accurately, move to a smaller model, shorten the prompt, or stream. **Do not quietly restate the budget as met.** | Accepted, because nobody waits |
 | **Q36** ⚠️ **NEW 2026-09-08** | **Three `*.advice.quote` intents are reachable from no menu.** `motor.advice.quote`, `health.advice.quote` and `life.advice.quote` have labels, slots (`vehicle`/`usage`/`coverage_level`, `age`/`budget`/`hospital_preference`, …) and playbooks, and no option in `menus.yaml` names them — only `travel.advice.quote` is on a menu. Found while building `D123`. On every human surface those three lines answer *"I want to buy"* with **เปรียบเทียบแผนและขอราคา** (`*.advice.compare`), whose own required slots include `current_policy_no` — a field a brand-new customer does not have, so the routed brief asks the broker for something that cannot exist. Splitting them adds a **seventh** option to three phone menus, which is a real cost on a keypad and none at all in the app. Options: (a) leave it — one option covers both conversations and the label says so; (b) add the quote options to all three reason menus, accepting seven-option phone menus; (c) add them with `contexts: [general]`… which does **not** help, because the IVR ignores `contexts` by design (`D122`), so the phone menu grows either way. This is a domain call, not an engineering one. | **Not acted on.** `D123` records the reasoning |
+| **Q37** ⚠️ **NEW 2026-09-08** | **`CallState.TRANSFERRED` is entered by nothing, and `D124` decided to leave it that way.** Normally that is this project's most-repeated bug. Here it is a finding: the state is **terminal**, so a call in it can never reach `WRAP_UP` — and after-call work on a handoff is real work. Making it non-terminal instead would leave **two states both meaning "the media is over and the agent is filing"**, which is `B25`/`B26`'s shape. So a handoff ends the call the ordinary way and the RECORD is what makes it a handoff, and a test asserts `TRANSFERRED` stays unentered so nobody tidies it back. What the state actually models is a **blind** transfer — push the caller into another queue and hang up — which `D63` explicitly rejects as *"what call centres do today and the reason people hate being transferred"*. Options: delete it (15 states become 14, and `TERMINAL_STATES`, `FINISHED_STATES`, `DATA_MODEL` and two generated diagrams follow), or keep it reserved for `D63`'s blind-transfer escape hatch and say so in the enum. | **Kept, unentered, documented.** Deleting a state is not a four-days-before-the-pitch change |
 | **Q16** | **A keypad lookup confirms a policy number at L1.** The caller supplied the digits and the agent must not read them aloud below L2 — but it is a confirmation oracle. Designed this way in `D44`; worth a second look. | Allowed |
 | **Q17** | **Commit `apps/workstation/dist/`?** It is gitignored, so a fresh clone has no workstation until `npm run build` runs — and on a venue with no internet, `npm install` is what fails. | Not committed |
 | **Q18** | **"Not this person" is a one-way door.** It clears the customer exactly as `D42` asks, but leaves the agent with nobody to attach the call to, and customer search does not exist (`D32` defers lookup). A rejected call stays anonymous for its duration. A test asserts this so it fails the day search lands. **Now visible rather than silent (`D61`)**: the two forward outcomes are disabled with the reason in the tooltip instead of answering 400. | Accepted for now |

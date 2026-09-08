@@ -1,0 +1,90 @@
+# insurers.yaml — the companies a broker can hand a call TO, and why (`D124`)
+#
+# `D117` made claims a HANDOFF: adjudicating and paying them is the insurer's duty, not
+# ours, and every such intent already carries `handoff_to_insurer: true` onto the broker's
+# screen before they speak. This file is what turns that banner into something the broker
+# can actually DO.
+#
+# ---------------------------------------------------------------------------------------
+# THE RECORD BEATS THE MENU
+# ---------------------------------------------------------------------------------------
+#
+# This list is a **menu**, not a whitelist. The carrier that underwrote the customer's
+# policy comes from `Policy.insurer` and is offered first whether or not it appears here —
+# because on hackathon day the real data arrives carrying carriers nobody has typed into
+# this file, and a broker who cannot hand a claim to the company that actually wrote the
+# policy has no product at all. A startup guard that demanded every fixture carrier be
+# listed here would refuse to boot on the real extract, which is the failure the whole
+# `CoreDataProvider` seam exists to prevent (`D3`).
+#
+# So: the list below is what the broker sees when the call is NOT about a policy we hold.
+#
+# ---------------------------------------------------------------------------------------
+# WHY THESE NAMES
+# ---------------------------------------------------------------------------------------
+#
+# Real carriers with real 2025 market share, from the orientation deck (`MARKET_FACTS` §8).
+# A judge from Krungsri Auto Broker recognises them on sight, and a demo full of
+# "Insurer A / Insurer B" throws away the one piece of realism that costs nothing.
+#
+# ⚠️ **Allianz Ayudhya is the Krungsri-affiliated carrier and is deliberately one row
+# among several.** A broker whose affiliate always wins is not a broker (`D117`).
+
+version: 1
+
+insurers:
+  # --- non-life (MARKET_FACTS §8, insight p.6) -----------------------------------------
+  - { code: viriyah,     name_th: "วิริยะประกันภัย",        lines: [motor, travel, pa] }
+  - { code: dhipaya,     name_th: "ทิพยประกันภัย",          lines: [motor, health, travel, pa] }
+  - { code: bangkok_ins, name_th: "กรุงเทพประกันภัย",       lines: [motor, health, travel, pa] }
+  - { code: tokio_marine, name_th: "โตเกียวมารีนประกันภัย",  lines: [motor, health, travel] }
+  - { code: muang_thai,  name_th: "เมืองไทยประกันภัย",       lines: [motor, health, travel, pa] }
+  - { code: chubb,       name_th: "ชับบ์สามัคคีประกันภัย",     lines: [motor, health, pa] }
+  - { code: thanachart,  name_th: "ธนชาตประกันภัย",         lines: [motor] }
+  - { code: allianz_general, name_th: "อลิอันซ์ อยุธยา ประกันภัย", lines: [motor, health, travel, pa] }
+  - { code: lmg,         name_th: "แอลเอ็มจีประกันภัย",       lines: [motor, health] }
+  - { code: thaivivat,   name_th: "ไทยวิวัฒน์ประกันภัย",       lines: [motor] }
+  - { code: axa,         name_th: "แอกซ่าประกันภัย",         lines: [motor, health, travel] }
+  - { code: msig,        name_th: "เอ็มเอสไอจีประกันภัย",      lines: [motor, travel] }
+
+  # --- life (MARKET_FACTS §8, insight p.25) --------------------------------------------
+  - { code: aia,         name_th: "เอไอเอ",                 lines: [life, health] }
+  - { code: fwd,         name_th: "เอฟดับบลิวดีประกันชีวิต",    lines: [life, health] }
+  - { code: muang_thai_life, name_th: "เมืองไทยประกันชีวิต",  lines: [life, health] }
+  - { code: thai_life,   name_th: "ไทยประกันชีวิต",          lines: [life] }
+  - { code: krungthai_axa, name_th: "กรุงไทย-แอกซ่า ประกันชีวิต", lines: [life, health] }
+  - { code: allianz_ayudhya, name_th: "อลิอันซ์ อยุธยา ประกันชีวิต", lines: [life, health] }
+  - { code: bangkok_life, name_th: "กรุงเทพประกันชีวิต",      lines: [life] }
+
+# ---------------------------------------------------------------------------------------
+# WHY THE CALL IS BEING HANDED OVER
+# ---------------------------------------------------------------------------------------
+#
+# A closed list, for `IntentCode`'s reason: a free-text field here becomes twelve spellings
+# of "claim" and no way to count them. `requires_policy: true` means the reason only makes
+# sense about cover the customer actually holds, so the broker is offered the **policy's
+# own carrier** rather than the market menu — handing a claim to a company that did not
+# write the policy is not a handoff, it is a wrong number.
+#
+# None of these says *approved*, *is covered*, or quotes a premium. That is the line
+# `D117` drew and this file must not cross it: we gather and pass on, they decide.
+
+handoff_reasons:
+  - code: claim_adjudication
+    label_th: "การพิจารณาและจ่ายค่าสินไหม"
+    requires_policy: true
+  - code: coverage_ruling
+    label_th: "การตีความความคุ้มครองในกรมธรรม์"
+    requires_policy: true
+  - code: preauth
+    label_th: "ขออนุมัติค่ารักษาล่วงหน้า (Fax Claim)"
+    requires_policy: true
+  - code: policy_issued_by_them
+    label_th: "กรมธรรม์ออกโดยบริษัทนั้นโดยตรง"
+    requires_policy: true
+  - code: service_complaint
+    label_th: "ร้องเรียนการบริการของบริษัทประกัน"
+    requires_policy: false
+  - code: other
+    label_th: "เรื่องอื่นๆ ที่เป็นอำนาจของบริษัทประกัน"
+    requires_policy: false

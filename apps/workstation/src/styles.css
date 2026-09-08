@@ -820,3 +820,109 @@ button.tool:disabled {
 .kv dd {
   margin: 0;
 }
+
+/* --- where the call goes when it is not staying with us (`D124`) --------------------- */
+
+/* Narrower than the tool box on purpose. That dialog is a rail of things to browse; this
+   is one decision with three answers, and a wide form makes a short list look unfinished. */
+.transfer-dialog {
+  width: min(680px, 94vw);
+  max-height: 88vh;
+  overflow-y: auto;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 20px 24px;
+  box-shadow: var(--shadow);
+}
+
+.transfer-dialog h3 {
+  margin: 16px 0 6px;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted, var(--ink-dim));
+}
+
+.tabs {
+  display: flex;
+  gap: 6px;
+  margin: 10px 0 4px;
+  border-bottom: 1px solid var(--line);
+}
+
+.tabs button {
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  padding: 8px 14px;
+  color: var(--ink-dim);
+}
+
+.tabs button.on {
+  color: var(--ink);
+  border-bottom-color: var(--accent);
+  font-weight: 650;
+}
+
+/* A radio row that is a proper click target: the label wraps the input, so the text is
+   part of the control rather than something beside it. */
+.choice {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.choice:hover {
+  border-color: var(--accent);
+}
+
+/* Greying is the courtesy; the server is the gate (`D121`). The cursor and the title
+   attribute together are what stop this reading as a broken control. */
+.choice.off {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.choice.off:hover {
+  border-color: var(--line);
+}
+
+.field {
+  display: block;
+  margin-top: 14px;
+}
+
+.field textarea {
+  width: 100%;
+  margin-top: 4px;
+}
+
+.banner.warn {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  color: var(--warn);
+  font-size: 13px;
+}
+
+/* An honest stub looks like a stub (`D115`). Dashed, quiet, and it says what it will do
+   rather than pretending to do it. */
+.stub-panel {
+  margin-top: 14px;
+  padding: 16px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  color: var(--ink-dim);
+}
+
+.stub-panel p {
+  margin: 0 0 8px;
+}
