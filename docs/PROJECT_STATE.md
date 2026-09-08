@@ -31,7 +31,14 @@ demonstrable slice, so "the demo" is the current state plus a chosen scenario (`
 
 ---
 
-## 2. Status: **P0 · P1 · P1b · P2a · P2b · P2c complete; P3 complete**
+## 2. Status: **P0 · P1 · P1b · P2a · P2b · P2c · P3 complete. P4 PARTLY DONE.**
+
+⚠️ **The phase numbering stopped describing the work on 2026-09-07.** The hackathon
+orientation redirected the project (`D115`), so what landed that day was the *broker*
+domain (`D117`), playbooks in config (`D118`), the LLM seam (`D119`) and the customer's
+paired screen (`D120`) — three of which are P4 items and one of which (`D120`) is not in
+any phase, because the plan was written before the idea existed. Read `NEXT_SESSION.md`
+for what is actually done rather than inferring it from a phase letter.
 
 The spine runs. A full call lifecycle - arrival, IVR, consent, queue, intake, matching, the offer
 handshake, the live call, wrap-up, rating, closed - executes end to end on fake adapters with no
@@ -98,7 +105,7 @@ demonstrable slice, so the demo is simply the current state of the system with a
 | LLM | **Built** (`D119`): `build_llm` is the factory, with `AnthropicLlm` (structured output via forced tool use), `OpenAiCompatibleLlm` (one adapter for Typhoon-hosted / OpenAI / vLLM / Ollama / LM Studio by base URL alone) and `RuleBasedLlm` as the shipped default and degradation rung. Prompts are versioned files in `prompts/th/`. Measured live: `claude-sonnet-5` summarises an intake in **4.5 s for $0.0085**. No LLM framework (`D31`) |
 | Object storage | MinIO (S3 API) for recordings |
 | Agent workstation | React 18 + TypeScript + Vite. **A full contact-centre workstation in one browser tab — the softphone is in it** (SIP.js over WSS to Asterisk, WebRTC/Opus through the agent's headset), plus the brief, the queue and status control. No desk phone, no install (`D32`) |
-| Customer side | Responsive **web customer simulator** with a demo persona picker, calling the same public `/v1/…` API the real Krungsri app would |
+| Customer side | **Two static pages, no build step** (`D47`, `D120`). `/sim` is the customer simulator with a persona picker; `/assist/<token>` is the **paired screen** a broker pushes onto during a call — comparisons, forms, document requests. Both call the same public `/v1/…` API the real Krungsri app would |
 | DB inspection | `pgweb` in compose + our own **Call Explorer** admin page |
 | Observability | OpenTelemetry traces keyed by `call_session_id`, Prometheus + Grafana + Loki |
 
@@ -349,9 +356,21 @@ workstation** — held while nobody owns the call, flushed on accept (`D105`, `D
 ☐ recording + encryption (needs P7's keys) · ☐ incremental turns persisted
 *(The identify step is not pending — it was designed and removed, `D84`.)*
 
-**P4 — analysis & case brief** ☐ intent taxonomy + classifier · ☐ entity extraction · ☐ rolling
-summary · ☐ brief versioning · ☐ confidence calibration · ☐ NBA playbooks · ☐ suggested opening ·
-☐ Anthropic adapter · ☐ OpenAI-compatible adapter · ☐ golden-set evaluation · ☐ provider comparison
+**P4 — analysis & case brief** (partly done, 2026-09-07)
+☑ **`build_llm` + `AnthropicLlm` + `OpenAiCompatibleLlm`** (`D119`) — the factory that did not
+exist for six phases while `Settings` accepted both names · ☑ **versioned prompt files** in
+`prompts/th/`, refusing a missing slot AND an undeclared one · ☑ **the intake summary**,
+fire-and-forget from Accept, measured at 4.5 s / $0.0085 on `claude-sonnet-5` · ☑ **NBA
+playbooks in config** (`D118`, closing `Q19`) · ☑ **the broker intent taxonomy** (`D117`,
+closing `Q7`) · ☐ intent classifier wired to the blend · ☐ entity extraction (**blocked on
+`Q24`**) · ☐ rolling summary · ☐ brief versioning · ☐ confidence calibration ·
+☐ suggested opening · ☐ golden-set evaluation · ☐ provider comparison table
+
+**Not in any phase — the customer's paired screen** (`D120`, 2026-09-07)
+☑ pairing a call to a screen, three entry paths · ☑ the guest/verified tier gate ·
+☑ push comparison / info / navigate · ☑ **push a form and get the answer back**, end to end ·
+☑ `apps/customer_assist/`, one static page · ☐ sending the link (P5's `NotifierPort`) ·
+☐ signature, OCR, document upload · ☐ merging with `customer_sim`
 
 **P5 — real telephony** ☐ Asterisk + ARI adapter · ☐ TLS/WSS certs · ☐ **in-browser softphone
 (SIP.js, devices, self-test, reconnect)** · ☐ customer WebRTC path · ☐ PSTN/ANI identification ·

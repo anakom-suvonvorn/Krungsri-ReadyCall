@@ -634,6 +634,17 @@ rationale on the agent screen.
 **The agent desktop is not an information screen next to a telephone. It is the whole workstation, and
 the call happens inside it.** (`D32`)
 
+> **And since `D120`, it reaches the customer's screen too.** A broker can bind the live
+> call to a screen the customer is holding and **push** onto it — a plan comparison, a
+> prefilled form, a document request — instead of describing a website down the phone.
+> Three entry paths (in-app, a link sent to the number already on the call, or the app
+> being *told* a call is live for a signed-in customer) converge on one paired session,
+> gated by two tiers: **anything true for anybody** at guest, **anything about this
+> person** only once they sign in. That gate is `D74`'s rule pointed at the customer's
+> screen, and a personal push to a link-only screen is refused with the reason so the
+> broker can ask. Drawn in `diagrams/13_broker_and_assist.md`; nothing about it is durable
+> (`D14`) and nothing is sent yet (`NotifierPort` is P5).
+
 The agent opens a browser tab, logs in, plugs in a headset, and from that one tab they:
 
 - **take and hold the call itself** — WebRTC audio in/out through the PC's headset, with mute, hold,
@@ -993,7 +1004,9 @@ budget degrades (§16) rather than delaying.
 | **The model returns nonsense** (a loop, our own vocabulary hint, or more speech than was physically possible) | The turn is **refused before the agent sees it** and logged. A thinner brief beats one with invented words in it — those are exactly the words that make a brief look credible (`B14`, `B16`, `D98`) |
 | **One utterance fails to transcribe** | Logged and skipped; the call is untouched. One sentence of the brief is the whole cost (`D12`) |
 | **The transcriber falls behind the caller** | Ingestion never blocks (`D12`), so the backlog grows and its audio is **held**, not released (`B20`). Past 120 s the oldest segment's audio is abandoned with a `warning` rather than growing until the process dies — and a segment whose audio is gone is **refused**, never approximated from whatever is left in the buffer |
-| LLM down / times out | Rule-based brief: intent from the **menu** (reliable, not a guess), entities by regex, template summary |
+| LLM down / times out | **BUILT** (`D119`). `IntakeSummariser` returns `None` on timeout, provider failure, an unpredicted exception, a model that says it could not tell, and a model that states a figure — and on every one of those the rule-based summary simply stays. It is started from `accept_offer` and **never awaited**, so none of it is on the path between the agent pressing Accept and the caller hearing them |
+| The model states a coverage figure | **Refused outright** (`D16`, `D119`). Coverage amounts are read from the record. The prompt forbids this and a guard checks anyway, because the guard assumes the prompt will one day fail |
+| The customer's paired screen is closed, stale or never opened | Nothing happens to the call (`D120`). The broker sees `paired: false` and reads the information out as they would have anyway. A pairing dies with the call plus a ten-minute grace, so a half-finished form still submits |
 | Core RO unavailable | Last cached snapshot with a staleness badge; else intent-only brief |
 | Matching unavailable | Default queue, FIFO — i.e. exactly today's behaviour |
 | One agent's workstation drops (tab closed, network, laptop asleep) | Presence TTL expires → that agent is simply not available; the matcher routes elsewhere. If it happens mid-offer, the offer times out and re-matches. **Mid-call the audio is a separate WebRTC session, so a UI reload does not drop the call** — the workstation re-attaches to the in-progress call on reconnect |

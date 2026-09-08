@@ -1,10 +1,10 @@
 # INTEGRATIONS
 
 _Every external thing the system touches: the port that hides it, the adapters behind it, and the config that selects one._
-_Status: **mostly design; the persistence stack, the whole audio path, the transcript's route to the agent's screen and the encrypted recording are real.** Last updated: 2026-09-06._
+_Status: **the persistence stack, the whole audio path, the transcript's route to the agent's screen, the encrypted recording and BOTH LLM adapters are real. Telephony is the last big fake.** Last updated: 2026-09-07._
 
 > **Real as of P2c (complete):** SQLAlchemy 2.0 (async) + Alembic + `asyncpg`, against
-> Postgres 16 in `infra/docker-compose.yml`, verified on a live container — **nine tables**,
+> Postgres 16 in `infra/docker-compose.yml`, verified on a live container — **eleven tables**,
 > and a restart verified by ending a real uvicorn process. `aiosqlite` is a **test-only**
 > dependency: the fast path that lets the store suites run with no container (`D75`), never
 > a deployment target. Everything else on this page is still design.
@@ -266,19 +266,25 @@ class LlmClient(Protocol):
     async def stream_text(self, prompt: PromptRef, vars: dict) -> AsyncIterator[str]: ...
 ```
 
-**Two adapters are to be implemented on P4's first day; the rest are defined but left as stubs**
-(`D29`). ⚠️ **Neither exists yet.** As of 2026-09-06 `src/readycall/adapters/llm/` contains
-`rulebased.py` and nothing else, and P4 has not started — so the "status" column below is a
-plan for every row but the last. `Settings.llm_provider` already accepts `anthropic` and
-`openai_compatible` and there is **no factory behind either name**, which is `B23`'s shape:
-a name that cannot select anything. Wiring `build_llm` is P4 step zero.
+**Both are built** (`D119`, 2026-09-07). `build_llm` in `adapters/llm/__init__.py` is the
+factory and the only place a client may be constructed — the same enforcement point
+`build_blob_storage` is, and for the same reason. Prompts are versioned files in
+`prompts/th/`, loaded by `PromptLibrary`.
+
+⚠️ *This block said "neither exists yet" until 2026-09-07, and before that said they were
+"both implemented" when they were not. `Settings.llm_provider` accepted both names with no
+factory behind either for six phases — `B23`'s shape. If you are reading this and the code
+disagrees, trust the code.*
 
 | Adapter | Status | Covers |
 |---|---|---|
-| **`AnthropicAdapter`** ⭐ | ☐ planned, P4 | `claude-opus-5` (quality) / `claude-sonnet-5` (latency+cost). Strong Thai; structured output via tool-use; prompt caching for the fixed system prompt |
-| **`OpenAiCompatibleAdapter`** ⭐ | ☐ planned, P4 | One adapter, parameterised by `base_url` + key — **covers Typhoon's hosted API, OpenAI, self-hosted vLLM, Ollama and LM Studio at once**, because they all speak the OpenAI wire format |
+| **`AnthropicLlm`** ⭐ | ☑ **built** (`D119`) | `claude-opus-5` / `claude-sonnet-5`. Structured output through **forced tool use** — the schema is a tool definition with `tool_choice` pinned, so the model cannot answer in prose. Measured: **4.5 s, $0.0085** to summarise one intake |
+| **`OpenAiCompatibleLlm`** ⭐ | ☑ **built** (`D119`) | One adapter, parameterised by `base_url` + key — **Typhoon's hosted API, OpenAI, self-hosted vLLM, Ollama and LM Studio at once**. Uses JSON-schema response format where the server supports it, falls back to schema-in-the-prompt where it does not, and **records which mechanism ran** |
 | `GeminiAdapter` | ☐ defined only | Different wire format; add if wanted |
-| `RuleBasedAdapter` | ☑ **built** (P0) | No model at all — the degradation rung: keyword/regex intent + template summary. Written, correct, and **instantiated nowhere** — see the warning above |
+| `RuleBasedLlm` | ☑ **built** (P0), and **wired** since `D119` | No model at all — the shipped default and the rung everything degrades to (`D12`). Needs no key, no network, no extra |
+
+Both SDKs live in the **`llm` extra** (`uv sync --extra llm`); neither is installed by
+default, because the shipped provider needs neither.
 
 So "run Typhoon" is a config choice, twice over:
 

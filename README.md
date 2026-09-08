@@ -68,6 +68,14 @@ uv run python scripts/run_scenario.py tests/scenarios/anonymous_declined.yaml
 uv run python -m readycall.entrypoints.api
 ```
 
+Three front ends come up with it:
+
+| | | |
+|---|---|---|
+| **`/sim`** | the customer simulator | one static page, no build step (`D47`) |
+| **`/workstation`** | the broker's desk | React bundle — needs the one-off `npm run build` in §2 |
+| **`/assist/<token>`** | the customer's **paired screen** (`D120`) | one static page. You do not open this directly — a broker mints the link with `POST /v1/agent/calls/<id>/assist/link` during a live call, and the token in the path is what authorises it |
+
 Then open **<http://127.0.0.1:8000/sim>**. The agent workstation at `/workstation` needs one extra
 build step — see [§2](#2-the-agent-workstation-react-bundle).
 

@@ -1,88 +1,130 @@
 # NEXT_SESSION
 
 _The live working state. READ THIS FIRST every session. Keep it short and current._
-_Last updated: 2026-09-06._
+_Last updated: 2026-09-07._
 
 ---
 
 ## If you have just been compacted, read this first
 
-_Rewritten 2026-09-06 (second time that day, after `D110`–`D114`). Everything settled
-before this block is in the sections below; what follows is what a fresh session needs and
-nothing it does not._
+_Rewritten 2026-09-07, after `D117`–`D120`. Everything settled before this block is in the
+sections below; what follows is what a fresh session needs and nothing it does not._
 
-### ⚠️ ZEROTH: read `docs/MARKET_FACTS.md`, and do not re-derive its numbers
+### ⚠️ FIRST: the user has notes waiting
 
-Every figure the orientation supplied is in there with its source slide — the broker
-channel share, the renewal/persistency case, market sizes, the real insurer names for
-fixtures, the competitor list, and **the logistics**. Two corrections it carries that a
-fresh session would otherwise get wrong:
+The session ended with the user saying **"i have a bunch of stuff to say / notes to give
+you from reading/trying"** and asking for this save *before* saying it. So:
 
-- **The pitch is 5 MINUTES, plus 5 minutes of Q&A**, twelve teams, presentation file
-  submitted 11:00-12:00 on day 2 (13 Sep). This rules out a live multi-step walkthrough
-  and it is the single most important planning constraint.
-- **The Gen Z challenge statement on insight p.35/48 is a WORKSHOP EXERCISE, not the
-  brief.** The real one is deliberately open: *"ในยุค AI เราจะช่วยให้ Insurance Broker
-  สามารถส่งมอบความคุ้มครองที่ใช่ ให้กับลูกค้าที่ใช่ ในเวลาที่ใช่ ผ่านช่องทางที่ใช่
-  ได้อย่างไร?"* — right coverage, right customer, right time, right channel. The team is
-  **already in the 12 finalists on the submitted idea**, so the job is refinement and
-  evidence, **not a pivot**. A voice-first answer is fine.
+- **Expect notes, and read them before building anything.** Twelve of the last fourteen
+  faults in this project were found by the user driving the screen, not by the suite.
+- **Do not start Track B or E.** They are next and they are not started; starting one
+  before hearing them would be exactly the wrong order.
+
+### ⚠️ ZEROTH: two files carry facts you must not re-derive
+
+1. **`docs/MARKET_FACTS.md`** — every figure the orientation supplied, with its source
+   slide. Broker channel share, the renewal case, market sizes, real insurer names, the
+   competitor list, and the logistics. **Do not invent a number that belongs here.**
+2. **`docs/reading/the_assist_rail.html`** — what the 7 September work actually does, in
+   plain language and drawn. **This is the shared vocabulary with the user now**; read it
+   before explaining any of it to them again.
+
+Three constraints from `MARKET_FACTS` that shape every plan:
+
+- **The pitch is 5 MINUTES plus 5 of Q&A**, twelve teams, file submitted 11:00–12:00 on
+  day 2 (13 Sep). This rules out a live multi-step walkthrough and is the single most
+  important planning fact.
+- **The Gen Z statement on insight p.35/48 is a WORKSHOP EXERCISE, not the brief.** The
+  real challenge is open — right coverage, right customer, right time, right channel — and
+  the team is **already a finalist on the submitted idea**. Refinement, **not a pivot**. A
+  voice-first answer is fine.
+- **Judging is Impact · Feasibility · Creativity · User insight.**
 
 ⚠️ Half those slides are images with no text layer, so `pypdf` returns empty pages. Render
 with PyMuPDF at ~110 dpi and read the PNGs. An empty extraction is not an empty slide.
 
-### ⚠️ FIRST: the direction changed on 2026-09-06. Read this before planning anything.
-
-The notes arrived, from the **hackathon orientation**, and they moved the project. The
-whole argument is in `docs/reading/the_broker_turn.html` (open it in a browser — it is the
-shared vocabulary with the user now) and recorded as **`D115`** and **`D116`**.
-
-**In one paragraph.** Re-reading the *briefing* against the *submitted deck* shows
-ReadyCall answers journey step 2 — *"re-collects data we already hold"* — while the brief
-marks step 3 (**แนะนำสินค้า**, recommend a product) as **LEAK สูงสุด**, its biggest, and
-step 4 as where customers physically drop off. The brief's headline problem is **mismatch**
-(people hold the wrong cover), and its named business outcome is **product holding per
-customer > 1.5**. Neither is a service-desk metric. So: keep everything built, and
-**extend forward** into compare-and-best-fit (step 3) and an agent **tool rail** that binds
-the call to the customer's screen (step 4). And reframe the domain from an insurer's call
-centre to a **broker's** — many insurers, one customer.
-
-- **`Q7` is CLOSED** (`D115`). The intent taxonomy was parked as a straw-man "awaiting the
-  team's domain review". The orientation was that review; it is now broker-shaped work.
-- **`Q24` is ANSWERED** (`D116`), by the brief rather than by us: *"ข้อมูลสุขภาพเป็น
-  sensitive data ต้องขอ consent แยก"*. Name the health scope in the offer wording on health
-  lines AND gate extraction in code. Both, one keypress.
-- **The consent gate MOVED** (`D116`): it is not about whether we may *hold* an
-  affiliate-sourced field, it is about whether we may **recommend** from it — which is
-  exactly the new feature. The brief gates personalised recommendation explicitly.
-- **P4 is no longer the next phase as written.** Its LLM work survives (and is Track D of
-  the week plan), but the ordering is now pitch-first: visible before invisible, because
-  the hackathon is an **idea pitch** and the demo is a supporting artifact.
-- **Judging is I-F-C-U = Impact · Feasibility · Creativity · User insight** (confirmed from
-  the briefing PDF, not guessed).
-
 ### Where the machine actually is
 
-**P3 is complete.** A caller reaches the right queue through a real menu, is offered the
-pre-call recording, their speech is transcribed by an engine chosen on measurements, **what
-they said is on the agent's screen the moment Accept is pressed**, and **their audio is in
-object storage encrypted** with a key ref and a retention date — or nowhere at all, if they
-declined. The transcript survives a restart. A caller nobody will take circles back instead
-of waiting forever.
+**P0 · P1 · P1b · P2a · P2b · P2c · P3 complete. P4 is PARTLY done, and one thing landed
+that is in no phase at all.** The phase letters stopped describing the work on 2026-09-07 —
+read this section, not a phase number.
 
-P0 · P1 · P1b · P2a · P2b · P2c · P3 done. **P4 is next and is not started.**
+A caller reaches the right **broker** queue through a real menu, is offered the pre-call
+recording, is transcribed by an engine chosen on measurements, and their words are on the
+broker's screen the moment Accept is pressed. Their audio is encrypted in object storage
+or nowhere. The broker sees **which carrier** underwrote the policy, and on a claim call a
+banner saying the call ends with the insurer. An **AI summary** upgrades the screen a few
+seconds later, or silently does not. And the broker can **bind the call to the customer's
+phone** and push a comparison or a form onto it.
 
-### The 2026-09-07 work, and where it is written down
+### The four decisions of 2026-09-07, one line each
 
-`D117` broker domain · `D118` playbooks to config · `D119` the LLM · `D120` the paired
-screen · `B30`, `B31`. **Three places, in the order a fresh session should read them:**
+| | what it is | the one thing to know |
+|---|---|---|
+| `D117` | the domain is a **broker's** | claims are **handoffs**, renewal is its own desk, `*.advice.compare` is the mandate. Config + one field; **no service logic changed** |
+| `D118` | playbooks in config | closes `Q19`. Guarded **both ways** at startup — a missing playbook and an unreachable one both refuse to boot |
+| `D119` | the LLM actually runs | `build_llm` + two adapters. **Six paths end in "return None"** and that is the design. Measured: **4.5 s, $0.0085** |
+| `D120` | the customer's paired screen | a link, not a code. **Guest sees anything true for anybody; personal content needs a sign-in**, and the refusal names the reason |
 
-1. `docs/reading/the_assist_rail.html` — plain language, drawn, with a "try it" section.
-   Open it in a browser. This is the shared vocabulary with the user now.
-2. `docs/diagrams/13_broker_and_assist.md` — five diagrams: the duty split, the five call
-   shapes, the pairing gate, the push round trip, and every path through the AI summary.
-3. `docs/explanations/P4_broker_and_assist.md` — the phase write-up, and **§5 is
-   copy-pasteable commands** for all of it.
+**Where they are written down**, in the order to read them:
+`docs/reading/the_assist_rail.html` → `docs/diagrams/13_broker_and_assist.md` (five new diagrams)
+→ `docs/explanations/P4_broker_and_assist.md` (**§5 is copy-pasteable commands**).
+
+### What is NOT built, precisely
+
+1. **The comparison DATA.** `D120` built the transport; the table renders and reaches the
+   phone. What fills it — `products.yaml`, gap analysis against what the customer holds,
+   ranking on real attributes with the model writing only the reason sentence — is
+   **Track B and is not started**.
+2. **Docker packaging** (Track E), and the rehearsal. ⚠️ Ship the container on
+   `STT_ENGINE=scripted`: a plain container cannot reach the GPU without host setup that
+   varies by machine, which is what fails at a venue.
+3. **Sending the assist link.** `NotifierPort` is P5. The link comes back for the broker to
+   read out.
+4. **Signature, OCR, document upload.** `document_request` records the intent and stubs it.
+5. **A golden set for the LLM.** Without one, "85% intent accuracy" is a claim, not a
+   measurement — and it is a named P4 exit criterion.
+6. **Everything P3 never had:** a real TTS voice (`Q22`), the agent's own leg (`D26`, P6),
+   P7's real key management, a recording player on the screen.
+
+### `Q24` — answered, and what it still gates
+
+Answered by the **brief itself** (`D116`): *"ข้อมูลสุขภาพเป็น sensitive data ต้องขอ consent
+แยก"*. The plan: name the health scope in the offer wording on health lines **and** gate
+extraction in code so health entities cannot be pulled without it.
+
+⚠️ **Neither half is built.** It is not blocking anything today because nothing extracts
+entities — and it becomes blocking at **the first line of an entity extractor**, which is
+the next P4 item after Track B. `D116` also moved the gate: it is not about whether we may
+*hold* an affiliate-sourced field, it is about whether we may **recommend** from it.
+
+### How to see the whole thing working
+
+```bash
+uv run python scripts/make_demo_audio.py    # a fresh clone has NO audio: *.wav is gitignored
+uv run python -m readycall.entrypoints.api
+#   /workstation, sign in as A006 (health), press พร้อมรับสาย, then:
+curl -X POST http://127.0.0.1:8000/v1/demo/calls -H "Content-Type: application/json" \
+  -d '{"intent_code":"health.claim.notify","caller_number":"0812345678","intake_keys":["2"],"ignore_hours":true}'
+#   Accept: the carrier name, the handoff banner, and three L1-gated actions.
+```
+
+Then the paired screen — `explanations/P4_broker_and_assist.md` §5.3 has the full sequence.
+**The step worth doing is pushing a form to a screen that has only tapped a link** and
+watching it refuse with the reason.
+
+### Before changing anything, know these
+
+- **`B25`** — the availability filter is the only thing keeping an unavailable agent from
+  being rung, and its absence was invisible for weeks.
+- **`B28`** — since `D113` one agent can hold **two assignments for one call**. Anything
+  asking "this agent's assignment for this call" must filter to `PENDING`/`ACCEPTED`.
+- **`B30`** — a fixture with **one** of something tests nothing about choosing.
+- **`B31`** — `uv sync` **prunes**. Name every extra in one command, or you will silently
+  remove the GPU stack and expose latent CI failures.
+- **`tests/integration/test_floor_under_load.py`** — seeded random walks over the real API
+  asserting **invariants**. Add a scenario whenever a fault is found by clicking; that is
+  now seven for seven.
 
 ### The five slices of 2026-09-06, in one line each
 
@@ -98,55 +140,6 @@ screen · `B30`, `B31`. **Three places, in the order a fresh session should read
 `docs/reading/the_recording.html` (published:
 https://claude.ai/code/artifact/c51ef926-0a13-45b7-b59f-6731be83255c). Read it before
 explaining any of this to them again — it is the shared vocabulary now.
-
-### `Q24` — the open question, and the recommendation already given
-
-A caller on the **health line** speaks health data into a recording consented only as
-`recording` + `ai_processing`. Under PDPA health information is a **special category**
-needing specific consent, and we do not have it.
-
-**It is harmless today**, because nothing extracts anything — we hold audio and a
-transcript of what they said. **It stops being harmless at the first line of P4's entity
-extractor**, which turns speech into structured fields like `condition: cardiac`. That is
-the difference between holding a recording and building a health record.
-
-The three options and the recommendation are written out in `Q24` below. The recommendation
-put to the user, and still the right one: **name the health scope in the offer wording on
-health lines (one keypress, honest disclosure) AND gate extraction so health entities can
-never be pulled without the scope** — two independent protections, no extra burden on a
-distressed caller. Rejected: a third keypress, because it lengthens the longest prompt in
-the system on the line where callers are least able to wait.
-
-**Do not write the extractor before this is settled.**
-
-### What is NOT built, precisely
-
-1. **P7's real key management.** `LocalKeyRing` holds the master in the process
-   environment, so anyone who can read that environment can read the recordings. The port
-   exists so a vault is a second adapter and nothing else changes.
-2. **A player on the agent's screen.** The recording exists and decrypts; nothing offers
-   it to the agent. A UI job now, not a storage one.
-3. **The agent's own leg.** `D26` — only the caller is recorded and transcribed. P6.
-4. **A real TTS voice.** `TTS_ENGINE=null` synthesises nothing, so the pack is a manifest
-   and every Thai line in this system has never been heard out loud (`Q22`).
-5. **Erasure beyond audio and text.** `scripts/purge_recordings.py` covers recordings, and
-   `TranscriptStore.delete_for_call` covers turns. Briefs and context snapshots are not
-   covered.
-
-### How to see the whole thing working
-
-```bash
-uv run python scripts/make_demo_audio.py    # a fresh clone has NO audio: *.wav is gitignored
-uv run python -m readycall.entrypoints.api
-#   /workstation, sign in as A001/A002/A003 (motor), press พร้อมรับสาย, then:
-curl -X POST http://127.0.0.1:8000/v1/demo/calls -H "Content-Type: application/json" \
-  -d '{"intent_code":"motor.claim.accident","intake_keys":["1"],"audio":"demo_intake.wav","ignore_hours":true}'
-#   press Accept: six Thai sentences, each with its moment in the recording.
-```
-
-`README.md` has the long version, plus §"Prove the recording is encrypted" — place the same
-call twice, once pressing `1` and once pressing `2`, and count the objects in the bucket.
-There is one.
 
 ### Before changing the matcher, the workstation or the audio path
 
@@ -193,9 +186,11 @@ median** (unstable at n=20), and **the test set moved the headline by 1.8x**.
 
 ## Where things stand right now
 
-**P0 · P1 · P1b · P2a · P2b · P2c complete. P3 COMPLETE — `D30`'s bake-off is closed
-(`D104`), the live transcript is on the screen (`D106`), and the encrypted recording is in
-object storage (`D110`).** The system knows who is calling and how much to believe it, why they are
+**P0 · P1 · P1b · P2a · P2b · P2c · P3 complete. P4 PARTLY DONE** — the LLM seam is built
+and measured (`D119`), playbooks are in config (`D118`), and the domain is a broker's
+(`D117`). Plus one thing in no phase at all: the customer's **paired screen** (`D120`).
+`D30`'s bake-off is closed (`D104`), the live transcript is on the screen (`D106`), and the
+encrypted recording is in object storage (`D110`). The system knows who is calling and how much to believe it, why they are
 calling, everything we hold about them assembled before the phone is answered, which agent
 should take it and why, the desk rings and a human accepts with the screen already right —
 the caller keys their own way to the right queue through a real menu hearing real
@@ -206,10 +201,12 @@ moment in the recording it was said — **and if they consented, their audio is 
 storage encrypted, with the key ref and the retention date on an `audio_recordings` row.**
 If they declined, it is nowhere.
 
-Verified **2026-09-06**: **842 tests** — 830 pass + 12 skipped with Postgres and MinIO both
-up. `ruff check` + `ruff format --check` clean over 202 files, `mypy --strict` clean over
-145, all scenarios replay, 69/69 diagrams current, prompt pack fresh (54 clips),
-`audit_docs.py` clean on the live files. **And verified against a running server with a
+Verified **2026-09-07**: **842 tests** — 830 pass + 12 skipped with Postgres and MinIO both
+up. `ruff check` + `ruff format --check` clean over 217 files, `mypy --strict` clean over
+153, all scenarios replay, 69/69 diagrams current, prompt pack fresh (59 clips),
+`audit_docs.py` clean on the live files. **And on a running server**: a broker call routes
+to `q_claims` carrying its carrier and handoff banner, a real `claude-sonnet-5` summary
+came back in 4.5 s for $0.0085, and a form pushed to a customer's phone came back filled. **And verified against a running server with a
 real MinIO container**: the bucket holds `RCE1`-framed ciphertext, the right master key
 returns the original 622,124-byte WAV, a wrong one refuses, and the caller who pressed 2
 left nothing behind.
@@ -218,7 +215,7 @@ left nothing behind.
 
 Almost every fault in this list came from somebody driving the screen and reporting what
 looked wrong — not from the suite. The pattern is worth knowing before reading any of it,
-because it is now **twelve** and they rhyme:
+because it is now **fourteen** and they rhyme:
 
 1. **`B6` (2026-08-24)** — six faults, **three of which were decisions the docs already
    contained**. The lesson is about reading `.mmd` sources, not about React.
@@ -254,6 +251,15 @@ because it is now **twelve** and they rhyme:
    end it. One agent now holds two assignments for one call, and every lookup that said
    "the first one" had been silently asserting there could only be one. It also let an
    agent who declined keep acting on a caller somebody else took.
+13. **`B30` (2026-09-07)** — the cold-call path knew the product line and threw it away.
+   Invisible since P1b because the demo customer held exactly ONE policy, so the "only one
+   they have" fallback produced correct output for the wrong reason. Found by giving them
+   a portfolio, not by a test. **A fixture with one of something tests nothing about
+   choosing.**
+14. **`B31` (2026-09-07)** — `uv sync` prunes, so installing the LLM extra removed the GPU
+   stack and instantly exposed five suite errors and five mypy errors that had been latent
+   for weeks and **would have been red on CI**. A deferred import relocates the failure,
+   and every `except ImportError` around the import is then guarding an empty room.
 11. **Two caught in the same session before shipping**, both by writing the test that
    would notice: `open_leg` replacing a leg and silently unsubscribing whoever opened
    first (`B24`'s shape, with two consumers now), and the STT worker's async stdin read
@@ -496,17 +502,15 @@ is handed.
 
 ## What to do next (in order)
 
-_Rewritten 2026-09-06, after `D110`–`D114`. The encrypted recording, the degradation
-reporting, the decode timeout, `Q31`'s circle-back and the durable transcript are all done
-and recorded; they are not work.
+_Rewritten 2026-09-07, after `D117`–`D120`. Tracks A, D and most of C are done; do not
+redo them._
 
-⚠️ **Two things come before any of this.** The user has feedback waiting (see the top of
-this file), and `Q24` is asked and unanswered — it blocks P4's entity extractor
-specifically, not the whole phase._
+⚠️ **The user has notes waiting** (see the top of this file). Read them before starting
+Track B or E — twelve of the last fourteen faults came from them driving the screen.
 
-**0. DONE — the notes arrived and became `D115`/`D116`.** The plan they produced is
-`docs/reading/the_broker_turn.html`. The five tracks below replace the old P4-first
-ordering for the week to 2026-09-13.
+**0. DONE — the orientation notes became `D115`/`D116`, and Tracks A, C and D became
+`D117`–`D120`.** The plan is `docs/reading/the_broker_turn.html`; what was built against it
+is `docs/reading/the_assist_rail.html`.
 
 | track | days | what | who |
 |---|---|---|---|
@@ -524,18 +528,32 @@ half-built ones prove less.
 without host setup that varies by machine, which is exactly what fails at a venue. Keep the
 real engine as a documented host-run option.
 
-**1. P4 — analysis and the brief v2+.** The largest remaining phase and the one the pitch
-leans on hardest. Intent classification, entity extraction, a rolling summary, brief
-versioning, confidence calibration, the suggested opening. Three things already point at
-it: `OfferOut.summary_th` is rendered on the offer card today from the rule-based builder
-and is the field an AI summary fills — **no client change needed**; `D92` draws the line P4
-must not cross (speech may change WHO answers and HOW SOON, never WHICH QUEUE), which
+**1. TRACK B — compare & best-fit.** The biggest remaining item, and the brief's biggest
+leak. The **transport already exists** (`D120` pushes a comparison to the customer's phone
+and it renders); what is missing is the data behind it:
+
+- `config/products.yaml` with genuinely comparable attributes — room & board, deductible,
+  co-pay, exclusions, OPD, sum insured — across the real carriers in `MARKET_FACTS` §8.
+- Gap analysis: the customer's current cover against each candidate, **differences ranked
+  by size**. `Policy.insurer` and the multi-carrier fixtures are already there for this.
+- **Rank on facts, explain with the model** (`D16`, `D115`): the ordering comes from real
+  attributes, the model writes only the reason sentence, and a figure that cannot be traced
+  to a field does not render.
+- Surface and compare — **never quote or underwrite**. The brief puts pricing out of scope.
+
+**2. TRACK E — package, freeze, rehearse.** Dockerfile + a compose profile, feature freeze,
+and **record a video of the demo working**. Live demos fail at venues.
+
+**3. What is left of P4 proper.** Intent classification wired to the blend, entity
+extraction, brief versioning, confidence calibration, the suggested opening, and a golden
+set so "85% intent accuracy" is a measurement. Two things point at it: `D92` draws the line
+P4 must not cross (speech may change WHO answers and HOW SOON, never WHICH QUEUE), which
 should be written as a test *with* the blend rather than after it; and `Q24` — a health-line
 caller speaking health data into a recording nobody consented to hold *as such* — has to be
 decided **before** an entity extractor exists, because that is the first code that can
 breach it.
 
-**2. Then, roughly in this order:** P5 real telephony, which is what replaces
+**4. Then, roughly in this order:** P5 real telephony, which is what replaces
 `POST /v1/demo/calls` and `D107`'s WAV player — and which is also what turns
 `RecordingService` on for the *live* leg (`D26`, P6) · `D85`'s `acw_stats` into
 `expected_free_in()` as a **score, never a filter** (`D73`) · the matcher inputs still fed
@@ -546,14 +564,14 @@ screen, which is a UI job now that the audio exists and decrypts · `call_intent
 `app_context_events` still in memory · `D64`'s live matching board · `Q26`'s env var that
 changes nothing.
 
-**A note on starting P4 without an LLM key.** The whole structure, the rule-based fallback,
-the prompts, the golden set and the comparison harness build and test with **no key at all**
-— `LLM_PROVIDER=rulebased` is the default and it is a real adapter, not a stub. ⚠️ But it is
-**an adapter nothing constructs**: there is no `build_llm`, so P4's step zero is the factory,
-not the prompts (checked 2026-09-06). The one
-exit criterion that needs a key is *"a Claude-vs-Typhoon table produced by the harness,
-not by opinion"*. `.env` has the slots ready (`ANTHROPIC_API_KEY`, or `LLM_BASE_URL` +
-`LLM_API_KEY` for the Typhoon/OpenAI/vLLM/Ollama adapter). Ask; do not stall on it.
+**A note on the LLM, now that it exists.** `build_llm` is wired, both adapters are real,
+and the key is in `.env` (`D119`). `LLM_PROVIDER=rulebased` remains the shipped default and
+is a real adapter needing no key, no network and no extra — so everything still builds and
+tests with nothing configured. The SDKs are the **`llm` extra**: `uv sync --extra llm`, and
+⚠️ name every other extra you want in the same command because **`uv sync` prunes** (`B31`).
+
+The exit criterion that still needs a key is *"a Claude-vs-Typhoon table produced by the
+harness, not by opinion"* — and `scripts/compare_llm.py` does not exist yet.
 
 **Before the hackathon**, separately from the build: `Q21` (which storage backend the demo
 runs on — and now also which **blob** backend, since `memory` is the one that needs no key
@@ -615,12 +633,14 @@ GPU should own the demo machine. Typhoon uses 1068 MB, so P4's model is the ques
 | **Q32** | **Should there be a "decline and show me a different caller" button?** The user proposed it and then talked themselves out of it, and they were right to. Two reasons. **It already exists implicitly:** declining re-solves the matrix immediately, and the caller you get next is the best remaining match *for you* — fit is scored per call×agent, so it is not "a worse call", it is the best of what is left. **And the explicit version is harmful:** a button that lets an agent skip a caller and keep their place is cherry-picking, which is the well-known contact-centre pathology the Hungarian solver exists to prevent — the hard cases would circulate while the easy ones got taken, and `matching_decisions` would record it as the system's choice rather than as a person's. `D109`'s *decline + pause* covers the legitimate need underneath the idea ("not now"), and costs the agent their place in the rotation, which is what makes it honest. | **Decided: not building it.** `D109` covers the real need |
 | **Q33** | **Ring every qualified agent at once and give the call to whoever answers first?** The user's "random idea", and it is a real pattern — it is what a room full of desk phones does. Worth keeping because it is a genuine **degradation rung**: if nothing has been accepted after N seconds, broadcasting beats a caller waiting. As the *primary* mechanism it deletes everything the matcher buys — fit, continuity, load balance, the anti-starvation ceiling — and replaces them with *who clicked fastest*, which systematically rewards the least busy rather than the best suited and gives N-1 agents an interruption for every call. `AgentHub.broadcast()` already exists, so the mechanism is cheap; the policy is what needs deciding. **Revisit after P5**, when there is real telephony to measure a real accept latency against. | **Parked.** Not for the hackathon build |
 | ~~Q7~~ | ~~Intent taxonomy + menu wording~~ | **RESOLVED 2026-09-07 by `D117`.** The orientation was the domain review, and the taxonomy is broker-shaped now: 33 intents, advice/compare and renewal first-class, claims as handoffs |
-| Q8 | Typhoon model ids / licence / pricing | Verify against live docs when writing the adapter |
+| Q8 | Typhoon model ids / licence / pricing | **Still open, and now cheap to close** — `OpenAiCompatibleLlm` is built (`D119`), so pointing `LLM_BASE_URL` at Typhoon is a config line. What is missing is the model id and the pricing, verified against live docs rather than memory |
 | Q9 | `OFFER_TIMEOUT_S=20`, ACW thresholds | Guesses; tune against how a real agent works |
 | Q11 | Language menu wording when English lands | `preferred` vs `acceptable` modelled (`D38`) |
 | Q12 | Which challenges count for promotion to L3 | 4 named + `other` free text (`D57`); confirm the named list with Krungsri |
 | Q13 | Does a third-party caller need a named representative | Assume yes; `Policy` has no `representatives` field yet |
 | Q15 | Matching weights are guesses | Tune against real volumes; `--compare` exists to re-measure |
+| **Q34** ⚠️ **NEW 2026-09-07** | **What the customer submits through a pushed form is not stored anywhere** (`D120`). The broker reads it off their screen and types it into the wrap-up. That is honest for a demo and wrong for a product: the customer filled in a form and the system kept no record of it. It wants a real table and a retention rule (`D14`), not a longer-lived dict — and the moment a signature or an upload lands, it stops being optional. | In memory, dies with the call |
+| **Q35** ⚠️ **NEW 2026-09-07** | **The AI summary takes 4.5 s, against a 1 s brief budget** (`D119`, `ARCHITECTURE` §15). Survivable only because it is fire-and-forget after Accept, so nobody waits. But the pitch says "the agent has the brief before they speak", and 4.5 s is after. Options: accept it and describe it accurately, move to a smaller model, shorten the prompt, or stream. **Do not quietly restate the budget as met.** | Accepted, because nobody waits |
 | **Q16** | **A keypad lookup confirms a policy number at L1.** The caller supplied the digits and the agent must not read them aloud below L2 — but it is a confirmation oracle. Designed this way in `D44`; worth a second look. | Allowed |
 | **Q17** | **Commit `apps/workstation/dist/`?** It is gitignored, so a fresh clone has no workstation until `npm run build` runs — and on a venue with no internet, `npm install` is what fails. | Not committed |
 | **Q18** | **"Not this person" is a one-way door.** It clears the customer exactly as `D42` asks, but leaves the agent with nobody to attach the call to, and customer search does not exist (`D32` defers lookup). A rejected call stays anonymous for its duration. A test asserts this so it fails the day search lands. **Now visible rather than silent (`D61`)**: the two forward outcomes are disabled with the reason in the tooltip instead of answering 400. | Accepted for now |
@@ -674,6 +694,14 @@ Facts about *this laptop* rather than the repo, so a fresh session does not redi
   ⚠️ **Never print its contents, never commit it, and never regenerate that key** —
   everything written under it becomes unreadable. `.env.example` is the committed twin and
   carries names only.
+- ⚠️ **The venv was pruned and restored on 2026-09-07** (`B31`). It now carries **every**
+  extra: `uv sync --extra web --extra llm --extra s3 --extra ml --extra asr`. Verified
+  after: `torch 2.11.0+cu128`, `cuda.is_available() True`, `nemo` imports, `anthropic` and
+  `openai` import. **Any `uv sync` naming fewer extras will silently remove the rest.**
+- **A stray ReadyCall server was left on port 8000 by an earlier session** and is still
+  there (a uv-managed python, not the project venv). Port 8077 belongs to the user's
+  music-backlog project. When verifying, pick a port and **check the route list to confirm
+  it is ReadyCall** — one verification round was spent querying the wrong app entirely.
 - **The GPU stack is installed and working**: `torch` + `cu128`, `nemo_toolkit[asr]`, and
   the HF cache holds four Thai checkpoints (~11.8 GB) paid for by the earlier project. So
   `STT_ENGINE=typhoon` runs here with no download. A fresh machine does not have any of it.

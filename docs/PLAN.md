@@ -1,7 +1,7 @@
 # PLAN
 
 _The master build plan for the full system: what gets built, in what order, and what "done" means for each phase._
-_Last updated: 2026-09-06._
+_Last updated: 2026-09-07._
 
 ---
 
@@ -299,17 +299,30 @@ which is P6 (`D26`).
 
 ---
 
-## P4 — Analysis & the case brief
+## P4 — Analysis & the case brief — ◐ **partly done (2026-09-07)**
 **Goal:** the agent screen from pitch p.7, fully populated and trustworthy.
 
-- `config/intents.yaml`: closed taxonomy + required slots per intent + intent→skill mapping.
-- Prompts in `prompts/th/`, versioned, each with a Pydantic output schema.
+⚠️ **The orientation redirected this phase before it started** (`D115`). What landed on
+2026-09-07 is the LLM seam, the summary, the playbooks and the broker taxonomy — plus one
+thing that is in no phase at all, the customer's paired screen (`D120`), because the plan
+was written before the idea existed. `docs/explanations/P4_broker_and_assist.md` is the
+write-up; `NEXT_SESSION.md` is the live state.
+
+- ✅ `config/intents.yaml`: closed taxonomy + required slots per intent + intent→skill
+  mapping — **rewritten broker-shaped** (`D117`, closing `Q7`): 33 intents, advice and
+  renewal first-class, claims carrying `handoff_to_insurer`.
+- ✅ Prompts in `prompts/th/`, versioned, each with a Pydantic output schema — and
+  rendering refuses a missing slot **and** an undeclared one (`D119`).
 - `intent.py`, `entities.py`, `summary.py`, `nba.py` (playbook-driven), `opening.py`, `pii.py`.
-- `confidence.py` — the blend from `ARCHITECTURE.md` §9 + calibration against the golden set + the floor.
+- ☑ **NBA playbooks are `config/playbooks.yaml`** (`D118`, closing `Q19`), guarded both ways at startup.
+- ☐ `confidence.py` — the blend from `ARCHITECTURE.md` §9 + calibration against the golden set + the floor.
 - `brief.py` — versioned brief assembly merging context + speech, `is_partial` handling, `sources_json`.
 - Re-routing when the speech-derived intent disagrees with the tapped product.
-- **Two LLM adapters implemented** (`D29`): `AnthropicAdapter` and `OpenAiCompatibleAdapter` (which
-  covers Typhoon-hosted, OpenAI, vLLM and Ollama by base URL alone). `GeminiAdapter` defined only.
+- ✅ **Two LLM adapters implemented** (`D29`, built by `D119`): `AnthropicLlm` (forced tool
+  use) and `OpenAiCompatibleLlm` (Typhoon-hosted / OpenAI / vLLM / Ollama / LM Studio by
+  base URL alone), behind `build_llm`. `GeminiAdapter` defined only. ✅ `summary.py` — the
+  intake summary, fire-and-forget from Accept, **4.5 s / $0.0085 measured live**.
+  ☐ `intent.py`, `entities.py` (**blocked on `Q24`**), `nba.py`, `opening.py`, `pii.py`.
 - `tests/golden/` + `scripts/eval_golden_set.py` reporting intent accuracy / entity F1 / summary
   faithfulness; wired into CI as a gate on prompt changes.
 - **`scripts/compare_llm.py`** — the same golden set through every configured provider, printing

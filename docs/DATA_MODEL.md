@@ -25,6 +25,16 @@ _Status: **partly built as of P2c, plus `audio_recordings` (`D110`)**. Last upda
 >   and the count are always written and the value only once something has named it (`D44`,
 >   `D78`).
 >
+> * **The paired customer screen has no table and will not get one soon** (`D120`). A
+>   pairing token, what the broker pushed onto it and what the customer sent back all live
+>   in memory and die with the call plus a ten-minute grace. That is the right retention
+>   for a credential whose only purpose is one conversation (`D14`) — and it means a
+>   restart drops a live assist session, which is the same thing a restart already does to
+>   the caller's place in the queue (`D78`). ⚠️ What the customer **submits** through a
+>   pushed form is a different matter: today it is read off the screen by the broker and
+>   typed into the wrap-up. The day it needs to survive, it wants a real table and a
+>   retention rule, not a longer-lived dict.
+>
 > The rule that decides all of it: **a table records something a person or a service DID;
 > anything computable from those records is derived.** See `explanations/P2c_persistence.md`
 > and `diagrams/11_persistence.md`.
