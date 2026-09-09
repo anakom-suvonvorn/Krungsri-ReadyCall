@@ -13,6 +13,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, status
 
 from readycall.api.deps import ContainerDep, PrincipalDep
 from readycall.api.schemas import (
+    AppIntakeNoteRequest,
     AssistRespondFromApp,
     ContactLine,
     ContactLinesResponse,
@@ -342,7 +343,79 @@ async def app_assist(principal: PrincipalDep, container: ContainerDep) -> dict[s
         "ended": False,
         "tier": str(session.tier),
         "items": [_assist_item(i) for i in session.items],
+        # The pre-call intake, as the app sees it (`D133`). The keypad hears this offer
+        # spoken and answers with a digit; the app can show it and answer with a tap,
+        # which is the same machine on a second surface (`D48`).
+        "intake": _app_intake_state(container, call.call_session_id),
     }
+
+
+def _app_intake_state(container: ContainerDep, call_session_id: str) -> dict[str, Any]:
+    """What the app needs to draw the intake offer (`D133`).
+
+    Deliberately thin. It reports whether the offer is still answerable, what was already
+    answered, and how much the customer has contributed — never the transcript itself,
+    which belongs to the broker's screen and to the record, not back to the person who
+    said it.
+    """
+    turns = len(container.transcript_delivery.turns_for(call_session_id))
+    report = container.intake.snapshot(call_session_id)
+    return {
+        # Whether the customer may still add to what they are telling us. They consented
+        # on the sheet before dialling (`D133`), so this is not "may they be asked" — it
+        # is "is the intake still open to write into".
+        "open": bool(report and report.recording),
+        "consented": None if report is None else report.consented,
+        "turns": turns,
+    }
+
+
+async def _live_call_for(principal: Any, container: Any) -> Any:
+    """This customer's newest live call, or None (`D133`).
+
+    Extracted because three endpoints now ask the same question, and the set of states
+    that counts as "live" is a decision (`D122`: the app counts from `CONNECTING`, because
+    somebody holding for ninety seconds is very much on a call) that must not end up
+    written down twice.
+    """
+    live = [
+        call
+        for call in await container.calls.list_in_states(*_LIVE_CALL_STATES)
+        if getattr(call, "customer_id", None) == principal.customer_id
+    ]
+    if not live:
+        return None
+    return max(live, key=lambda c: getattr(c, "started_at", None) or container.clock.now())
+
+
+@router.post("/app/intake/note", summary="Type what you wanted to say, instead of saying it")
+async def app_intake_note(
+    body: AppIntakeNoteRequest, principal: PrincipalDep, container: ContainerDep
+) -> dict[str, Any]:
+    """A typed intake turn (`D133`). **A real path, not a stub.**
+
+    `D88` put the seam at *turns rather than frames* so a strategy is a pure function of
+    what was said, however it was said. Typed text is a turn that never needed a model, so
+    everything downstream — the held transcript, the agent's screen, the durable record,
+    the rule-based brief and the AI summary — works with no audio and no GPU anywhere.
+
+    That also makes it the one path on which the whole AI story can be demonstrated on a
+    laptop with no microphone, which is worth more than it sounds four days from a pitch.
+    """
+    call = await _live_call_for(principal, container)
+    if call is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="no live call")
+    text = body.text.strip()
+    if not text:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="empty note")
+
+    accepted = await container.intake.on_typed_note(call.call_session_id, text)
+    if not accepted:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail="the intake is not open — answer the offer first, or it has closed",
+        )
+    return {"intake": _app_intake_state(container, call.call_session_id)}
 
 
 @router.post("/app/call/hangup", summary="The customer hangs up")

@@ -22,9 +22,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from readycall import ids
 from readycall.clock import Clock
 from readycall.config import Settings
-from readycall.domain.enums import CallState, ConsentScope, DegradationReason, FinalizeReason
+from readycall.domain.enums import (
+    CallState,
+    ConsentScope,
+    DegradationReason,
+    FinalizeReason,
+    SpeakerRole,
+)
 from readycall.domain.models import CallSession, IntakeResult, TranscriptTurn
 from readycall.domainpack import DomainPack
 from readycall.logging import get_logger
@@ -409,6 +416,83 @@ class IntakeService:
         if consented is False:
             return DegradationReason.INTAKE_DECLINED
         return DegradationReason.NO_CONSENT
+
+    def snapshot(self, call_session_id: str) -> HoldReport | None:
+        """What this hold looks like right now, without changing it (`D133`).
+
+        `_report` is the same shape but is produced by a *step* — it answers "what just
+        happened". The app polls, so it needs "what is true", and a poll that had to drive
+        the machine to find out would be a read with a side effect.
+        """
+        live = self._live.get(call_session_id)
+        if live is None:
+            return None
+        return HoldReport(
+            call_session_id=call_session_id,
+            kind=None,
+            recording=live.run.recording,
+            consented=live.run.consented,
+            offers_made=live.run.offers_made,
+            played=tuple(live.played),
+            pressed=tuple(live.run.pressed),
+            intake_id=live.strategy.intake_id,
+        )
+
+    async def on_typed_note(self, call_session_id: str, text: str) -> bool:
+        """The customer TYPED what they wanted to say, instead of speaking it (`D133`).
+
+        This is a first-class intake path rather than a stand-in, and the reason is
+        `D88`: **a strategy consumes turns, not frames.** The media gateway, the detector
+        and the STT engine all sit on the far side of that seam precisely so that what
+        arrives here is *what was said*, however it was said. Typed text is a turn that
+        never needed a model — so the brief, the summary, the durable transcript and the
+        agent's screen all work unchanged, with no audio anywhere.
+
+        ⚠️ `engine` is `typed`, never an ASR name, and `asr_confidence` stays `None`.
+        Recording a keyboard as though it were a transcriber would put a confidence score
+        on something that was never uncertain, and would make the two indistinguishable in
+        `transcript_turns` later.
+
+        ⚠️ **`D98`'s rate guard does not apply and must not be added here.** It refuses
+        more characters than a human could have *spoken* in the seconds of audio a turn
+        arrived on; a person typing has no such limit, and the guard exists to catch a
+        hallucinating model rather than to police a customer.
+
+        Returns False when there is no live intake to add to — the offer was declined, or
+        the call has moved on — so the caller can say so rather than dropping it silently.
+        """
+        live = self._live.get(call_session_id)
+        if live is None or not live.run.recording:
+            return False
+        # ⚠️ The SEQUENCE comes from the strategy, which already holds every turn of this
+        # intake, and never from `TranscriptDeliveryService`. The delivery service is a
+        # *projection fed by the bus*, and `publish()` only enqueues (`D105`) — so two
+        # notes typed inside one drain window both read a count of zero and both became
+        # `seq=1`. That is `B26`'s shape: a lagging read used as the source of truth for a
+        # value something else owns. Caught by a log line saying `seq=1` twice.
+        seq = len(live.strategy.turns) + 1
+        # Typed text has no position in an audio stream. A stamp derived from the turn
+        # number keeps the transcript ordered without claiming a duration nobody measured.
+        at_ms = (seq - 1) * 1000
+        turn = TranscriptTurn(
+            turn_id=ids.turn_id(),
+            call_session_id=call_session_id,
+            seq=seq,
+            speaker_role=SpeakerRole.CUSTOMER,
+            text=text,
+            t_start_ms=at_ms,
+            t_end_ms=at_ms,
+            engine="typed",
+            intake_id=live.strategy.intake_id,
+        )
+        await live.strategy.on_turn(turn)
+        log.info(
+            "customer typed an intake note",
+            call_session_id=call_session_id,
+            characters=len(text),
+            seq=seq,
+        )
+        return True
 
     def live_call_ids(self) -> tuple[str, ...]:
         return tuple(self._live)

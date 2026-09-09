@@ -215,12 +215,46 @@
         </div>
       </div>
 
+      <!-- The pre-call intake, as an app sees it (`D133`). The keypad hears this offer
+           spoken and answers with a digit; here it is two buttons and a text box, and
+           both go through the SAME `IntakeService` machine (`D48`: one machine, two
+           surfaces). Hidden once answered, and never shown after the agent picks up. -->
+      <div id="intake-card" class="card hidden" style="margin-top:14px">
+        <h2>ระหว่างรอสาย</h2>
+        <p id="intake-ask">
+          ระหว่างที่รอ ท่านสามารถเล่าเรื่องที่ต้องการติดต่อไว้ล่วงหน้าได้
+          เจ้าหน้าที่จะเห็นข้อมูลทันทีที่รับสาย
+        </p>
+        <div id="intake-open" class="hidden">
+          <label for="intake-text">เล่าเรื่องที่ต้องการติดต่อ</label>
+          <textarea id="intake-text" rows="4"
+            placeholder="เช่น รถชนเมื่อเช้านี้ที่ถนนรัชดา ไม่มีใครบาดเจ็บ อยากทราบว่าต้องทำอย่างไรต่อ"></textarea>
+          <button class="primary" id="intake-send">ส่งให้เจ้าหน้าที่</button>
+          <div class="note" id="intake-count"></div>
+        </div>
+        <!-- A LABELLED STUB, which is the rule for anything that looks real and is not
+             (`D115`). There is no media path from a browser yet, so choosing "record"
+             consents exactly as typing does and then says this, rather than miming a
+             recorder that captures nothing. -->
+        <div id="intake-recording" class="hidden">
+          <div class="note">🎙️ ส่วนอัดเสียงเป็นการสาธิต ยังไม่ได้เชื่อมต่อระบบเสียงจริง —
+            พิมพ์เล่าด้านบนได้เลย ผลลัพธ์ปลายทางเหมือนกันทุกอย่าง</div>
+        </div>
+      </div>
+
       <div class="from-agent">
         <h2>จากเจ้าหน้าที่</h2>
         <div id="ended-note" class="ended-note hidden">
           สายสิ้นสุดแล้ว — ยังส่งข้อมูลที่กรอกค้างไว้ได้อีกสักครู่
         </div>
         <div class="stack" id="live-items"></div>
+        <!-- ⚠️ Without this there is NO WAY BACK once the broker rings off while
+             something is on screen: `pollAssist` keeps `step-live` visible for the whole
+             grace window, and browse/contact stay hidden behind it. Hanging up from this
+             side happened to clear it; being hung up ON did not. -->
+        <button id="back-to-plans" class="hidden" style="margin-top:14px">
+          ← กลับไปหน้าแผนของฉัน
+        </button>
       </div>
     </section>
 
@@ -442,7 +476,7 @@
         sense for somebody who already holds it</b> — one <code>menus.yaml</code>, two
         surfaces (<code>D122</code>). Tap outside to cancel.`,
     });
-    for (const r of data.reasons) addRow(box, r.key, r.label_th, () => { closeSheet(); placeCall(plan, r); });
+    for (const r of data.reasons) addRow(box, r.key, r.label_th, () => openIntakeChoice(plan, r, () => openReasons(plan)));
   }
 
   // Step 1 of the "something else" branch (`D123`). This is the keypad's OWN first
@@ -474,13 +508,50 @@
         Same taxonomy, different list.`,
       back: openLines,
     });
-    for (const r of data.reasons) addRow(box, r.key, r.label_th, () => { closeSheet(); placeCall(null, r); });
+    for (const r of data.reasons) addRow(box, r.key, r.label_th, () => openIntakeChoice(null, r, () => openGeneralReasons(line)));
+  }
+
+  /** The intake offer, asked BEFORE dialling (`D133`).
+   *
+   * ⚠️ **Why here and not "while you wait", which is where a phone asks it.** The spoken
+   * offer happens on hold because a telephone has nowhere else to put it. An app does:
+   * it is already asking which plan and which reason, and one more tap costs nothing
+   * while a spoken question costs everybody thirty seconds. That is `D48`'s argument —
+   * answer on a screen what would otherwise be read out in an earpiece.
+   *
+   * It is also the only place it CAN be asked. `INTAKE_ACTIVE` is reachable only from
+   * `QUEUED`, and this system moves a caller to `MATCHED` the instant the offer resolves
+   * — so a caller who declines and changes their mind mid-wait cannot be given an intake
+   * without a call-lifecycle change. Attempted, refused by the state machine, and left
+   * refused: recorded as `Q39` rather than patched next to the call state machine four
+   * days before a pitch.
+   */
+  function openIntakeChoice(plan, reason, back) {
+    const box = showSheet({
+      sub: "ก่อนต่อสาย — อยากเล่าเรื่องไว้ก่อนไหม?",
+      note: `เจ้าหน้าที่จะได้เห็นทันทีที่รับสาย ไม่ต้องเล่าซ้ำ
+        (<code>D10</code>, <code>D133</code>) — และการเลือก "ไม่" ก็เป็นคำตอบที่ถูกต้อง
+        ระบบจะบันทึกว่าเคยถามแล้ว ไม่ใช่ว่าไม่เคยถาม (<code>D88</code>).`,
+      back,
+    });
+    addRow(box, "✍️", "พิมพ์เล่าให้ฟัง (ระหว่างรอสาย)", () => {
+      closeSheet();
+      placeCall(plan, reason, { tell: true, typed: true });
+    });
+    addRow(box, "🎙️", "อัดเสียงเล่า — สาธิต ยังไม่ได้ต่อระบบเสียง", () => {
+      closeSheet();
+      placeCall(plan, reason, { tell: true, typed: true, stub: true });
+    });
+    addRow(box, "→", "ไม่ ขอรอสายตามปกติ", () => {
+      closeSheet();
+      placeCall(plan, reason, { tell: false });
+    });
   }
 
   $("contact").onclick = () => { if (state.plan) openReasons(state.plan); };
   $("contact-general").onclick = () => openLines();
 
-  async function placeCall(plan, reason) {
+  async function placeCall(plan, reason, intake) {
     try {
       const t0 = performance.now();
       const intent = await api("POST", "/v1/calls/intents", {
@@ -513,9 +584,14 @@
         correlation_token: intent.correlation_token,
         intent_code: reason ? reason.intent_code : null,
         caller_number: "0812345678",
-        intake_keys: ["2"],
+        // The customer's own answer to the intake offer, given on screen a moment ago
+        // rather than spoken at them on hold (`D133`). `["1"]` consents and opens the
+        // intake; `["2"]` declines and is RECORDED as a refusal, which is a different
+        // fact from never having been asked (`D88`).
+        intake_keys: intake && intake.tell ? ["1"] : ["2"],
         ignore_hours: true,
       });
+      intakeStub = Boolean(intake && intake.stub);
       startAssistWatch();
     } catch (err) {
       alert("Failed: " + err.message);
@@ -530,6 +606,8 @@
   // form the customer is halfway through, which is the one place it would be infuriating.
   let assistTimer = null;
   let lastAssistSig = null;
+  //: Whether the customer picked the (stubbed) voice option, so the card can say so.
+  let intakeStub = false;
 
   function startAssistWatch() {
     if (assistTimer) return;
@@ -569,6 +647,11 @@
     }
 
     $("ended-note").classList.toggle("hidden", !state.ended);
+    // A way back, once there is something to go back FROM (`D133`). Only after the call
+    // has ended: offering it mid-call would be an app inviting you to walk away from a
+    // conversation you are having.
+    $("back-to-plans").classList.toggle("hidden", !state.ended);
+    renderIntake(state);
     if (state.ended) {
       $("live-head").textContent = "สายสิ้นสุดแล้ว";
       $("live-timer").textContent = "—";
@@ -624,6 +707,61 @@
     }
     lastAssistSig = null;
     await pollAssist();
+  };
+
+  /** Draw the intake offer from the server's own view of the hold (`D133`).
+   *
+   * ⚠️ It sets classes and one line of text, and NEVER rebuilds the textarea. This runs
+   * on every 1.5s poll, and re-rendering the box would wipe whatever the customer is
+   * halfway through typing — the hazard `D120` names and `D44`'s keypad panel already
+   * taught once.
+   */
+  function renderIntake(state) {
+    const it = state.intake || {};
+    const card = $("intake-card");
+    // Never once a human is on the line, and never after the call: this is for the wait.
+    if (!state.call_active || state.connected || state.ended) {
+      card.classList.add("hidden");
+      return;
+    }
+
+    const open = it.open === true;
+    // Only shown once the customer has already consented, which they did on the sheet
+    // before dialling. Nothing here asks a question.
+    card.classList.toggle("hidden", !open);
+    if (!open) return;
+    $("intake-open").classList.remove("hidden");
+    $("intake-recording").classList.toggle("hidden", !intakeStub);
+    $("intake-count").textContent = it.turns
+      ? `ส่งไปแล้ว ${it.turns} ข้อความ — เจ้าหน้าที่จะเห็นทั้งหมดทันทีที่รับสาย`
+      : "พิมพ์แล้วกดส่ง จะส่งกี่ครั้งก็ได้จนกว่าเจ้าหน้าที่จะรับสาย";
+  }
+
+  $("intake-send").onclick = async () => {
+    const box = $("intake-text");
+    const text = box.value.trim();
+    if (!text) return;
+    $("intake-send").disabled = true;
+    try {
+      await api("POST", "/v1/app/intake/note", { text });
+      box.value = "";
+    } finally {
+      $("intake-send").disabled = false;
+    }
+    lastAssistSig = null;
+    await pollAssist();
+  };
+
+  $("back-to-plans").onclick = () => {
+    // Leave the finished call behind and go back to browsing. The pairing is untouched:
+    // the grace window is the server's business, and coming back is a poll away.
+    stopAssistWatch();
+    lastAssistSig = null;
+    callStartedAt = null;
+    $("step-live").classList.add("hidden");
+    $("step-browse").classList.remove("hidden");
+    $("step-contact").classList.remove("hidden");
+    $("live-items").innerHTML = "";
   };
 
   function assistCard(item) {

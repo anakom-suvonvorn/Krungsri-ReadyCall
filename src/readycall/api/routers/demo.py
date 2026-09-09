@@ -519,10 +519,7 @@ async def call_options(container: ContainerDep) -> dict[str, Any]:
                 "label_th": customer.polite_name_th,
                 "caller_number": customer.phones[0],
                 "assurance": "l1_probable",
-                "note_th": (
-                    f"{len(policies)} กรมธรรม์ · เบอร์ตรงกับที่ระบบมี "
-                    "จึงได้แค่ L1 (ยังไม่ยืนยันตัวตน)"
-                ),
+                "note_th": (f"{len(policies)} กรมธรรม์ · เบอร์ตรงกับที่ระบบมี จึงได้แค่ L1 (ยังไม่ยืนยันตัวตน)"),
             }
         )
 
@@ -575,9 +572,7 @@ async def call_options(container: ContainerDep) -> dict[str, Any]:
             # returns nothing — and the AI summary rides on the brief, so it cannot
             # appear at all. Defaulting to the path where the feature is invisible is how
             # somebody concludes it is broken.
-            "caller_key": next(
-                (c["key"] for c in callers if c["key"] != "unknown"), "unknown"
-            ),
+            "caller_key": next((c["key"] for c in callers if c["key"] != "unknown"), "unknown"),
             "waited_s": 40.0,
             "ignore_hours": True,
             "record": False,

@@ -5511,3 +5511,96 @@ mismatch guard fired on `motor.other` against a `motor.claim.notify` script and 
 when the intent was corrected; and the placed call put the AI preview on the offer card
 **2.2 s after the desk went ready**, replaced after Accept by the Sonnet summary over all
 six turns.
+
+## D133. The customer can TYPE their intake, and the app asks before it dials
+_Taken 2026-09-09 from the user's idea: **"since this is in app, we can do something like
+'while you wait would you like to record or write…' instead"**. The writing half turned out
+not to be a stub at all._
+
+- **Problem.** The pre-call intake is the pitch's second move and it needs a microphone, a
+  media path from the browser, and an ASR engine — none of which exist on the customer's
+  side. `/sim` therefore always sent `intake_keys: ["2"]`: every app call declined the
+  offer, so the app could never demonstrate the feature the deck leads on.
+
+- **Decision.** Two halves, and they are deliberately not the same kind of thing.
+
+  **Typing is a first-class path, not a stand-in.** `D88` put the intake seam at *turns
+  rather than frames* precisely so a strategy is a pure function of what was **said**,
+  however it was said — the gateway, the detector and the STT engine all sit on the far
+  side of it. **Typed text is a turn that never needed a model.** So it goes straight into
+  `IntakeService.on_turn`, and the held transcript, the agent's screen, the durable
+  `transcript_turns` row, the rule-based brief and the AI summary all work unchanged.
+
+  **Voice is a labelled stub**, which is `D115`'s rule for anything that looks real and is
+  not. Choosing it consents exactly as typing does and then says on screen that the audio
+  path is not connected, rather than miming a recorder that captures nothing.
+
+### What this buys, and it is worth more than it sounds
+
+**The entire AI story now runs with no audio anywhere.** Verified end to end: three
+sentences typed into `/sim`, no microphone, no WAV, no GPU, no ASR — and the broker's offer
+card carried a `gpt-5.4-mini` summary **2.5 s** after the desk rang, replaced after Accept
+by the Sonnet summary over all three turns.
+
+Four days from a pitch, on a shared venue laptop, that is the difference between a demo
+that depends on a working sound card and one that does not.
+
+### ⚠️ The offer is asked BEFORE dialling, and that was forced as well as better
+
+The user asked for it *during* the wait, which is where a telephone asks it. Two reasons it
+moved:
+
+1. **An app has somewhere better to put the question.** It is already asking which plan and
+   which reason; one more tap costs nothing, while a spoken question costs everybody thirty
+   seconds in an earpiece. That is `D48`'s argument exactly — answer on a screen what would
+   otherwise be read out.
+2. **It is the only place it can be asked.** `INTAKE_ACTIVE` is reachable only from
+   `QUEUED`, and this system moves a caller to `MATCHED` the instant the offer resolves —
+   so there is effectively **no window** during the wait in which an intake can legally be
+   opened. Attempted, refused by the state machine with
+   `IllegalTransition: matched -> intake_active`, and **left refused**: reaching into the
+   call lifecycle four days before a pitch to widen a transition is not a change to make
+   casually. Recorded as `Q39`.
+
+A first version of this shipped an app-side "standing offer" endpoint (`POST
+/v1/app/intake/answer`) plus `HoldMachine.on_app_answer`, on the argument that a card on a
+screen never stops being on screen. It was correct, tested — and once the question moved to
+before dialling, **called by nothing**. It was deleted rather than left in place, because
+that is this project's single most repeated fault and the fix is to notice it before
+committing rather than after.
+
+### Two rules the typed turn obeys
+
+**`engine` is `typed`, never an ASR name, and `asr_confidence` stays `None`.** Recording a
+keyboard as though it were a transcriber puts a confidence score on something that was
+never uncertain, and makes the two indistinguishable in `transcript_turns` — the table
+P4's analysis and P6's wrap-up draft both read.
+
+**`D98`'s rate guard does not apply, and must not be added.** It refuses more characters
+than a human could have *spoken* in the seconds of audio a turn arrived on. A keyboard has
+no such limit; applying it here would police a customer instead of catching a hallucinating
+model. A test asserts a long note survives.
+
+### ⚠️ The sequence comes from the strategy, and taking it from the screen was a bug
+
+The first version numbered each note from
+`len(TranscriptDeliveryService.turns_for(call_id))`. That service is a **projection fed by
+the bus**, and `publish()` only enqueues (`D105`) — so two notes typed inside one drain
+window both read a count of zero and both became `seq=1`, silently corrupting the order of
+the transcript. `PassiveRecordIntake` already holds every turn of the intake and is
+synchronous, so the number comes from there.
+
+`B26`'s shape in a new place: a lagging read used as the source of truth for a value
+something else owns. **Found by reading a log line that said `seq=1` twice**, which is the
+2026-09-08/09 discipline paying for itself again — no test asserted ordering across two
+notes, and the assertion that now does was written after the log gave it away.
+
+### The way back, which did not exist
+
+`/sim` kept the call screen up for the whole ten-minute grace window after the broker rang
+off (`D120`), with browse and contact hidden behind it — so a customer whose call ended
+*while something was on their screen* had **no way back to their plans at all**. Hanging up
+from their own side happened to clear it; being hung up on did not. There is a
+**← กลับไปหน้าแผนของฉัน** button now, shown only once the call has ended, because offering
+it mid-call would be an app inviting somebody to walk away from a conversation they are
+having.

@@ -317,6 +317,17 @@ class DeclineOfferRequest(ApiModel):
     stop_offering: bool = False
 
 
+class AppIntakeNoteRequest(ApiModel):
+    """One typed intake turn (`D133`).
+
+    Capped at a length a person plausibly types about one problem. There is no rate guard
+    here and there must not be: `D98`'s exists to catch a model claiming more speech than
+    fits in the audio it arrived on, and a keyboard has no such limit.
+    """
+
+    text: str = Field(min_length=1, max_length=2000)
+
+
 class EndCallRequest(ApiModel):
     reason: str = Field(default="caller_hung_up", max_length=64)
 
