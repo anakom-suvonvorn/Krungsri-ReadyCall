@@ -109,6 +109,9 @@
   ul { margin: 8px 0 0; padding-left: 20px; }
   li { margin-bottom: 5px; }
   .err { color: #a2331d; font-size: 14px; }
+  /* A message a person typed, not a panel the system composed (`D128`). */
+  .from-who { font-size: 11px; color: var(--muted); letter-spacing: .02em; margin-bottom: 4px; }
+  .wrap { white-space: pre-wrap; }
 </style>
 </head>
 <body>
@@ -211,7 +214,15 @@ function card(item) {
 }
 
 function info(p) {
-  let html = p.text_th ? "<p>" + esc(p.text_th) + "</p>" : "";
+  // `from_agent` says a HUMAN wrote this, and the customer is told so (`D128`). Every
+  // other panel on this screen is the system quoting a record; this one is the broker's
+  // own sentence, and a message that looks system-generated carries an authority the
+  // person who typed it did not intend to claim.
+  let html = p.from_agent
+    ? '<div class="from-who">ข้อความจากเจ้าหน้าที่</div>'
+    : "";
+  // Newlines survive: a broker pasting three steps or an address means the line breaks.
+  html += p.text_th ? '<p class="wrap">' + esc(p.text_th) + "</p>" : "";
   if (Array.isArray(p.bullets_th) && p.bullets_th.length) {
     html += "<ul>" + p.bullets_th.map((b) => "<li>" + esc(b) + "</li>").join("") + "</ul>";
   }

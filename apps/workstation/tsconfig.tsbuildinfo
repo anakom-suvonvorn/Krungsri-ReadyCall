@@ -1,1 +1,1 @@
-{"root":["./src/app.tsx","./src/api.ts","./src/assist.tsx","./src/comparison.tsx","./src/main.tsx","./src/panels.tsx","./src/transfer.tsx","./src/usesocket.ts"],"version":"5.9.3"}
+{"root":["./src/app.tsx","./src/api.ts","./src/assist.tsx","./src/main.tsx","./src/panels.tsx","./src/plans.tsx","./src/transfer.tsx","./src/usesocket.ts"],"version":"5.9.3"}

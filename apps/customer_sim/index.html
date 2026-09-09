@@ -86,6 +86,10 @@
 
   .headline { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
   .note { font-size: 12px; color: var(--muted); margin-top: 8px; }
+  table.cmp { border-collapse: collapse; width: 100%; font-size: 12px; margin-top: 8px; }
+  table.cmp th, table.cmp td { border: 1px solid var(--line); padding: 5px 7px; text-align: right; white-space: nowrap; }
+  table.cmp th:first-child, table.cmp td:first-child { text-align: left; }
+  table.cmp td.best { background: rgba(255,199,44,.16); font-weight: 700; }
   .hidden { display: none; }
 
   .scrim { position: fixed; inset: 0; background: rgba(6,14,30,.55); display: flex; align-items: flex-end; justify-content: center; z-index: 20; }
@@ -626,11 +630,47 @@
       };
       return el;
     }
-    el.innerHTML = `<h2>${item.title_th}</h2>${stub}`
-      + (item.payload.text_th ? `<p>${item.payload.text_th}</p>` : "")
+    const p = item.payload;
+    let body = "";
+    // `from_agent` says a HUMAN wrote this (`D128`). Everything else on this screen is the
+    // system quoting a record, and a typed sentence rendered identically would borrow an
+    // authority the person who wrote it did not claim.
+    if (p.from_agent) body += '<div class="note">ข้อความจากเจ้าหน้าที่</div>';
+    // ⚠️ ESCAPED, and that is not paranoia since `D128`: this text is typed by a person
+    // into a box, and it used to be interpolated into innerHTML raw.
+    if (p.text_th) body += `<p style="white-space:pre-wrap">${esc(p.text_th)}</p>`;
+    if (Array.isArray(p.bullets_th) && p.bullets_th.length) {
+      body += "<ul>" + p.bullets_th.map((b) => `<li>${esc(b)}</li>`).join("") + "</ul>";
+    }
+    if (item.kind === "comparison") body += comparisonTable(p);
+    el.innerHTML = `<h2>${esc(item.title_th)}</h2>${stub}${body}`
       + '<div class="note">ดูรายละเอียดกับเจ้าหน้าที่ได้เลย</div>';
     return el;
   }
+
+  /** The same table the link page draws (`D126`). The app IS the paired screen since
+   *  `D122`, so a comparison pushed to it must not degrade to a bare title. */
+  function comparisonTable(p) {
+    const cols = p.columns_th || [];
+    const rows = p.rows || [];
+    if (!cols.length || !rows.length) return "<div class='note'>ไม่มีข้อมูลเปรียบเทียบ</div>";
+    let html = '<div style="overflow-x:auto"><table class="cmp"><thead><tr>'
+      + cols.map((c) => `<th>${esc(c)}</th>`).join("") + "</tr></thead><tbody>";
+    for (const row of rows) {
+      html += "<tr>" + (row.cells || []).map((cell, i) =>
+        `<td${row.best_index === i ? ' class="best"' : ""}>${esc(cell)}</td>`
+      ).join("") + "</tr>";
+    }
+    html += "</tbody></table></div>";
+    if (p.held_hidden) {
+      html += '<div class="note">เข้าสู่ระบบเพื่อเทียบกับแผนปัจจุบันของคุณเอง</div>';
+    }
+    if (p.note_th) html += `<div class="note">${esc(p.note_th)}</div>`;
+    return html;
+  }
+
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
   function render(intent, status, roundTrip, reason) {
     $("result-empty").classList.add("hidden");

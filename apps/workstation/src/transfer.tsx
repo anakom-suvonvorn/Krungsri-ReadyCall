@@ -32,7 +32,50 @@
  */
 
 import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import type { HandoffOptions } from "./api";
+
+/**
+ * A radio that looks like a pill.
+ *
+ * The native `<input type="radio">` this replaces drew its own bullet, and a bullet beside
+ * a variable-length Thai label never lines up — the marker sits on the first line's
+ * baseline while the label wraps under it. Worse, each option owned a full-width row, so
+ * six short reasons produced a tall column of mostly empty space.
+ *
+ * `role="radio"` + `aria-checked` keeps the semantics the markup lost: a screen reader
+ * still hears one-of-many, and arrow keys still move between them, because the group is a
+ * `radiogroup` and only the selected pill is in the tab order.
+ */
+function Pill({
+  selected,
+  disabled,
+  onSelect,
+  title,
+  className = "",
+  children,
+}: {
+  selected: boolean;
+  disabled?: boolean;
+  onSelect: () => void;
+  title?: string;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={selected}
+      disabled={disabled}
+      title={title}
+      className={`pill-opt ${selected ? "on" : ""} ${className}`.trim()}
+      onClick={onSelect}
+    >
+      {children}
+    </button>
+  );
+}
 
 export function TransferButton({
   disabled,
@@ -143,59 +186,51 @@ export function TransferDialog({
             )}
 
             <h3>ส่งต่อให้บริษัทใด</h3>
-            <div className="stack">
-              {/* The customer's own carrier first, and it is not in the same list as the
-                  market menu on purpose: handing a claim to a company that did not write
-                  the policy is not a handoff, it is a wrong number. */}
-              {options?.policy_insurer && (
-                <label className="choice">
-                  <input
-                    type="radio"
-                    name="handoff-target"
-                    checked={target === "__policy__"}
-                    onChange={() => setTarget("__policy__")}
-                  />
-                  <span>
-                    <b>{options.policy_insurer}</b>
-                    <span className="faint"> — บริษัทที่รับประกันกรมธรรม์ของลูกค้า</span>
-                  </span>
-                </label>
-              )}
-              <select
-                value={target === "__policy__" ? "" : target}
-                onChange={(e) => setTarget(e.target.value)}
+            {/* The customer's own carrier is its own pill above the market grid, not a row
+                in it: handing a claim to a company that did not write the policy is not a
+                handoff, it is a wrong number. */}
+            {options?.policy_insurer && (
+              <Pill
+                selected={target === "__policy__"}
                 disabled={busy}
+                onSelect={() => setTarget("__policy__")}
+                className="wide"
               >
-                <option value="">— บริษัทอื่น —</option>
-                {options?.insurers.map((ins) => (
-                  <option key={ins.code} value={ins.code}>
-                    {ins.name_th}
-                  </option>
-                ))}
-              </select>
+                <b>{options.policy_insurer}</b>
+                <span className="pill-sub">บริษัทที่รับประกันกรมธรรม์ของลูกค้า</span>
+              </Pill>
+            )}
+            <div className="pill-grid" role="radiogroup" aria-label="บริษัทที่จะส่งต่อ">
+              {options?.insurers.map((ins) => (
+                <Pill
+                  key={ins.code}
+                  selected={target === ins.code}
+                  disabled={busy}
+                  onSelect={() => setTarget(ins.code)}
+                >
+                  {ins.name_th}
+                </Pill>
+              ))}
             </div>
 
             <h3>เพราะอะไร</h3>
-            <div className="stack">
+            <div className="pill-grid" role="radiogroup" aria-label="เหตุผลในการส่งต่อ">
               {options?.reasons.map((r) => (
-                <label
+                <Pill
                   key={r.code}
-                  className={r.available ? "choice" : "choice off"}
+                  selected={reason === r.code}
+                  disabled={busy || !r.available}
+                  // Greying is the courtesy, the server is the gate (`D121`) — so the
+                  // reason travels on the control the broker can actually hover.
                   title={
                     r.available
                       ? undefined
                       : "เหตุผลนี้ใช้กับกรมธรรม์ที่ลูกค้าถืออยู่ — สายนี้ไม่มีกรมธรรม์ที่เรามองเห็น"
                   }
+                  onSelect={() => setReason(r.code)}
                 >
-                  <input
-                    type="radio"
-                    name="handoff-reason"
-                    disabled={!r.available || busy}
-                    checked={reason === r.code}
-                    onChange={() => setReason(r.code)}
-                  />
-                  <span>{r.label_th}</span>
-                </label>
+                  {r.label_th}
+                </Pill>
               ))}
             </div>
 

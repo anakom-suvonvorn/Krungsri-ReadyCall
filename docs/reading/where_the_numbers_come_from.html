@@ -1,0 +1,554 @@
+<title>Where the Numbers Come From</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+  :root {
+    --paper:  #F2F1ED;
+    --card:   #FBFAF8;
+    --sunk:   #E7E5DE;
+    --line:   #D6D3CA;
+    --ink:    #1A1C1F;
+    --muted:  #5D6570;
+    --faint:  #868D97;
+    --ours:   #14524F;
+    --ours-sk:#E0EBEA;
+    --hand:   #9C4020;
+    --hand-sk:#F6E5DE;
+    --gold:   #7E6212;
+    --gold-sk:#F3ECD6;
+
+    --display: "Newsreader", Georgia, serif;
+    --body: "IBM Plex Sans", "IBM Plex Sans Thai", "Noto Sans Thai", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper:  #15171A; --card: #1D2024; --sunk: #24272C; --line: #343941;
+      --ink:    #E9EAEC; --muted: #A4ABB5; --faint: #7C838D;
+      --ours:   #63B8B2; --ours-sk: #16302E;
+      --hand:   #E08A66; --hand-sk: #2E1B12;
+      --gold:   #D2B25C; --gold-sk: #2A2412;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper:  #15171A; --card: #1D2024; --sunk: #24272C; --line: #343941;
+    --ink:    #E9EAEC; --muted: #A4ABB5; --faint: #7C838D;
+    --ours:   #63B8B2; --ours-sk: #16302E;
+    --hand:   #E08A66; --hand-sk: #2E1B12;
+    --gold:   #D2B25C; --gold-sk: #2A2412;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--paper); color: var(--ink);
+    font-family: var(--body); font-size: 16.5px; line-height: 1.62;
+    -webkit-font-smoothing: antialiased; margin: 0;
+  }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 26px 110px; }
+  .col { max-width: 66ch; }
+
+  header.top { padding: 62px 0 36px; border-bottom: 2px solid var(--ink); margin-bottom: 46px; }
+  .eyebrow {
+    font-family: var(--mono); font-size: 11.5px; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--muted);
+    display: flex; flex-wrap: wrap; gap: 7px 18px; margin-bottom: 24px;
+  }
+  h1 {
+    font-family: var(--display); font-weight: 600;
+    font-size: clamp(36px, 6vw, 64px); line-height: 1.03; letter-spacing: -.02em;
+    margin: 0 0 20px; text-wrap: balance; max-width: 17ch;
+  }
+  .standfirst { font-size: clamp(17px, 2vw, 20px); line-height: 1.5; color: var(--muted); max-width: 62ch; margin: 0; }
+  .standfirst strong { color: var(--ink); font-weight: 600; }
+
+  section { margin: 0 0 68px; }
+  h2 {
+    font-family: var(--display); font-weight: 600;
+    font-size: clamp(24px, 3vw, 32px); line-height: 1.15; letter-spacing: -.012em;
+    margin: 0 0 6px; text-wrap: balance;
+  }
+  .kicker {
+    font-family: var(--mono); font-size: 11.5px; letter-spacing: .13em;
+    text-transform: uppercase; color: var(--ours); margin: 0 0 12px; font-weight: 500;
+  }
+  h3 { font-weight: 600; font-size: 17.5px; margin: 30px 0 7px; }
+  p { margin: 0 0 15px; }
+  .col > p:last-child { margin-bottom: 0; }
+  ul, ol { margin: 0 0 15px; padding-left: 21px; }
+  li { margin-bottom: 7px; }
+  li::marker { color: var(--faint); }
+  strong { font-weight: 600; }
+  .th { font-family: var(--body); }
+
+  code {
+    font-family: var(--mono); font-size: .86em; background: var(--sunk);
+    padding: 1px 5px; border-radius: 3px;
+  }
+  pre {
+    font-family: var(--mono); font-size: 13.2px; line-height: 1.6;
+    background: var(--sunk); border: 1px solid var(--line); border-radius: 6px;
+    padding: 14px 16px; overflow-x: auto; margin: 16px 0;
+  }
+  pre code { background: none; padding: 0; }
+
+  figure { margin: 28px 0; }
+  .scroller { overflow-x: auto; padding-bottom: 4px; }
+  .scroller svg { display: block; min-width: 720px; width: 100%; height: auto; }
+  figcaption { font-size: 14px; color: var(--muted); margin-top: 11px; max-width: 72ch; }
+
+  .tw { overflow-x: auto; margin: 22px 0; }
+  table { border-collapse: collapse; width: 100%; min-width: 520px; font-size: 15px; }
+  th, td { text-align: left; padding: 10px 14px 10px 0; vertical-align: top; border-bottom: 1px solid var(--line); }
+  th {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .11em; text-transform: uppercase;
+    color: var(--faint); font-weight: 500; border-bottom: 1px solid var(--ink); padding-top: 0;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; padding-right: 0; }
+  th.num { text-align: right; padding-right: 0; }
+
+  .tag {
+    display: inline-block; font-family: var(--mono); font-size: 10.5px;
+    letter-spacing: .06em; text-transform: uppercase; padding: 2px 7px;
+    border-radius: 3px; white-space: nowrap; font-weight: 500;
+  }
+  .t-ours { background: var(--ours-sk); color: var(--ours); }
+  .t-hand { background: var(--hand-sk); color: var(--hand); }
+  .t-part { background: var(--gold-sk); color: var(--gold); }
+
+  .note {
+    border-left: 3px solid var(--gold); background: var(--gold-sk);
+    padding: 15px 18px; border-radius: 0 5px 5px 0; margin: 22px 0;
+  }
+  .note p:last-child { margin-bottom: 0; }
+  .note strong { color: var(--gold); }
+
+  .refuse {
+    border: 1px solid var(--hand); background: var(--hand-sk);
+    padding: 17px 19px; border-radius: 5px; margin: 22px 0;
+  }
+  .refuse h3 { margin: 0 0 7px; color: var(--hand); font-size: 16px; }
+  .refuse p:last-child { margin-bottom: 0; }
+
+  .facts {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 1px; background: var(--line); border: 1px solid var(--line); margin: 26px 0;
+  }
+  .facts > div { background: var(--card); padding: 16px 18px; }
+  .facts dt {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--faint); margin-bottom: 6px;
+  }
+  .facts dd { margin: 0; font-size: 15px; line-height: 1.45; }
+  .facts dd b { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  /* Screen → mechanism → rule. The three-part shape this page repeats, because the
+     question it answers is "what is actually happening behind that button". */
+  .layers { display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); margin: 24px 0; }
+  .layers > div { background: var(--card); padding: 15px 18px; display: grid; grid-template-columns: 120px 1fr; gap: 18px; }
+  .layers dt {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .11em;
+    text-transform: uppercase; color: var(--faint); padding-top: 3px;
+  }
+  .layers dd { margin: 0; }
+  .layers dd p:last-child { margin-bottom: 0; }
+  @media (max-width: 620px) { .layers > div { grid-template-columns: 1fr; gap: 6px; } }
+
+  .contents { border: 1px solid var(--line); background: var(--card); padding: 18px 22px; margin: 0 0 46px; }
+  .contents ol { margin: 0; padding-left: 20px; columns: 2; column-gap: 34px; }
+  .contents li { margin-bottom: 5px; break-inside: avoid; }
+  @media (max-width: 620px) { .contents ol { columns: 1; } }
+
+  footer { border-top: 2px solid var(--ink); padding-top: 20px; font-size: 14px; color: var(--muted); }
+  a { color: var(--ours); text-underline-offset: 2px; }
+  a:focus-visible { outline: 2px solid var(--ours); outline-offset: 3px; }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+
+<div class="wrap">
+
+<header class="top">
+  <div class="eyebrow">
+    <span>Krungsri ReadyCall</span><span>HACK VIDVA</span>
+    <span>8–9 September 2026</span><span>D123 · D124 · D125 · D126 · D127 · D128 · D129</span>
+  </div>
+  <h1>Where the Numbers Come From</h1>
+  <p class="standfirst">Seven changes in two days, and one question runs through all of them: <strong>who is allowed to decide what the customer sees?</strong> This page is the behind-the-scenes — what happens when each new button is pressed, and the rule that decides it.</p>
+</header>
+
+<nav class="contents" aria-label="Contents">
+  <ol>
+    <li><a href="#new-business">Asking about cover you do not have</a></li>
+    <li><a href="#handoff">Handing the call to the insurer</a></li>
+    <li><a href="#catalogue">Why the plan list is not a config file</a></li>
+    <li><a href="#ranking">The ranking, worked out by hand</a></li>
+    <li><a href="#leak">The column that was on the wrong screen</a></li>
+    <li><a href="#panel">The plan panel, and the bug it exposed</a></li>
+    <li><a href="#message">The one thing the broker writes</a></li>
+    <li><a href="#thread">The thread: who composes what</a></li>
+  </ol>
+</nav>
+
+<section id="new-business">
+  <p class="kicker">D123 · the app</p>
+  <h2>Asking about cover you do not have</h2>
+
+  <div class="col">
+    <p>In the app, <strong>Contact us — something else</strong> used to go straight to a list of admin things: change my details, request a document, pay a premium, complain. So a customer could ask about a policy they hold, and about their own paperwork, and could <em>not</em> ask about buying anything.</p>
+
+    <p>The options were not missing. They were sitting in the per-line reason menus, in the <code>general</code> context, reachable from the phone keypad and from nowhere else. <span class="th">ซื้อประกันเดินทาง</span> — buy travel insurance — is the clean example: <code>D122</code> correctly filtered it <em>out</em> of the "about this plan" list, and it had no other home.</p>
+  </div>
+
+  <div class="layers">
+    <div><dt>On screen</dt><dd><p>Tapping <em>something else</em> now asks <strong>which kind of cover</strong> first — motor, health, travel, life, or <span class="th">เรื่องอื่นๆ</span> — and then shows that line's reasons.</p></dd></div>
+    <div><dt>Underneath</dt><dd><p><code>GET /v1/app/contact-lines</code> returns the <em>keypad's own first menu</em>, straight out of <code>menus.yaml</code>. Picking one calls the existing <code>contact-reasons</code> endpoint with <code>context=general</code>.</p></dd></div>
+    <div><dt>The rule</dt><dd><p><strong>That list is deliberately not filtered.</strong> <code>contexts</code> describes <em>reasons</em>; this question is what <em>establishes</em> the context. A customer who has not tapped a policy has told us exactly as little as somebody who has just dialled.</p></dd></div>
+  </div>
+
+  <div class="col">
+    <p>Two details worth knowing. <code>unknown</code> is a row in that list rather than a special case — it is the keypad's own <span class="th">เรื่องอื่นๆ</span>, and following it lands on the admin menu, exactly where this branch used to start. Nothing was taken away; a step was put in front. And no config changed: one read-only endpoint over the menu the app was already reading.</p>
+  </div>
+
+  <div class="note">
+    <p><strong>Found on the way:</strong> <code>motor.advice.quote</code>, <code>health.advice.quote</code> and <code>life.advice.quote</code> exist as intents, with slots and playbooks, and <em>no menu reaches any of them</em> — only travel's does. Recorded as <code>Q36</code>. Splitting "buy" from "compare" would add a seventh option to three phone menus, which is a domain call rather than an engineering one.</p>
+  </div>
+</section>
+
+<section id="handoff">
+  <p class="kicker">D124 · the call</p>
+  <h2>Handing the call to the insurer</h2>
+
+  <div class="col">
+    <p>Since <code>D117</code> a claim call arrives with a banner saying it ends with the insurer, because adjudicating and paying claims is their duty and not a broker's. The banner was the entire feature. The broker read it, said the sentence, pressed <span class="th">วางสาย</span>, and typed whatever they remembered into the wrap-up. <strong>Which company, and why, existed nowhere.</strong></p>
+  </div>
+
+  <div class="layers">
+    <div><dt>On screen</dt><dd><p><span class="th">ส่งต่อ</span> sits beside <span class="th">วางสาย</span>. The dialog offers the carrier that wrote this customer's policy as its own choice above a menu of the market, then a closed list of reasons.</p></dd></div>
+    <div><dt>Underneath</dt><dd><p>The handoff is recorded, then the call is ended — <strong>in that order</strong>. The wrap-up form renders the instant the state changes, so a prefill computed afterwards is one nobody ever sees.</p></dd></div>
+    <div><dt>The rule</dt><dd><p><strong>The record beats the menu.</strong> <code>config/insurers.yaml</code> is a list somebody typed; <code>Policy.insurer</code> is a fact about this customer. The policy's carrier is offerable whether or not it appears in the file.</p></dd></div>
+  </div>
+
+  <div class="col">
+    <p>That last rule is the one to keep. On hackathon day the real data arrives carrying carriers nobody has typed into config — and a broker who cannot hand a claim to the company that actually wrote the policy has no product at all. A startup check demanding the two agree would refuse to boot on exactly the data the whole <code>CoreDataProvider</code> seam exists to absorb.</p>
+
+    <p>The request carries a <em>reason code</em> and either an <em>insurer code</em> or a flag meaning "the carrier on their policy". <strong>There is no field for a company name</strong>, so a client cannot file a handoff to a company that never wrote anything for this customer — and the wrap-up would have recorded that as fact.</p>
+  </div>
+
+  <div class="refuse">
+    <h3>Why it does not use <code>CallState.TRANSFERRED</code></h3>
+    <p>The obvious move, and wrong twice. That state is <strong>terminal</strong>, so a call in it could never reach <code>WRAP_UP</code> — and after-call work on a handoff is real work: what was gathered, what the insurer will need, what the customer was told. Making it non-terminal instead would leave <strong>two states that both mean "the media is over and the agent is filing"</strong>, and every reader of "is this agent in after-call work" would have to check both. That is how <code>B25</code> and <code>B26</code> happened.</p>
+    <p>So a handoff ends the call the ordinary way, and what makes it a handoff is the <em>record</em>: a <code>handed_to_insurer:&lt;code&gt;</code> transition reason, a <code>call.handed_off</code> event, and a disposition the broker confirms. A test asserts <code>TRANSFERRED</code> stays unentered, so nobody tidies it back without reading why.</p>
+  </div>
+
+  <div class="col">
+    <p>Nothing is written until the broker presses save. The handoff prefills the wrap-up as a <em>suggestion</em>; the durable statement is the <code>call_wrapups</code> row they submit, because they are the one who made the promise to the customer.</p>
+  </div>
+</section>
+
+<section id="catalogue">
+  <p class="kicker">D125 · the data</p>
+  <h2>Why the plan list is not a config file</h2>
+
+  <div class="col">
+    <p>Every earlier note said to put the comparison data in <code>config/products.yaml</code>, beside the intents and the menus. The question that stopped it was yours: <em>"shouldn't the comparison data come from the company's database, not a yaml?"</em></p>
+
+    <p>It should, and the reasoning generalises into a test you can apply to anything:</p>
+  </div>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>If the answer changes because…</th><th>Then it is…</th><th>And it lives…</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>an insurer launched or withdrew a plan</td>
+          <td><span class="tag t-hand">data</span> owned by somebody else</td>
+          <td>behind <code>CoreDataProvider</code></td>
+        </tr>
+        <tr>
+          <td>we decided a room rate matters more than an outpatient limit</td>
+          <td><span class="tag t-ours">config</span> — our own knowledge</td>
+          <td><code>config/comparison.yaml</code></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="col">
+    <p>The practical half is sharper than the philosophical one. <strong><code>config/</code> is not reachable by the hackathon-day data swap.</strong> The entire point of the port is that "the data is not what we assumed" becomes a config line and a green contract suite rather than a rewrite — so putting the one thing the comparison reads <em>outside</em> that seam would have meant the feature the pitch leans on hardest was the single feature the swap could not fix.</p>
+
+    <p>What landed: <code>list_products(line=…, active_only=…)</code> on the port and on every adapter, <code>Product</code> with an <code>insurer</code> and typed coverage rows — the <em>same</em> rows a policy uses, read by <em>one</em> parser, because a gap analysis compares what the customer holds against what a plan offers and two shapes for one concept is two mapping bugs.</p>
+  </div>
+
+  <div class="note">
+    <p><strong>There is no premium field, and that is the decision rather than an omission.</strong> Pricing and underwriting are out of scope. A plan says what it <em>covers</em>; what it costs this customer depends on their age, their risk and the insurer's own underwriting. Surface and compare — never quote.</p>
+  </div>
+
+  <div class="col">
+    <p>Writing the contract test found two things that were quietly broken. <strong><code>EMP-GROUP-HEALTH</code> and <code>KS-MOTOR-2ND</code> were on policies and in no catalogue at all</strong>, so looking up the plan behind two of the demo customer's three policies returned nothing — and the only symptom would have been an empty column on somebody's phone. And <strong>the same carrier was spelled two ways</strong>: a policy said <span class="th">อลิอันซ์ อยุธยา</span> while the catalogue said <span class="th">อลิอันซ์ อยุธยา ประกันภัย</span>, and that suffix is what separates the general company from the life company.</p>
+  </div>
+
+  <div class="facts">
+    <div><dt>Plans</dt><dd><b>19</b> across <b>6</b> real carriers</dd></div>
+    <div><dt>Withdrawn on purpose</dt><dd><b>1</b> — so <code>active_only</code> has something to exclude</dd></div>
+    <div><dt>Premium fields</dt><dd><b>none</b> — out of scope</dd></div>
+    <div><dt>Affiliate ranked first</dt><dd><b>no</b>, and a test asserts it</dd></div>
+  </div>
+</section>
+
+<section id="ranking">
+  <p class="kicker">D126 · the logic</p>
+  <h2>The ranking, worked out by hand</h2>
+
+  <div class="col">
+    <p>This is the part worth reading slowly, because it is the answer to <em>"is the AI picking the plan?"</em> — and the answer is no, and that is deliberate.</p>
+
+    <p><strong>Every position in the table is arithmetic.</strong> A model, when one is wired in, rewrites only the <em>reason sentence</em> on top of an ordering it did not choose. A model that ranks is a model that can be argued into putting a plan first; a model that explains an arithmetic ranking cannot.</p>
+
+    <p>Here is the actual sum, on the real demo customer. Their employer group plan caps a hospital room at <strong>฿1,500 a day</strong>, which is the gap the whole health story turns on.</p>
+  </div>
+
+  <div class="tw">
+    <table>
+      <thead>
+        <tr>
+          <th>What is compared</th>
+          <th class="num">They hold</th>
+          <th class="num">Muang Thai Plus</th>
+          <th class="num">Bangkok Elite</th>
+          <th class="num">Weight</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="th">ค่าห้อง</span> per day <span style="color:var(--muted)">higher is better</span></td>
+          <td class="num">1,500</td>
+          <td class="num">5,000<br><span style="color:var(--ours)">+2.00</span></td>
+          <td class="num">6,000<br><span style="color:var(--ours)">+2.00</span></td>
+          <td class="num">×3</td>
+        </tr>
+        <tr>
+          <td><span class="th">วงเงินต่อปี</span> <span style="color:var(--muted)">higher is better</span></td>
+          <td class="num">200,000</td>
+          <td class="num">5,000,000<br><span style="color:var(--ours)">+2.00</span></td>
+          <td class="num">10,000,000<br><span style="color:var(--ours)">+2.00</span></td>
+          <td class="num">×3</td>
+        </tr>
+        <tr>
+          <td><span class="th">ผู้ป่วยนอก</span> per visit <span style="color:var(--muted)">higher is better</span></td>
+          <td class="num">800</td>
+          <td class="num">2,000<br><span style="color:var(--ours)">+1.50</span></td>
+          <td class="num">2,500<br><span style="color:var(--ours)">+2.00</span></td>
+          <td class="num">×1</td>
+        </tr>
+        <tr>
+          <td><span class="th">ค่าใช้จ่ายส่วนแรก</span> <span style="color:var(--muted)">lower is better</span></td>
+          <td class="num">0</td>
+          <td class="num">0<br><span style="color:var(--faint)">same</span></td>
+          <td class="num">30,000<br><span style="color:var(--hand)">−1.00</span></td>
+          <td class="num">×2</td>
+        </tr>
+        <tr>
+          <td><span class="th">ส่วนร่วมจ่าย</span> <span style="color:var(--muted)">lower is better</span></td>
+          <td class="num">—</td>
+          <td class="num">0%<br><span style="color:var(--faint)">not stated</span></td>
+          <td class="num">10%<br><span style="color:var(--faint)">not stated</span></td>
+          <td class="num">×2</td>
+        </tr>
+        <tr>
+          <td><strong>Score</strong></td>
+          <td class="num">—</td>
+          <td class="num"><strong>13.50</strong><br><span class="tag t-ours">ranked 1st</span></td>
+          <td class="num"><strong>12.00</strong><br><span class="tag t-part">ranked 3rd</span></td>
+          <td class="num"></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="col">
+    <p><strong>Read the Bangkok Elite column.</strong> It has the best figure in three of the five rows and it still ranks below Muang Thai, because a ฿30,000 excess costs it −1.00 at weight 2. That is the ranking doing real work rather than sorting by the biggest number — and it is the moment worth showing a judge.</p>
+
+    <p>Four arithmetic rules make that honest, and each one was a specific way to lie to somebody choosing insurance:</p>
+
+    <ol>
+      <li><strong>Absent is not zero.</strong> A plan silent on outpatient cover and a plan that excludes it are different products. A missing figure moves the score in neither direction, renders as "—", and can never win its row. That is why the copay row above decides nothing: the customer's own plan does not state one, so there is nothing to compare against.</li>
+      <li><strong>Improvement is clipped</strong> to +2.00 / −1.00. Bangkok Elite's annual limit is fifty times what they hold; without the clip that one number would decide the table, and a comparison whose order is set by a single outlier is a sales script with a table around it.</li>
+      <li><strong>Below 5%, "better" is not reported as better.</strong> A 2% higher room rate is not a reason to change carrier. The figure still renders — the customer sees both numbers — it is simply not called an improvement.</li>
+      <li><strong>The plan they already hold is never a candidate.</strong> It is the column everything is measured against. Offering it back is a table recommending the status quo it was asked to challenge.</li>
+    </ol>
+  </div>
+
+  <div class="note">
+    <p><strong>And a fifth, which only appeared once the output was looked at.</strong> With no policy to improve on, every weighted improvement is exactly zero — which is not a tie, it is <em>no ranking at all</em>, and the order then falls back to whatever the catalogue happened to be in. That is precisely how an affiliated carrier ends up silently first. New business ranks candidates against <em>each other</em> instead, one attribute at a time.</p>
+  </div>
+
+  <div class="col">
+    <p>The reason sentence names what is worse as well as what is better, for the same reason the red chips on screen are exactly as large as the green ones: a panel that shows only the upside is a sales script.</p>
+    <pre><code>กรุงเทพ เฮลท์ อีลิท จากกรุงเทพประกันภัย — ค่าห้องและค่าอาหารสูงกว่า
+แผนปัจจุบัน (1,500 บาทต่อวัน → 6,000 บาทต่อวัน) แต่ค่าใช้จ่ายส่วนแรก
+0 บาทต่อปี → 30,000 บาทต่อปี</code></pre>
+  </div>
+</section>
+
+<section id="leak">
+  <p class="kicker">D126 · the part that nearly shipped wrong</p>
+  <h2>The column that was on the wrong screen</h2>
+
+  <div class="col">
+    <p>The table's first column is headed <span class="th">แผนปัจจุบันของคุณ</span> and carries the customer's real coverage figures. The tool that pushes it is declared <code>personal: false</code> — so the first time it was pushed, all of that landed on a screen that had only <em>tapped a link</em>. Tapping a link proves somebody is holding that phone. It does not prove who they are.</p>
+
+    <p>Both obvious fixes are wrong. Marking the tool personal walls off the one part of this journey with no privacy cost at all — comparing what the market offers is true for anybody, and gating it is the ordinary and wrong design. Leaving it is a stranger's cover on whoever holds the handset.</p>
+  </div>
+
+  <figure>
+    <div class="scroller">
+      <svg viewBox="0 0 880 250" role="img" aria-label="One push, two outcomes. A guest screen receives the market comparison with the customer's own column removed and a line explaining why. A signed-in screen receives the same table with the customer's own plan as the first column.">
+        <text x="0" y="14" font-family="IBM Plex Mono, monospace" font-size="10.5" letter-spacing="1.3" fill="var(--faint)">ONE TOOL · ONE BUTTON · THE COLUMN IS WHAT MOVES</text>
+
+        <rect x="330" y="34" width="220" height="46" rx="6" fill="var(--card)" stroke="var(--ink)" stroke-width="1.5"/>
+        <text x="440" y="54" font-family="IBM Plex Sans, sans-serif" font-size="13" font-weight="600" fill="var(--ink)" text-anchor="middle">compare.plans</text>
+        <text x="440" y="70" font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="var(--muted)" text-anchor="middle">personal: false — and it stays that way</text>
+
+        <path d="M380 80 L230 80 L230 118" stroke="var(--hand)" stroke-width="1.5" fill="none"/>
+        <polygon points="230,124 226,114 234,114" fill="var(--hand)"/>
+        <path d="M500 80 L650 80 L650 118" stroke="var(--ours)" stroke-width="1.5" fill="none"/>
+        <polygon points="650,124 646,114 654,114" fill="var(--ours)"/>
+
+        <rect x="60" y="126" width="340" height="104" rx="6" fill="var(--hand-sk)" stroke="var(--hand)"/>
+        <text x="80" y="150" font-family="IBM Plex Sans, sans-serif" font-size="13" font-weight="600" fill="var(--hand)">GUEST — tapped a link</text>
+        <text x="80" y="174" font-family="IBM Plex Sans, sans-serif" font-size="12.5" fill="var(--ink)">the market comparison, in full</text>
+        <text x="80" y="194" font-family="IBM Plex Sans, sans-serif" font-size="12.5" fill="var(--ink)">their own column: removed</text>
+        <text x="80" y="216" font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="var(--muted)">and the page says WHY it is missing</text>
+
+        <rect x="480" y="126" width="340" height="104" rx="6" fill="var(--ours-sk)" stroke="var(--ours)"/>
+        <text x="500" y="150" font-family="IBM Plex Sans, sans-serif" font-size="13" font-weight="600" fill="var(--ours)">SIGNED IN — proved who they are</text>
+        <text x="500" y="174" font-family="IBM Plex Sans, sans-serif" font-size="12.5" fill="var(--ink)">the same market comparison</text>
+        <text x="500" y="194" font-family="IBM Plex Sans, sans-serif" font-size="12.5" fill="var(--ink)">plus แผนปัจจุบันของคุณ as column 1</text>
+        <text x="500" y="216" font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="var(--muted)">the gap, made visible</text>
+      </svg>
+    </div>
+    <figcaption>The tool stays guest-safe and the <em>column</em> moves. Same button, same push — the server reads the screen's tier and composes accordingly, and the flag never comes from the request.</figcaption>
+  </figure>
+
+  <div class="col">
+    <p>An absence explains nothing, so the customer's page says <span class="th">เข้าสู่ระบบเพื่อเทียบกับแผนปัจจุบันของคุณเอง</span> where the column would be — otherwise a guest concludes we do not hold their policy.</p>
+  </div>
+</section>
+
+<section id="panel">
+  <p class="kicker">D127 · the screen</p>
+  <h2>The plan panel, and the bug it exposed</h2>
+
+  <div class="col">
+    <p>Your note was that the comparison "is just there on the side on the right, put into there with not much thought at all" — which was fair. It was a five-column table living in a 340-pixel lane, permanently expanded, needing its own scrollbar to exist. The feature had arrived before a place for it did.</p>
+
+    <p>Your framing named the missing thing: a broker does not want <em>"the comparison"</em>, they want <strong>what the market offers</strong>. Comparison is one answer to that. Reading a single plan's figures out loud is the same question at a different zoom.</p>
+  </div>
+
+  <div class="layers">
+    <div><dt>On screen</dt><dd><p>A compact <span class="th">ข้อมูลแผนประกัน</span> panel showing the current best match in one line, opening a dialog with a line selector and two tabs: <span class="th">เปรียบเทียบ</span> and <span class="th">แผนทั้งหมด</span>.</p></dd></div>
+    <div><dt>Underneath</dt><dd><p><code>GET …/plans?line=</code> returns the catalogue for a line with every figure the ranking uses. Pushing one plan sends a <em>product code</em>; the server reads what it covers.</p></dd></div>
+    <div><dt>The rule</dt><dd><p>The rail is where you see there is something to look up; the dialog is where you look it up. The preview line keeps the useful half visible at zero width cost.</p></dd></div>
+  </div>
+
+  <div class="refuse">
+    <h3>The line selector broke something the moment it existed</h3>
+    <p>Switching the dialog to <strong>motor</strong> during a health call announced <span class="th">ลูกค้ายังไม่มีความคุ้มครองในหมวดนี้</span> — to a customer holding a motor policy — and then ranked the motor catalogue as <strong>new business</strong>. Not just a missing column: a different question, answered silently.</p>
+    <p>The baseline was <code>relevant_policy</code>, the policy <em>this call</em> is about. Right for the policy panel and for a handoff; wrong the instant the broker asks about another line — which is the entire point of a broker's portfolio. It now reads the whole portfolio and takes the policy on the line being asked about. Motor finds <code>MT-2024-008830</code>; a line they hold nothing on still compares, as new business.</p>
+  </div>
+
+  <div class="col">
+    <p>Worth noticing that this is <code>B30</code>'s lesson again — <em>a fixture with one of something tests nothing about choosing</em> — and that it only surfaced because <code>D117</code> gave the demo customer cover from three carriers across two lines in the first place.</p>
+  </div>
+</section>
+
+<section id="message">
+  <p class="kicker">D128 · your idea</p>
+  <h2>The one thing the broker writes</h2>
+
+  <div class="col">
+    <p>Every other control on the rail sends something the <em>system</em> composed from a record: a comparison, a prefilled form, a checklist. Your idea was the same box pointed the other way — the broker types, and the customer reads.</p>
+
+    <p>It is useful for exactly the thing the phone is bad at: a hospital name, a spelling, a reference number, three steps to follow. Line breaks survive, because an address has them.</p>
+  </div>
+
+  <div class="refuse">
+    <h3>This is the one tool where the tier gate cannot help</h3>
+    <p><code>personal</code> describes what a tool is <em>for</em>. This one is for whatever the broker needs to say — the system cannot classify a sentence it did not write. Marking it personal would wall off the ordinary case (a hospital's name is true for anybody) and would not stop the broker typing a policy number anyway.</p>
+    <p>So the composer puts the screen's tier <strong>in front of them while they type</strong>: <span class="th">ลูกค้ายังไม่ได้เข้าสู่ระบบ — เลี่ยงข้อมูลส่วนบุคคล</span>, or green once they have signed in. Give the person the fact and let them decide, rather than fake a refusal the system is not equipped to make. They are already choosing what to say out loud to whoever holds that phone; this is the same judgement with the screen's status visible for once.</p>
+  </div>
+
+  <div class="col">
+    <p>The customer is told a person wrote it — <span class="th">ข้อความจากเจ้าหน้าที่</span> sits above the text. Everything else on that screen is the system quoting a record, and a typed sentence rendered identically would borrow an authority the writer did not claim.</p>
+
+    <p>It also made an existing hazard real: <code>/sim</code> was dropping <code>text_th</code> into <code>innerHTML</code> unescaped. Harmless while every payload was server-composed; a script injection with a keyboard attached the moment a human types into the box. Both customer surfaces escape now.</p>
+  </div>
+
+  <div class="note">
+    <p><strong>Not built: images and files.</strong> You asked, and it is a scope call rather than a shrug. Agent-to-customer files need blob storage on the assist path, a size and type policy, and a retention rule — the same list <code>Q34</code> already has open. The text half is the part that removes the failure being solved, and it needs none of that.</p>
+  </div>
+</section>
+
+<section id="thread">
+  <p class="kicker">The thread</p>
+  <h2>Who is allowed to compose what</h2>
+
+  <div class="col">
+    <p>Six changes, one question. Everything that reaches the customer's screen has an author, and the system is strict about which author is allowed for which kind of content.</p>
+  </div>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>What reaches the customer</th><th>Who composes it</th><th>Because</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>A coverage figure, in a table or a plan detail</td>
+          <td><span class="tag t-ours">the server</span>, from the record</td>
+          <td>A figure a browser assembled is a figure nobody can trace to a field</td>
+        </tr>
+        <tr>
+          <td>The ordering of a comparison</td>
+          <td><span class="tag t-ours">the server</span>, arithmetic from config weights</td>
+          <td>A ranking that can be argued with is a ranking that can be bought</td>
+        </tr>
+        <tr>
+          <td>The reason sentence beside each plan</td>
+          <td><span class="tag t-part">a model, eventually</span> — generated for now</td>
+          <td>It may explain an ordering; it may never choose one</td>
+        </tr>
+        <tr>
+          <td>Which carrier a call is handed to</td>
+          <td><span class="tag t-ours">the server</span>, from a code the client picked</td>
+          <td>A client that could send a company <em>name</em> could invent one</td>
+        </tr>
+        <tr>
+          <td>A sentence the broker types</td>
+          <td><span class="tag t-hand">the broker</span>, and it says so on screen</td>
+          <td>The one case the system cannot classify, so the human decides — with the tier in front of them</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="col">
+    <p>The last row is the exception, and it is the one that proves the rule is about <em>capability</em> rather than trust: everywhere the system knows enough to compose the content, it does, and the client only ever names <em>which</em>. Where it does not know — a human's own sentence — it says who wrote it and shows the writer what kind of screen they are writing to.</p>
+  </div>
+
+  <div class="facts">
+    <div><dt>Tests</dt><dd><b>891</b> passing, 12 skipped</dd></div>
+    <div><dt>Decisions</dt><dd><b>D123</b> – <b>D129</b> this session</dd></div>
+    <div><dt>New config</dt><dd><code>insurers.yaml</code>, <code>comparison.yaml</code></dd></div>
+    <div><dt>New call states</dt><dd><b>none</b> — deliberately</dd></div>
+  </div>
+</section>
+
+<footer>
+  <p>Written 9 September 2026, covering the 8–9 September work. Decisions <code>D123</code>–<code>D129</code>; the full reasoning for each is in <code>docs/DECISIONS.md</code>. Every number on this page came from a running server or the test suite, not from the code being read.</p>
+</footer>
+
+</div>

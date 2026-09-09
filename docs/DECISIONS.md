@@ -5085,3 +5085,133 @@ five rows* — because of its ฿30,000 deductible, shown as a red chip beside t
 and **โตเกียวมารีน** third. Pushing to a guest screen produced a four-column market table
 with `held_hidden: true`; signing in and pushing again added **แผนปัจจุบันของคุณ** as
 column 1. 14 unit tests on the rules, 4 over HTTP.
+
+## D127. The comparison becomes one answer inside a plan-information panel
+_Taken 2026-09-09, from the user's reaction to `D126` on screen: *"it's just there on the
+side on the right, and is just put into there with not much thought at all."* They are
+right, and the fix is not layout._
+
+- **Problem.** `D126` shipped the comparison as a permanently expanded block in the
+  workstation's right column: a ranked list, a five-column table and a push button, in a
+  340-pixel lane. The table needed its own horizontal scrollbar to exist there. The
+  feature arrived before a place for it did.
+
+  The user's own framing named the missing thing: *"what if we do an info panel, from which
+  there'll be multiple stuff about the company's plans/info, and one of the things in there
+  will be to create the plan comparison."*
+
+- **They are describing the actual question.** A broker on a call does not want *"the
+  comparison"* — they want **what the market offers**. Comparing against what the customer
+  holds is one answer at one zoom level; reading a single plan's figures out loud, or
+  checking what a carrier covers before saying anything, are the same question at another.
+  Building the narrow answer as the whole surface is what made it look bolted on, because
+  it was.
+
+- **Decision.** A compact **ข้อมูลแผนประกัน** panel on the rail with a one-line preview of
+  the current best match, opening a dialog with a shared line selector and two tabs:
+  **เปรียบเทียบ** (`D126`'s ranking, unchanged) and **แผนทั้งหมด** (the catalogue, plan by
+  plan, with every figure the ranking uses). Either can be pushed to the customer.
+
+`GET /v1/agent/calls/{id}/plans` is the new read. `held` marks the plan behind the
+customer's own policy — **a flag, not extra detail**: the policy panel already discloses
+that record at the level assurance allows, and this must not become a second, ungated route
+to the same fact.
+
+`info.plan_detail` pushes one plan, and it obeys `D126`'s rule exactly: **the client names
+WHICH plan, the server says what it covers.** A test pushes fake bullets alongside the
+product code and asserts they are discarded.
+
+### ⚠️ The bug the line selector exposed the moment it existed
+
+Switching the dialog to **motor** on a health call announced *"ลูกค้ายังไม่มีความคุ้มครอง
+ในหมวดนี้"* — to a customer holding a motor policy — and then ranked the motor catalogue as
+**new business**.
+
+The baseline was `relevant_policy`: the policy *this call* is about. That is right for the
+policy panel and for a handoff, and wrong the instant the broker asks about another line —
+which is the entire point of a broker's portfolio. `D117` gave the demo customer cover from
+three carriers across two lines precisely so this case exists, and `B30`'s lesson applies
+again in a new place: **a fixture with one of something tests nothing about choosing.**
+
+It now reads `active_policies` and takes the policy **on the line being asked about**,
+preferring the call's own when it matches so the default view still names the policy the
+rest of the screen is about. Two tests: one that motor finds `MT-2024-008830`, and one that
+a line they hold nothing on is still comparable — as new business, which is a different
+question with a different answer and must not be reached by accident.
+
+### Why this is not just a bigger panel
+
+The dialog is where a broker *looks something up*; the rail is where they see that there is
+something to look up. Putting the preview line on the rail (*"ตรงที่สุดตอนนี้: …"*) keeps
+the useful half visible at all times and costs no width, which the permanently expanded
+version could not do at any size.
+
+## D128. One tool sends what the broker typed, and the customer is told a person wrote it
+_Taken 2026-09-09 from the user's idea: `form.free_text` (`D122`) lets the customer type to
+us; this is the same box pointed the other way._
+
+- **Problem.** Every control on the tool rail sends something the **system** composed from
+  a record — a comparison, a prefilled form, a document checklist. There was no way for the
+  broker to put *their own sentence* on the customer's screen: a hospital name, a spelling,
+  a reference number, three steps to follow. All of it currently goes down the phone line
+  and has to be caught by ear, which is the exact failure `D120` was built to remove.
+
+- **Decision.** `note.agent_message` — a composer in the rail rather than a button. The
+  broker types or pastes, presses send, and it appears on the customer's screen. Line
+  breaks survive, because an address has them and losing them is the reason not to bother.
+
+### ⚠️ The tier gate cannot help here, and saying so is the design
+
+`D121` established that `personal` describes **what a tool is FOR**. This tool is for
+whatever the broker needs to say, so the system cannot classify its content — it did not
+write it. Marking it `personal: true` would wall off the ordinary case (a hospital's name
+is true for anybody) and would not stop the broker typing a policy number anyway.
+
+So the composer puts the **screen's current tier in front of them while they type**:
+*"ลูกค้ายังไม่ได้เข้าสู่ระบบ — เลี่ยงข้อมูลส่วนบุคคล"*, or green once they have signed in.
+That is `D71`'s pattern — give the person the fact and let them decide — rather than a
+refusal the system is not equipped to make. The broker is already choosing what to say out
+loud to whoever is holding that phone; this is the same judgement, with the screen's status
+visible for once.
+
+### The customer is told a person wrote it
+
+`from_agent: true` renders **ข้อความจากเจ้าหน้าที่** above the text. Every other panel on
+that screen is the system quoting a record, and a typed sentence rendered identically would
+borrow an authority the person who wrote it did not claim.
+
+### And it made an existing hazard real
+
+`/sim` interpolated `payload.text_th` into `innerHTML` **unescaped**. That was latent while
+every payload was server-composed; the moment a human types into the box it is a script
+injection with a keyboard attached. Both customer surfaces escape now, and `/sim` gained the
+comparison table it had been silently degrading to a bare title (`D122` made the app a
+paired screen; its renderer never caught up).
+
+### Not built: images and files
+
+The user asked *"maybe even images/files upload and send too?"*. Deliberately not, and it is
+a scope call rather than a shrug: agent→customer files need blob storage on the assist path,
+a size and type policy, and a retention rule (`D14`) — the same list `Q34` already has open
+for form answers. **The text half is the part that removes the failure being solved**, and
+it needs none of that.
+
+## D129. One-of-many renders as pills, not as radio rows
+_Taken 2026-09-09 from the user's note on the transfer dialog: the bullets show, they do not
+line up, and there is a lot of empty space._
+
+- **Problem.** `D124`'s dialog used native `<input type="radio">` rows. Three things go
+  wrong at once with Thai labels: the marker sits on the first line's baseline while the
+  label wraps beneath it, so nothing lines up; each option owns a full-width row, so six
+  short reasons make a tall column of mostly nothing; and twelve carrier names became a
+  scroll.
+
+- **Decision.** A `Pill` control — `<button role="radio" aria-checked>` inside a
+  `radiogroup` — wrapping into whatever width it has. **The semantics stay in the markup**,
+  so dropping the input element does not drop one-of-many for anybody using a screen
+  reader, and selection moves three things at once (border, fill, weight) rather than
+  relying on colour alone, because it has to survive a glance across twelve names.
+
+The customer's own carrier keeps its own full-width pill above the grid: it is a different
+**kind** of answer, not one more row in the same list (`D124`). The same control is reused
+for the plan dialog's line selector (`D127`), which is the same question shape.

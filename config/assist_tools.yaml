@@ -87,6 +87,37 @@ tools:
     kind: info
     personal: false
 
+  info.plan_detail:
+    group: compare
+    label_th: "รายละเอียดแผนเดียว"
+    # Picked in the plan browser rather than pushed blind, so the payload names WHICH plan
+    # and the server reads its figures from the catalogue (`D127`). Guest-safe for the
+    # same reason the comparison is: what a plan covers is true for anybody.
+    hint_th: "ส่งความคุ้มครองของแผนที่เลือกให้ลูกค้าอ่าน"
+    kind: info
+    personal: false
+
+  # --- what the broker types, rather than what the system knows ------------------------
+  #
+  # `D128`. Every other tool on this rail sends something the SYSTEM composed from a
+  # record: a comparison, a prefilled form, a checklist. This one sends the broker's own
+  # sentence — the thing they are already saying out loud, written down so the customer
+  # can read a hospital name, a spelling, a reference number or a set of steps instead of
+  # trying to catch it over a bad line. It is `form.free_text` pointed the other way.
+  #
+  # ⚠️ It is the one tool whose CONTENT the system cannot classify, so the tier gate
+  # cannot help: `personal` describes what a tool is FOR (`D121`), and this one is for
+  # whatever the broker needs to say. The composer therefore shows the screen's current
+  # tier in front of the broker while they type, which is the fact they need to decide —
+  # `D71`'s pattern rather than a refusal the system is not equipped to make.
+
+  note.agent_message:
+    group: forms
+    label_th: "ส่งข้อความให้ลูกค้าอ่าน"
+    hint_th: "พิมพ์หรือวางข้อความ แล้วส่งขึ้นหน้าจอลูกค้า - เจ้าหน้าที่เป็นผู้เขียนเอง"
+    kind: info
+    personal: false
+
   # --- forms: the group where `D121`'s correction actually shows -----------------------
 
   form.quote_request:

@@ -245,6 +245,30 @@ export type AssistTool = {
   stub: boolean;
 };
 
+export type PlanCoverage = {
+  kind: string;
+  label_th: string;
+  amount: number | null;
+  unit: string | null;
+  note: string | null;
+};
+
+/** The market, per line (`D127`). `held` marks the plan behind the customer's own policy
+ *  — a flag, not extra detail: the policy panel already discloses that record at the level
+ *  it is allowed to, and this must not become a second ungated route to the same fact. */
+export type PlanCatalogue = {
+  line: string | null;
+  lines: { line: string; label_th: string }[];
+  plans: {
+    product_code: string;
+    name_th: string;
+    insurer: string | null;
+    short_desc: string | null;
+    held: boolean;
+    coverages: PlanCoverage[];
+  }[];
+};
+
 export type ComparisonTable = {
   columns_th: string[];
   rows: { cells: string[]; best_index?: number }[];
@@ -455,6 +479,14 @@ export const api = {
     call<ComparisonView>(
       "GET",
       `/v1/agent/calls/${callId}/comparison` + (line ? `?line=${encodeURIComponent(line)}` : ""),
+    ),
+
+  /** The plan catalogue for a line (`D127`). Read-only, and the figures are the
+   *  server's — the client picks WHICH plan and never what it covers. */
+  plans: (callId: string, line?: string) =>
+    call<PlanCatalogue>(
+      "GET",
+      `/v1/agent/calls/${callId}/plans` + (line ? `?line=${encodeURIComponent(line)}` : ""),
     ),
 
   /** DEMO: a caller arrives. Stands in for telephony until P5. */

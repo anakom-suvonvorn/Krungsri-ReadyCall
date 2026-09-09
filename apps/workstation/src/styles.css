@@ -868,29 +868,70 @@ button.tool:disabled {
 
 /* A radio row that is a proper click target: the label wraps the input, so the text is
    part of the control rather than something beside it. */
-.choice {
+/* One-of-many, as pills rather than radio rows.
+ *
+ * The native radio drew its own bullet, and a bullet beside a variable-length Thai label
+ * never lines up — the marker sits on the first line's baseline while the label wraps
+ * under it. Each option also owned a full-width row, so six short reasons produced a tall
+ * column of mostly empty space. These wrap into the width they have and are their own
+ * click target.
+ *
+ * The SEMANTICS are kept in the markup (`role="radio"` + `aria-checked` inside a
+ * `radiogroup`), so losing the input element does not lose one-of-many for anybody
+ * reading this with a screen reader. */
+.pill-grid {
   display: flex;
-  gap: 10px;
-  align-items: baseline;
-  padding: 9px 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  cursor: pointer;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
 }
 
-.choice:hover {
+button.pill-opt {
+  width: auto;
+  text-align: left;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  line-height: 1.3;
+}
+
+button.pill-opt:hover:not(:disabled) {
   border-color: var(--accent);
+}
+
+/* Selected has to survive a glance across twelve carrier names, so it moves three things
+   at once — border, fill and weight — rather than relying on colour alone. */
+button.pill-opt.on {
+  border-color: var(--accent);
+  background: rgba(255, 199, 44, 0.16);
+  color: var(--ink);
+  font-weight: 650;
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+/* The customer's own carrier: full width, above the market grid, because it is a
+   different KIND of answer rather than one more row in the same list. */
+button.pill-opt.wide {
+  width: 100%;
+  border-radius: var(--radius);
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pill-sub {
+  font-size: 11px;
+  color: var(--ink-dim);
+  font-weight: 400;
 }
 
 /* Greying is the courtesy; the server is the gate (`D121`). The cursor and the title
    attribute together are what stop this reading as a broken control. */
-.choice.off {
-  opacity: 0.45;
+button.pill-opt:disabled {
+  opacity: 0.4;
   cursor: not-allowed;
-}
-
-.choice.off:hover {
-  border-color: var(--line);
 }
 
 .field {
@@ -1028,4 +1069,105 @@ button.small {
   width: auto;
   padding: 4px 10px;
   font-size: 12px;
+}
+
+/* --- the plan information dialog (`D127`) -------------------------------------------- */
+
+/* Wider than the transfer dialog and narrower than the tool box: a comparison table needs
+   room, and this is one table rather than four rows of tools. */
+.plans-dialog {
+  width: min(1100px, 95vw);
+  max-height: 88vh;
+  overflow-y: auto;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 20px 24px;
+  box-shadow: var(--shadow);
+}
+
+.plans-dialog h3 {
+  margin: 12px 0 4px;
+  font-size: 15px;
+}
+
+/* Browse: the list on the left stays put while the detail on the right changes, so the
+   broker never loses their place in a twelve-plan catalogue mid-sentence. */
+.plan-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 320px) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+  margin-top: 12px;
+}
+
+@media (max-width: 900px) {
+  .plan-cols {
+    grid-template-columns: 1fr;
+  }
+}
+
+.plan-list {
+  display: grid;
+  gap: 6px;
+  max-height: 52vh;
+  overflow-y: auto;
+}
+
+button.plan-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+  padding: 9px 12px;
+  line-height: 1.35;
+}
+
+button.plan-row.on {
+  border-color: var(--accent);
+  background: rgba(255, 199, 44, 0.1);
+}
+
+.plan-detail .kv {
+  margin-top: 10px;
+}
+
+.plan-detail .kv div {
+  justify-content: space-between;
+}
+
+.plan-detail .kv dd {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.plan-detail button.primary {
+  margin-top: 14px;
+}
+
+/* --- the broker's own message (`D128`) ----------------------------------------------- */
+
+/* A tool that is a small form rather than a button, so it needs the room a button does
+   not — and it sits in the same strip, which is why the width is pinned. */
+.tool.composer {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  flex: 0 0 280px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  background: var(--panel-2);
+}
+
+.tool.composer textarea {
+  width: 100%;
+  resize: vertical;
+  font: inherit;
+}
+
+.tool.composer .badge {
+  align-self: flex-start;
 }

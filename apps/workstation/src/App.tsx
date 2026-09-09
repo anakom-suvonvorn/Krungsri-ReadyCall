@@ -19,13 +19,19 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, api } from "./api";
-import type { AssistCatalogue, AssistState, ComparisonView, HandoffOptions } from "./api";
+import type {
+  AssistCatalogue,
+  AssistState,
+  ComparisonView,
+  HandoffOptions,
+  PlanCatalogue,
+} from "./api";
 import type { Capture, Snapshot, TranscriptTurn } from "./api";
 import { useSocket } from "./useSocket";
 import type { SocketMessage } from "./useSocket";
 import { AssistPanel } from "./assist";
 import { TransferButton, TransferDialog } from "./transfer";
-import { ComparisonPanel } from "./comparison";
+import { PlansDialog, PlansPanel } from "./plans";
 import {
   BacklogPanel,
   BriefPanel,
@@ -65,6 +71,11 @@ export default function App() {
   const [transferOpen, setTransferOpen] = useState(false);
   const [handoffOptions, setHandoffOptions] = useState<HandoffOptions | null>(null);
   const [comparison, setComparison] = useState<ComparisonView | null>(null);
+  const [catalogue, setCatalogue] = useState<PlanCatalogue | null>(null);
+  const [plansOpen, setPlansOpen] = useState(false);
+  /** Which line the dialog is looking at. `null` means "whatever this call is about",
+   *  which is the server's own default — the client does not guess it. */
+  const [line, setLine] = useState<string | null>(null);
 
   useEffect(() => {
     if (toast === null) return;
@@ -158,19 +169,29 @@ export default function App() {
   const refreshComparison = useCallback(async () => {
     if (!activeCallId) {
       setComparison(null);
+      setCatalogue(null);
       return;
     }
     try {
-      setComparison(await api.comparison(activeCallId));
+      setComparison(await api.comparison(activeCallId, line ?? undefined));
     } catch {
       // A panel that cannot load must never break the call screen (`D12`'s shape).
       setComparison(null);
     }
-  }, [activeCallId]);
+    try {
+      setCatalogue(await api.plans(activeCallId, line ?? undefined));
+    } catch {
+      setCatalogue(null);
+    }
+  }, [activeCallId, line]);
 
   useEffect(() => {
     void refreshComparison();
   }, [refreshComparison]);
+
+  // A new call is a different customer, so the line the LAST call was about must not
+  // carry over — a motor catalogue on a health call is a table about nobody.
+  useEffect(() => setLine(null), [activeCallId]);
 
   useEffect(() => {
     if (!transferOpen || !activeCallId) return;
@@ -458,20 +479,13 @@ export default function App() {
             }
           />
           {/* The broker's mandate, above the tool rail because it is the thing they are
-              on the call to do — and because the rail's own "push a comparison" button
-              sends what this panel is showing (`D126`). */}
-          <ComparisonPanel
-            view={callId ? comparison : null}
-            busy={busy}
-            paired={Boolean(assist?.paired)}
-            onRefresh={() => void refreshComparison()}
-            onPush={() =>
-              callId &&
-              run(() => api.assistPush(callId, "compare.plans")).then(() => {
-                void refreshAssist();
-                setToast("ส่งตารางเปรียบเทียบไปที่หน้าจอลูกค้าแล้ว");
-              })
-            }
+              on the call to do. Compact here and detailed in a dialog (`D127`): the
+              comparison table needs more width than a 340px column has, and it is one
+              answer to "what does the market offer" rather than the whole question. */}
+          <PlansPanel
+            callId={callId}
+            comparison={comparison}
+            onOpen={() => setPlansOpen(true)}
           />
 
           {/* Under the keypad, because it is the same idea one step further out: a
@@ -485,9 +499,11 @@ export default function App() {
             onMintLink={() =>
               callId && run(() => api.assistLink(callId)).then(() => void refreshAssist())
             }
-            onPush={(toolId) =>
+            onPush={(toolId, payload) =>
               callId &&
-              run(() => api.assistPush(callId, toolId)).then(() => void refreshAssist())
+              run(() => api.assistPush(callId, toolId, payload ?? {})).then(() =>
+                void refreshAssist(),
+              )
             }
             onRefresh={() => void refreshAssist()}
           />
@@ -549,6 +565,34 @@ export default function App() {
           <span className="faint">{wrapping ? "" : "ไม่มีสายที่กำลังสนทนา"}</span>
         )}
       </footer>
+
+      <PlansDialog
+        open={plansOpen && Boolean(callId)}
+        comparison={comparison}
+        catalogue={catalogue}
+        busy={busy}
+        paired={Boolean(assist?.paired)}
+        onClose={() => setPlansOpen(false)}
+        onPickLine={setLine}
+        onPushComparison={() =>
+          callId &&
+          run(() => api.assistPush(callId, "compare.plans", { line: line ?? undefined })).then(
+            () => {
+              void refreshAssist();
+              setToast("ส่งตารางเปรียบเทียบไปที่หน้าจอลูกค้าแล้ว");
+            },
+          )
+        }
+        onPushPlan={(productCode) =>
+          callId &&
+          run(() =>
+            api.assistPush(callId, "info.plan_detail", { product_code: productCode }),
+          ).then(() => {
+            void refreshAssist();
+            setToast("ส่งรายละเอียดแผนไปที่หน้าจอลูกค้าแล้ว");
+          })
+        }
+      />
 
       <TransferDialog
         open={transferOpen && Boolean(callId)}

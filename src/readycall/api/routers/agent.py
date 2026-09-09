@@ -306,18 +306,42 @@ async def end_call(
 # --- compare & best-fit (D126) -------------------------------------------------------------
 
 
-async def _relevant_policy_for(container: Any, call_session_id: str) -> Any:
-    """The policy this call is about, from the FROZEN snapshot.
+async def _relevant_policy_for(
+    container: Any, call_session_id: str, line: str | None = None
+) -> Any:
+    """The policy the comparison is measured against, from the FROZEN snapshot.
 
     The snapshot rather than the bank core, for `_prefill_for`'s reason: it is what the
     system knew when it decided, it needs no round trip, and it cannot move underneath the
     call while the broker is reading a table built from it.
+
+    ⚠️ **`line` is why this reads `active_policies` and not only `relevant_policy`**
+    (`D127`). `relevant_policy` is the one this CALL is about — correct for the policy
+    panel and for a handoff. But the plan dialog lets the broker switch lines, and a
+    customer holding a broker's portfolio holds cover on several: asking about motor while
+    on a health call is an ordinary thing to do. Reading only the call's own policy made
+    the motor tab announce *"ลูกค้ายังไม่มีความคุ้มครองในหมวดนี้"* to a customer who holds
+    a motor policy — and then silently rank as new business, which is a different question
+    with a different answer.
     """
     snapshot_id = container.snapshot_for_call.get(call_session_id)
     if snapshot_id is None:
         return None
     snapshot = await container.snapshots.get(snapshot_id)
-    return snapshot.payload.relevant_policy if snapshot is not None else None
+    if snapshot is None:
+        return None
+    payload = snapshot.payload
+    if line is None:
+        return payload.relevant_policy
+    # Prefer the call's own policy when it is on the line being asked about, so the
+    # default view keeps naming the policy the rest of the screen is about.
+    relevant = payload.relevant_policy
+    if relevant is not None and str(relevant.line) == line:
+        return relevant
+    for policy in payload.active_policies:
+        if str(policy.line) == line:
+            return policy
+    return None
 
 
 async def _build_comparison(container: Any, call_session_id: str, line: str | None) -> Any:
@@ -327,8 +351,10 @@ async def _build_comparison(container: Any, call_session_id: str, line: str | No
     comparable attributes configured, or the catalogue has nothing for it. A broker with
     nothing to compare is a state, not a failure (`D125`).
     """
-    held = await _relevant_policy_for(container, call_session_id)
-    chosen = line or (str(held.line) if held is not None else None)
+    chosen = line
+    if chosen is None:
+        default = await _relevant_policy_for(container, call_session_id)
+        chosen = str(default.line) if default is not None else None
     if chosen is None:
         session = await container.calls.get(call_session_id)
         chosen = str(session.product_line) if session is not None else None
@@ -345,11 +371,92 @@ async def _build_comparison(container: Any, call_session_id: str, line: str | No
     catalogue = await container.core.list_products(line=product_line)
     if not catalogue:
         return None
-    # Only compare against what they hold when it is the SAME line. A motor policy is not
-    # a baseline for a health plan, and subtracting one from the other would produce a
-    # table of confident nonsense rather than an empty one.
-    baseline = held if (held is not None and str(held.line) == chosen) else None
+    # The baseline is this customer's cover ON THIS LINE, which is not necessarily the
+    # policy the call is about (`D127`). A motor policy is never a baseline for a health
+    # plan — subtracting one from the other is confident nonsense — but a customer with a
+    # broker's portfolio holds both, and the broker may ask about either.
+    baseline = await _relevant_policy_for(container, call_session_id, chosen)
     return container.comparison.build(line=chosen, spec=spec, held=baseline, catalogue=catalogue)
+
+
+_UNIT_TH: dict[str, str] = {
+    "per_day": "ต่อวัน",
+    "per_year": "ต่อปี",
+    "per_visit": "ต่อครั้ง",
+    "per_accident": "ต่อครั้ง",
+    "percent": "%",
+}
+
+
+def _figure_th(coverage: Any) -> str:
+    """A coverage figure as the customer reads it. Never `0` for an absent one (`D125`)."""
+    if coverage.amount is None:
+        return "—"
+    if coverage.unit == "percent":
+        return f"{coverage.amount:,.0f}%"
+    return f"{coverage.amount:,.0f} บาท{_UNIT_TH.get(coverage.unit or '', '')}"
+
+
+def _plan_out(product: Any, *, held: bool = False) -> dict[str, Any]:
+    return {
+        "product_code": product.product_code,
+        "name_th": product.name_th,
+        "insurer": product.insurer,
+        "short_desc": product.short_desc,
+        "held": held,
+        "coverages": [
+            {
+                "kind": c.kind,
+                "label_th": c.label_th,
+                "amount": c.amount,
+                "unit": c.unit,
+                "note": c.note,
+            }
+            for c in product.coverages
+        ],
+    }
+
+
+@router.get("/calls/{call_session_id}/plans")
+async def plans(
+    call_session_id: str,
+    who: AgentDep,
+    container: ContainerDep,
+    line: str | None = None,
+) -> dict[str, Any]:
+    """The plan catalogue the broker can read from and quote out of (`D127`).
+
+    A broker's screen has always had the customer's own policy on it and nothing about
+    what else exists — which is the half of *"คัดสรรแบบประกันและบริษัทฯ"* the workstation
+    could not do. This is the market, per line, with every figure the comparison ranks on.
+
+    `held` marks the plan behind the customer's own policy. It is a flag rather than extra
+    detail: the policy panel already discloses that record at the level it is allowed to,
+    and this endpoint must not become a second, ungated route to the same fact.
+    """
+    session, _ = await _require_active_call(container, call_session_id, who)
+    default = await _relevant_policy_for(container, call_session_id)
+    chosen = line or (str(default.line) if default else str(session.product_line))
+    # `held` follows the line being browsed, not the call's own policy (`D127`) — a
+    # customer with a broker's portfolio holds cover on several lines.
+    held_policy = await _relevant_policy_for(container, call_session_id, chosen)
+
+    lines = [
+        {"line": key, "label_th": spec.label_th}
+        for key, spec in container.pack.comparison_lines.items()
+    ]
+    try:
+        product_line = ProductLine(chosen)
+    except ValueError:
+        return {"line": None, "lines": lines, "plans": []}
+
+    catalogue = await container.core.list_products(line=product_line)
+    held_code = held_policy.product_code if held_policy else None
+    return {
+        "line": chosen,
+        "lines": lines,
+        "plans": [_plan_out(p, held=p.product_code == held_code) for p in catalogue],
+    }
 
 
 @router.get("/calls/{call_session_id}/comparison")
@@ -675,6 +782,29 @@ async def push_to_customer(
         screen = container.assist.for_call(call_session_id)
         verified = screen is not None and str(screen.tier) == "verified"
         payload = to_push_payload(result, include_held=verified)
+    elif body.tool_id == "info.plan_detail":
+        # The client names WHICH plan; the figures are read from the catalogue here
+        # (`D127`). Same rule as the comparison, and for the same reason: a coverage
+        # number is data, not something a browser assembled (`D16`).
+        code = str(body.payload.get("product_code") or "")
+        product = await container.core.get_product(code) if code else None
+        if product is None:
+            raise _bad_request(PermanentError(f"unknown plan {code!r}"))
+        payload = {
+            "text_th": f"{product.name_th} — {product.insurer or ''}".strip(" —"),
+            "bullets_th": [
+                f"{c.label_th}: {_figure_th(c)}" for c in product.coverages if c.amount is not None
+            ],
+        }
+    elif body.tool_id == "note.agent_message":
+        # ⚠️ The ONE tool whose content the system does not compose (`D128`). The broker is
+        # the author — this is the sentence they are already saying out loud — so the text
+        # comes from the request, capped, and is labelled on the customer's screen as
+        # having been written by a person rather than read out of a record.
+        text = str(body.payload.get("text_th") or "").strip()
+        if not text:
+            raise _bad_request(PermanentError("an empty message is not a message"))
+        payload = {"text_th": text[:1200], "from_agent": True}
     if tool.fields:
         # The field list is the tool's, not the request's. A client that could send its
         # own field set could put any label it liked in front of the customer.

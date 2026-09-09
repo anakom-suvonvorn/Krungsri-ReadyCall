@@ -393,3 +393,154 @@ async def test_a_guest_screen_gets_the_market_not_the_customers_own_cover(
     unlocked = verified["items"][-1]["payload"]
     assert unlocked["columns_th"][1] == "แผนปัจจุบันของคุณ"
     assert unlocked["held_hidden"] is False
+
+
+# --- the plan browser and the broker's own message (D127, D128) --------------------------
+
+
+@pytest.mark.anyio
+async def test_the_broker_can_read_the_market_not_only_the_customers_policy(
+    client: Any,
+) -> None:
+    """`D127`. A broker's screen has always had the customer's own policy on it and
+    nothing about what else exists — which is the half of *"คัดสรรแบบประกันและบริษัทฯ"*
+    the workstation could not do."""
+    call_id = await on_a_claim_call(client)
+    body = client.get(f"/v1/agent/calls/{call_id}/plans").json()
+
+    assert body["line"] == "health"
+    assert len(body["plans"]) >= 5
+    assert [line["line"] for line in body["lines"]], "every comparable line is selectable"
+    assert all(p["insurer"] for p in body["plans"]), "a broker's catalogue names the carrier"
+    assert any(p["held"] for p in body["plans"]), (
+        "and the plan the customer is ON is marked — the most useful row when explaining a gap"
+    )
+    assert any(c["amount"] is not None for p in body["plans"] for c in p["coverages"])
+
+
+@pytest.mark.anyio
+async def test_pushing_one_plan_reads_its_figures_from_the_catalogue(client: Any) -> None:
+    """`D127`, and it is `D126`'s rule again: the client names WHICH plan, the server says
+    what it covers. A browser assembling coverage figures is `D16` with extra steps."""
+    call_id = await on_a_claim_call(client)
+    link = client.post(f"/v1/agent/calls/{call_id}/assist/link").json()
+    client.get(f"/v1/assist/{link['token']}")
+
+    pushed = client.post(
+        f"/v1/agent/calls/{call_id}/assist/push",
+        json={
+            "tool_id": "info.plan_detail",
+            "payload": {"product_code": "MT-HEALTH-PLUS", "bullets_th": ["คุ้มครอง 999 ล้าน"]},
+        },
+    )
+    assert pushed.status_code == 200, pushed.text
+
+    item = client.get(f"/v1/assist/{link['token']}").json()["items"][-1]
+    assert item["kind"] == "info"
+    assert "999" not in str(item["payload"]), "the client's bullets were discarded"
+    assert "เมืองไทย เฮลท์ พลัส" in item["payload"]["text_th"]
+    assert any("5,000 บาทต่อวัน" in b for b in item["payload"]["bullets_th"])
+
+
+@pytest.mark.anyio
+async def test_an_unknown_plan_is_refused_rather_than_pushed_empty(client: Any) -> None:
+    call_id = await on_a_claim_call(client)
+    link = client.post(f"/v1/agent/calls/{call_id}/assist/link").json()
+    client.get(f"/v1/assist/{link['token']}")
+    refused = client.post(
+        f"/v1/agent/calls/{call_id}/assist/push",
+        json={"tool_id": "info.plan_detail", "payload": {"product_code": "NOPE"}},
+    )
+    assert refused.status_code == 400
+
+
+@pytest.mark.anyio
+async def test_the_brokers_own_message_reaches_the_customer_labelled_as_theirs(
+    client: Any,
+) -> None:
+    """`D128`. The one tool whose content the system does not compose — so the customer is
+    told a person wrote it, rather than reading it as the system quoting a record."""
+    call_id = await on_a_claim_call(client)
+    link = client.post(f"/v1/agent/calls/{call_id}/assist/link").json()
+    client.get(f"/v1/assist/{link['token']}")
+
+    typed = "โรงพยาบาลกรุงเทพ ชั้น 3\nแผนกผู้ป่วยนอก\nถามหาคุณสมชาย"
+    pushed = client.post(
+        f"/v1/agent/calls/{call_id}/assist/push",
+        json={"tool_id": "note.agent_message", "payload": {"text_th": typed}},
+    )
+    assert pushed.status_code == 200, pushed.text
+
+    screen = client.get(f"/v1/assist/{link['token']}").json()
+    item = screen["items"][-1]
+    assert item["payload"]["text_th"] == typed, "line breaks survive — an address has them"
+    assert item["payload"]["from_agent"] is True
+    # Guest-safe on purpose, and this is the assertion that says so: it landed on a screen
+    # that has only tapped a link. The broker is saying this out loud anyway, and the
+    # composer shows them the tier while they type rather than the system refusing a
+    # sentence it did not write and cannot classify (`D128`).
+    assert screen["tier"] == "guest"
+
+
+@pytest.mark.anyio
+async def test_an_empty_message_is_refused(client: Any) -> None:
+    """An empty panel on somebody's phone mid-call explains nothing and cannot be undone."""
+    call_id = await on_a_claim_call(client)
+    link = client.post(f"/v1/agent/calls/{call_id}/assist/link").json()
+    client.get(f"/v1/assist/{link['token']}")
+    for text in ("", "   \n  "):
+        refused = client.post(
+            f"/v1/agent/calls/{call_id}/assist/push",
+            json={"tool_id": "note.agent_message", "payload": {"text_th": text}},
+        )
+        assert refused.status_code == 400, text
+
+
+@pytest.mark.anyio
+async def test_switching_line_finds_the_cover_the_customer_holds_on_THAT_line(
+    client: Any,
+) -> None:
+    """`D127`, and it was a live bug found by clicking the line pills.
+
+    The baseline used to be `relevant_policy` — the policy this CALL is about. Correct for
+    the policy panel and for a handoff, and wrong the moment the broker switches the plan
+    dialog to another line: a customer holding a broker's portfolio holds cover on several,
+    and asking about motor while on a health call is an ordinary thing to do.
+
+    The symptom was worse than a missing column. The motor tab announced *"ลูกค้ายังไม่มี
+    ความคุ้มครองในหมวดนี้"* to somebody with a motor policy, and then ranked as **new
+    business** — a different question with a different answer, silently.
+    """
+    call_id = await on_a_claim_call(client)  # a HEALTH claim
+
+    health = client.get(f"/v1/agent/calls/{call_id}/comparison").json()
+    assert health["line"] == "health"
+    assert health["held_policy_no"] == "HL-2024-000811"
+
+    motor = client.get(f"/v1/agent/calls/{call_id}/comparison", params={"line": "motor"}).json()
+    assert motor["available"] is True
+    assert motor["held_policy_no"] == "MT-2024-008830", (
+        "the customer's MOTOR policy, not the health one the call is about"
+    )
+    assert motor["table"]["columns_th"][1] == "แผนปัจจุบันของคุณ"
+
+    # And the browser marks the right row for the line being browsed.
+    plans = client.get(f"/v1/agent/calls/{call_id}/plans", params={"line": "motor"}).json()
+    held = [p for p in plans["plans"] if p["held"]]
+    assert [p["product_code"] for p in held] == ["KS-MOTOR-2ND"]
+
+
+@pytest.mark.anyio
+async def test_a_line_the_customer_holds_nothing_on_is_still_comparable(
+    client: Any,
+) -> None:
+    """The other half: no cover on that line is a real answer, not a failure. It ranks as
+    new business — candidates against each other rather than against nothing (`D126`)."""
+    call_id = await on_a_claim_call(client)
+    travel = client.get(f"/v1/agent/calls/{call_id}/comparison", params={"line": "travel"}).json()
+    assert travel["available"] is True
+    assert travel["held_policy_no"] is None
+    assert "แผนปัจจุบันของคุณ" not in travel["table"]["columns_th"]
+    scores = [c["score"] for c in travel["candidates"]]
+    assert scores == sorted(scores, reverse=True)
+    assert scores[0] > scores[-1], "ranked against each other, not all zero"

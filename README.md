@@ -397,11 +397,19 @@ rather than a claim:
 curl -X POST http://127.0.0.1:8000/v1/demo/calls -H "Content-Type: application/json" -d "{\"intent_code\": \"health.advice.compare\", \"caller_number\": \"0812345678\", \"intake_keys\": [\"2\"], \"ignore_hours\": true}"
 ```
 
-Press **Accept**. The **เปรียบเทียบแผน** panel ranks three plans against what this customer
-already holds, each with a sentence and green ↑ / red ↓ chips for what is better and what
-is worse. Read the second row: it usually has the **best figure in most columns** and still
-ranks below the first, because of a deductible. That is the ranking doing real work rather
-than sorting by the biggest number.
+Press **Accept**, then **เปิดข้อมูลแผน** in the right rail. The dialog has a line selector
+and two tabs (`D127`):
+
+- **เปรียบเทียบ** ranks three plans against what this customer already holds, each with a
+  sentence and green ↑ / red ↓ chips for what is better and what is worse. Read the second
+  row: it usually has the **best figure in most columns** and still ranks below the first,
+  because of a deductible. That is the ranking doing real work rather than sorting by the
+  biggest number.
+- **แผนทั้งหมด** is the catalogue for that line, plan by plan, with the customer's own
+  marked. Selecting one shows its figures and can push just that plan.
+
+Switch the line selector to **ประกันรถยนต์**: the comparison re-bases onto the customer's
+*motor* policy rather than the health one the call is about.
 
 Everything about that order is arithmetic — weights live in `config/comparison.yaml`, the
 figures come from `Product.coverages` through `CoreDataProvider`. **The model, when one is
@@ -416,6 +424,18 @@ says why. Tapping a link proves somebody is holding that phone, not who they are
 Sign in on the customer's screen and push again: **แผนปัจจุบันของคุณ** appears as the first
 column. Same tool, same button — the *column* is gated, not the tool, because comparing what
 the market offers is true for anybody (`D126`, `D121`).
+
+### Send the customer something you typed yourself
+
+Every other tool sends what the *system* composed. This one sends the broker's own sentence
+— a hospital name, a spelling, three steps — so it does not have to be caught by ear
+(`D128`). In the tool box, the **ส่งข้อความให้ลูกค้าอ่าน** control is a text box rather than
+a button: type, press send, and it appears on the paired screen labelled
+**ข้อความจากเจ้าหน้าที่** so the customer knows a person wrote it.
+
+⚠️ Note the badge above the send button. It shows whether the customer's screen is signed
+in, because this is the one tool whose content the system cannot classify — so the broker
+gets the fact and makes the call (`D128`).
 
 - **Needs set up:** §1 and §2.
 - **Needs running:** the API server. Nothing else.

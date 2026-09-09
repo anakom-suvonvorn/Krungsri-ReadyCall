@@ -23,7 +23,7 @@ somebody calls it.** `grep -rn "\.method_name(" src/` is thirty seconds and it h
 been the answer nine times.
 
 The second pattern, worth equal weight: **every one of these was found by the user
-pressing a button, never by the suite.** 896 tests pass and did not see any of it. When
+pressing a button, never by the suite.** 903 tests pass and did not see any of it. When
 they report something, believe the report before believing the tests.
 
 ⚠️ **And `B39`'s specific lesson, because it cost a whole round trip:** when the user
@@ -37,8 +37,12 @@ the case they mentioned in parentheses and shipped the ordinary one broken.
    slide. Broker channel share, the renewal case, market sizes, real insurer names, the
    competitor list, and the logistics. **Do not invent a number that belongs here.**
 2. **`docs/reading/the_assist_rail.html`** — what the 7 September work actually does, in
-   plain language and drawn. **This is the shared vocabulary with the user now**; read it
-   before explaining any of it to them again.
+   plain language and drawn.
+3. **`docs/reading/where_the_numbers_come_from.html`** — the 8–9 September work
+   (`D123`–`D129`), written for the **mechanism**: what happens when each new button is
+   pressed, the comparison arithmetic worked out by hand on the real fixtures, and the
+   disclosure leak that nearly shipped. **These two are the shared vocabulary with the
+   user now**; read them before explaining any of it to them again.
 
 Three constraints from `MARKET_FACTS` that shape every plan:
 
@@ -306,7 +310,7 @@ moment in the recording it was said — **and if they consented, their audio is 
 storage encrypted, with the key ref and the retention date on an `audio_recordings` row.**
 If they declined, it is nowhere.
 
-Verified **2026-09-08 (evening)**: **896 tests** — 884 pass + 12 skipped, with Postgres
+Verified **2026-09-08 (evening)**: **903 tests** — 891 pass + 12 skipped, with Postgres
 and MinIO both up. `ruff check` + `ruff format --check` clean over 220 files,
 `mypy --strict` clean over 155, 69/69 diagrams current, prompt pack fresh, `audit_docs.py`
 clean on the live files. **And by driving `/sim` in a browser** (`D123`): *Contact us —
@@ -404,7 +408,7 @@ because it is now **twenty-two** and they rhyme:
    day. `B36` was an entry path that had been **broken since P1b** and that nothing had
    ever executed.
 15. **`B32`/`B33` (2026-09-08)** — both found in ten minutes of *using* the tool rail, and
-   neither visible to 896 tests. The catalogue was fetched on mount, before sign-in, so it
+   neither visible to 903 tests. The catalogue was fetched on mount, before sign-in, so it
    401'd into a defensive `catch` and the rail was empty for the shift. And the dialog's
    2-second poll was rebuilt every render — the workstation re-renders every second — so
    it never fired once, which looked exactly like the server not returning the customer's
@@ -1776,6 +1780,7 @@ URL from another conversation creates a duplicate instead.
 | `reading/the_line.html` — the keypad | https://claude.ai/code/artifact/5953f7a7-d0c4-4829-8cc7-fec2b6f5b856 |
 | `reading/2026-09-03_what_happened.md` — **markdown, not a page.** The 3 September session from zero, with a glossary and the two open decisions. Written for the user after three summaries failed to land | _(a file, no URL)_ |
 | `reading/2026-09-05_the_words_on_the_screen.md` — **markdown, not a page.** How the transcript reached the agent's screen, and the two services that turned out to be running nowhere (`B24`). Ends in three commands that put six Thai sentences on a real screen | _(a file, no URL)_ |
+| `reading/where_the_numbers_come_from.html` — **the 8–9 September work, by mechanism** (`D123`–`D129`). Written because the user said *"i have no idea what a bunch of stuff you just done is, in terms of how it actually works behind the scene/logic"*. Each change as **on screen → underneath → the rule**, the ranking arithmetic worked out by hand on the real fixtures (why the plan with the best figure in 3 of 5 rows ranks third), and the guest-screen leak drawn | _(a file, no URL)_ |
 | `reading/the_assist_rail.html` — **what the 2026-09-07 work actually does**, in plain language: the broker/insurer duty split drawn, the five call shapes and where each ENDS, the pairing and its one gate drawn, the six ways the AI summary does nothing, and a fifteen-minute "try it" that ends with watching a personal push get REFUSED. Written because a terminal summary of `D117`-`D120` tells the reader nothing | _(a file, no URL)_ |
 | `reading/the_broker_turn.html` — **the plan of record from 2026-09-06.** Why the pitch extends from the service call into comparison (step 3, the brief's biggest leak) and document handling (step 4), the broker-vs-agent reframe, the consent correction, the persona recommendation and the seven-day track plan. `D115`/`D116`. **Artifact publishing was blocked, so this one is a file** | _(a file, no URL)_ |
 | `reading/the_recording.html` — **what happens to the caller's voice**: the encrypted recording explained from a phone packet to a file in a bucket (envelope encryption drawn, not asserted), the killable decode worker, `Q31`'s circle-back, and the durable transcript. Written because *"the encrypted recording landed"* tells the reader nothing | https://claude.ai/code/artifact/c51ef926-0a13-45b7-b59f-6731be83255c |

@@ -58,7 +58,7 @@ export function AssistPanel({
   catalogue: AssistCatalogue | null;
   busy: boolean;
   onMintLink: () => void;
-  onPush: (toolId: string) => void;
+  onPush: (toolId: string, payload?: Record<string, unknown>) => void;
   onRefresh: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -214,7 +214,7 @@ function ToolRailDialog({
   state: AssistState | null;
   verified: boolean;
   busy: boolean;
-  onPush: (toolId: string) => void;
+  onPush: (toolId: string, payload?: Record<string, unknown>) => void;
   onClose: () => void;
 }) {
   // Escape closes it, like every other dismissable surface in the browser. Registered
@@ -268,15 +268,25 @@ function ToolRailDialog({
                     to a group makes that ROW scroll instead of making the whole dialog
                     taller. The dialog's height is the thing worth keeping stable. */}
                 <div className="tool-strip">
-                  {group.tools.map((tool) => (
-                    <ToolButton
-                      key={tool.tool_id}
-                      tool={tool}
-                      locked={tool.personal && !verified}
-                      busy={busy}
-                      onPush={onPush}
-                    />
-                  ))}
+                  {group.tools.map((tool) =>
+                    tool.tool_id === "note.agent_message" ? (
+                      <AgentMessageTool
+                        key={tool.tool_id}
+                        tool={tool}
+                        busy={busy}
+                        verified={verified}
+                        onPush={onPush}
+                      />
+                    ) : (
+                      <ToolButton
+                        key={tool.tool_id}
+                        tool={tool}
+                        locked={tool.personal && !verified}
+                        busy={busy}
+                        onPush={onPush}
+                      />
+                    ),
+                  )}
                 </div>
               </div>
             ))}
@@ -311,6 +321,68 @@ function ToolRailDialog({
   );
 }
 
+/**
+ * The one tool the broker writes themselves (`D128`).
+ *
+ * Every other control on this rail sends something the SYSTEM composed from a record — a
+ * comparison, a prefilled form, a checklist. This sends the broker's own sentence: the
+ * thing they are already saying out loud, written down so the customer can read a hospital
+ * name, a spelling, a reference number or a set of steps instead of trying to catch it
+ * over a bad line. It is `form.free_text` (`D122`) pointed the other way.
+ *
+ * ⚠️ **The tier gate cannot help here, and the banner is the answer.** `personal` says what
+ * a tool is FOR (`D121`), and this one is for whatever the broker needs to say — the
+ * system cannot classify a sentence it did not write. So the composer puts the screen's
+ * current tier in front of them **while they type**, which is the fact they need in order
+ * to decide. `D71`'s pattern: give the person the reason, do not fake a refusal the system
+ * is not equipped to make.
+ */
+function AgentMessageTool({
+  tool,
+  busy,
+  verified,
+  onPush,
+}: {
+  tool: AssistTool;
+  busy: boolean;
+  verified: boolean;
+  onPush: (toolId: string, payload?: Record<string, unknown>) => void;
+}) {
+  const [text, setText] = useState("");
+  const send = () => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    onPush(tool.tool_id, { text_th: trimmed });
+    setText("");
+  };
+  return (
+    <div className="tool composer">
+      <span className="tool-label">{tool.label_th}</span>
+      <textarea
+        rows={3}
+        value={text}
+        maxLength={1200}
+        placeholder="พิมพ์หรือวางข้อความที่จะให้ลูกค้าอ่าน"
+        disabled={busy}
+        onChange={(e) => setText(e.target.value)}
+        // Ctrl/⌘+Enter sends. A bare Enter must NOT: an address or a set of steps is
+        // several lines, and losing the newline is the whole reason to type it here.
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) send();
+        }}
+      />
+      <span className={`badge ${verified ? "ok" : "warn"}`}>
+        {verified
+          ? "ลูกค้าเข้าสู่ระบบแล้ว"
+          : "ลูกค้ายังไม่ได้เข้าสู่ระบบ — เลี่ยงข้อมูลส่วนบุคคล"}
+      </span>
+      <button className="primary" disabled={busy || !text.trim()} onClick={send}>
+        ส่งข้อความ
+      </button>
+    </div>
+  );
+}
+
 function ToolButton({
   tool,
   locked,
@@ -320,7 +392,7 @@ function ToolButton({
   tool: AssistTool;
   locked: boolean;
   busy: boolean;
-  onPush: (toolId: string) => void;
+  onPush: (toolId: string, payload?: Record<string, unknown>) => void;
 }) {
   return (
     <button
