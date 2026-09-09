@@ -34,17 +34,30 @@ reading the prose caught it. **A green counter is not a read output.**
 prompt instead; stretching the regex would start eating truthful sentences. If it recurs it
 wants its **own** pattern, not a looser one.
 
-### 2. Then: `/sim` still has no browser check of the typed-intake card
+### 2. ~~`/sim` has no browser check of the typed-intake card~~ ✅ **DONE 2026-09-09 (late)**
 
-`D133`'s typed intake is verified end to end (three sentences typed, AI summary on the
-offer card 2.5 s later). What was **not** re-checked after the last edit is the `/sim`
-card's own rendering — the choice sheet before dialling, the box appearing during the
-wait, and the stub note when the voice option is chosen. Drive it in a browser:
-`/sim` → persona 1 → a plan → Contact → a reason → **the new third sheet**.
+All three things checked in a browser on a running server, persona 1 →
+กรุงศรี เฮลท์ แพลน เอ → *Contact us about this plan* → แจ้งเคลมหรือเข้ารักษา:
 
-⚠️ The in-app browser pane could not composite clicks in this session — `computer` clicks
-silently did nothing while `read_page` and `javascript_tool` worked fine. Drive it with
-`javascript_tool` and read the DOM.
+- **the choice sheet before dialling** renders — *"ก่อนต่อสาย — อยากเล่าเรื่องไว้ก่อนไหม?"*, three
+  options, and the footnote saying the broker sees it the moment they answer and that
+  *"ไม่"* is a recorded answer rather than silence (`D88`);
+- **the box during the wait** renders with its example placeholder and
+  *"ส่งกี่ครั้งก็ได้จนกว่าเจ้าหน้าที่จะรับสาย"*. A 42-character note sent: `POST /v1/app/intake/note 200`
+  in the app's own call list and `customer typed an intake note … seq=1` in the log;
+- **the voice option is a labelled stub, and still offers typing** —
+  *"ส่วนอัดเสียงเป็นการสาธิต ยังไม่ได้เชื่อมต่อระบบเสียงจริง — พิมพ์เล่าด้านบนได้เลย"*, which is `D115`'s rule.
+
+⚠️ **The browser pane still cannot composite clicks** — `computer` clicks do nothing while
+`read_page`, `javascript_tool` and screenshots all work. Drive `/sim` with
+`javascript_tool` and read the DOM. Two notes that cost time: the accessibility tree
+returns almost nothing for this page (three bare `button` nodes), so find controls by
+**text content**, not by ref; and setting a React `<textarea>` needs the native value
+setter plus a dispatched `input` event, or the component never sees the text.
+
+⚠️ **The app's "API CALLS MADE" panel scrolls**, so reading the first screen of it shows
+only the assist polls and looks exactly like the request never being made. Read the
+element's full `innerText`, not the visible part.
 
 ### 3. Then: the queue below, which is unchanged
 
