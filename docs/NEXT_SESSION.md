@@ -1,7 +1,7 @@
 # NEXT_SESSION
 
 _The live working state. READ THIS FIRST every session. Keep it short and current._
-_Last updated: 2026-09-08._
+_Last updated: 2026-09-09._
 
 ---
 
@@ -30,8 +30,24 @@ they report something, believe the report before believing the tests.
 flags an edge case, they are **adding to** the main case, not replacing it. I built only
 the case they mentioned in parentheses and shipped the ordinary one broken.
 
+**The 2026-09-08/09 pattern is a third one, and it is cheaper than both:
+LOOK AT THE OUTPUT, not at the code that produced it.** Three real faults surfaced that way
+in two days, and none of them was visible in a passing test:
 
-### ⚠️ ZEROTH: two files carry facts you must not re-derive
+- The comparison push went out, and **reading the JSON** showed the customer's own coverage
+  figures sitting on a screen that had only tapped a link (`D126`). No test asserted it
+  because no test knew to.
+- The plan dialog's line selector was clicked once, and motor announced *"no cover"* to a
+  motor policyholder (`D127`).
+- The contract test for the new catalogue was written, and **two policies turned out to
+  point at product codes in no catalogue at all** (`D125`) — since P1b.
+
+So: after building something that produces content, **print the content and read it.**
+`curl` the endpoint, dump the payload, open the screen. It is the same discipline as
+`B24`'s "follow the call graph from something a user does", one step further along.
+
+
+### ⚠️ ZEROTH: three files carry facts you must not re-derive
 
 1. **`docs/MARKET_FACTS.md`** — every figure the orientation supplied, with its source
    slide. Broker channel share, the renewal case, market sizes, real insurer names, the
@@ -41,7 +57,7 @@ the case they mentioned in parentheses and shipped the ordinary one broken.
 3. **`docs/reading/where_the_numbers_come_from.html`** — the 8–9 September work
    (`D123`–`D129`), written for the **mechanism**: what happens when each new button is
    pressed, the comparison arithmetic worked out by hand on the real fixtures, and the
-   disclosure leak that nearly shipped. **These two are the shared vocabulary with the
+   disclosure leak that nearly shipped. **These three are the shared vocabulary with the
    user now**; read them before explaining any of it to them again.
 
 Three constraints from `MARKET_FACTS` that shape every plan:
@@ -58,9 +74,13 @@ Three constraints from `MARKET_FACTS` that shape every plan:
 ⚠️ Half those slides are images with no text layer, so `pypdf` returns empty pages. Render
 with PyMuPDF at ~110 dpi and read the PNGs. An empty extraction is not an empty slide.
 
-### What landed on 2026-09-08 (evening), in four commits
+### What landed on 2026-09-08 (evening) and 2026-09-09, in six commits
 
 Read this before the queue below — the queue reflects it, but this is the shape of it.
+**The plain-language version of all seven decisions is
+`docs/reading/where_the_numbers_come_from.html`**, written for the mechanism rather
+than the outcome, because the user's note was *"i have no idea what a bunch of stuff
+you just done is, in terms of how it actually works behind the scene."*
 
 | | what it is | the one thing to know |
 |---|---|---|
@@ -68,16 +88,22 @@ Read this before the queue below — the queue reflects it, but this is the shap
 | `D124` | handing the call to the insurer is an **action** | `D117`'s banner became a button beside วางสาย. ⚠️ It does **not** use `CallState.TRANSFERRED` — see `Q37`. The **internal** transfer tab is a labelled stub and is **a scope call waiting on you** |
 | `D125` | the plan catalogue is **live data behind the port**, not a yaml | your correction, and it was a category error about to be made. Found two quiet faults: two policies pointed at product codes in no catalogue, and one carrier was spelled two ways |
 | `D126` | compare & best-fit, **ranked on facts** | the model writes only the reason sentence. ⚠️ Found a real leak: the table's first column is the customer's own cover on a tool declared `personal: false`. The **column** is gated now, not the tool |
+| `D127` | the comparison is **one answer inside a plan panel** | the user's design. A compact rail panel opening a dialog: line selector, ranking, and the whole catalogue plan by plan. ⚠️ The line selector immediately found a bug — switching line kept the *call's* policy as the baseline and told a motor policyholder they had no motor cover |
+| `D128` | one tool sends **what the broker typed** | `form.free_text` pointed the other way. The one tool whose content the system cannot classify, so the composer shows the screen's tier while they type. It also made `/sim`'s unescaped `innerHTML` a real injection risk, now fixed on both customer surfaces |
+| `D129` | one-of-many is **pills, not radio rows** | native radios drew bullets that never line up beside Thai labels and gave each option a full-width row. `role="radio"` keeps the semantics the markup lost |
 
-**Two things want your decision**, and both are written up where they belong:
+**Three things want your decision**, and all three are written up where they belong:
 
 1. **The internal transfer tab** (`D124`'s last section). It needs a transfer offer
    distinct from a queue offer, plus a rework of *"which call is mine"* inside
-   `services/agents/` — where `B7`, `B25` and `B28` all lived — four days before the
-   pitch. The external half is complete and is the one that expresses `D117`.
+   `services/agents/` — where `B7`, `B25` and `B28` all lived — with the pitch on
+   13 September. The external half is complete and is the one that expresses `D117`.
 2. **`Q36`** — three `*.advice.quote` intents that no menu reaches. Splitting *"buy"* from
    *"compare"* adds a seventh option to three phone menus. A domain call, not an
    engineering one.
+3. **Agent → customer images and files** (`D128`'s last section). The user asked; the
+   text half is built and the file half is not. It needs blob storage on the assist
+   path, a size/type policy and a retention rule — `Q34`'s list, which is already open.
 
 ### The 2026-09-08 notes, and what each became
 
@@ -86,7 +112,7 @@ Read this before the queue below — the queue reflects it, but this is the shap
 | README credits still say Thonburian only | correct | **DONE.** Typhoon credited as the shipped engine, Thonburian kept as supported + the fallback, and named as the engine every accuracy figure was first measured on |
 | *"there's no tool rail on the workstation at all"* | correct, and it was `B24`'s family | **DONE** (`D121`) |
 | *"forms needs to be signed in is only half true — look at the purpose, not the type"* | correct, and wrong in BOTH directions | **DONE** (`D121`) |
-| *"shouldn't the comparison data come from the company's database, not a yaml?"* | **correct, and it was a category error about to be made** | **NOT STARTED.** See below — this reshapes Track B |
+| *"shouldn't the comparison data come from the company's database, not a yaml?"* | **correct, and it was a category error about to be made** | **DONE** (`D125`) — and the test that generalises it is in the decision: *if the answer changes because an insurer launched a plan it is data; if it changes because we decided differently it is config* |
 | *"the tool rail doesn't unlock when i open the link"* | correct — a deadlock I built | **DONE** (`B35`) |
 | *"why is there a เข้าสู่ระบบ on the link page?"* | correct; it read as mandatory | **DONE** (`D121` amendment) + `D122` moves the verified tier to the app, where it belongs |
 | *"the contact options are weird — they already have the plan"* | correct, and `D48` was the cause | **DONE** (`D122`) |
@@ -118,13 +144,14 @@ Read this before the queue below — the queue reflects it, but this is the shap
    prefilled. `D117`'s banner is now something the broker *does*.
    ⚠️ The **internal** tab (`D63`'s consulted transfer to another desk) is a **labelled
    stub on screen** and is a scope call put to you — see the queue below.
-| *"it feels like a hackathon without AI"* | half a misreading, half a real gap | **NOT STARTED.** See below |
-| transfer button beside วางสาย, two tabs (internal / other company) | correct, and the second tab is new | **NOT STARTED.** Extends `D63` |
+| *"it feels like a hackathon without AI"* | half a misreading, half a real gap | **STILL OPEN.** The cheapest honest answer is now `D126`'s reason sentence — the seam exists, the ranking stays arithmetic |
+| transfer button beside วางสาย, two tabs (internal / other company) | correct, and the second tab is new | ◐ **HALF DONE** (`D124`) — the **external** tab is built and verified; the internal one is a labelled stub and a scope call |
 | register the customer via a pushed form, or push the app download? | their own second instinct is right | **DECIDED** in `D121`: push the download, registration belongs to the bank's app |
 | where to put an OpenAI key; try several fast models | answered | **NOT STARTED.** `scripts/compare_llm.py` still does not exist |
 | *"is it all still swappable?"* | yes, with two named exceptions | products data (fixed by the note above) and `NotifierPort`, which does not exist |
 
-**The products correction, in one paragraph, because it changes Track B's shape.** A plan
+**The products correction, in one paragraph. ⚠️ HISTORICAL — this was done as `D125`;
+kept because the reasoning is the reusable part.** A plan
 catalogue is **live data owned by someone else**, not domain taxonomy — it changes without
 us, and `config/` is *not reachable by the hackathon-day data swap*. So a `config/products.yaml`
 would have put the one thing the comparison feature reads outside the seam built for
@@ -164,7 +191,14 @@ broker's screen the moment Accept is pressed. Their audio is encrypted in object
 or nowhere. The broker sees **which carrier** underwrote the policy, and on a claim call a
 banner saying the call ends with the insurer. An **AI summary** upgrades the screen a few
 seconds later, or silently does not. And the broker can **bind the call to the customer's
-phone** and push a comparison or a form onto it.
+phone** and push onto it.
+
+**Since 2026-09-08/09 the broker can also do the job the domain says they are for.** They
+can read the whole market for a line, compare it against what this customer actually holds
+— ranked on arithmetic, not by a model — push that table or a single plan to the phone,
+type a sentence of their own onto it, and **hand the call to the insurer** with the carrier
+and the reason recorded. And a customer in the app can finally ask about cover they do not
+have yet.
 
 ### The four decisions of 2026-09-07, one line each
 
@@ -172,7 +206,7 @@ phone** and push a comparison or a form onto it.
 |---|---|---|
 | `D117` | the domain is a **broker's** | claims are **handoffs**, renewal is its own desk, `*.advice.compare` is the mandate. Config + one field; **no service logic changed** |
 | `D118` | playbooks in config | closes `Q19`. Guarded **both ways** at startup — a missing playbook and an unreachable one both refuse to boot |
-| `D119` | the LLM actually runs | `build_llm` + two adapters. **Six paths end in "return None"** and that is the design. Measured: **4.5 s, $0.0085** |
+| `D119` | the LLM actually runs | `build_llm` + two adapters. **Six paths end in "return None"** and that is the design. Measured: **4.5 s**; the $0.0085 cost is WITHDRAWN until the cost table is fixed (see the queue) |
 | `D120` | the customer's paired screen | a link, not a code. **Guest sees anything true for anybody; personal content needs a sign-in**, and the refusal names the reason |
 
 **Where they are written down**, in the order to read them:
@@ -181,10 +215,11 @@ phone** and push a comparison or a form onto it.
 
 ### What is NOT built, precisely
 
-1. **The comparison DATA.** `D120` built the transport; the table renders and reaches the
-   phone. What fills it — `products.yaml`, gap analysis against what the customer holds,
-   ranking on real attributes with the model writing only the reason sentence — is
-   **Track B and is not started**.
+1. ~~The comparison DATA.~~ **BUILT** (`D125`, `D126`, `D127`) — catalogue behind the
+   port, ranked on config weights, on the workstation and pushable to the phone. ⚠️ What
+   is genuinely left of it: **the model writing the reason sentence**. `Candidate.reason_th`
+   is the seam, it is generated today, and filling it leaves the ranking untouched. That is
+   the cheapest remaining way to make "we use AI" concrete without letting a model rank.
 2. **Docker packaging** (Track E), and the rehearsal. ⚠️ Ship the container on
    `STT_ENGINE=scripted`: a plain container cannot reach the GPU without host setup that
    varies by machine, which is what fails at a venue.
@@ -195,6 +230,10 @@ phone** and push a comparison or a form onto it.
    measurement — and it is a named P4 exit criterion.
 6. **Everything P3 never had:** a real TTS voice (`Q22`), the agent's own leg (`D26`, P6),
    P7's real key management, a recording player on the screen.
+7. **The INTERNAL transfer** (`D63`) — the roster half of the two-tab dialog. It renders as
+   a labelled stub that says so. `D124`'s last section has the full reason and the risk;
+   it is a scope call, not an oversight.
+8. **Agent → customer files and images** (`D128`). The text half is built.
 
 ### `Q24` — answered, and what it still gates
 
@@ -218,9 +257,22 @@ curl -X POST http://127.0.0.1:8000/v1/demo/calls -H "Content-Type: application/j
 #   Accept: the carrier name, the handoff banner, and three L1-gated actions.
 ```
 
-Then the paired screen — `explanations/P4_broker_and_assist.md` §5.3 has the full sequence.
-**The step worth doing is pushing a form to a screen that has only tapped a link** and
-watching it refuse with the reason.
+Then, on that same call, the four things that landed since (`README` has each as its own
+section, and `reading/where_the_numbers_come_from.html` explains the mechanism):
+
+- **เปิดข้อมูลแผน** in the right rail → the ranking, and the catalogue plan by plan. Read
+  the **second** row: it usually holds the best figure in most columns and still ranks
+  below the first, because of a deductible. Switch the line selector to motor and watch
+  the baseline re-base onto their motor policy.
+- **สร้างลิงก์ให้ลูกค้า**, open the link, then push the comparison. The customer's own
+  column is **absent** on a guest screen and the page says why; sign in and push again.
+- **ส่งข้อความให้ลูกค้าอ่าน** in the tool box — type anything, and watch the tier badge
+  above the send button.
+- **ส่งต่อ** beside วางสาย → the carrier on their policy, a reason, and the wrap-up already
+  filled in.
+
+⚠️ **The step worth doing is still pushing a personal FORM to a link-only screen** and
+watching it refuse with the reason. That is the rule the whole paired screen rests on.
 
 ### Before changing anything, know these
 
@@ -310,8 +362,8 @@ moment in the recording it was said — **and if they consented, their audio is 
 storage encrypted, with the key ref and the retention date on an `audio_recordings` row.**
 If they declined, it is nowhere.
 
-Verified **2026-09-08 (evening)**: **903 tests** — 891 pass + 12 skipped, with Postgres
-and MinIO both up. `ruff check` + `ruff format --check` clean over 220 files,
+Verified **2026-09-09**: **903 tests** — 891 pass + 12 skipped, with Postgres
+and MinIO both up (`readycall-postgres-1`, `readycall-minio-1`, both healthy). `ruff check` + `ruff format --check` clean over 220 files,
 `mypy --strict` clean over 155, 69/69 diagrams current, prompt pack fresh, `audit_docs.py`
 clean on the live files. **And by driving `/sim` in a browser** (`D123`): *Contact us —
 something else* asked which kind of cover, ประกันเดินทาง returned **ซื้อประกันเดินทาง** —
@@ -328,14 +380,20 @@ things that were both false before. **And on a live `health.advice.compare` call
 (`D126`): the panel ranked เมืองไทย เฮลท์ พลัส first and กรุงเทพ เฮลท์ อีลิท second
 *despite the best figure in three of five rows*, because of its ฿30,000 deductible; a push
 to a **guest** screen carried the market table with `held_hidden: true`, and signing in
-added แผนปัจจุบันของคุณ as column 1.
-**And by driving the workstation in a browser**: link minted from the panel, tool box
-opened (11 tools, exactly the 5 personal ones locked), a blank quote form pushed to a
+added แผนปัจจุบันของคุณ as column 1. **And on 2026-09-09** (`D127`, `D128`, `D129`): the
+transfer dialog has **no radio inputs left** — 13 carrier pills and 6 reason pills in two
+`radiogroup`s, and picking one clears the rest including the policy pill; the plan dialog
+switched to **ประกันรถยนต์** and re-based onto `MT-2024-008830 (ธนชาตประกันภัย)`, which is
+the bug that fix exists for; and a three-line message typed into the composer arrived on the
+paired screen with its line breaks intact, `from_agent: true`, and the amber
+*"ลูกค้ายังไม่ได้เข้าสู่ระบบ"* badge above the send button.
+**And, on 2026-09-08 morning**: link minted from the panel, tool box
+opened (11 tools then, 14 now, exactly the 5 personal ones locked), a blank quote form pushed to a
 GUEST screen at 375 px, filled in, submitted, and read back on the broker's screen; then
 sign-in, all 5 unlocked, and a claim form arriving prefilled with `HL-2024-000811` and
 `เมืองไทยประกันภัย`. **And on a running server**: a broker call routes
 to `q_claims` carrying its carrier and handoff banner, a real `claude-sonnet-5` summary
-came back in 4.5 s for $0.0085, and a form pushed to a customer's phone came back filled. **And verified against a running server with a
+came back in 4.5 s (cost figure withdrawn, see the queue), and a form pushed to a customer's phone came back filled. **And verified against a running server with a
 real MinIO container**: the bucket holds `RCE1`-framed ciphertext, the right master key
 returns the original 622,124-byte WAV, a wrong one refuses, and the caller who pressed 2
 left nothing behind.
@@ -647,9 +705,28 @@ a false statement about what somebody said · the event had to grow `engine`,
 `engine_version`, `is_final` and `intake_id`, because a subscriber can only persist what it
 is handed.
 
+**The broker's own job, 2026-09-07 to 2026-09-09 (`D115`–`D129`). In no phase, because
+the plan was written before the orientation redirected it.** `config/` gained
+`insurers.yaml` (who a call may be handed to, and why) and `comparison.yaml` (which figures
+matter per line, and which way is better) · `CoreDataProvider` gained
+**`list_products(line=…, active_only=…)`** on the port, every adapter and the contract
+suite, and `Product` gained `insurer` + typed `Coverage` rows — the **same** rows a policy
+uses, read by **one** parser (`D125`) · **`services/comparison/`** ranks candidates on
+arithmetic over config weights with no I/O of its own, and `to_push_payload` composes the
+table the customer's screen renders (`D126`) · **`services/transfer/`** records who a call
+was handed to and why, and prefills the wrap-up (`D124`) · the workstation gained a **plan
+panel** — rail preview, dialog, line selector, ranking, catalogue plan by plan (`D127`) — a
+**ส่งต่อ** button beside วางสาย, and a **composer** for the broker's own sentence (`D128`) ·
+`assist_tools.yaml` is **14 tools** now, and `menus.yaml`'s `contexts` finally has an app
+surface that asks step 1 first (`D123`).
+
 ## Designed but NOT built (read before touching these areas)
 
-- **`D63` — call transfer.** One filtered roster menu covering all three needs (named agent /
+- **`D63` — call transfer. ◐ HALF BUILT.** The **external** half — handing the call to
+  another company — landed as `D124`, with a two-tab dialog whose second tab is a labelled
+  stub. What follows describes the **internal** half, which is what that stub stands for and
+  is still a scope call (`D124`'s last section states the risk).
+  One filtered roster menu covering all three needs (named agent /
   department / seniority), with *"let the system choose"* walking the same list in fit order.
   The caller moves **last**: an acceptance notifies the *original* agent, who wraps up with the
   customer and presses Release. A busy receiver can *accept and queue at the front*. Lands with
@@ -665,63 +742,57 @@ for its estimates and its "if the week collapses" line, not as a to-do list._
 
 ### The actual queue, in order
 
-1. ~~**"Contact us — something else" needs a new-business path.**~~ ✅ **DONE
-   2026-09-08 (`D123`)** — and it was exactly what this said it was: one read-only
-   endpoint (`GET /v1/app/contact-lines`, the `product_line` menu) plus a second step in
-   `/sim`. No config, no menu, no intent, no service logic. ⚠️ It left one thing behind,
-   recorded as **`Q36`**: `motor.advice.quote`, `health.advice.quote` and
-   `life.advice.quote` exist with slots and playbooks and **no menu reaches any of them**
-   — only travel's does.
-2. **Transfer** — ◐ **the external half is DONE (`D124`); the internal half is a
-   DECISION FOR YOU.** Built and verified: ส่งต่อ beside วางสาย, `insurers.yaml` with the
-   real carriers, the policy's own carrier offered first and never missing, six reasons,
-   the wrap-up prefilled, a `call.handed_off` event. Not built: **โอนสายภายใน**, which
-   renders as a labelled stub naming `D63`.
+_Rewritten 2026-09-09. **Everything above item 1 is done** — `D115`–`D129` covers the
+orientation notes, the broker domain, the LLM seam, the paired screen, the tool rail, the
+new-business path, the handoff, the whole of compare-and-best-fit, and the plan panel. What
+follows is only what is left._
 
-   **Why it stopped there, so you can overrule it.** `D63`'s internal transfer is
-   *consulted*: the caller keeps talking to the first broker while the second decides, and
-   moves only when the first presses Release. That needs a transfer offer distinct from a
-   queue offer (`AssignmentService.offer` demands `MATCHED` and transitions to `OFFERED`;
-   the call must stay `IN_CALL`), a way to hand an accepted assignment from one agent to
-   another, and a rework of *"which call is mine"* from a fact about the **call** to a
-   fact about the **assignment** — without which the first broker's screen keeps showing
-   a live call they are no longer on, with a วางสาย that would end somebody else's. That
-   is a day inside `services/agents/`, where `B7`, `B25` and `B28` all lived, four days
-   before the pitch. **Say the word and it gets built; otherwise the stub is honest and
-   the risk stays where it is.**
-3. **Track B — compare & best-fit.** ◐ **The DATA half is done (`D125`).**
-   `list_products(line=…, active_only=…)` is on the port and every adapter, `Product` has
-   `insurer` and typed `Coverage` rows, and the fixtures are 19 plans across 6 real
-   carriers with a withdrawn one so `active_only` has something to exclude. Two quiet
-   faults fell out: two policies pointed at product codes in no catalogue at all, and the
-   same carrier was spelled two ways between a policy and the catalogue.
+⚠️ **The date matters now.** Pitch is **13 September**, file submitted 11:00–12:00 that
+morning, **5 minutes plus 5 of Q&A**. Mentor booking closed 9 September. Feature freeze
+should be end of day 11 at the latest, because item 1 needs a whole evening and cannot be
+done on the morning of.
 
-   ✅ **And the RANKING landed too (`D126`).** `services/comparison/` ranks on facts with
-   weights from `config/comparison.yaml`, the workstation has a panel showing the ranked
-   candidates with their trade-offs, and pushing sends a table **composed on the server** —
-   `compare.plans` used to push whatever payload the client sent, so coverage figures would
-   have been assembled in a browser.
+1. **REHEARSE, AND RECORD THE VIDEO.** Track E, and it is now the highest-value item in
+   this file by a distance. The build is well past what five minutes can show; what does
+   not exist is a rehearsed five minutes and a recording that survives a venue's wifi.
+   ⚠️ `Q23` bites here: personalised menus renumber, and a human reading a script off
+   paper presses what the script says. Either rehearse with the persona that will actually
+   be used, or set `personalisation.enabled: false` for the day.
 
-   ⚠️ **It also found a disclosure leak by looking at the output**: the table's first
-   column is the customer's own cover, and the tool is `personal: false`, so it landed on a
-   guest screen. Fixed the way `D121` reasons — the tool stays guest-safe and the **column**
-   moves: guest sees the market, signed-in sees the market against their own plan.
+2. **Package and freeze.** Dockerfile + a compose profile. ⚠️ **Ship the container on
+   `STT_ENGINE=scripted`** — a plain container cannot reach the GPU without host setup that
+   varies by machine, which is exactly what fails at a venue. The real engine runs on our
+   own box for the pitch and the video. Also decide `Q21` (which storage backend the demo
+   runs on) and `Q17` (whether `apps/workstation/dist/` gets committed, which decides
+   whether a venue with no internet can build the workstation at all).
 
-   **What is left of Track B:** the model writing the reason sentence (`Candidate.reason_th`
-   is the seam; the ranking is untouched by filling it), and gap analysis against a
-   customer's *whole portfolio* rather than one policy per line.
-4. **The AI story.** `scripts/compare_llm.py` does not exist and is a named P4 exit
-   criterion. ⚠️ **The cost table in `adapters/llm/anthropic.py` is WRONG** — it carries
-   Opus at $15/$75 and Sonnet at $3/$15; current published rates are **$5/$25 and $2/$10**,
-   so the "$0.0085 per call" figure in `D119` is ~1.5x too high (really ≈ $0.0057), and the
-   Haiku key has a date suffix so the correct model id never matches it. Fix the table,
-   then measure Haiku 4.5 against `Q35`'s 4.5 s.
+3. **The cheapest remaining feature, if there is time for exactly one:** the model writing
+   the comparison's **reason sentence**. `Candidate.reason_th` in
+   `services/comparison/service.py` is the seam; it is generated today. Filling it leaves
+   the ranking untouched, which is the whole point of `D126`'s split — and it makes "we use
+   AI" concrete without letting a model near an ordering. The LLM seam already exists
+   (`D119`), so this is a prompt file, a schema, and a fire-and-forget call.
+
+4. **The AI story, if there is more time.** `scripts/compare_llm.py` does not exist and is
+   a named P4 exit criterion. ⚠️ **The cost table in `adapters/llm/anthropic.py` is WRONG**
+   — it carries Opus at $15/$75 and Sonnet at $3/$15; current published rates are **$5/$25
+   and $2/$10**, so `D119`'s "$0.0085 per call" is ~1.5x too high (really ≈ $0.0057), and
+   the Haiku key has a date suffix so the correct model id never matches it. **Do not quote
+   the $0.0085 figure in the pitch until this is fixed and re-measured.**
+
 5. **The lapse-propensity model.** Agreed scope: **one** model, trained on a **real public
    dataset** (Kaggle/UCI/OpenML) — the user was explicit that synthetic data is circular
-   and a judge can dismantle it in one question. ⚠️ **Verify the dataset actually
-   downloads before building anything on it.**
-6. **Track E — package, freeze, rehearse.** Ship the container on `STT_ENGINE=scripted`;
-   run the real engine on our own box for the pitch and the recorded video.
+   and a judge can dismantle it in one question. ⚠️ **Verify the dataset actually downloads
+   before building anything on it.** Realistically a post-hackathon item now.
+
+**Waiting on the user, not on time** — all three are written up where they belong:
+
+- **The internal transfer tab** (`D124`'s last section). A day inside `services/agents/`,
+  where `B7`, `B25` and `B28` all lived. The stub is honest; building it three days out is
+  the risk.
+- **`Q36`** — three `*.advice.quote` intents no menu reaches.
+- **Agent → customer files and images** (`D128`). Needs blob storage on the assist path, a
+  size/type policy and a retention rule (`Q34`'s open list).
 
 **0. DONE — the orientation notes became `D115`/`D116`, Tracks A, C and D became
 `D117`–`D120`, and the 8 September notes became `D121`, `D122` and `B32`–`B39`.** The plan
@@ -731,22 +802,25 @@ is `docs/reading/the_broker_turn.html`; what was built against it is
 | track | days | what | who |
 |---|---|---|---|
 | ~~**A**~~ | ~~1-2~~ | ✅ **DONE 2026-09-07** (`D117`, `D118`, `B30`). **Broker domain pack** — intents/skills/queues around renewal, enquiry, quote, service, **handoff**; `insurer` on `Policy`; fixtures where one customer holds policies from three insurers. **Blocks everything else** | 1 |
-| **B** | 2-5 | **Compare & best-fit** — `products.yaml` with comparable attributes, gap analysis, rule-based ranking first, model writes only the reason sentence (`D16`) | 2 |
-| ~~**C**~~ | ~~1-6~~ | ◐ **PARTLY DONE 2026-09-07** (`D120`) — pairing, the tool rail and push-a-form all work end to end; the comparison DATA is Track B's. **Customer app v2 + the tool rail** — the 375-line static page becomes a Vite app; push-a-form working end to end, the rest as labelled stubs | 2 |
+| ~~**B**~~ | ~~2-5~~ | ✅ **DONE 2026-09-08/09** (`D125`, `D126`, `D127`) — and NOT as `products.yaml`: the catalogue is live data behind `CoreDataProvider`. Ranked on config weights, on the workstation, pushable to the phone. Only the model's reason sentence is left | 2 |
+| ~~**C**~~ | ~~1-6~~ | ✅ **DONE 2026-09-07/09** (`D120`, `D121`, `D122`, `D127`, `D128`) — pairing, the tool rail, push-a-form, the plan panel and the broker's own message all work end to end. The app never became a Vite build and does not need to be one. **Customer app v2 + the tool rail** — the 375-line static page becomes a Vite app; push-a-form working end to end, the rest as labelled stubs | 2 |
 | ~~**D**~~ | ~~2-4~~ | ✅ **DONE 2026-09-07** (`D119`). **The LLM, actually running** — `build_llm` FIRST (there is no adapter and no factory), then summary + intent into `summary_th`, then a labelled set | 1 |
 | **E** | 5-7 | **Package, freeze, rehearse** — Dockerfile + compose profile, **feature freeze end of day 5**, and record a video of the demo working | all |
 
 **If the week collapses, three things:** the broker domain pack · compare & best-fit on the
 workstation · **one** tool working end to end. One real tool proves the rail; five
-half-built ones prove less.
+half-built ones prove less. ✅ **All three exist as of 2026-09-09** — which is why item 1 in
+the queue above is rehearsal rather than a feature.
 
 ⚠️ **Ship the container on `STT_ENGINE=scripted`.** A plain container cannot reach the GPU
 without host setup that varies by machine, which is exactly what fails at a venue. Keep the
 real engine as a documented host-run option.
 
-**1. TRACK B — compare & best-fit.** The biggest remaining item, and the brief's biggest
-leak. The **transport already exists** (`D120` pushes a comparison to the customer's phone
-and it renders); what is missing is the data behind it:
+**1. TRACK B — compare & best-fit. ✅ DONE, 2026-09-08/09.** ⚠️ What follows was the
+PLAN; it is kept because the four bullets are exactly what shipped and they are the clearest
+statement of the rules. What actually landed differs on one point, and it is the important
+one: the catalogue is **not** `config/products.yaml` — it is live data behind
+`CoreDataProvider` (`D125`), because `config/` is not reachable by the hackathon-day swap.
 
 - `config/products.yaml` with genuinely comparable attributes — room & board, deductible,
   co-pay, exclusions, OPD, sum insured — across the real carriers in `MARKET_FACTS` §8.
@@ -883,9 +957,29 @@ this"* · **`Q29` the latency and `Q30` the test set** (both `D104`, and `Q30` i
 + Typhoon compared · React workstation with the softphone in it · web customer simulator ·
 menu-first flow (`D37`).
 
-## The machine, as left on 2026-09-06
+## The machine, as left on 2026-09-09
 
 Facts about *this laptop* rather than the repo, so a fresh session does not rediscover them.
+
+**⚠️ Read these four first — they cost time on 2026-09-08/09 and they will again.**
+
+- **PORT 8000 STILL HOLDS A STALE SERVER FROM AN EARLIER SESSION.** Verification on
+  2026-09-08/09 ran on **8010** instead (`API_PORT=8010 uv run python -m
+  readycall.entrypoints.api`). Either port works; just do not assume 8000 is yours, and
+  **check `/health` names ReadyCall** (`intents_loaded: 33`) before believing what you see.
+- **NEVER PIPE A LONG-RUNNING SERVER THROUGH `head`.** `... | head -40` closes the pipe
+  after 40 lines, and every later log write then raises **inside the request handler** — so
+  the app starts returning **500 on endpoints that log** while `/health` (which does not)
+  keeps answering 200. That looked exactly like an application bug for several minutes.
+  Redirect to a file instead.
+- **THE SERVER DOES NOT RELOAD PYTHON CHANGES.** Restart it, and confirm the old process is
+  gone first (`Get-NetTCPConnection -LocalPort <port> -State Listen`), or the new one fails
+  to bind while its log still prints `api ready`.
+- **`uv run python - <<'PY'` HEREDOCS BREAK ON APOSTROPHES** — twice on 2026-09-09. Write the
+  script into the scratchpad with the Write tool and run it by path.
+
+**Both containers are up and healthy** as of 2026-09-09: `readycall-postgres-1` and
+`readycall-minio-1`. The 903-test run above was with both.
 
 - **Docker works** (v29.2.0) and **Docker Desktop has to be started by hand** — it was not
   running on 2026-09-06 and `docker compose` failed with a named-pipe error rather than
@@ -952,6 +1046,58 @@ Facts about *this laptop* rather than the repo, so a fresh session does not redi
 
 ## Things to be careful about (live landmines)
 
+- **A COVERAGE FIGURE ON THE CUSTOMER'S SCREEN IS COMPOSED BY THE SERVER, ALWAYS**
+  (`D126`, `D127`, `D16`). `compare.plans` and `info.plan_detail` **discard the request's
+  payload** and build their own; the client sends a `tool_id`, a `line` or a
+  `product_code`, and nothing else. Two tests push fake tables and assert they are thrown
+  away. If you add another tool that renders figures, it belongs in that `elif` chain in
+  `push_to_customer` — a tool whose numbers come from the request is `D16` with extra
+  steps, and it will look completely normal in review.
+- **`note.agent_message` IS THE ONE EXCEPTION, AND IT IS DELIBERATE** (`D128`). Its text
+  comes from the broker because the system did not write it and cannot classify it. That
+  is why the composer shows the screen's **tier** while they type, why the customer sees
+  **ข้อความจากเจ้าหน้าที่** above it, and why both customer surfaces now **escape** what
+  they render — `/sim` was interpolating it into `innerHTML` raw. Do not "simplify" that
+  escaping away, and do not add a second free-text tool without the same three things.
+- **THE COMPARISON'S HELD COLUMN IS GATED ON THE SCREEN'S TIER, NOT ON THE TOOL** (`D126`,
+  `D121`). `compare.plans` is `personal: false` and must stay so — comparing what the
+  market offers is true for anybody. The customer's OWN column is not, so
+  `to_push_payload(..., include_held=)` is read from the session and **never** from the
+  request. Marking the tool personal instead would wall off the half with no privacy cost,
+  which is the design `D120` argued against at length.
+- **THE COMPARISON BASELINE FOLLOWS THE LINE BEING ASKED ABOUT, NOT THE CALL** (`D127`).
+  `_relevant_policy_for(container, call_id, line)` reads `active_policies`; passing no
+  `line` gives the call's own policy, which is right for the policy panel and for a handoff
+  and **wrong** for the plan dialog. Getting this wrong told a motor policyholder they had
+  no motor cover and then silently ranked as new business — a different question with a
+  different answer.
+- **A HANDOFF DOES NOT ENTER `CallState.TRANSFERRED`, AND A TEST HOLDS THAT DOWN** (`D124`,
+  `Q37`). The state is terminal, so a call in it can never reach `WRAP_UP`, and after-call
+  work on a handoff is real work. Making it non-terminal would leave two states both
+  meaning "the media is over and the agent is filing" — `B25`/`B26`'s shape. What makes a
+  handoff a handoff is the record: the transition reason, the `call.handed_off` event and
+  the disposition the broker files.
+- **`insurers.yaml` IS A MENU, NOT A WHITELIST** (`D124`). The carrier on the customer's own
+  policy is offerable whether or not it is in the file, because the real extract arrives on
+  hackathon day carrying carriers nobody typed. A startup guard demanding the two agree
+  would refuse to boot on exactly the data the `CoreDataProvider` seam exists to absorb.
+  The one guard that DOES run is `D122`'s shape: if every handoff reason required a policy,
+  a caller holding none could never be handed over, so that refuses to boot.
+- **`None` IN A COVERAGE ROW MEANS *NOT STATED*, NEVER ZERO** (`D125`, `D126`). A plan
+  silent on outpatient cover and a plan that excludes it are different products. It
+  contributes nothing to the score in either direction, renders as "—", and can never win
+  its row. Every rendering path has to keep that — a `or 0` anywhere near a coverage amount
+  is a claim the data does not support.
+- **RANKING IS ARITHMETIC AND THE MODEL ONLY WRITES THE SENTENCE** (`D126`, `D16`, `D115`).
+  Weights live in `config/comparison.yaml`; `better: higher|lower` refuses to boot on
+  anything else, because getting it backwards is silent — every plan still renders, in the
+  wrong order, with a confident reason attached. When the model is wired into
+  `Candidate.reason_th`, it must not touch `score`.
+- **WITH NO POLICY TO IMPROVE ON, EVERY WEIGHTED IMPROVEMENT IS ZERO** (`D126`). That is
+  not a tie, it is no ranking at all, and the order then falls back to catalogue order —
+  which is precisely how an affiliated carrier ends up silently first. New business ranks
+  candidates against each other, min-max per attribute. A test asserts the strongest plan
+  wins even when its product code sorts last.
 - **SINCE `D113`, ONE AGENT CAN HOLD TWO ASSIGNMENTS FOR ONE CALL** (`B28`). The round-1
   decline and the round-2 accept both exist, both belong to that agent, and `for_agent`
   yields them in insertion order — the **decline first**. Anything asking "this agent's
@@ -1024,7 +1170,8 @@ Facts about *this laptop* rather than the repo, so a fresh session does not redi
   and the read path only *prefers* what is already cached.
 - **THE SUMMARY IS FIRE-AND-FORGET AND MUST STAY THAT WAY** (`D119`, `D12`). `accept_offer`
   starts the task and never awaits it — the agent is connected the moment that endpoint
-  returns. Measured on the real provider: **4.5 s, $0.0085 a call** on `claude-sonnet-5`,
+  returns. Measured on the real provider: **4.5 s a call** on `claude-sonnet-5` (the cost
+  figure that used to sit here is WITHDRAWN — the table it came from carries pre-2026 rates),
   which is well outside §15's 1 s brief budget and survivable only because nobody waits
   for it. If a summary is ever wanted BEFORE accept, that number says it needs a smaller
   model, a shorter prompt or streaming.

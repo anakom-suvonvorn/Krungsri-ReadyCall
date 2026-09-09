@@ -1,7 +1,7 @@
 # INTEGRATIONS
 
 _Every external thing the system touches: the port that hides it, the adapters behind it, and the config that selects one._
-_Status: **the persistence stack, the whole audio path, the transcript's route to the agent's screen, the encrypted recording and BOTH LLM adapters are real. Telephony is the last big fake.** Last updated: 2026-09-07._
+_Status: **the persistence stack, the whole audio path, the transcript's route to the agent's screen, the encrypted recording and BOTH LLM adapters are real. Telephony is the last big fake.** Last updated: 2026-09-09._
 
 > **Real as of P2c (complete):** SQLAlchemy 2.0 (async) + Alembic + `asyncpg`, against
 > Postgres 16 in `infra/docker-compose.yml`, verified on a live container — **eleven tables**,

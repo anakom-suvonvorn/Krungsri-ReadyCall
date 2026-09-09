@@ -1,7 +1,7 @@
 # PROJECT_STATE
 
 _What this project is, what exists, what doesn't, and where everything lives._
-_Last updated: 2026-09-08._
+_Last updated: 2026-09-09._
 
 ---
 
@@ -34,15 +34,26 @@ demonstrable slice, so "the demo" is the current state plus a chosen scenario (`
 ## 2. Status: **P0 · P1 · P1b · P2a · P2b · P2c · P3 complete. P4 PARTLY DONE.**
 
 ⚠️ **The phase numbering stopped describing the work on 2026-09-07.** The hackathon
-orientation redirected the project (`D115`), so what landed that day was the *broker*
-domain (`D117`), playbooks in config (`D118`), the LLM seam (`D119`) and the customer's
-paired screen (`D120`) — three of which are P4 items and one of which (`D120`) is not in
-any phase, because the plan was written before the idea existed. Read `NEXT_SESSION.md`
-for what is actually done rather than inferring it from a phase letter.
+orientation redirected the project (`D115`), and everything since has been the **broker's
+own job** rather than a phase: the broker domain (`D117`), playbooks in config (`D118`),
+the LLM seam (`D119`), the customer's paired screen and its tool rail (`D120`–`D122`), the
+app's new-business path (`D123`), handing a call to the insurer (`D124`), compare-and-best-fit
+end to end (`D125`–`D127`), and a message the broker types themselves (`D128`). Only three
+of those are P4 items; the rest are in no phase, because the plan was written before the
+ideas existed. **Read `NEXT_SESSION.md` for what is actually done** rather than inferring it
+from a phase letter.
+
+The one-line version: a caller reaches the right broker queue, is transcribed while they
+wait, and the broker answers with the brief already on screen — and can then **compare the
+market against what this customer holds**, push that table or a single plan or their own
+sentence to the customer's phone, and **hand the call to the insurer** with the carrier and
+the reason recorded.
 
 The spine runs. A full call lifecycle - arrival, IVR, consent, queue, intake, matching, the offer
 handshake, the live call, wrap-up, rating, closed - executes end to end on fake adapters with no
-telephony, no GPU, no database and no API key.
+telephony, no GPU, no database and no API key. So does everything the broker does on top of it:
+the plan catalogue, the ranking, the pushes and the handoff all run on the fixture adapter with
+nothing configured.
 
 As of P3 the identity ladder, **the IVR itself**, **the intake offer**, the context assembler,
 the brief builder, the public API, the matching engine, agent presence, the offer handshake and
@@ -148,11 +159,20 @@ FullProject/
 │  ├─ demo_personas.yaml*    # DEMO: ids only, everything displayed is read live (D47)
 │  ├─ voice_prompts.yaml     # every spoken line, as Thai text (D24)
 │  ├─ assist_tools.yaml*     # the tool rail: what a broker may push to the customer's
-│  │                         #   screen (D120, D121). 4 groups, 11 tools. `personal` is the
+│  │                         #   screen (D120, D121, D127, D128). 4 groups, 14 tools.
+│  │                         #   `personal` is the
 │  │                         #   TIER GATE and is read from here, never from a request -
 │  │                         #   a client able to declare its own push non-personal would
 │  │                         #   be the gate's own bypass. Guarded both ways at startup,
 │  │                         #   including: prefill on a non-personal tool refuses to boot.
+│  ├─ comparison.yaml*       # which figures a comparison ranks on, per line, and which
+│  │                         #   way is better (D126). The OTHER half of D125's split: the
+│  │                         #   plan catalogue is live data behind CoreDataProvider, and
+│  │                         #   this is our own knowledge about how to compare it. Test of
+│  │                         #   the distinction - if the answer changes because an insurer
+│  │                         #   launched a plan it is data; if it changes because we
+│  │                         #   decided differently it is config. `better:` refuses to
+│  │                         #   boot on anything but higher/lower: wrong is SILENT.
 │  ├─ insurers.yaml*         # who a call may be handed TO, and why (D124). Real carriers
   │                         #   from MARKET_FACTS 8. A MENU, not a whitelist: the carrier
   │                         #   on the customer's own policy is offered whether or not it
@@ -375,7 +395,7 @@ workstation** — held while nobody owns the call, flushed on accept (`D105`, `D
 ☑ **`build_llm` + `AnthropicLlm` + `OpenAiCompatibleLlm`** (`D119`) — the factory that did not
 exist for six phases while `Settings` accepted both names · ☑ **versioned prompt files** in
 `prompts/th/`, refusing a missing slot AND an undeclared one · ☑ **the intake summary**,
-fire-and-forget from Accept, measured at 4.5 s / $0.0085 on `claude-sonnet-5` · ☑ **NBA
+fire-and-forget from Accept, measured at 4.5 s on `claude-sonnet-5` (⚠️ **the $0.0085 figure is withdrawn** until the cost table in `adapters/llm/anthropic.py` is corrected — it carries pre-2026 rates, so the real number is ≈ $0.0057; do not quote it) · ☑ **NBA
 playbooks in config** (`D118`, closing `Q19`) · ☑ **the broker intent taxonomy** (`D117`,
 closing `Q7`) · ☐ intent classifier wired to the blend · ☐ entity extraction (**blocked on
 `Q24`**) · ☐ rolling summary · ☐ brief versioning · ☐ confidence calibration ·
@@ -398,7 +418,22 @@ the customer's own carrier offered first and never missing, closed reasons, the 
 prefilled, a `call.handed_off` event, and no new call state ·
 ☐ sending the link (P5's `NotifierPort`) · ☐ signature, OCR, document upload ·
 ☐ merging with `customer_sim` · ☐ **internal transfer** (`D63`'s consulted handover) —
-a labelled stub on screen, and a scope call awaiting the user (`D124`)
+a labelled stub on screen, and a scope call awaiting the user (`D124`) ·
+☐ **agent → customer files and images** (`D128`) — the text half is built
+
+**Not in any phase — the broker's own job** (`D123`–`D129`, 2026-09-08/09)
+☑ **the app can ask about cover the customer does not hold** — the keypad's own step 1 in
+front of the *"something else"* branch (`D123`) · ☑ **handing the call to the insurer** as an
+action, with `config/insurers.yaml`, closed reasons and the wrap-up prefilled (`D124`) ·
+☑ **the plan catalogue behind `CoreDataProvider`**, not in `config/` — `list_products` on the
+port and every adapter, `insurer` + typed `Coverage` rows on `Product`, 19 plans across 6 real
+carriers (`D125`) · ☑ **compare & best-fit ranked on arithmetic** over weights in
+`config/comparison.yaml`, with the model reserved for the reason sentence alone (`D126`) ·
+☑ **the plan information panel** — rail preview, dialog, line selector, ranking, catalogue
+plan by plan, push one plan (`D127`) · ☑ **a message the broker types themselves**, labelled
+as human-written on the customer's screen (`D128`) · ☑ one-of-many as pills (`D129`) ·
+☐ the model writing the reason sentence — `Candidate.reason_th` is the seam ·
+☐ gap analysis across a customer's whole portfolio rather than one policy per line
 
 **P5 — real telephony** ☐ Asterisk + ARI adapter · ☐ TLS/WSS certs · ☐ **in-browser softphone
 (SIP.js, devices, self-test, reconnect)** · ☐ customer WebRTC path · ☐ PSTN/ANI identification ·

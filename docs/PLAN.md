@@ -1,7 +1,7 @@
 # PLAN
 
 _The master build plan for the full system: what gets built, in what order, and what "done" means for each phase._
-_Last updated: 2026-09-07._
+_Last updated: 2026-09-09._
 
 ---
 
@@ -299,14 +299,24 @@ which is P6 (`D26`).
 
 ---
 
-## P4 — Analysis & the case brief — ◐ **partly done (2026-09-07)**
+## P4 — Analysis & the case brief — ◐ **partly done (2026-09-07 to 09)**
 **Goal:** the agent screen from pitch p.7, fully populated and trustworthy.
 
 ⚠️ **The orientation redirected this phase before it started** (`D115`). What landed on
-2026-09-07 is the LLM seam, the summary, the playbooks and the broker taxonomy — plus one
-thing that is in no phase at all, the customer's paired screen (`D120`), because the plan
-was written before the idea existed. `docs/explanations/P4_broker_and_assist.md` is the
-write-up; `NEXT_SESSION.md` is the live state.
+2026-09-07 is the LLM seam, the summary, the playbooks and the broker taxonomy — plus a
+run of work that is in **no phase at all**, because the plan was written before the ideas
+existed: the customer's paired screen (`D120`) and the tool rail (`D121`, `D122`), then
+compare-and-best-fit end to end (`D125`, `D126`, `D127`), the handoff to the insurer
+(`D124`), the app's new-business path (`D123`) and the broker's own message (`D128`).
+
+**Read `NEXT_SESSION.md` for the live state, not a phase letter.** The write-ups are
+`docs/explanations/P4_broker_and_assist.md` (7 September) and
+`docs/reading/where_the_numbers_come_from.html` (8–9 September, by mechanism).
+
+⚠️ **Track B is done and it is NOT where this plan said it would be.** The plan called for
+`config/products.yaml`; the catalogue is live data behind `CoreDataProvider` instead
+(`D125`), because `config/` is not reachable by the hackathon-day data swap. That is the
+single most reusable correction in this file.
 
 - ✅ `config/intents.yaml`: closed taxonomy + required slots per intent + intent→skill
   mapping — **rewritten broker-shaped** (`D117`, closing `Q7`): 33 intents, advice and
