@@ -5806,3 +5806,80 @@ A second test asserts `v1` is still on disk (`D18`).
   the honest move is to fold these checks into `scripts/compare_llm.py` as a
   `summarize_context` case, so the objective columns are re-measured by the harness rather
   than by hand — and, per `D130`, the Thai still gets read by a human either way.
+
+## D136. The container ships on the scripted engine, and the image is the "starts anywhere" story
+_Taken 2026-09-09 (late). `PLAN.md`'s Track E, and queue item 2 in `NEXT_SESSION`._
+
+- **Problem.** There was no `Dockerfile`. The system runs on a clean clone in about a
+  minute — but only if you have `uv`, and `/workstation` only if you also have Node. Four
+  days from a pitch that is two things that can go wrong on somebody else's laptop, and
+  `PLAN.md`'s risk register has one rule about venues: **never depend on one.**
+
+- **Decision.** A two-stage image — Node builds the React bundle, `python:3.11-slim` runs
+  it — plus two compose **profiles**, so that every command that worked before this
+  existed still does exactly what it did.
+
+  ```
+  docker compose -f infra/docker-compose.yml up -d postgres      # unchanged
+  docker compose -f infra/docker-compose.yml --profile demo up    # the whole demo
+  ```
+
+### What the image runs on, and why each default is what it is
+
+| | | why |
+|---|---|---|
+| `STT_ENGINE=scripted` | the only real degradation | a plain container **cannot reach the GPU** without host setup that varies by machine, which is exactly what fails at a venue. The real Typhoon engine runs on our own box for the pitch and the video |
+| `LLM_PROVIDER=rulebased` | models off unless a key is passed | `rulebased` is a real adapter, not a stub (`D119`), so the image starts with nothing configured. `-e` switches the models on |
+| `STORAGE_BACKEND=memory`, `BLOB_STORAGE=memory` | no containers required | this is what makes it startable on a venue laptop with nothing else running. `Q21` is still open; the `demo-postgres` profile is the other half of that question, one command away |
+| non-root `uid 10001` | | nothing writes outside `/app` and the demo stores are in memory |
+
+### ⚠️ The whole AI story runs in this container, with no audio at all
+
+That is `D133`'s dividend and it is worth stating plainly, because it is the demo path a
+venue can actually run. **Verified end to end inside the image**, with keys passed at
+`docker run`: three Thai sentences typed on `/sim` reached the broker's transcript panel as
+three turns; a `gpt-5.4-mini` preview of them was on the offer card **before Accept**
+(`D131`); `claude-sonnet-5` replaced it after; and `D135`'s context panel carried its own
+sentence. Every `*.wav` is excluded by `.dockerignore` — there is no audio in the image and
+none is needed.
+
+### Three faults found by running the container rather than by building it
+
+1. **`/sim` and `/assist/<token>` 404'd, silently.** `create_app` mounts both only
+   `if <dir>.is_dir()` — correct for a dev clone with no built workstation, and it means an
+   image missing `apps/customer_sim/` **starts, reports healthy, serves `/workstation`, and
+   loses two of the three customer surfaces with no error anywhere.** The first build did
+   exactly that. Found by curling `/sim`, which is this project's `B24` lesson in a new
+   place: a green build is not a running system.
+2. **`DATABASE_URL` is read by nothing.** The `demo-postgres` profile was written with the
+   obvious name; `Settings.database_url` is a computed **property** over
+   `readycall_database_url`, so the app would have quietly talked to `127.0.0.1` inside its
+   own container. That is `Q26`'s "env var that changes nothing", caught before it shipped
+   because the setting was looked up rather than assumed.
+3. **`chown -R` cost 109 s on every rebuild.** Recursively chowning ~4,000
+   bytecode-compiled files. Creating the user *before* anything is written and copying with
+   `--chown` took the rebuild from **484 s to 44 s** — which on a feature-freeze day is the
+   difference between iterating and not.
+
+⚠️ **Two of my own test scripts reported faults that were not there**, and both are worth
+remembering because the shape recurs: `/v1/agent/me` carries `brief` and `transcript` at
+the **top level**, not under `call`, and the offer card's AI summary is `offer.summary_th`,
+not `offer.brief.summary_th` — reading the wrong path renders a working feature as `None`.
+And a **stale caller from an earlier failed run** was offered ahead of the new one, because
+`max_offer_rounds: 0` means a caller nobody takes circles forever (`D113`) — so the
+transcript read as empty for a call that never had one. **Compare the `call_session_id` you
+placed against `active_call_session_id` before believing anything about a call.**
+
+- **Alternatives.** *Commit `apps/workstation/dist/`* (`Q17`) — not needed for the image,
+  which builds the bundle itself; `Q17` stays open for the non-Docker venue case.
+  *Ship the `ml`/`asr` extras* — ~3 GB of CUDA wheels for an engine this image cannot run.
+  *No profiles, a second compose file* — profiles keep one file and leave §3/§4's commands
+  untouched.
+- **Tradeoffs.** The image is a full `slim` Python plus both LLM SDKs, so it is not small,
+  and a cold build pays for `npm ci` and the dependency resolve. Neither matters for a
+  demo image built once. The scripted engine means the container **cannot** demonstrate
+  real Thai ASR — that is the point of the split, and the README says so where somebody
+  running it will read it.
+- **Future.** If the image is ever handed to a judge, `DEMO_LOGIN_ENABLED` is the flag to
+  think about: it is `true` by default and is what lets `/sim` become any customer.
+  Harmless on fixture data, wrong the moment the data is real (`D47`).

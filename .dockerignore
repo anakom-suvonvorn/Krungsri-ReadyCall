@@ -1,0 +1,63 @@
+# Keep the build context small and keep secrets and real speech out of an image that may
+# be handed to a judge (`D14`, `D97`, `D136`).
+
+# Secrets. `.env` holds live API keys; the image takes them at run time with `-e`.
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+secrets/
+
+# Real customer audio and transcripts. Never in an image.
+data/
+recordings/
+transcripts/
+*.wav
+*.mp3
+*.m4a
+*.flac
+tests/audio/
+
+# Model weights — gigabytes, and this image runs `STT_ENGINE=scripted` anyway.
+models/
+*.bin
+*.safetensors
+*.ct2/
+.cache/
+.hf_cache/
+
+# Local environments and build output. `.venv` especially: it is a Windows venv here and
+# copying it into a Linux image produces a broken interpreter that looks installed.
+.venv/
+node_modules/
+apps/**/dist/
+apps/**/.vite/
+__pycache__/
+*.py[oc]
+*.egg-info
+build/
+wheels/
+
+# Where BLOB_STORAGE=localfs writes.
+var/
+
+# Tooling caches — large, useless in an image, and .mypy_cache alone is thousands of files.
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage*
+
+# History and docs. The image runs the system; it is not where anyone reads about it.
+.git/
+.github/
+docs/
+tests/
+DemoProject/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+*.swp

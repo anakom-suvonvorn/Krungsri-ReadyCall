@@ -283,8 +283,17 @@ FullProject/
 │  └─ customer_assist/*      # D120. The customer's PAIRED screen, opened from a link the
 │                            #   broker sends. One static page, polls 1s. Separate from the
 │                            #   sim on purpose: a stranger opens this from a phone.
+├─ Dockerfile                # D136. Two stages: node builds the workstation bundle, slim
+│                            #   python runs it. Ships on STT_ENGINE=scripted (no GPU is
+│                            #   reachable from a plain container) and LLM_PROVIDER=rulebased
+│                            #   (keys go in with -e). Non-root; HEALTHCHECK reads
+│                            #   intents_loaded, not just status.
+├─ .dockerignore             # D136. Keeps .env, every *.wav and the model weights out of an
+│                            #   image that may be handed to a judge (D14, D97).
 ├─ infra/*
 │  ├─ docker-compose.yml  asterisk/  grafana/  k8s/
+│  │     # D136 added `app` (profile: demo) and `app-postgres` (profile: demo-postgres).
+│  │     # Behind PROFILES so every pre-existing command still does what it did.
 ├─ scripts/*                 # audit_docs, gen_diagrams, render_diagrams, run_matching, run_scenario,
 │                            #   bake_off (D30, --dump prints the text behind a CER),
 │                            #   score_endpointer (B20 - scores the DETECTOR, which a CER
@@ -313,7 +322,7 @@ P0 and the P1 core are built; everything from P1b onward is not. Legend: ☐ pla
 ☑ contract test suites (core data, event bus) · ☑ scenario runner + 3 scenarios · ☑ CI ·
 ☑ domain-pack config (`intents.yaml`, `skills.yaml`, `dids.yaml`) · ☑ core fixtures (3 personas,
 4 policies across 4 lines) · ☐ Postgres schema + Alembic · ☐ mock-core *generator* (~2,000 customers;
-hand-authored fixtures exist) · ☐ docker-compose
+hand-authored fixtures exist) · ☑ docker-compose · ☑ **a Dockerfile and two demo profiles** (`D136`)
 
 **P1 — context-aware calling** (core done; the HTTP layer is P1b)
 ☑ identity resolver + assurance ladder L0–L3 · ☑ `dids.yaml` + `menus.yaml` wired in ·
@@ -475,6 +484,14 @@ uv run python scripts/run_scenario.py tests/scenarios/pattheera_ipd.yaml --quiet
 uv run python scripts/run_scenario.py tests/scenarios/roadside_motor_claim.yaml --quiet
 uv run python scripts/run_scenario.py tests/scenarios/anonymous_declined.yaml --quiet
 uv run ruff check . && uv run ruff format --check . && uv run mypy
+```
+
+Or the whole thing in a container, with nothing else installed (`D136`):
+
+```bash
+docker build -t readycall .
+docker run --rm -p 8000:8000 readycall             # /sim and /workstation on :8000
+# or: docker compose -f infra/docker-compose.yml --profile demo up --build
 ```
 
 Arrives with later phases:

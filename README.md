@@ -87,7 +87,7 @@ build step — see [§2](#2-the-agent-workstation-react-bundle).
 |---|---|---|
 | **[uv](https://docs.astral.sh/uv/)** | everything Python. Installs its own Python 3.11 | **Yes** |
 | **Node 18+** | building the agent workstation bundle, **once** | Only for `/workstation` |
-| **Docker** | Postgres, so a shift survives a restart | Optional |
+| **Docker** | Postgres, so a shift survives a restart — **or the whole system in one container** (§5b), which needs none of the rows above | Optional |
 | **mermaid-cli** | re-rendering the docs diagrams to SVG | Only if you edit diagrams |
 | **An NVIDIA GPU** | local Thai speech-to-text | Only for real STT (§7). Everything else, tests included, runs without one |
 
@@ -259,6 +259,74 @@ uv run python mock/bank_core/generate.py --seed 42 --customers 2000
 
 Writes to `mock/bank_core/generated/` (gitignored). Deterministic: the same seed produces
 byte-identical files.
+
+### 5b. The whole thing in one container — *optional, and it needs nothing else installed*
+
+If you do not want to install anything — no `uv`, no Node, no Python — this is the one command
+that gets you a running ReadyCall:
+
+```bash
+docker build -t readycall .
+```
+
+```bash
+docker run --rm -p 8000:8000 readycall
+```
+
+Then <http://127.0.0.1:8000/sim> and <http://127.0.0.1:8000/workstation>, exactly as above. The
+image builds the React workstation itself, so `/workstation` works with no `npm` step and no
+internet at run time.
+
+Or through compose, which is behind a **profile** so it does not disturb the Postgres/MinIO
+commands in §3 and §4:
+
+```bash
+docker compose -f infra/docker-compose.yml --profile demo up --build
+```
+
+**What is real in the container and what is not.** Everything except the speech engine: the IVR,
+the identity ladder, the matcher, the brief, the workstation, the paired customer screen, the plan
+comparison, the handoff — all real, on fixture data, with no services and no keys.
+
+⚠️ **The image ships on `STT_ENGINE=scripted`, on purpose.** A plain container cannot reach the
+GPU without host setup that varies by machine, which is exactly what fails at a venue. The real
+Typhoon engine (§7) runs on a host with a GPU; this image is the one that starts anywhere.
+
+⚠️ **It also defaults to `LLM_PROVIDER=rulebased`**, a real adapter that needs no key (`D119`), so
+the container runs with nothing configured. Pass keys to turn the models on:
+
+```bash
+docker run --rm -p 8000:8000 \
+  -e LLM_PROVIDER=anthropic -e LLM_MODEL=claude-sonnet-5 -e ANTHROPIC_API_KEY=sk-ant-... \
+  -e LLM_FAST_PROVIDER=openai_compatible -e LLM_FAST_MODEL=gpt-5.4-mini \
+  -e LLM_FAST_BASE_URL=https://api.openai.com/v1 -e OPENAI_API_KEY=sk-proj-... \
+  readycall
+```
+
+**With keys, the full AI story runs in the container with no microphone and no GPU**, because a
+typed intake is a real turn rather than a stand-in (`D133`). Verified end to end in the image: three
+sentences typed on `/sim` reached the broker's transcript panel, a `gpt-5.4-mini` preview of them
+was on the offer card **before Accept**, `claude-sonnet-5` replaced it after, and the
+*"ข้อมูลอื่นๆ ที่มีเกี่ยวกับลูกค้า"* panel carried its own model-written sentence (`D131`, `D134`,
+`D135`). There is no audio in the image at all — every `*.wav` is excluded by `.dockerignore`.
+
+The container runs as a non-root user and answers `/health`, which is also its `HEALTHCHECK`:
+
+```bash
+curl -s http://127.0.0.1:8000/health
+# {"status":"ok", ... "intents_loaded":33}
+```
+
+⚠️ **`intents_loaded` is the field that matters.** A container that started but loaded no domain
+pack still returns `status: ok` on some failures; the count is what proves the config directory
+came along.
+
+**If you want the durable backend instead** (`Q21` is the open question of which the demo should
+use), there is a second profile that brings Postgres up with it:
+
+```bash
+docker compose -f infra/docker-compose.yml --profile demo-postgres up --build
+```
 
 ### 6. Diagram rendering — *only if you edit the docs*
 
@@ -1032,6 +1100,16 @@ RECORDING_MASTER_KEY ──┬─▶ BLOB_STORAGE=localfs   (a directory; no con
                                                     └─▶ BLOB_STORAGE=minio
      (without the key: BLOB_STORAGE=memory only — any durable store REFUSES to start,
       because ciphertext nobody can ever read is worse than no recording at all)
+```
+
+```
+docker build -t readycall .  ──▶ docker run -p 8000:8000 readycall
+                                   ├─▶ /sim, /workstation, /assist/<token>   all work immediately
+                                   ├─▶ STT_ENGINE=scripted                   (no GPU reachable in a
+                                   │                                          plain container, on purpose)
+                                   └─▶ LLM_PROVIDER=rulebased                (pass -e keys for real models)
+     (needs NOTHING else installed — not uv, not Node, not Python. The image builds the
+      workstation bundle itself, so /workstation needs no npm step at run time.)
 ```
 
 Nothing in the left column depends on anything in the right.

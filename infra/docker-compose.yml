@@ -11,6 +11,73 @@
 name: readycall
 
 services:
+  # The application itself (`D136`, Track E). Behind a PROFILE, so every command that
+  # worked before this service existed still does exactly what it did:
+  #
+  #   docker compose -f infra/docker-compose.yml up -d postgres     # unchanged
+  #   docker compose -f infra/docker-compose.yml --profile demo up  # the whole demo
+  #
+  # ⚠️ It depends on NOTHING. `STORAGE_BACKEND=memory` and `BLOB_STORAGE=memory` are the
+  # image's defaults and they are what make this startable on a venue laptop with nothing
+  # else running — `PLAN.md`'s risk register says never depend on the venue. Postgres is
+  # opt-in below and is `Q21`'s open question, not a default.
+  app:
+    profiles: ["demo"]
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: readycall:latest
+    ports: ["${API_PORT:-8000}:8000"]
+    environment:
+      # Everything here is already the image's default; it is restated so the file shows
+      # what the demo actually runs on rather than hiding it in a Dockerfile.
+      STT_ENGINE: scripted
+      STORAGE_BACKEND: memory
+      BLOB_STORAGE: memory
+      LOG_FORMAT: json
+      # The models are off unless a key is passed. Set these in a shell or an `.env`
+      # beside this file and they reach the container; leave them unset and the
+      # rule-based adapter answers, which needs nothing (`D119`).
+      LLM_PROVIDER: "${LLM_PROVIDER:-rulebased}"
+      LLM_MODEL: "${LLM_MODEL:-}"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      LLM_FAST_PROVIDER: "${LLM_FAST_PROVIDER:-}"
+      LLM_FAST_MODEL: "${LLM_FAST_MODEL:-}"
+      LLM_FAST_BASE_URL: "${LLM_FAST_BASE_URL:-}"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys,json; d=json.load(urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4)); sys.exit(0 if d.get('status')=='ok' and d.get('intents_loaded') else 1)"]
+      interval: 15s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+  # Same image, pointed at the Postgres below — `Q21`'s other option, so that rehearsing
+  # on a durable backend is one command rather than a hand-edited environment. ⚠️ It adds
+  # a container to the list of things that can fail on the day; that is the whole of Q21.
+  app-postgres:
+    profiles: ["demo-postgres"]
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: readycall:latest
+    depends_on:
+      postgres: {condition: service_healthy}
+    ports: ["${API_PORT:-8000}:8000"]
+    environment:
+      STT_ENGINE: scripted
+      STORAGE_BACKEND: postgres
+      # ⚠️ `READYCALL_DATABASE_URL`, not `DATABASE_URL`. `Settings.database_url` is a
+      # computed PROPERTY over this field, so the obvious name is read by nothing and
+      # would leave the app quietly talking to `127.0.0.1` inside its own container —
+      # `Q26`'s "env var that changes nothing", caught here before it shipped.
+      READYCALL_DATABASE_URL: postgresql+asyncpg://readycall:readycall@postgres:5432/readycall
+      BLOB_STORAGE: memory
+      LOG_FORMAT: json
+      LLM_PROVIDER: "${LLM_PROVIDER:-rulebased}"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+
   postgres:
     image: postgres:16-alpine
     environment:

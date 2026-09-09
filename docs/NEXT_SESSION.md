@@ -59,10 +59,16 @@ setter plus a dispatched `input` event, or the component never sees the text.
 only the assist polls and looks exactly like the request never being made. Read the
 element's full `innerText`, not the visible part.
 
-### 3. Then: the queue below, which is unchanged
+### 3. Then: the queue below — and item 2 of it is now done too
 
-Rehearsal and the video are still item 1 of the real queue. Nothing in the last two days
-changed that.
+**Rehearsal and the video are the whole of what is left before the pitch.** `D136` packaged
+the system (queue item 2), so the only things between here and 13 September are the ones
+that need the team rather than the code: a rehearsed five minutes, a recording that
+survives a venue's wifi, and the feature freeze itself.
+
+⚠️ `Q23` bites during rehearsal: personalised menus **renumber**, and a human reading a
+script off paper presses what the script says. Either rehearse with the persona that will
+actually be used, or set `personalisation.enabled: false` for the day.
 
 ### What the user asked for that is DONE
 
@@ -336,9 +342,10 @@ have yet.
    is genuinely left of it: **the model writing the reason sentence**. `Candidate.reason_th`
    is the seam, it is generated today, and filling it leaves the ranking untouched. That is
    the cheapest remaining way to make "we use AI" concrete without letting a model rank.
-2. **Docker packaging** (Track E), and the rehearsal. ⚠️ Ship the container on
-   `STT_ENGINE=scripted`: a plain container cannot reach the GPU without host setup that
-   varies by machine, which is what fails at a venue.
+2. ~~**Docker packaging**~~ **BUILT 2026-09-09 (`D136`)** — `Dockerfile`, `.dockerignore`
+   and two compose profiles, verified by running the container rather than by building it.
+   **The rehearsal and the video are still the open half of Track E**, and they are now the
+   only thing above a feature in this file's queue.
 3. **Sending the assist link.** `NotifierPort` is P5. The link comes back for the broker to
    read out.
 4. **Signature, OCR, document upload.** `document_request` records the intent and stubs it.
@@ -875,12 +882,22 @@ done on the morning of.
    paper presses what the script says. Either rehearse with the persona that will actually
    be used, or set `personalisation.enabled: false` for the day.
 
-2. **Package and freeze.** Dockerfile + a compose profile. ⚠️ **Ship the container on
-   `STT_ENGINE=scripted`** — a plain container cannot reach the GPU without host setup that
-   varies by machine, which is exactly what fails at a venue. The real engine runs on our
-   own box for the pitch and the video. Also decide `Q21` (which storage backend the demo
-   runs on) and `Q17` (whether `apps/workstation/dist/` gets committed, which decides
-   whether a venue with no internet can build the workstation at all).
+2. ~~**Package and freeze.**~~ ✅ **PACKAGED 2026-09-09 (`D136`); the FREEZE is still yours.**
+   `Dockerfile` + `.dockerignore` + two compose profiles (`demo`, `demo-postgres`). Built
+   and driven: every surface serves, a full call runs, and **the whole AI story runs inside
+   the container with no audio** — three typed sentences on `/sim`, a `gpt-5.4-mini`
+   preview on the offer card before Accept, `claude-sonnet-5` after, and `D135`'s context
+   panel. Two commands, nothing else installed:
+
+   ```bash
+   docker build -t readycall .
+   docker run --rm -p 8000:8000 readycall     # /sim and /workstation on :8000
+   ```
+
+   ⚠️ Ships on `STT_ENGINE=scripted` and `LLM_PROVIDER=rulebased`; keys go in with `-e`
+   (README §5b has the line). `Q17` is **no longer a Docker problem** — the image builds the
+   bundle itself — but still matters for a venue running without Docker. `Q21` still wants
+   an answer; the `demo-postgres` profile makes it one command either way.
 
 3. **The cheapest remaining feature, if there is time for exactly one:** the model writing
    the comparison's **reason sentence**. `Candidate.reason_th` in

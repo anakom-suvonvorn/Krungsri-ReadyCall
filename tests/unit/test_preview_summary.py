@@ -611,6 +611,6 @@ def test_a_superseded_context_prompt_is_kept_on_disk() -> None:
     superseded = PromptRef(id="summarize_context", version="v1")
 
     assert library.get(superseded) is not None
-    assert ContextSummariser.PROMPT != superseded, (
+    assert ContextSummariser.PROMPT.version != superseded.version, (
         "the shipped prompt is still v1 — D135 replaced it"
     )
