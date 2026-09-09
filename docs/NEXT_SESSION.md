@@ -2089,6 +2089,7 @@ URL from another conversation creates a duplicate instead.
 
 | Page | URL |
 |---|---|
+| `reading/what_landed_9_10_september.html` — **`D135`–`D138` and `B41`, in plain language.** Written because the user said *"i have no idea on all the stuff you just did"*. Each change as what / where / why / how, the measurement tables, and §`left` answers *"what do we have left to do"* — including why the internal transfer is a scope call rather than an oversight | https://claude.ai/code/artifact/c486b010-b060-46a6-b6e9-1957ed925334 |
 | `reading/the_line.html` — the keypad | https://claude.ai/code/artifact/5953f7a7-d0c4-4829-8cc7-fec2b6f5b856 |
 | `reading/2026-09-03_what_happened.md` — **markdown, not a page.** The 3 September session from zero, with a glossary and the two open decisions. Written for the user after three summaries failed to land | _(a file, no URL)_ |
 | `reading/2026-09-05_the_words_on_the_screen.md` — **markdown, not a page.** How the transcript reached the agent's screen, and the two services that turned out to be running nowhere (`B24`). Ends in three commands that put six Thai sentences on a real screen | _(a file, no URL)_ |

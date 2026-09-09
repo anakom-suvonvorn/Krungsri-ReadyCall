@@ -1,0 +1,721 @@
+<title>What Landed, 9–10 September</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+  :root {
+    --paper:  #F2F1ED;
+    --card:   #FBFAF8;
+    --sunk:   #E7E5DE;
+    --line:   #D6D3CA;
+    --ink:    #1A1C1F;
+    --muted:  #5D6570;
+    --faint:  #868D97;
+    --ours:   #14524F;
+    --ours-sk:#E0EBEA;
+    --hand:   #9C4020;
+    --hand-sk:#F6E5DE;
+    --gold:   #7E6212;
+    --gold-sk:#F3ECD6;
+
+    --display: "Newsreader", Georgia, serif;
+    --body: "IBM Plex Sans", "IBM Plex Sans Thai", "Noto Sans Thai", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper:  #15171A; --card: #1D2024; --sunk: #24272C; --line: #343941;
+      --ink:    #E9EAEC; --muted: #A4ABB5; --faint: #7C838D;
+      --ours:   #63B8B2; --ours-sk: #16302E;
+      --hand:   #E08A66; --hand-sk: #2E1B12;
+      --gold:   #D2B25C; --gold-sk: #2A2412;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper:  #15171A; --card: #1D2024; --sunk: #24272C; --line: #343941;
+    --ink:    #E9EAEC; --muted: #A4ABB5; --faint: #7C838D;
+    --ours:   #63B8B2; --ours-sk: #16302E;
+    --hand:   #E08A66; --hand-sk: #2E1B12;
+    --gold:   #D2B25C; --gold-sk: #2A2412;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--paper); color: var(--ink);
+    font-family: var(--body); font-size: 16.5px; line-height: 1.62;
+    -webkit-font-smoothing: antialiased; margin: 0;
+  }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 26px 110px; }
+  .col { max-width: 66ch; }
+
+  header.top { padding: 62px 0 36px; border-bottom: 2px solid var(--ink); margin-bottom: 46px; }
+  .eyebrow {
+    font-family: var(--mono); font-size: 11.5px; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--muted);
+    display: flex; flex-wrap: wrap; gap: 7px 18px; margin-bottom: 24px;
+  }
+  h1 {
+    font-family: var(--display); font-weight: 600;
+    font-size: clamp(36px, 6vw, 64px); line-height: 1.03; letter-spacing: -.02em;
+    margin: 0 0 20px; text-wrap: balance; max-width: 17ch;
+  }
+  .standfirst { font-size: clamp(17px, 2vw, 20px); line-height: 1.5; color: var(--muted); max-width: 62ch; margin: 0; }
+  .standfirst strong { color: var(--ink); font-weight: 600; }
+
+  section { margin: 0 0 68px; }
+  h2 {
+    font-family: var(--display); font-weight: 600;
+    font-size: clamp(24px, 3vw, 32px); line-height: 1.15; letter-spacing: -.012em;
+    margin: 0 0 6px; text-wrap: balance;
+  }
+  .kicker {
+    font-family: var(--mono); font-size: 11.5px; letter-spacing: .13em;
+    text-transform: uppercase; color: var(--ours); margin: 0 0 12px; font-weight: 500;
+  }
+  h3 { font-weight: 600; font-size: 17.5px; margin: 30px 0 7px; }
+  p { margin: 0 0 15px; }
+  .col > p:last-child { margin-bottom: 0; }
+  ul, ol { margin: 0 0 15px; padding-left: 21px; }
+  li { margin-bottom: 7px; }
+  li::marker { color: var(--faint); }
+  strong { font-weight: 600; }
+  .th { font-family: var(--body); }
+
+  code {
+    font-family: var(--mono); font-size: .86em; background: var(--sunk);
+    padding: 1px 5px; border-radius: 3px;
+  }
+  pre {
+    font-family: var(--mono); font-size: 13.2px; line-height: 1.6;
+    background: var(--sunk); border: 1px solid var(--line); border-radius: 6px;
+    padding: 14px 16px; overflow-x: auto; margin: 16px 0;
+  }
+  pre code { background: none; padding: 0; }
+
+  figure { margin: 28px 0; }
+  .scroller { overflow-x: auto; padding-bottom: 4px; }
+  .scroller svg { display: block; min-width: 720px; width: 100%; height: auto; }
+  figcaption { font-size: 14px; color: var(--muted); margin-top: 11px; max-width: 72ch; }
+
+  .tw { overflow-x: auto; margin: 22px 0; }
+  table { border-collapse: collapse; width: 100%; min-width: 520px; font-size: 15px; }
+  th, td { text-align: left; padding: 10px 14px 10px 0; vertical-align: top; border-bottom: 1px solid var(--line); }
+  th {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .11em; text-transform: uppercase;
+    color: var(--faint); font-weight: 500; border-bottom: 1px solid var(--ink); padding-top: 0;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; padding-right: 0; }
+  th.num { text-align: right; padding-right: 0; }
+
+  .tag {
+    display: inline-block; font-family: var(--mono); font-size: 10.5px;
+    letter-spacing: .06em; text-transform: uppercase; padding: 2px 7px;
+    border-radius: 3px; white-space: nowrap; font-weight: 500;
+  }
+  .t-ours { background: var(--ours-sk); color: var(--ours); }
+  .t-hand { background: var(--hand-sk); color: var(--hand); }
+  .t-part { background: var(--gold-sk); color: var(--gold); }
+
+  .note {
+    border-left: 3px solid var(--gold); background: var(--gold-sk);
+    padding: 15px 18px; border-radius: 0 5px 5px 0; margin: 22px 0;
+  }
+  .note p:last-child { margin-bottom: 0; }
+  .note strong { color: var(--gold); }
+
+  .refuse {
+    border: 1px solid var(--hand); background: var(--hand-sk);
+    padding: 17px 19px; border-radius: 5px; margin: 22px 0;
+  }
+  .refuse h3 { margin: 0 0 7px; color: var(--hand); font-size: 16px; }
+  .refuse p:last-child { margin-bottom: 0; }
+
+  .facts {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 1px; background: var(--line); border: 1px solid var(--line); margin: 26px 0;
+  }
+  .facts > div { background: var(--card); padding: 16px 18px; }
+  .facts dt {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--faint); margin-bottom: 6px;
+  }
+  .facts dd { margin: 0; font-size: 15px; line-height: 1.45; }
+  .facts dd b { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  /* Screen → mechanism → rule. The three-part shape this page repeats, because the
+     question it answers is "what is actually happening behind that button". */
+  .layers { display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); margin: 24px 0; }
+  .layers > div { background: var(--card); padding: 15px 18px; display: grid; grid-template-columns: 120px 1fr; gap: 18px; }
+  .layers dt {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .11em;
+    text-transform: uppercase; color: var(--faint); padding-top: 3px;
+  }
+  .layers dd { margin: 0; }
+  .layers dd p:last-child { margin-bottom: 0; }
+  @media (max-width: 620px) { .layers > div { grid-template-columns: 1fr; gap: 6px; } }
+
+  .contents { border: 1px solid var(--line); background: var(--card); padding: 18px 22px; margin: 0 0 46px; }
+  .contents ol { margin: 0; padding-left: 20px; columns: 2; column-gap: 34px; }
+  .contents li { margin-bottom: 5px; break-inside: avoid; }
+  @media (max-width: 620px) { .contents ol { columns: 1; } }
+
+  footer { border-top: 2px solid var(--ink); padding-top: 20px; font-size: 14px; color: var(--muted); }
+  a { color: var(--ours); text-underline-offset: 2px; }
+  a:focus-visible { outline: 2px solid var(--ours); outline-offset: 3px; }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+
+<div class="wrap">
+
+<header class="top">
+  <div class="eyebrow">
+    <span>ReadyCall · HACK VIDVA</span><span>9–10 September 2026</span>
+    <span>D135 · D136 · D137 · D138 · B41</span>
+  </div>
+  <h1>What landed on 9–10 September</h1>
+  <p class="standfirst">
+    Five changes, written across two sessions from one instruction. Four were planned. The
+    fifth was a <strong>bug you found by asking why a checkbox could not be ticked</strong>
+    — and it turned out the machine had been calling a paid model three times per call
+    while the screen said it was calling none.
+  </p>
+</header>
+
+<nav class="contents col" style="max-width:none">
+  <ol>
+    <li><a href="#map">The map: five changes, one line each</a></li>
+    <li><a href="#d135">D135 — the customer-context sentence</a></li>
+    <li><a href="#d136">D136 — the container that starts anywhere</a></li>
+    <li><a href="#d137">D137 — the model writes the comparison's reason</a></li>
+    <li><a href="#b41">B41 — the screen that lied about the AI</a></li>
+    <li><a href="#d138">D138 — the ⚙ panel you asked for</a></li>
+    <li><a href="#try">See all of it yourself, in ten minutes</a></li>
+    <li><a href="#left">What is actually left</a></li>
+  </ol>
+</nav>
+
+<section id="map">
+  <p class="kicker">Orientation</p>
+  <h2>The map</h2>
+  <div class="col">
+    <p>
+      Everything below is committed. Each row is one commit, one decision entry, and tests
+      that fail if it breaks.
+    </p>
+  </div>
+
+  <div class="tw">
+  <table>
+    <thead>
+      <tr><th>#</th><th>What it is</th><th>Where it lives</th><th>The one thing to know</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="tag t-ours">D135</span></td>
+        <td>The Thai sentence over “what the bank already knew”</td>
+        <td><code>prompts/th/summarize_context.v2.md</code></td>
+        <td>Verifying it is what showed the <em>prompt</em> was wrong. It never once led with the life events.</td>
+      </tr>
+      <tr>
+        <td><span class="tag t-ours">D136</span></td>
+        <td>The whole system in one Docker container</td>
+        <td><code>Dockerfile</code>, <code>infra/docker-compose.yml</code></td>
+        <td>Two commands, nothing else installed. Three faults found by <em>running</em> it, not building it.</td>
+      </tr>
+      <tr>
+        <td><span class="tag t-ours">D137</span></td>
+        <td>A model writes the plan-comparison reason sentence</td>
+        <td><code>services/analysis/comparison_reason.py</code></td>
+        <td>Every number it writes must be one we handed it. The ranking is untouched.</td>
+      </tr>
+      <tr>
+        <td><span class="tag t-hand">B41</span></td>
+        <td>The screen said “no model” while calling one</td>
+        <td><code>api/routers/demo.py</code>, <code>api/app.py</code></td>
+        <td><strong>Your question found this.</strong> It was spending money and reporting that it was not.</td>
+      </tr>
+      <tr>
+        <td><span class="tag t-ours">D138</span></td>
+        <td>The ⚙ settings panel</td>
+        <td><code>apps/workstation/src/settings.tsx</code></td>
+        <td>Switch the AI on and off mid-demo, no restart. Not persisted.</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section id="d135">
+  <p class="kicker">D135 · the planned item that went sideways</p>
+  <h2>The sentence about what the bank already knew</h2>
+
+  <div class="col">
+    <h3>What it is</h3>
+    <p>
+      When a broker answers a call, one panel says <span class="th">“ข้อมูลอื่นๆ ที่มีเกี่ยวกับลูกค้า”</span>
+      — everything the bank already holds about this person that the broker would otherwise
+      have to ask for. Home loan, new child, deposits, past conversations. That panel was
+      built the day before (<code>D134</code>) and shipped with a note saying its
+      <strong>facts</strong> were verified on a running server but its
+      <strong>model-written sentence</strong> had never been seen working.
+    </p>
+
+    <h3>Where</h3>
+    <p>
+      The facts come from <code>services/brief/context_facts.py</code>. The sentence is
+      written by <code>ContextSummariser</code> in
+      <code>services/analysis/summary.py</code>, using a prompt file at
+      <code>prompts/th/summarize_context.*.md</code>. It renders in the workstation's brief.
+    </p>
+
+    <h3>Why it needed doing first</h3>
+    <p>
+      Two guards could have been eating the sentence. One refuses any run of four or more
+      digits, because a coverage amount must never be written by a model — and this project
+      prints dates in the Buddhist era, so <code>30/08/2565</code> looks exactly like money.
+      That had already thrown away one correct summary.
+    </p>
+
+    <h3>How it was checked, and what actually turned up</h3>
+    <p>
+      I ran the real summariser over the real customer's facts six times against a live
+      model and <strong>read every sentence</strong>. The guards were fine — sixteen clean
+      runs, zero refusals, Buddhist dates in every one. The prompt was not:
+    </p>
+  </div>
+
+  <div class="tw">
+  <table>
+    <thead><tr><th>Over six live runs</th><th class="num">v1 (old)</th><th class="num">v2 (shipped)</th></tr></thead>
+    <tbody>
+      <tr><td>Answered / refused</td><td class="num">5 / 1</td><td class="num"><b>6 / 0</b></td></tr>
+      <tr><td>Led with a life event (the “why now”)</td><td class="num"><b>0 of 5</b></td><td class="num"><b>6 of 6</b></td></tr>
+      <tr><td>Named the mortgage</td><td class="num">4 of 5</td><td class="num"><b>6 of 6</b></td></tr>
+      <tr><td>Claimed something was “not found”</td><td class="num">1 of 5</td><td class="num">0 of 6</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="col">
+    <p>
+      The old prompt told the model to lead with whatever relates to today's call. The
+      panel's own ordering rule says the opposite, and says why: <strong>life events come
+      first because they are the only thing there that answers “why now”</strong>, and the
+      only thing the broker could not have guessed from the policy list already in front of
+      them. The prompt and the ordering disagreed, and the prompt won on every single call.
+    </p>
+    <p>
+      So the sentence a judge would read opened with <em>“they once rang about renewing a
+      motor policy, and it's closed”</em> — while the mortgage and the new child, which the
+      orientation deck calls the cleanest example of <em>right customer × right time</em> in
+      the whole brief, came last or not at all.
+    </p>
+  </div>
+
+  <div class="refuse">
+    <h3>⚠️ The near-miss worth remembering</h3>
+    <p>
+      My first rewrite fixed all three problems and was <strong>green on every counter</strong>
+      — and it recited the customer's <strong>balance bands</strong>
+      (<code>1m-5m</code>, <code>500k-1m</code>) in 6 of 6 runs, where the old one never had.
+      The money guard cannot see those: there is no run of four digits in <code>1m-5m</code>.
+    </p>
+    <p>
+      Only reading the Thai caught it. That is now written into the project's landmine list
+      as one line: <strong>a green counter is not a read output.</strong>
+    </p>
+  </div>
+
+  <div class="col">
+    <p>
+      What ships is a new file, <code>summarize_context.v2.md</code>. The old one stays on
+      disk on purpose — every stored summary records which prompt file produced it, so
+      deleting v1 would make old results unexplainable.
+    </p>
+  </div>
+</section>
+
+<section id="d136">
+  <p class="kicker">D136 · packaging</p>
+  <h2>The container that starts anywhere</h2>
+
+  <div class="col">
+    <h3>What it is</h3>
+    <p>
+      Two commands and you have a running ReadyCall, with no <code>uv</code>, no Node, no
+      Python installed:
+    </p>
+  </div>
+
+  <pre><code>docker build -t readycall .
+docker run --rm -p 8000:8000 readycall</code></pre>
+
+  <div class="col">
+    <p>
+      Then <code>/sim</code> and <code>/workstation</code> on port 8000. There is also a
+      compose profile — <code>--profile demo</code> — kept behind a profile so every
+      Postgres/MinIO command that worked before still does exactly what it did.
+    </p>
+
+    <h3>Why, and why it ships without the speech engine</h3>
+    <p>
+      The plan's own risk register has one rule about venues: <strong>never depend on
+      one</strong>. But a plain container cannot reach the GPU without host setup that
+      varies by machine — which is precisely what fails on the day. So the image ships on
+      the scripted speech engine, and the real Typhoon engine runs on our own laptop for the
+      pitch and the recorded video. Everything else in it is real.
+    </p>
+
+    <h3>How it was verified — and the three faults that found</h3>
+    <p>
+      By <strong>running</strong> the container and driving it, not by watching the build
+      succeed:
+    </p>
+    <ol>
+      <li>
+        <strong><code>/sim</code> and the customer's paired screen returned 404 — silently.</strong>
+        The app mounts those two pages only if their folder exists, which is right for a
+        developer's clone and means an image missing them <em>starts, reports healthy,
+        serves the workstation, and loses two of the three customer screens with no error
+        anywhere</em>. The first build did exactly that. Found by fetching <code>/sim</code>.
+      </li>
+      <li>
+        <strong>The Postgres profile used an environment variable nothing reads.</strong>
+        <code>DATABASE_URL</code> looks obvious; the setting is actually
+        <code>READYCALL_DATABASE_URL</code> behind a computed property, so the app would
+        have quietly talked to itself instead of the database.
+      </li>
+      <li>
+        <strong>A rebuild took 484 seconds.</strong> One line was changing ownership of
+        ~4,000 files. Creating the user before anything is written took it to
+        <strong>44 seconds</strong> — on a feature-freeze day that is the difference between
+        iterating and not.
+      </li>
+    </ol>
+  </div>
+
+  <div class="note">
+    <p>
+      <strong>The whole AI story runs in the container with no audio at all.</strong> That
+      is what the typed intake bought. Verified inside the image: three Thai sentences typed
+      into <code>/sim</code> reached the broker's transcript panel, a fast model's summary of
+      them was on the offer card <em>before</em> Accept, the careful model replaced it after,
+      and the context panel carried its own sentence. Every <code>.wav</code> is excluded
+      from the image — there is no audio in it and none is needed.
+    </p>
+  </div>
+</section>
+
+<section id="d137">
+  <p class="kicker">D137 · the last piece of compare-and-best-fit</p>
+  <h2>A model writes the reason, and never the ranking</h2>
+
+  <div class="col">
+    <h3>What it is</h3>
+    <p>
+      In the plan panel, each compared plan has a sentence under it saying how it differs
+      from what the customer holds. That sentence used to be assembled by code — honest,
+      traceable, and dull: it named the single biggest improvement and the single biggest
+      downside and stopped. A model writes it now.
+    </p>
+
+    <h3>Why the split is where it is</h3>
+    <p>
+      The <strong>order</strong> of those plans is arithmetic over weights in a config file,
+      computed from real coverage figures. That is deliberate: a model that ranks is a model
+      that can be argued into putting a plan first. A model that explains an ordering it
+      never saw a score for cannot. So the model rewrites one string and touches nothing
+      else — the service that does the ranking does not know this feature exists.
+    </p>
+
+    <h3>What it produces</h3>
+    <p>
+      On the demo data, the plan that has the <em>better figure in three of four rows</em>
+      and still ranks second:
+    </p>
+    <p class="th" style="border-left:3px solid var(--ours); padding-left:14px; color:var(--ink)">
+      เพิ่มค่าห้องและค่าอาหารจาก 3,000 เป็น 6,000 วงเงินผู้ป่วยในต่อปีจาก 1,000,000 เป็น
+      10,000,000 และค่ารักษาผู้ป่วยนอกจาก 1,500 เป็น 2,500 <strong>แต่ค่าใช้จ่ายส่วนแรกสูงขึ้นจาก 0 เป็น 30,000</strong>
+    </p>
+    <p>
+      The ฿30,000 deductible is exactly why it ranks second, and the sentence says so. The
+      old generated one mentioned two of those four differences.
+    </p>
+
+    <h3>The four guards</h3>
+    <ol>
+      <li>
+        <strong>Every number it writes must be one we handed it.</strong> Not “no numbers” —
+        the useful sentence quotes real amounts, and that is what makes it a comparison
+        rather than an adjective. So the check is <em>provenance</em>: a figure the model
+        produced that was not in its input is a coverage amount invented by a model, and it
+        is refused.
+      </li>
+      <li><strong>It may not rank.</strong> No “best”, “most suitable”, “you should pick”.</li>
+      <li><strong>It may not mention price.</strong> There is no premium anywhere in its input, so any price is invented by construction.</li>
+      <li><strong>It may not promise cover.</strong> Underwriting belongs to the insurer.</li>
+    </ol>
+    <p>A refused sentence falls back to the generated one, so none of this can break the table.</p>
+  </div>
+
+  <div class="note">
+    <p>
+      <strong>This is the one model call in the system that is waited for</strong>, and the
+      reason is mechanical: the plan panel is fetched once when you open it and never polled,
+      so a background task would finish into a screen nothing refreshes. It is bounded at 3
+      seconds, it is nowhere near the call path, and the ranked table is already computed
+      when the wait starts. Measured: <b>2.4 s</b> the first time, <b>4 ms</b> after that
+      from a cache.
+    </p>
+  </div>
+
+  <div class="col">
+    <p>
+      A small <strong>AI</strong> chip marks a sentence a model wrote. It is absent, rather
+      than saying “generated”, when no model wrote it — a badge on every row stops being
+      information.
+    </p>
+    <p>
+      Two faults surfaced on the first live run, and neither was a guard. The startup
+      warm-up — which exists to pay the first hosted call's cost so no caller does — was
+      running on a 4-second deadline, and a cold call plus the OpenAI parameter negotiation
+      takes longer than that. So it timed out, the negotiation went unpaid, and
+      <em>the next real call failed outright</em>. And my own cache stored that failure
+      permanently. Both fixed; the cache now tells a refusal (deterministic, worth caching)
+      apart from a failed call (transient, never cached).
+    </p>
+  </div>
+</section>
+
+<section id="b41">
+  <p class="kicker">B41 · the one you found</p>
+  <h2>The screen said “no model configured”. It was calling one.</h2>
+
+  <div class="col">
+    <p>
+      You asked why the line in the custom test-call dialog could never be ticked:
+    </p>
+    <p class="th" style="border-left:3px solid var(--hand); padding-left:14px">
+      ให้โมเดลสรุป — ยังไม่ได้ตั้งค่าโมเดล — จะใช้สรุปแบบกฎ ซึ่งไม่เรียกโมเดลใดๆ
+    </p>
+    <p>
+      Two answers. The first: that line is a <strong>status report</strong>, not a control —
+      the dialog is built to describe what the machine is, not to configure it. The second is
+      the problem: <strong>the sentence was false on your machine.</strong>
+    </p>
+
+    <h3>What was actually happening</h3>
+    <p>
+      There are <strong>two</strong> model clients, not one. A “careful” one for the full
+      summary after Accept, and a “fast” one for anything that has to arrive while somebody
+      is waiting. The fast one is built whenever <code>LLM_FAST_MODEL</code> is set —
+      <em>whatever <code>LLM_PROVIDER</code> says</em>. And three of the four AI features run
+      on the fast client:
+    </p>
+    <ul>
+      <li>the summary that lands on the offer card before you press Accept;</li>
+      <li>the customer-context panel (the one from D135 above);</li>
+      <li>the comparison's reason sentence (D137 above).</li>
+    </ul>
+    <p>Your <code>.env</code> said, in effect:</p>
+  </div>
+
+  <pre><code>LLM_PROVIDER=rulebased          # → the dialog concluded "no model"
+LLM_FAST_PROVIDER=openai_compatible
+LLM_FAST_MODEL=gpt-5.4-mini     # → but this built a REAL client</code></pre>
+
+  <div class="col">
+    <p>
+      So the machine was calling <code>gpt-5.4-mini</code> at OpenAI <strong>three times per
+      call, and being billed for it</strong>, while the screen said it called nothing. The
+      dialog computed “is the AI on?” from the main provider alone.
+    </p>
+
+    <h3>How it was proved</h3>
+    <p>
+      Not by argument — by construction, and then on a running server:
+    </p>
+  </div>
+
+  <pre><code>LLM_PROVIDER in .env : rulebased
+main client          : rulebased / rulebased-v1
+fast client          : openai_compatible / gpt-5.4-mini</code></pre>
+
+  <div class="col">
+    <p>
+      And a call placed on that “rule-based” instance logged
+      <code>context summary unavailable error=</code> — an <em>empty</em> error, which is a
+      bare timeout, which the rule-based adapter can never produce because it does no
+      network I/O at all.
+    </p>
+
+    <h3>The fix, in three parts</h3>
+    <ol>
+      <li>The dialog asks the running system what was built, not the config file.</li>
+      <li>
+        It <strong>names the two stages apart</strong>, because they genuinely differ.
+        One combined sentence is exactly what hid this.
+      </li>
+      <li>
+        The startup warm-up had the same wrong test, so on your configuration the real fast
+        client was never warmed and its first call timed out cold. That is why the context
+        panel sometimes appeared to do nothing on the first call of a session.
+      </li>
+    </ol>
+  </div>
+
+  <div class="refuse">
+    <h3>The lesson, written into the docs</h3>
+    <p>
+      <strong>A status line is a claim, and a claim derived from one field is a claim about
+      that field, not about the system.</strong> This project's most repeated fault is code
+      that runs and nothing calls it. This is the mirror image: <em>code that is called, and
+      the screen says it is not</em> — which is worse, because nothing fails and somebody
+      plans a demo around it.
+    </p>
+  </div>
+</section>
+
+<section id="d138">
+  <p class="kicker">D138 · the thing you asked for</p>
+  <h2>The ⚙ panel</h2>
+
+  <div class="col">
+    <h3>How to use it</h3>
+    <p>
+      There is a <strong>⚙</strong> button in the workstation header, next to
+      <span class="th">ออกจากระบบ</span>. It opens a panel with three choices:
+    </p>
+    <ul>
+      <li><span class="th"><strong>ปิดโมเดล — ใช้สรุปแบบกฎ</strong></span> — the AI off, entirely.</li>
+      <li><strong>Anthropic</strong> · <code>claude-sonnet-5</code></li>
+      <li><strong>OpenAI-compatible</strong> · <code>gpt-5.4-mini</code></li>
+    </ul>
+    <p>
+      One click switches. <strong>No restart.</strong> A choice you have no key for is greyed
+      out and says which key is missing. Underneath, the panel reports the two stages
+      separately — so you can see at a glance that, say, the full summary is rule-based while
+      the preview is a real model.
+    </p>
+    <p>
+      <strong>It is not saved.</strong> Restart and it returns to whatever <code>.env</code>
+      says. That is deliberate: a switch thrown for a demo that silently outlives the demo is
+      a setting nobody can find later.
+    </p>
+
+    <h3>Why this is worth a button</h3>
+    <p>
+      The strongest thing this system can show in five minutes is <strong>the same call,
+      twice</strong> — once with the model off, so the arithmetic ranking and the rule-based
+      brief stand up on their own, and once with it on. Before this, that meant editing a
+      file and restarting mid-pitch.
+    </p>
+
+    <h3>The five rules behind it, because a settings endpoint is a good place for a hole</h3>
+    <ol>
+      <li>
+        <strong>The request names a provider and nothing else.</strong> No key, no URL, no
+        model id. A request that could name its own endpoint would let anyone signed in point
+        our summariser at a server of their choosing — and post every caller's words to it.
+        A test sends those fields and asserts they are rejected.
+      </li>
+      <li><strong>No key ever reaches the browser.</strong> “Available” is a yes/no the server worked out from its own environment.</li>
+      <li><strong>Clients are built by the one factory</strong> that builds them at startup, so the switch cannot drift from the boot path.</li>
+      <li><strong>The config object stays frozen.</strong> The switch copies it; nothing else in the process starts reading different settings than it booted with.</li>
+      <li><strong>The whole thing is a 404 on a non-demo instance</strong>, behind the same flag that allows signing in as any agent.</li>
+    </ol>
+
+    <h3>Two things it must do that are easy to miss</h3>
+    <p>
+      Turning the model <em>off</em> turns the <strong>fast</strong> one off too — otherwise
+      the offer card keeps calling a hosted model while the panel says the AI is disabled,
+      which is B41 recreated by the control built to fix it. And both text caches are
+      cleared, or you would see one model's prose on a screen reporting the other.
+    </p>
+  </div>
+</section>
+
+<section id="try">
+  <p class="kicker">Ten minutes</p>
+  <h2>See all of it yourself</h2>
+
+  <div class="col">
+    <p>⚠️ Pull first, then rebuild the workstation — the built bundle is not in git, so the ⚙ button and the AI chip will not appear until you do:</p>
+  </div>
+
+  <pre><code>cd apps/workstation &amp;&amp; npm run build &amp;&amp; cd ../..
+uv run python -m readycall.entrypoints.api</code></pre>
+
+  <div class="col">
+    <ol>
+      <li>Open <code>/workstation</code>, sign in as <strong>A006</strong>, press <span class="th">พร้อมรับสาย</span>.</li>
+      <li>Press <strong>⚙</strong>. Read the two lines under the pills — that is B41's fix. Switch to <strong>OpenAI-compatible</strong>.</li>
+      <li>Press <span class="th">+ สายทดสอบ⚙</span> and place a <code>health.advice.compare</code> call.</li>
+      <li>Accept it, then open <span class="th">เปิดข้อมูลแผน</span> in the right rail. Read the sentence under the <em>second</em> plan — it should name the deductible. Look for the small <strong>AI</strong> chip.</li>
+      <li>Press <strong>⚙</strong> again, switch to <span class="th">ปิดโมเดล</span>, and reopen the panel on a new call. Same ranking, duller sentences, no chip. <strong>That contrast is the demo.</strong></li>
+    </ol>
+  </div>
+</section>
+
+<section id="left">
+  <p class="kicker">The answer to your third question</p>
+  <h2>What is actually left</h2>
+
+  <div class="col">
+    <p>
+      Very little, and almost none of it is code. The build is well past what five minutes
+      can show.
+    </p>
+
+    <h3>Needs you, not the code</h3>
+    <ol>
+      <li>
+        <strong>Rehearse, and record the video.</strong> This is the highest-value item left
+        by a distance. ⚠️ Personalised menus <em>renumber</em> per caller, and a human
+        reading a script off paper presses what the script says — so rehearse with the exact
+        persona you will use, or turn personalisation off for the day.
+      </li>
+      <li><strong>Feature freeze.</strong> End of 11 September at the latest.</li>
+      <li>
+        <strong>Two decisions:</strong> which storage backend the demo runs on, and whether
+        the built workstation bundle gets committed so a venue with no internet can still
+        serve it. (The container sidesteps the second entirely.)
+      </li>
+    </ol>
+
+    <h3>Deliberately not built, and each is written up</h3>
+    <ul>
+      <li>
+        <strong>The internal transfer</strong> — <span class="th">โอนสายภายใน</span>. The
+        external half (handing the call to another <em>insurer</em>) is built and working.
+        The internal tab is a labelled stub. It needs a transfer-offer flow distinct from a
+        queue offer plus a rework of “which call is mine” inside the agent services — which
+        is where three of this project's worst bugs have lived. <strong>Three days out,
+        that is the risk, not the reward.</strong> It is a scope call and it is yours.
+      </li>
+      <li><strong>Sending the assist link by SMS</strong> — the broker reads it out instead.</li>
+      <li><strong>Signature, OCR, file upload</strong> — the text half is built; files need storage, a size/type policy and a retention rule.</li>
+      <li><strong>Three “get a quote” intents no menu reaches</strong> — a domain question about splitting “buy” from “compare”.</li>
+      <li><strong>The lapse-propensity model</strong> — agreed scope is one model on a real public dataset, never synthetic. Realistically after the hackathon.</li>
+    </ul>
+
+    <p>
+      If the week collapsed to three things, all three already exist: the broker domain,
+      compare-and-best-fit on the workstation, and one tool working end to end. That is why
+      the queue's top item is rehearsal rather than a feature.
+    </p>
+  </div>
+</section>
+
+<footer>
+  Written 10 September 2026 · decisions <code>D135</code>–<code>D138</code> and bug
+  <code>B41</code> in <code>docs/DECISIONS.md</code> and <code>docs/BUG_HISTORY.md</code> ·
+  live state in <code>docs/NEXT_SESSION.md</code>
+</footer>
+
+</div>
