@@ -1,7 +1,7 @@
 # DECISIONS
 
 _Significant engineering decisions and their rationale. Append new ones at the bottom; never silently reverse one without a new entry explaining why._
-_Last updated: 2026-09-09._
+_Last updated: 2026-09-10._
 
 Format per entry: **Problem → Decision → Reasoning → Alternatives → Tradeoffs → Future.**
 
@@ -5985,3 +5985,98 @@ names all four differences in the order the weights care about.
 - **Future.** `Q40`'s customer×plan fit score is still **out** and still collides with
   `D126`. If the guards ever need to catch motive-guessing the way `D135`'s prompt does, it
   wants its own pattern rather than a looser existing one.
+
+## D138. The model can be switched on and off from the workstation, without a restart
+_Taken 2026-09-10 from the user's report, which was a question about a checkbox and turned
+out to be `B41`: **"there's no place to enable/say to use it??? and can never be ticked??
+maybe create a settings button/panel thing … so that i can quickly demonstrate both having
+and not having llm really quickly"**._
+
+- **Problem.** *"Is the AI on?"* was decided by `LLM_PROVIDER` in `.env`, read once at
+  startup into a **frozen** `Settings`. Changing it meant editing a file and restarting the
+  server. That is correct for a deployment and useless for a pitch, where the strongest
+  thing this system can show is **the same call, with the model and without it** — the
+  arithmetic ranking and the rule-based brief standing up on their own, then the model
+  layered on top.
+
+  The user was also right that the line they were looking at could never be ticked: it is a
+  *status report*, and `D132` says assurance and urgency are **shown, not chosen** for a
+  good reason. What was missing was not a checkbox on that dialog — it was a place to
+  change the thing the dialog reports.
+
+- **Decision.** A ⚙ panel in the workstation header, and two endpoints behind it:
+  `GET /v1/agent/settings` and `POST /v1/agent/settings/llm`. Picking a provider rebuilds
+  the clients and every service that holds one, in place, with no restart.
+
+### Five rules, and each one is a way this could have been a hole
+
+1. **The request names a PROVIDER and nothing else.** No key, no base URL, no model id.
+   A request able to name its own endpoint would let a signed-in agent point this system's
+   summariser at a server of their choosing and post every caller's words to it. Same
+   reasoning that keeps `personal` out of `AssistPushRequest` (`D121`) and `agent_id` out
+   of every request on this router (`D4`). A test sends both extra fields and asserts
+   **422**.
+2. **No key is ever in the payload.** Availability is a boolean the server computed from
+   its own environment. A settings screen that echoed a key back would put a live
+   credential in a browser, in a log, and in a screenshot of a demo.
+3. **Everything goes through `build_llm`.** It is the only place a client may be
+   constructed — the rule `build_blob_storage` enforces (`D110`) — and a second
+   construction path here is how the runtime switch would eventually disagree with startup
+   about what `anthropic` means.
+4. **`Settings` stays frozen.** The switch copies it with an override and keeps the copy
+   for the clients only; `self.settings` is untouched, so nothing else in the process
+   starts reading a different configuration than it booted with.
+5. **Gated on `DEMO_AGENT_LOGIN_ENABLED`, reusing that flag deliberately.** An endpoint
+   that can swap the AI provider over HTTP belongs behind the same switch as the one that
+   lets anybody sign in as any agent — both say *"this is a demo instance"*, and a second
+   knob meaning the same thing is a second thing to forget to turn off. On a real
+   deployment it is a 404, which is what provider selection should be there.
+
+### Two things the switch must do that are easy to miss
+
+**Turning the model off turns the FAST one off too.** Otherwise the offer card keeps
+calling a hosted model while the panel reports the AI as disabled — which is `B41` again,
+recreated by the control built to fix it. A test asserts `fast_model` goes `None`.
+
+**Both text caches are cleared.** `comparison_reason_cache` (`D137`) and
+`context_summaries` (`D134`) hold sentences a *different* model wrote. Keeping them would
+show the broker Sonnet's prose on a screen reporting that the model is off — the panel
+lying about the one thing it exists to report.
+
+And the new client is **warmed in the background** on the way out, for `D137`'s reason: the
+first hosted call of a process pays DNS, TLS and the OpenAI-compatible `max_tokens`
+negotiation, and without absorbing it the first caller after the switch is the one with no
+summary.
+
+### It is not persisted, and that is the decision
+
+A restart returns to whatever `.env` says. A switch thrown for a demo that then silently
+outlives the demo is a configuration nobody can find later — the same argument `D78` makes
+for not restoring `READY` across a restart: state that invites work must come from a person,
+now, not from something they did on Tuesday.
+
+### What the panel reports, which is half its value
+
+It names the two stages **separately**, because they genuinely differ and collapsing them
+is what made `B41` invisible for days:
+
+- *สรุปฉบับเต็ม (หลังกดรับสาย)* — the careful pass, `LLM_MODEL`.
+- *สรุประหว่างรอรับสาย · แผงข้อมูลลูกค้า · เหตุผลเปรียบเทียบแผน* — everything on
+  `fast_llm or llm`, which is three of the four AI features.
+
+On a machine with only a fast model configured it says so out loud, with the warning that
+`LLM_PROVIDER=rulebased` is **not** the same as "no model is called".
+
+- **Alternatives.** *A checkbox on the test-call dialog* — that dialog describes one call;
+  this is process-wide, and `D132` is explicit that it reports rather than configures.
+  *Persist to `.env`* — a demo control that rewrites config on disk is a surprise waiting
+  for whoever runs it next. *Accept a model id in the request* — see rule 1; the models
+  come from `.env`, which is where a name belongs beside the key that pays for it.
+- **Tradeoffs.** Swapping clients mid-process means an in-flight summary finishes on the
+  old model. That is harmless — it completes and caches — but it means the very next
+  screen after a switch can carry one sentence from the previous provider. The caches are
+  cleared, so it cannot persist beyond that call.
+- **Future.** The panel is deliberately one section. `STT_ENGINE` is the obvious second,
+  and it is **not** here on purpose: switching a speech engine at runtime means loading a
+  model into VRAM on a request thread, which is a different kind of operation from
+  re-pointing an HTTP client.

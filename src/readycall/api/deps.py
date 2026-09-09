@@ -30,6 +30,7 @@ from readycall.adapters.core_data.fixtures import FixtureFileProvider
 from readycall.adapters.core_data.null import NullCoreDataProvider
 from readycall.adapters.event_bus.memory import InMemoryEventBus
 from readycall.adapters.llm import build_fast_llm, build_llm
+from readycall.adapters.llm.openai_compatible import OPENAI_BASE_URL
 from readycall.adapters.stt.scripted import ScriptedSttEngine, load_scripted_turns
 from readycall.adapters.telephony.simulated import SimulatedTelephonyProvider
 from readycall.adapters.vad.energy import EnergyVad
@@ -316,6 +317,10 @@ class Container:
         #: recomputed every time; the sentences are not, so the second open of the panel —
         #: and every line the broker flips back to — is instant and free.
         self.comparison_reason_cache: dict[tuple[str, str], dict[str, str]] = {}
+        #: What `LLM_PROVIDER` says, kept so the runtime switch can put it back (`D138`).
+        #: `Settings` is frozen and read once at startup, so "which model is on" cannot be
+        #: answered from it after somebody has flipped the switch.
+        self.llm_choice: str = str(settings.llm_provider)
 
         #: Every durable store, chosen by `STORAGE_BACKEND` (`D75`, `D78`). Each service
         #: below gets its own and writes through to it; nothing reads it on the hot path.
@@ -534,6 +539,131 @@ class Container:
         CallState.VOICEMAIL,
         CallState.TRANSFERRED,
     )
+
+    # --- the runtime model switch (`D138`) -------------------------------------------
+
+    def llm_options(self) -> list[dict[str, object]]:
+        """Which model choices this process can actually make, and why not (`D138`).
+
+        ⚠️ **Availability is decided from the keys already in the environment, and a key
+        never leaves this method.** The panel is told *"anthropic: usable"*, never the
+        secret that makes it so — a settings screen that echoed a key back would put a live
+        credential in a browser, in a log, and in a screenshot of a demo.
+
+        `rulebased` is always offered because it is a real adapter needing nothing
+        (`D119`), and it is what "turn the AI off" means here.
+        """
+        settings = self.settings
+        fast = settings.llm_fast_model or None
+        options: list[dict[str, object]] = [
+            {
+                "provider": "rulebased",
+                "label_th": "ปิดโมเดล — ใช้สรุปแบบกฎ",
+                "model": None,
+                "fast_model": None,
+                "available": True,
+                "why_th": "ไม่เรียกโมเดลใดๆ ไม่ต้องใช้คีย์ ไม่ต้องต่อเน็ต",
+            },
+            {
+                "provider": "anthropic",
+                "label_th": "Anthropic",
+                "model": settings.llm_model or "claude-sonnet-5",
+                "fast_model": fast,
+                "available": bool(settings.anthropic_api_key),
+                "why_th": (
+                    "สรุปหลังรับสายด้วยโมเดลนี้"
+                    if settings.anthropic_api_key
+                    else "ยังไม่มี ANTHROPIC_API_KEY ใน .env"
+                ),
+            },
+            {
+                "provider": "openai_compatible",
+                "label_th": "OpenAI-compatible",
+                "model": settings.llm_fast_model or "gpt-5.4-mini",
+                "fast_model": fast,
+                "available": bool(settings.llm_api_key or settings.openai_api_key),
+                "why_th": (
+                    "เร็วกว่า เหมาะกับสรุประหว่างรอรับสาย"
+                    if (settings.llm_api_key or settings.openai_api_key)
+                    else "ยังไม่มี OPENAI_API_KEY หรือ LLM_API_KEY ใน .env"
+                ),
+            },
+        ]
+        return options
+
+    def apply_llm_choice(self, provider: str) -> None:
+        """Rebuild every model-using service against a different provider (`D138`).
+
+        ⚠️ **Through `build_llm`, always.** That factory is the only place a client may be
+        constructed — the same rule `build_blob_storage` enforces (`D110`) — and a second
+        construction path here is how the runtime switch would eventually disagree with
+        startup about what `anthropic` means.
+
+        ⚠️ **`Settings` is frozen and stays frozen.** This copies it with an override and
+        keeps the copy for the clients only; `self.settings` is untouched, so nothing else
+        in the process starts reading a different configuration than it booted with.
+
+        Runtime only, deliberately: a restart returns to whatever `.env` says. A switch
+        thrown for a demo that then silently outlives the demo is a configuration nobody
+        can find later.
+        """
+        from readycall.config import LlmProviderName
+
+        chosen = LlmProviderName(provider)
+        overrides: dict[str, object] = {"llm_provider": chosen}
+        if chosen is LlmProviderName.OPENAI_COMPATIBLE:
+            # `_check_coherent` refuses this provider with no base URL, and the copy is
+            # validated like any other `Settings`. Defaulting to OpenAI's own URL is what
+            # makes the choice one click rather than one click and a text field.
+            overrides["llm_base_url"] = self.settings.llm_base_url or OPENAI_BASE_URL
+            overrides["llm_model"] = self.settings.llm_fast_model or "gpt-5.4-mini"
+        effective = self.settings.model_copy(update=overrides)
+
+        self.llm = build_llm(effective, prompts=self.prompt_library, clock=self.clock)
+        self.fast_llm = build_fast_llm(effective, prompts=self.prompt_library, clock=self.clock)
+        if chosen is LlmProviderName.RULEBASED:
+            # Turning the model off must turn the FAST one off too, or the offer card keeps
+            # calling a hosted model while the panel says the AI is disabled.
+            self.fast_llm = None
+
+        self.summariser = IntakeSummariser(
+            llm=self.llm, clock=self.clock, timeout_s=effective.llm_timeout_s
+        )
+        self.preview_summariser = IntakeSummariser(
+            llm=self.fast_llm or self.llm,
+            clock=self.clock,
+            timeout_s=effective.llm_preview_timeout_s,
+        )
+        self.context_summariser = ContextSummariser(
+            llm=self.fast_llm or self.llm,
+            clock=self.clock,
+            timeout_s=effective.llm_preview_timeout_s,
+        )
+        self.comparison_reasons = ComparisonReasonWriter(
+            llm=self.fast_llm or self.llm,
+            timeout_s=effective.llm_comparison_timeout_s,
+        )
+        # ⚠️ Both caches hold text a DIFFERENT model wrote. Keeping them would show the
+        # broker Sonnet's sentences on a screen reporting that the model is off, which is
+        # the panel lying about the thing it exists to report.
+        self.comparison_reason_cache.clear()
+        self.context_summaries.clear()
+        self.llm_choice = str(chosen)
+
+    def llm_state(self) -> dict[str, object]:
+        """What the panel renders. Never a key, and never `Settings` itself."""
+        real = self.llm_choice != "rulebased"
+        return {
+            "provider": self.llm_choice,
+            "enabled": real,
+            # `.model`, not `.name` — `name` is the PROVIDER ("anthropic"), and a panel
+            # that reported the provider under a heading saying "model" would be wrong in
+            # the one place somebody checks before quoting a number in a pitch.
+            "model": self.llm.model if real else None,
+            "fast_model": (self.fast_llm.model if self.fast_llm is not None else None),
+            "configured_provider": str(self.settings.llm_provider),
+            "options": self.llm_options(),
+        }
 
     async def restore(self) -> dict[str, int]:
         """Rebuild the working set from the durable stores. Returns what was reloaded.

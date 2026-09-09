@@ -48,6 +48,7 @@ import {
   mmss,
   useSecondTicker,
 } from "./panels";
+import { SettingsButton } from "./settings";
 
 export default function App() {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
@@ -337,6 +338,11 @@ export default function App() {
           }
           skills={presence.skills}
         />
+        {/* `D138`. Switching the AI model on and off without a restart, which is what
+            makes "the same call, with and without the model" a demo rather than a
+            paragraph. It is NOT disabled on a call: flipping it mid-call is exactly the
+            comparison worth showing, and nothing in flight is cancelled by it. */}
+        <SettingsButton />
         <button
           className="ghost"
           disabled={busy || onCall}

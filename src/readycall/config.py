@@ -193,6 +193,10 @@ class Settings(BaseSettings):
     #: already computed when the wait starts, and the generated sentences render on
     #: timeout. Set to 0 to skip the model entirely and always use them.
     llm_comparison_timeout_s: float = 3.0
+    #: Pay the first hosted call's cost at startup rather than making the first caller pay
+    #: it (`D131`, `D137`). ⚠️ It is a REAL provider call, so tests and any offline run
+    #: want it off — and `B41` widened when it fires, which is what made that necessary.
+    llm_warmup_enabled: bool = True
     tts_engine: TtsEngineName = TtsEngineName.NULL
     core_data_provider: CoreDataProviderName = CoreDataProviderName.FIXTURES
     core_mapping_file: Path = Path("config/core_mapping.yaml")

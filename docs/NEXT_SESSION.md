@@ -1,13 +1,13 @@
 # NEXT_SESSION
 
 _The live working state. READ THIS FIRST every session. Keep it short and current._
-_Last updated: 2026-09-09._
+_Last updated: 2026-09-10._
 
 ---
 
 ## ⚠️ CONTINUE HERE — rewritten 2026-09-09 (late), after `D135`
 
-**Everything is committed and green.** **946 tests** — 934 pass + 12 skipped — ruff + ruff format + mypy clean, the
+**Everything is committed and green.** **957 tests** — 945 pass + 12 skipped — ruff + ruff format + mypy clean, the
 workstation builds, 69/69 diagrams current. There is no half-applied edit anywhere. What
 follows is what is *unfinished*, not what is broken.
 
@@ -58,6 +58,20 @@ setter plus a dispatched `input` event, or the component never sees the text.
 ⚠️ **The app's "API CALLS MADE" panel scrolls**, so reading the first screen of it shows
 only the assist polls and looks exactly like the request never being made. Read the
 element's full `innerText`, not the visible part.
+
+### 1b. ⚠️ `B41`: `LLM_PROVIDER=rulebased` DOES NOT MEAN "no model is called"
+
+The single most useful thing in this file right now. `build_fast_llm` builds a **real**
+client whenever `LLM_FAST_MODEL` is set, whatever `LLM_PROVIDER` says, and **three of the
+four AI features run on `fast_llm or llm`** — the preview summary (`D131`), the
+customer-context panel (`D134`/`D135`) and the comparison's reason sentence (`D137`).
+
+The dev `.env` said `LLM_PROVIDER=rulebased` with `LLM_FAST_MODEL=gpt-5.4-mini`, so the
+machine was calling OpenAI three times per call **while the test-call dialog said
+“ไม่เรียกโมเดลใดๆ”**. Found because the user asked why a checkbox could not be ticked.
+
+**Press ⚙ in the workstation header** (`D138`) to see the truth and to switch without a
+restart. To have no model anywhere, unset `LLM_FAST_MODEL` too.
 
 ### 2b. ⚠️ AFTER PULLING `D137`: rebuild the workstation, or you will not see it
 
@@ -129,7 +143,7 @@ somebody calls it.** `grep -rn "\.method_name(" src/` is thirty seconds and it h
 been the answer nine times.
 
 The second pattern, worth equal weight: **every one of these was found by the user
-pressing a button, never by the suite.** 946 tests pass and did not see any of it. When
+pressing a button, never by the suite.** 957 tests pass and did not see any of it. When
 they report something, believe the report before believing the tests.
 
 ⚠️ **And `B39`'s specific lesson, because it cost a whole round trip:** when the user
@@ -496,7 +510,7 @@ moment in the recording it was said — **and if they consented, their audio is 
 storage encrypted, with the key ref and the retention date on an `audio_recordings` row.**
 If they declined, it is nowhere.
 
-Verified **2026-09-09 (late)**: **946 tests** — 934 pass + 12 skipped, with Postgres
+Verified **2026-09-09 (late)**: **957 tests** — 945 pass + 12 skipped, with Postgres
 and MinIO both up (`readycall-postgres-1`, `readycall-minio-1`, both healthy). `ruff check` + `ruff format --check` clean over 220 files,
 `mypy --strict` clean over 157, 69/69 diagrams current, prompt pack fresh, `audit_docs.py`
 clean on the live files. **And by driving `/sim` in a browser** (`D123`): *Contact us —

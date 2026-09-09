@@ -554,6 +554,20 @@ OPENAI_API_KEY=sk-proj-...
 LLM_FAST_MODEL=gpt-5.4-mini
 ```
 
+⚠️ **`LLM_PROVIDER=rulebased` does NOT mean "no model is called"** (`B41`). `LLM_FAST_MODEL`
+builds a **real** client whatever `LLM_PROVIDER` says, and three of the four AI features —
+the preview above, the customer-context panel and the comparison's reason sentence — run on
+`fast_llm or llm`. So the block above with `LLM_PROVIDER=rulebased` still calls
+`gpt-5.4-mini` three times a call, and bills you for it. To have no model anywhere, leave
+`LLM_FAST_MODEL` unset too.
+
+**You do not have to restart to change any of this.** Press **⚙** in the workstation header
+(`D138`): the panel lists every provider whose key is present, switches in one click, and
+reports the two stages **separately** so *"the full summary is rule-based, the preview is
+`gpt-5.4-mini`"* is visible rather than hidden behind one sentence. It is not persisted — a
+restart returns to `.env` — which is exactly what you want for showing the same call with
+the model and without it, back to back.
+
 Then install the SDKs and start the server. ⚠️ **Name every extra you want in one command —
 `uv sync` prunes** (`B31`):
 

@@ -360,6 +360,19 @@ class AssistRespondFromApp(ApiModel):
     response: dict[str, Any] = Field(default_factory=dict)
 
 
+class SetLlmRequest(ApiModel):
+    """Which model provider to switch to (`D138`).
+
+    ⚠️ **A provider name and nothing else.** No key, no base URL, no model id. A request
+    able to name its own endpoint would let a signed-in agent point this system's
+    summariser at a server of their choosing and post every caller's words to it — the
+    same reasoning that keeps `personal` out of `AssistPushRequest` and `agent_id` out of
+    every request on this router (`D4`, `D121`).
+    """
+
+    provider: str = Field(min_length=1, max_length=32)
+
+
 class AssistPushRequest(ApiModel):
     """One thing the broker puts on the customer's screen (`D120`, `D121`).
 

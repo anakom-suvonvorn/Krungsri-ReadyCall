@@ -45,6 +45,7 @@ from readycall.api.schemas import (
     OfferOut,
     PendingWrapupOut,
     QueueOut,
+    SetLlmRequest,
     TranscriptTurnOut,
     WorkstationSnapshot,
     WrapupRequest,
@@ -866,6 +867,83 @@ async def push_to_customer(
         "personal": item.personal,
         "stub": item.stub,
     }
+
+
+# --- the runtime model switch (D138) ------------------------------------------------------
+
+
+def _require_runtime_settings(container: Any) -> None:
+    """⚠️ Gated on `DEMO_AGENT_LOGIN_ENABLED`, deliberately reusing that flag (`D138`).
+
+    An endpoint that can swap the AI provider over HTTP belongs behind the same switch as
+    the one that lets anybody sign in as any agent: both say *"this is a demo instance"*,
+    and a second knob meaning the same thing is a second thing to forget to turn off.
+    On a real deployment `demo_agent_login_enabled` is false and this is a 404, which is
+    what it should be — provider selection there is a deployment decision, not a button.
+    """
+    if not container.settings.demo_agent_login_enabled:
+        raise HTTPException(status_code=404, detail="not found")
+
+
+@router.get("/settings")
+async def read_settings(who: AgentDep, container: ContainerDep) -> dict[str, Any]:
+    """What the ⚙ panel renders (`D138`).
+
+    ⚠️ **No secret is ever in this payload.** Availability is reported as a boolean the
+    server computed from the keys in its own environment; the keys themselves stay there.
+    """
+    _require_runtime_settings(container)
+    return {"llm": container.llm_state()}
+
+
+@router.post("/settings/llm")
+async def set_llm(body: SetLlmRequest, who: AgentDep, container: ContainerDep) -> dict[str, Any]:
+    """Switch the model on, off, or to the other provider, without a restart (`D138`).
+
+    ⚠️ **The request names a PROVIDER, never a key and never a base URL.** Accepting
+    either would let a signed-in agent point this system's summariser at a server of their
+    choosing and post every caller's words to it.
+
+    The new client is warmed in the background for `D137`'s reason: the first hosted call
+    of a process pays DNS, TLS and the OpenAI-compatible `max_tokens` negotiation, and
+    without absorbing it here the first caller after the switch is the one with no summary.
+    """
+    _require_runtime_settings(container)
+    options = {str(o["provider"]): o for o in container.llm_options()}
+    chosen = options.get(body.provider)
+    if chosen is None:
+        raise HTTPException(status_code=400, detail="unknown provider")
+    if not chosen["available"]:
+        # The client greys these out, but the SERVER is the gate (`D121`, `B5`): a panel
+        # that could be persuaded to select an unusable provider would leave every
+        # summary failing with a key error nobody could see from the workstation.
+        raise HTTPException(status_code=400, detail=str(chosen["why_th"]))
+
+    try:
+        container.apply_llm_choice(body.provider)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"{type(exc).__name__}: {exc}"[:200]) from exc
+
+    task = asyncio.create_task(_warm_switched_llm(container))
+    _BACKGROUND.add(task)
+    task.add_done_callback(_BACKGROUND.discard)
+
+    log.info("llm provider switched at runtime", provider=body.provider, by=who.agent_id)
+    return {"llm": container.llm_state()}
+
+
+async def _warm_switched_llm(container: Any) -> None:
+    """Pay the new client's cold-start cost before a caller does (`D137`, `D131`)."""
+    if container.llm_choice == "rulebased":
+        return
+    try:
+        await container.preview_summariser.with_timeout(20.0).summarise(
+            ["สวัสดีครับ ทดสอบระบบครับ ขอบคุณครับ"],
+            intent_label_th="ทดสอบระบบ",
+            line_label_th="unknown",
+        )
+    except Exception:
+        log.warning("llm warm-up after switch failed - the first summary will pay for it")
 
 
 @router.get("/assist/tools")

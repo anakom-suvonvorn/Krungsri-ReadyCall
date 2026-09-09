@@ -1,7 +1,7 @@
 # BUG_HISTORY
 
 _Solved bugs and the lessons they bought. **Search this file FIRST when debugging** — the answer may already be here._
-_Last updated: 2026-09-09._
+_Last updated: 2026-09-10._
 
 Format per entry:
 
@@ -1840,3 +1840,85 @@ will match the width."** Both halves of that sentence were one bug._
   be disabled to reproduce the fault, **the repro is wrong, not the report** — the
   viewport was the missing variable here, and believing the first negative result would
   have shipped the bug with a comment claiming it was fixed.
+
+## B41. The screen said "no model configured" while three of the four AI features were calling one
+- **Symptoms:** the user, reading the custom test-call dialog on their own machine:
+  *"at the bottom of the custom call thing it says* **ให้โมเดลสรุป — ยังไม่ได้ตั้งค่าโมเดล —
+  จะใช้สรุปแบบกฎ ซึ่งไม่เรียกโมเดลใดๆ** *but there's no place to enable it??? and can never
+  be ticked??"*
+
+  The sentence claims the machine **calls no model at all**. It was false. On that same
+  machine, `gpt-5.4-mini` at OpenAI was being called on every call — for the preview
+  summary on the offer card (`D131`), the customer-context panel (`D134`/`D135`) and the
+  comparison's reason sentence (`D137`) — and being billed for.
+
+- **Root cause:** two independent readings of *"is the AI on?"*, and the wrong one was on
+  screen.
+
+  `build_fast_llm` builds a **real** client whenever `LLM_FAST_MODEL` is set, whatever
+  `LLM_PROVIDER` says — that is deliberate and documented (`D131`: the fast model may be at
+  a different vendor from the careful one). Every one of the three features above runs on
+  `self.fast_llm or self.llm`, so a fast model alone is enough to make them real.
+
+  The dialog computed `llm_real = settings.llm_provider is not RULEBASED` — the **main**
+  provider only. The dev `.env` said exactly:
+
+  ```
+  LLM_PROVIDER=rulebased          # -> the dialog concluded "no model"
+  LLM_FAST_PROVIDER=openai_compatible
+  LLM_FAST_MODEL=gpt-5.4-mini     # -> but this built a real client
+  ```
+
+  So the one configuration where the two readings disagree is the one the project had been
+  running on for days.
+
+- **Investigation:** the user's report was about a *checkbox*, not about correctness. The
+  fix for the reported complaint (`D138`'s switch) needed the container to answer "which
+  model is on", and building `llm_state()` put the two answers side by side for the first
+  time — `provider=rulebased, enabled=False, model=None, **fast=gpt-5.4-mini**`.
+
+  Confirmed by construction rather than by argument:
+
+  ```
+  LLM_PROVIDER in .env : rulebased
+  main client          : rulebased / rulebased-v1
+  fast client          : openai_compatible / gpt-5.4-mini
+  ```
+
+  and independently on a running server, where a call placed on that "rule-based" instance
+  logged `context summary unavailable error=` — an **empty** error, which is a bare
+  `TimeoutError`, which the rule-based adapter can never produce because it does no I/O.
+
+- **Fix:** three parts.
+  1. The dialog asks the **container** (`container.llm_state()`), not `Settings`. The
+     container is also the only thing that can answer after `D138`'s runtime switch.
+  2. The note **names the two stages apart** — *"สรุปหลังรับสาย…"* and *"สรุประหว่างรอรับสาย ·
+     แผงข้อมูลลูกค้า · เหตุผลเปรียบเทียบแผน…"* — because they genuinely differ, and one
+     combined sentence is exactly what hid this.
+  3. `_warm_llm` had the **same** wrong test (`settings.llm_provider is RULEBASED`), so on
+     that configuration the real fast client was never warmed and its first call timed out
+     cold. It now asks what was actually built. ⚠️ That widened when the warm-up fires, so
+     `LLM_WARMUP_ENABLED` exists to keep unit tests off the network — a real provider call
+     from a unit test was the immediate consequence, caught by a socket warning in pytest.
+
+- **Verification:** `tests/unit/test_llm_switch.py` — a fixture configured exactly like the
+  dev `.env` asserts the dialog reports a model and does **not** say *"ไม่เรียกโมเดลใดๆ"*,
+  and its twin asserts a genuinely model-free instance still does. Then in a browser: the
+  ⚙ panel on that machine showed *"⬜ สรุปฉบับเต็ม — ใช้สรุปแบบกฎ"* beside
+  *"✅ สรุประหว่างรอรับสาย · แผงข้อมูลลูกค้า · เหตุผลเปรียบเทียบแผน — gpt-5.4-mini"*, which is
+  the truth the old sentence was hiding.
+
+- **Lesson:** **a status line is a claim, and a claim derived from one field is a claim
+  about that field, not about the system.** This is `B25`'s "two places answering one
+  question will disagree in silence" with the disagreement pointed at a *human* rather than
+  at another service — the code was right and the sentence about the code was wrong, which
+  is worse, because nothing fails and somebody plans a demo around it.
+
+  It also belongs to this project's largest family from the other side. The usual fault is
+  *code that runs and nothing calls it*; this is **code that is called and the screen says
+  it is not**. Both are answered the same way: follow the wire from the thing a human
+  reads back to the thing that produces it.
+
+  ⚠️ And the cost was not only confusion. It was **spending money on API calls while
+  displaying that it was not making any** — the kind of error that is invisible until an
+  invoice arrives.

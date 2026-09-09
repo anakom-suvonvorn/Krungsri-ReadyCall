@@ -26,7 +26,7 @@ from readycall.api.deps import Container
 from readycall.api.routers import agent, assist, demo, health, mobile
 from readycall.api.security import AuthenticationRequired
 from readycall.clock import Clock
-from readycall.config import LlmProviderName, Settings, get_settings
+from readycall.config import Settings, get_settings
 from readycall.console import enable_utf8
 from readycall.db.storage import Storage
 from readycall.logging import configure, get_logger
@@ -150,7 +150,14 @@ async def _warm_llm(container: Container) -> None:
     ⚠️ It costs one call's worth of tokens per process start. At the fast tier's rates that
     is a fraction of a cent; the alternative measured over 5 s on the first real call.
     """
-    if container.settings.llm_provider is LlmProviderName.RULEBASED:
+    # ⚠️ **NOT `settings.llm_provider`** (`B41`). `build_fast_llm` builds a REAL client
+    # whenever `LLM_FAST_MODEL` is set, whatever `LLM_PROVIDER` says — so a machine
+    # configured `rulebased` with a fast model set was returning here and leaving that
+    # real client cold, which is why its first context summary timed out. Ask what was
+    # actually built.
+    if not container.settings.llm_warmup_enabled:
+        return
+    if container.llm.name == "rulebased" and container.fast_llm is None:
         return
     # ⚠️ **The warm-up gets its OWN, generous deadline, and the preview's tight one is
     # wrong here.** `LLM_PREVIEW_TIMEOUT_S` is 4 s because a preview arriving after Accept

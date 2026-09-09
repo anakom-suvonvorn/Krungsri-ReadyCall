@@ -479,11 +479,39 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
   return parsed as T;
 }
 
+/** What the ⚙ panel renders (`D138`). ⚠️ Never contains a key: availability is a boolean
+ *  the server computed from its own environment. */
+export type LlmSettings = {
+  provider: string;
+  enabled: boolean;
+  /** The model for the FULL summary after Accept, or null when that stage is rule-based. */
+  model: string | null;
+  /** The model for the preview, the customer-context panel and the comparison sentence.
+   *  ⚠️ Can be set while `model` is null - that configuration is `B41`, and it means three
+   *  of the four AI features call a hosted model while the main provider is rule-based. */
+  fast_model: string | null;
+  configured_provider: string;
+  options: {
+    provider: string;
+    label_th: string;
+    model: string | null;
+    fast_model: string | null;
+    available: boolean;
+    why_th: string;
+  }[];
+};
+
 export const api = {
   signIn: (agentId: string) =>
     call<Presence>("POST", "/v1/agent/demo-login", { agent_id: agentId }),
   signOut: () => call<void>("POST", "/v1/agent/logout"),
   me: () => call<Snapshot>("GET", "/v1/agent/me"),
+
+  /** `D138`. Demo-only: 404 on an instance with `DEMO_AGENT_LOGIN_ENABLED` off. */
+  settings: () => call<{ llm: LlmSettings }>("GET", "/v1/agent/settings"),
+  /** ⚠️ A provider name and nothing else - never a key and never a base URL (`D138`). */
+  setLlm: (provider: string) =>
+    call<{ llm: LlmSettings }>("POST", "/v1/agent/settings/llm", { provider }),
   declare: (intent: string) =>
     call<Presence>("POST", "/v1/agent/state", { agent_intent: intent }),
 

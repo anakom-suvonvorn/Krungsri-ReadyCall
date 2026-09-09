@@ -37,7 +37,7 @@ from readycall.api.schemas import (
     PlaceCallResponse,
 )
 from readycall.api.security import DemoSessionStore
-from readycall.config import LlmProviderName, SttEngineName
+from readycall.config import SttEngineName
 from readycall.domain.enums import CallState, ProductLine, Urgency
 from readycall.errors import ConfigError
 from readycall.logging import get_logger
@@ -85,6 +85,25 @@ def load_personas(config_dir: Path) -> tuple[PersonaSpec, ...]:
         except KeyError as exc:
             raise ConfigError(f"demo persona is malformed: missing {exc}") from exc
     return tuple(out)
+
+
+def _llm_note_th(state: dict[str, Any]) -> str:
+    """One sentence saying which model runs where (`B41`).
+
+    Deliberately names the two stages apart. They can genuinely differ — `LLM_FAST_MODEL`
+    builds a real client whatever `LLM_PROVIDER` says — and the single sentence this
+    replaced hid exactly that, reporting *"no model configured"* on a machine that was
+    calling one three times per call.
+    """
+    main = state["model"]
+    fast = state["fast_model"]
+    if main is None and fast is None:
+        return "ปิดโมเดลอยู่ — ใช้สรุปแบบกฎ ซึ่งไม่เรียกโมเดลใดๆ"
+    parts = []
+    parts.append(f"สรุปหลังรับสายด้วย {main}" if main else "สรุปหลังรับสายแบบกฎ (ไม่เรียกโมเดล)")
+    if fast:
+        parts.append(f"สรุประหว่างรอรับสาย · แผงข้อมูลลูกค้า · เหตุผลเปรียบเทียบแผน ด้วย {fast}")
+    return " · ".join(parts)
 
 
 def _require_demo(container: ContainerDep) -> None:
@@ -529,9 +548,18 @@ async def call_options(container: ContainerDep) -> dict[str, Any]:
     # What the AI stages ACTUALLY are, so the dialog can say whether ticking "transcribe"
     # and "summarise" will do anything real. A control that silently does nothing is worse
     # than one greyed out with its reason (`D71`).
-    llm_real = settings.llm_provider is not LlmProviderName.RULEBASED
+    # ⚠️ **ASK THE CONTAINER, NOT `Settings`** (`B41`, `D138`). This read
+    # `settings.llm_provider is not RULEBASED` and was wrong in the most expensive
+    # direction: `build_fast_llm` builds a REAL client whenever `LLM_FAST_MODEL` is set,
+    # whatever `LLM_PROVIDER` says — and the preview summary, the customer-context panel
+    # and the comparison's reason sentence all run on `fast_llm or llm`. So a machine
+    # configured `LLM_PROVIDER=rulebased` with `LLM_FAST_MODEL=gpt-5.4-mini` was calling a
+    # hosted model for three of the four AI features while this dialog said
+    # *"ยังไม่ได้ตั้งค่าโมเดล ... ซึ่งไม่เรียกโมเดลใดๆ"*. Since `D138` the container is also
+    # the only thing that knows the answer after a runtime switch.
+    llm_state = container.llm_state()
+    llm_real = bool(llm_state["enabled"]) or llm_state["fast_model"] is not None
     scripted = settings.stt_engine is SttEngineName.SCRIPTED
-    fast = settings.llm_fast_model
     return {
         "intents": intents,
         "callers": callers,
@@ -554,17 +582,13 @@ async def call_options(container: ContainerDep) -> dict[str, Any]:
         },
         "llm": {
             "real": llm_real,
-            "provider": str(settings.llm_provider),
-            "model": settings.llm_model if llm_real else None,
-            "fast_model": fast if llm_real else None,
-            "note_th": (
-                (
-                    f"สรุปหลังรับสายด้วย {settings.llm_model}"
-                    + (f" · สรุประหว่างรอรับสายด้วย {fast}" if fast else "")
-                )
-                if llm_real
-                else "ยังไม่ได้ตั้งค่าโมเดล — จะใช้สรุปแบบกฎ ซึ่งไม่เรียกโมเดลใดๆ"
-            ),
+            "provider": str(llm_state["provider"]),
+            "model": llm_state["model"],
+            "fast_model": llm_state["fast_model"],
+            # Says which stages are real SEPARATELY, because they genuinely can differ:
+            # the fast model can be configured while the main one is rule-based, and
+            # collapsing that into one sentence is what made `B41` invisible.
+            "note_th": _llm_note_th(llm_state),
         },
         "defaults": {
             # ⚠️ A RECOGNISED caller by default, not the anonymous one (`D132`, `Q38`).
