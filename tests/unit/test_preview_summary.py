@@ -28,6 +28,7 @@ from readycall.api.app import create_app, pump_once
 from readycall.clock import ManualClock
 from readycall.config import Settings
 from readycall.ports.llm import LlmResult, LlmUsage, PromptRef
+from readycall.prompts import PromptLibrary
 from readycall.services.analysis import ContextSummariser, IntakeSummariser
 from tests.conftest import REPO_ROOT
 
@@ -579,3 +580,37 @@ async def test_a_real_money_figure_is_still_refused(client: Any) -> None:
 
     assert box.context_summaries.get(call_id) is None, "a stated amount reached the screen"
     assert box.context_summariser.refused == 1
+
+
+def test_the_shipped_context_prompt_exists_and_takes_the_slots_it_is_handed() -> None:
+    """`D135`. A `PromptRef` naming a file that is not there fails **only** when a real
+    model is configured — and `LLM_PROVIDER=rulebased` is the shipped default, so the whole
+    suite and every offline run would stay green while the panel was dead on the one
+    machine that matters. Same reasoning as the voice pack's two-way id guard (`D28`).
+    """
+    library = PromptLibrary.load(REPO_ROOT / "prompts" / "th")
+    template = library.get(ContextSummariser.PROMPT)
+
+    rendered = template.render(
+        {
+            "facts": "- เพิ่งมีบุตร · เมื่อ 15/03/2567 · ความมั่นใจ 0.70 [core:life_events]",
+            "customer_name_th": "คุณทดสอบ",
+            "intent_label_th": "ต่ออายุกรมธรรม์",
+        }
+    )
+    assert "15/03/2567" in rendered, "the facts slot did not reach the rendered prompt"
+    assert "{facts}" not in rendered
+
+
+def test_a_superseded_context_prompt_is_kept_on_disk() -> None:
+    """`D18`, `D135`. `analyses.prompt_version` names the file a result came from, so an
+    old summary stops being explainable the moment its prompt is deleted. `v1` produced
+    real results before `D135` replaced it; it stays.
+    """
+    library = PromptLibrary.load(REPO_ROOT / "prompts" / "th")
+    superseded = PromptRef(id="summarize_context", version="v1")
+
+    assert library.get(superseded) is not None
+    assert ContextSummariser.PROMPT != superseded, (
+        "the shipped prompt is still v1 — D135 replaced it"
+    )

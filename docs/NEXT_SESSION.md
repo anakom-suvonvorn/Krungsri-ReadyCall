@@ -1,51 +1,38 @@
 # NEXT_SESSION
 
 _The live working state. READ THIS FIRST every session. Keep it short and current._
-_Last updated: 2026-09-09 (late)._
+_Last updated: 2026-09-09._
 
 ---
 
-## ⚠️ CONTINUE HERE — written 2026-09-09 mid-task, before a compact
+## ⚠️ CONTINUE HERE — rewritten 2026-09-09 (late), after `D135`
 
-**Everything is committed and green.** 927 tests pass, ruff + ruff format + mypy clean, the
-workstation builds, 69/69 diagrams current, `audit_docs.py` clean on the live files. There
-is no half-applied edit anywhere. What follows is what is *unfinished*, not what is broken.
+**Everything is committed and green.** **929 tests** — 917 pass + 12 skipped — ruff + ruff format + mypy clean, the
+workstation builds, 69/69 diagrams current. There is no half-applied edit anywhere. What
+follows is what is *unfinished*, not what is broken.
 
-### 1. FIRST THING: verify `D134`'s model sentence against a live model
+### 1. ~~Verify `D134`'s model sentence against a live model~~ ✅ **DONE — `D135`**
 
-`D134` (the *"ข้อมูลอื่นๆ ที่มีเกี่ยวกับลูกค้า"* panel) is **committed and its data half is
-verified on a running server** — 6 facts, right order, sources, Buddhist dates, confidence
-only on inferred facts. **The model-written sentence over those facts has never been seen
-working.** The one live run that reached it was refused by our own `_FIGURE` guard (a
-Buddhist year read as a coverage amount); that is fixed with unit tests and has not been
-re-run against a real model.
+Verified, and verifying it is what showed the **prompt** was wrong. `_FIGURE` and
+`_DATE_LIKE` were fine — 0 refusals in 16 clean runs with Buddhist dates in every
+sentence, so `D134`'s fix is correct as written. The *sentence* was not: over six live
+runs `v1` led with the conversation history **every time and with a life event never**, one
+run dropped the mortgage, and one asserted that a renewal record was *not found* — a claim
+about data the prompt is never handed.
 
-⚠️ Port 8000 holds a stale server from an older session — use **8010**, and check
-`/health` names ReadyCall before believing anything.
+`prompts/th/summarize_context.v2.md` ships now. Verified end to end on a running server:
+**1.8 s**, `facts=6`, leading with the new child and the mortgage, both dated, no balance
+band, no recommendation. `v1` stays on disk (`D18`).
 
-```bash
-# Terminal 1. A key must be in .env; LLM_FAST_MODEL=gpt-5.4-mini is already set there.
-API_PORT=8010 LLM_PROVIDER=anthropic LLM_MODEL=claude-sonnet-5 \
-  DEMO_AUDIO_DIR=tests/audio uv run python -m readycall.entrypoints.api > /tmp/rc.log 2>&1 &
+⚠️ **The lesson worth carrying, because it nearly shipped a leak.** `v2`'s first draft was
+green on every counter *and* recited the customer's balance bands (`1m-5m`, `500k-1m`) in
+6 of 6 runs. `_FIGURE` cannot see those — there is no run of four digits in `1m-5m`. Only
+reading the prose caught it. **A green counter is not a read output.**
 
-# Terminal 2. A003 is the RENEWAL desk; general.renewal needs `renewal.retention`, and a
-# motor advisor is simply never offered it (`D117`, and it costs an hour every time).
-curl -s -c /tmp/c -X POST localhost:8010/v1/agent/demo-login -H 'Content-Type: application/json' -d '{"agent_id":"A003"}'
-curl -s -b /tmp/c -X POST localhost:8010/v1/demo/calls -H 'Content-Type: application/json' \
-  -d '{"intent_code":"general.renewal","caller_number":"+66898887777","intake_keys":["2"],"ignore_hours":true}'
-curl -s -b /tmp/c -X POST localhost:8010/v1/agent/state -H 'Content-Type: application/json' -d '{"agent_intent":"ready"}'
-# accept the offer, then read brief.context.summary_th off GET /v1/agent/me
-grep -E "context summary|summarize_context" /tmp/rc.log
-```
-
-**What "working" looks like:** `context summary ready` in the log, and
-`brief.context.summary_th` carrying two or three Thai sentences that mention the mortgage
-and the new child, state no money figure, and **do not say what to sell** (`D116`).
-
-**If it is refused again**, the log line says which guard fired. `_RECOMMENDS` firing is
-the system working — re-read the prompt's rule 2 before loosening anything.
-
-⚠️ **Never print Thai to the Windows console** (`B1`). Write to a UTF-8 file and read it.
+⚠️ **`_RECOMMENDS` was deliberately NOT widened.** A draft produced *"อาจเกี่ยวข้องกับ
+การทบทวนความคุ้มครอง"* — motive-guessing the guard cannot catch. It is forbidden by the
+prompt instead; stretching the regex would start eating truthful sentences. If it recurs it
+wants its **own** pattern, not a looser one.
 
 ### 2. Then: `/sim` still has no browser check of the typed-intake card
 
@@ -76,7 +63,7 @@ changed that.
 | a back button after the call ends | ✅ `D133` |
 | a guide for the UI team + git for beginners | ✅ `docs/FOR_THE_TEAM.md` |
 | where is AI used, and ideas | answered in chat; the ideas became `D134` |
-| customer-context panel | ◐ `D134` — data verified, **model sentence not** |
+| customer-context panel | ✅ `D134` + `D135` — data verified, model sentence verified, and the prompt replaced because verifying it showed `v1` never led with the life events |
 
 ### The three decisions the user made this session, so nobody re-opens them
 
@@ -111,7 +98,7 @@ somebody calls it.** `grep -rn "\.method_name(" src/` is thirty seconds and it h
 been the answer nine times.
 
 The second pattern, worth equal weight: **every one of these was found by the user
-pressing a button, never by the suite.** 927 tests pass and did not see any of it. When
+pressing a button, never by the suite.** 929 tests pass and did not see any of it. When
 they report something, believe the report before believing the tests.
 
 ⚠️ **And `B39`'s specific lesson, because it cost a whole round trip:** when the user
@@ -129,10 +116,19 @@ in two days, and none of them was visible in a passing test:
   motor policyholder (`D127`).
 - The contract test for the new catalogue was written, and **two policies turned out to
   point at product codes in no catalogue at all** (`D125`) — since P1b.
+- The context panel's sentence was measured over six live runs and every objective counter
+  was green; **reading the Thai** showed `v1` had never once led with the life events, and
+  that a rewrite recited the customer's balance bands `_FIGURE` cannot see (`D135`).
 
 So: after building something that produces content, **print the content and read it.**
 `curl` the endpoint, dump the payload, open the screen. It is the same discipline as
 `B24`'s "follow the call graph from something a user does", one step further along.
+
+⚠️ **And `D135`'s sharper version of it, for anything a model writes: A GREEN COUNTER IS
+NOT A READ OUTPUT.** Counting refusals, guard hits and keyword presence tells you the
+plumbing works; it cannot tell you the sentence is the right sentence. Both faults in
+`D135` — a summary that led with the least useful fact, and a draft that copied a balance
+band — sat behind counters reading 6/6 green. Write the harness *and* read the prose.
 
 
 ### ⚠️ ZEROTH: three files carry facts you must not re-derive
@@ -469,7 +465,7 @@ moment in the recording it was said — **and if they consented, their audio is 
 storage encrypted, with the key ref and the retention date on an `audio_recordings` row.**
 If they declined, it is nowhere.
 
-Verified **2026-09-09**: **927 tests** — 915 pass + 12 skipped, with Postgres
+Verified **2026-09-09 (late)**: **929 tests** — 917 pass + 12 skipped, with Postgres
 and MinIO both up (`readycall-postgres-1`, `readycall-minio-1`, both healthy). `ruff check` + `ruff format --check` clean over 220 files,
 `mypy --strict` clean over 157, 69/69 diagrams current, prompt pack fresh, `audit_docs.py`
 clean on the live files. **And by driving `/sim` in a browser** (`D123`): *Contact us —

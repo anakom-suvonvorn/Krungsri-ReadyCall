@@ -5699,3 +5699,110 @@ that produced the facts above is the run where the summary was refused by `_FIGU
 fix has unit tests (16 pass in `test_preview_summary.py`) and has **not** been seen
 working against a live model. **That is the first thing to do next** — the commands are in
 `NEXT_SESSION.md` under "continue here".
+
+## D135. The context sentence was verified, and verifying it is what showed the prompt was wrong
+_Taken 2026-09-09 (late), completing the verification `D134` shipped without. The panel's
+data half was already proven; this is the model-written sentence over it._
+
+- **Problem.** `D134` committed with its own verification half-finished and said so: the
+  facts rendered correctly on a running server, but the **sentence** had never been seen
+  working end to end after the `_DATE_LIKE` fix. The one live run that reached it was
+  refused by `_FIGURE` reading a Buddhist year as a coverage amount.
+
+  Re-run against a live model, the guard turned out to be **fine** — and the *sentence*
+  turned out not to be. This is `NEXT_SESSION`'s third pattern paying for itself: the
+  counters were green and the prose was wrong, and only reading the prose showed it.
+
+- **Decision.** `prompts/th/summarize_context.v2.md`, and `ContextSummariser.PROMPT` moves
+  to it. `v1` stays on disk (`D18`: `analyses.prompt_version` names the file a result came
+  from, so deleting it makes old summaries unexplainable).
+
+### What v1 actually did, measured rather than asserted
+
+Six live runs on `gpt-5.4-mini` over the real `C000002` facts:
+
+| | v1 | **v2 (shipped)** |
+|---|---|---|
+| answered / refused | 5 / 1 | **6 / 0** |
+| led with a life event | **0 of 5** | **6 of 6** |
+| named the mortgage | 4 of 5 | **6 of 6** |
+| asserted an absence | 1 of 5 | **0 of 6** |
+| copied a balance band | 0 of 5 | **0 of 6** |
+| printed a confidence decimal | 0 of 5 | **0 of 6** |
+
+Confirmed at **8 of 8** clean on the shipped file under its final name, plus 3 of 3 on
+`claude-sonnet-5` (the `self.llm` fallback when no fast client is configured), plus one
+end-to-end run on a live server: **1.8 s**, `facts=6`, on the fast model.
+
+### The three faults, and the one that mattered
+
+1. **It never led with the life events, in any run.** `v1`'s rule 5 said *"emphasise what
+   is relevant to today's reason first"*, and `known_facts()`'s docstring says the opposite
+   and says why: **life events come first because they are the only thing on this panel
+   that answers "why now"**, and the only class the broker could not have guessed from the
+   policy list already in front of them. The prompt and the ordering decision disagreed,
+   and the prompt won on every call. So the sentence a judge would read opened with *"they
+   once rang about renewing a motor policy, and it is closed"* while the mortgage and the
+   new child — `MARKET_FACTS` §7's cleanest **right customer × right time** example, and
+   the reason this panel exists — came last or not at all.
+2. **One run asserted an absence**: *"ยังไม่พบข้อมูลการต่ออายุกรมธรรม์เดิม..."* — no renewal
+   record found. The prompt is handed a **selected** list, never the whole record, so
+   "not found" is a claim about data it was never given. `v1`'s rule 1 offered
+   *"if the list is thin, say it is unclear"* and the model applied it to the
+   topic-relevant **subset** rather than the list.
+3. **`_FIGURE` and `_DATE_LIKE` were never the problem.** 0 refusals in 16 clean runs with
+   Buddhist dates in every sentence. `D134`'s fix is correct as written.
+
+### ⚠️ The regression the counters would have hidden
+
+`v2`'s first draft fixed all three and was green on every counter — and **recited the
+customer's balance bands** (*"สินเชื่อช่วง 1m-5m และบัญชีเงินฝากช่วง 500k-1m"*) in **6 of 6**
+runs, where `v1` had done it in 0 of 5. `_FIGURE` cannot see it: there is no run of four
+digits in `1m-5m`. It also printed the raw confidence decimals in 2 of 6, which is
+telemetry in prose that rule 4 exists to express in **words** so the broker does not have
+to read a float mid-conversation.
+
+The cause was mine: telling the model to write *"then the products held"* invited it to
+enumerate holdings, and the band is on the fact line. Both are now refused by name in
+rule 3 and rule 4. **A green counter is not a read output** — this is the same lesson as
+`D134`'s own two faults, arriving one layer up.
+
+A second draft then drifted the other way once: *"...และอาจเกี่ยวข้องกับการทบทวนความคุ้มครองใน
+ช่วงนี้"* — the model **guessing a motive**, which `_RECOMMENDS` cannot catch because it
+names no product and uses none of the seven listed phrases. Rule 2 forbids it explicitly
+now. ⚠️ **The guard was not widened to match**, deliberately: `_RECOMMENDS` catches
+sell-language, and stretching it to catch "may relate to" would start eating truthful
+sentences. If motive-guessing recurs it wants its own pattern, not a looser one.
+
+### Two rules that only appeared once it was written down
+
+- **Dates are stated, never paraphrased.** An early draft dropped the dates entirely, and
+  one run rendered `15/03/2567` as *"early last year"* — which is wrong, it is two years
+  ago. The date **is** the "why now" evidence, so rule 7 requires it verbatim from the
+  list. This also keeps `D134`'s `_DATE_LIKE` fix exercised on the shipped path rather than
+  only in a test.
+- **`is_clear: false` is the way to say "not much here", not a Thai sentence saying so.**
+  `v1` asked for prose in that case, which is what produced fault 2. The schema already
+  has the field and `D13` says a model allowed to decline invents less.
+
+### The test that was missing, and it is this project's oldest shape
+
+`ContextSummariser.PROMPT` naming a file that is not on disk fails **only** when a real
+model is configured. `LLM_PROVIDER=rulebased` is the shipped default, so the suite, CI and
+every offline run stay green while the panel is dead on the one machine that matters —
+`B7`'s family again, and the same reasoning as the voice pack's two-way id guard (`D28`).
+`test_the_shipped_context_prompt_exists_and_takes_the_slots_it_is_handed` renders the
+shipped ref with the real slots; verified by pointing it at `v9` and watching it fail.
+A second test asserts `v1` is still on disk (`D18`).
+
+- **Alternatives.** *Edit `v1` in place* — refused, `D18`: a prompt is a file with its
+  version in the name. *Rank the drafts on the counters alone* — that is what would have
+  shipped the balance-band regression. *Widen `_RECOMMENDS`* — see above.
+- **Tradeoffs.** `v2` is a longer prompt: 1300 tokens in against `v1`'s 740, roughly
+  \$0.0002 more per call at `gpt-5.4-mini` rates, and no measurable latency change
+  (1.1–2.9 s across 19 runs). Five explicit prohibitions is a lot of rope for a small
+  model; the counters are the thing to re-measure if the fast model is ever changed.
+- **Future.** The probe used here is throwaway. If a third prompt version is ever needed,
+  the honest move is to fold these checks into `scripts/compare_llm.py` as a
+  `summarize_context` case, so the objective columns are re-measured by the harness rather
+  than by hand — and, per `D130`, the Thai still gets read by a human either way.

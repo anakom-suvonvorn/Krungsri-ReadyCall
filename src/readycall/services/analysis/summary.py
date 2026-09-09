@@ -215,7 +215,12 @@ class ContextSummariser:
     switches which safety check runs is how one of them eventually stops running.
     """
 
-    PROMPT = PromptRef(id="summarize_context", version="v1")
+    #: `v2` since `D135`. `v1` shipped with `D134` and was measured over 6 live runs: it
+    #: led with a conversation-history line every time and never with the life events, one
+    #: run dropped the mortgage entirely, and one asserted that a renewal record was *not
+    #: found* — a claim about data this prompt is never given. `v1` stays on disk because
+    #: `analyses.prompt_version` names the file a result came from (`D18`).
+    PROMPT = PromptRef(id="summarize_context", version="v2")
 
     def __init__(
         self,

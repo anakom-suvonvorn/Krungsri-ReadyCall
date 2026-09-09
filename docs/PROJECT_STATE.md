@@ -65,7 +65,7 @@ the disclosure gate moves when the agent attests. **What they said while waiting
 screen** (`D106`), and if they consented, **their audio is in object storage encrypted**
 (`D110`) with a key ref and a retention date. If they declined, it is nowhere.
 
-Verified on 2026-09-09: **927 tests** — 915 pass + 12 skipped with Postgres and MinIO both
+Verified on 2026-09-09: **929 tests** — 917 pass + 12 skipped with Postgres and MinIO both
 up (the 12 are foreign-key cases the in-memory backend cannot have, and the `ml`-extra ones).
 Without those containers the count of skips rises and nothing fails.
 `ruff check` and `ruff format --check` clean over **225** files, `mypy --strict`
@@ -113,7 +113,7 @@ demonstrable slice, so the demo is simply the current state of the system with a
 | Telephony | Asterisk 20 + ARI + AudioSocket by default, behind a `TelephonyProvider` port (Twilio / LiveKit / simulated adapters). Demo trick: a softphone on a real mobile pointed at the laptop over local Wi-Fi = a genuine VoIP call with no internet |
 | STT | **Typhoon ASR** (`scb10x/typhoon-asr-realtime`, a NeMo FastConformer transducer), re-implemented streaming-first (`D9`). Chosen on measurements against Thonburian Whisper fp16 and its CTranslate2 `int8_float16` build — it is the only one that meets the 1.5 s budget (`D30` closed by `D104`). The CT2 build is the documented fallback (`D103`) |
 | TTS | Pre-rendered prompt clips built from `voice_prompts.yaml` (`D24`); streaming only for future conversational intake |
-| LLM | **Built** (`D119`): `build_llm` is the factory, with `AnthropicLlm` (structured output via forced tool use), `OpenAiCompatibleLlm` (one adapter for Typhoon-hosted / OpenAI / vLLM / Ollama / LM Studio by base URL alone) and `RuleBasedLlm` as the shipped default and degradation rung. Prompts are versioned files in `prompts/th/`. Measured live: `claude-sonnet-5` summarises an intake in **4.5 s for $0.0085**. No LLM framework (`D31`) |
+| LLM | **Built** (`D119`): `build_llm` is the factory, with `AnthropicLlm` (structured output via forced tool use), `OpenAiCompatibleLlm` (one adapter for Typhoon-hosted / OpenAI / vLLM / Ollama / LM Studio by base URL alone) and `RuleBasedLlm` as the shipped default and degradation rung. Prompts are versioned files in `prompts/th/` — **4 of them** since `D135` (`summarize_intake.v1`, `intent_classify.v1`, `summarize_context.v1` superseded and `.v2` shipped). Measured live: `claude-sonnet-5` summarises an intake in **4.5 s for ≈ $0.0057** (⚠️ **not** $0.0085 — that figure came from a pre-2026 rate table and was withdrawn by `D130`). The fast model `gpt-5.4-mini` writes the context panel's sentence in **1.8 s**. No LLM framework (`D31`) |
 | Object storage | MinIO (S3 API) for recordings |
 | Agent workstation | React 18 + TypeScript + Vite. **A full contact-centre workstation in one browser tab — the softphone is in it** (SIP.js over WSS to Asterisk, WebRTC/Opus through the agent's headset), plus the brief, the queue and status control. No desk phone, no install (`D32`) |
 | Customer side | **Two static pages, no build step** (`D47`, `D120`). `/sim` is the customer simulator with a persona picker; `/assist/<token>` is the **paired screen** a broker pushes onto during a call — comparisons, forms, document requests. Both call the same public `/v1/…` API the real Krungsri app would |
@@ -435,7 +435,11 @@ as human-written on the customer's screen (`D128`) · ☑ one-of-many as pills (
 ☑ **what the bank already knew, on the broker's screen** (`D134`) — holdings, life
 events and the conversation history were assembled on every call and dropped at the DTO
 boundary; the panel shows them with sources, marks inferences as inferences, and carries a
-model-written summary that is refused if it states a figure or recommends a product ·
+model-written summary that is refused if it states a figure or recommends a product.
+**Verified end to end on a live model by `D135`**, which also replaced the prompt: `v1` led
+with the conversation history on every one of six runs and never with the life events, so
+the mortgage and the new child — the whole point of the panel — came last or not at all.
+`v2` leads with them, dates them, and states no balance band ·
 ☑ **a configurable test call** (`D132`) · ☑ **a typed intake** (`D133`) — the whole AI
 story with no audio at all ·
 ☑ **the AI summary is on the offer card BEFORE Accept** (`D131`) — a fast preview during
