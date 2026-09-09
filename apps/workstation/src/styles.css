@@ -1027,6 +1027,19 @@ button.pill-opt:disabled {
   background: rgba(248, 113, 113, 0.1);
 }
 
+/* `D137`. Marks the SENTENCE as model-written, never the ranking — the order is arithmetic
+   over config weights and no model ever sees a score (`D126`). Deliberately quieter than
+   the ok/bad chips: it is provenance, not a verdict, and it must not compete with the
+   downside chip sitting under it. */
+.chip.ai {
+  font-size: 10px;
+  padding: 1px 6px;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  border-color: var(--line);
+  background: transparent;
+}
+
 /* The table scrolls inside its own box: a wide comparison must not push the whole
    workstation sideways. */
 .tw {

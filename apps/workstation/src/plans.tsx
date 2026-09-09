@@ -256,7 +256,15 @@ function ComparePane({
               <b>{c.name_th}</b>
               <span className="faint"> · {c.insurer}</span>
             </div>
-            <div className="faint">{c.reason_th}</div>
+            <div className="faint">
+              {/* `D137`. The badge marks the SENTENCE, never the ranking: the order is
+                  arithmetic over config weights and no model sees a score (`D126`). It is
+                  here so a broker about to read this aloud can tell which kind of sentence
+                  it is - and it is absent, not "generated", when no model wrote it, because
+                  a badge on every row stops being information. */}
+              {c.reason_source === "model" && <span className="chip ai">AI</span>}{" "}
+              {c.reason_th}
+            </div>
             <div className="chips">
               {c.better_on.map((label) => (
                 <span key={`b-${label}`} className="chip ok">

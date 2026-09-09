@@ -459,6 +459,38 @@ async def plans(
     }
 
 
+async def _comparison_reasons(container: Any, call_session_id: str, result: Any) -> dict[str, str]:
+    """The model's sentences for this table, cached per (call, line) (`D137`).
+
+    ⚠️ **This is the one model call in the system that is awaited**, and the reason is that
+    the plan panel is fetched once when the broker opens it and is never polled — so a
+    fire-and-forget would complete into a screen that nothing refreshes. Everything that
+    makes that safe is already true when the wait starts: the ranked table is computed, the
+    wait is bounded by `LLM_COMPARISON_TIMEOUT_S`, a timeout returns `{}` and the generated
+    sentences render, and none of it is anywhere near the call path (`D12`).
+
+    The cache is what stops a broker flipping between lines paying for the same sentences
+    twice. It is keyed by line as well as call, because switching the line selector rebases
+    the whole table onto a different policy (`D127`).
+    """
+    if container.settings.llm_comparison_timeout_s <= 0:
+        return {}
+    key = (call_session_id, result.line)
+    cached: dict[str, str] | None = container.comparison_reason_cache.get(key)
+    if cached is not None:
+        return cached
+    written: dict[str, str] | None = await container.comparison_reasons.write(result)
+    if written is None:
+        # ⚠️ The call never completed - a timeout, or the provider's one-off `max_tokens`
+        # rejection landing here because the startup warm-up did not absorb it. NOT cached:
+        # that is transient, and storing it would make one cold-start failure permanent for
+        # the rest of this call. An empty dict IS cached, because "the model answered and
+        # every sentence was refused" is deterministic and asking again buys nothing.
+        return {}
+    container.comparison_reason_cache[key] = written
+    return written
+
+
 @router.get("/calls/{call_session_id}/comparison")
 async def comparison(
     call_session_id: str,
@@ -478,6 +510,8 @@ async def comparison(
     if result is None:
         return {"available": False, "line": line, "candidates": []}
 
+    written = await _comparison_reasons(container, call_session_id, result)
+
     return {
         "available": True,
         "line": result.line,
@@ -491,7 +525,13 @@ async def comparison(
                 "name_th": c.product.name_th,
                 "insurer": c.product.insurer,
                 "score": round(c.score, 3),
-                "reason_th": c.reason_th,
+                # `D137`. The model rewrites this string and nothing else; `score` above
+                # is the arithmetic it never saw (`D126`). The source is reported because
+                # if the server knows it, the server says it (`D68`) — and because a
+                # broker about to read a sentence aloud should be able to tell which kind
+                # of sentence it is.
+                "reason_th": written.get(c.product.product_code, c.reason_th),
+                "reason_source": ("model" if c.product.product_code in written else "generated"),
                 "better_on": [d.label_th for d in c.better_on],
                 "worse_on": [d.label_th for d in c.worse_on],
             }

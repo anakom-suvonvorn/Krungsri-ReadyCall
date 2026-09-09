@@ -372,6 +372,9 @@ export type ComparisonView = {
     insurer: string | null;
     score: number;
     reason_th: string;
+    /** Who wrote `reason_th` (`D137`). The ORDERING is always arithmetic (`D126`) —
+     *  this says only whether a model rewrote the sentence beside it. */
+    reason_source?: "model" | "generated";
     better_on: string[];
     worse_on: string[];
   }[];

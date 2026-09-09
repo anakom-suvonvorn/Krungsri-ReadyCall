@@ -65,7 +65,7 @@ the disclosure gate moves when the agent attests. **What they said while waiting
 screen** (`D106`), and if they consented, **their audio is in object storage encrypted**
 (`D110`) with a key ref and a retention date. If they declined, it is nowhere.
 
-Verified on 2026-09-09: **929 tests** — 917 pass + 12 skipped with Postgres and MinIO both
+Verified on 2026-09-09: **946 tests** — 934 pass + 12 skipped with Postgres and MinIO both
 up (the 12 are foreign-key cases the in-memory backend cannot have, and the `ml`-extra ones).
 Without those containers the count of skips rises and nothing fails.
 `ruff check` and `ruff format --check` clean over **225** files, `mypy --strict`
@@ -454,7 +454,7 @@ story with no audio at all ·
 ☑ **the AI summary is on the offer card BEFORE Accept** (`D131`) — a fast preview during
 the offer window, the careful pass over the whole transcript after · ☑ **`scripts/compare_llm.py`**,
 the P4 comparison table, with both cost tables corrected against live pricing (`D130`) ·
-☐ the model writing the reason sentence — `Candidate.reason_th` is the seam ·
+☑ **the model writing the reason sentence** (`D137`) — four guards, the first being that every number in it must be one we handed the model (`D16`); the ranking is untouched ·
 ☐ gap analysis across a customer's whole portfolio rather than one policy per line
 
 **P5 — real telephony** ☐ Asterisk + ARI adapter · ☐ TLS/WSS certs · ☐ **in-browser softphone

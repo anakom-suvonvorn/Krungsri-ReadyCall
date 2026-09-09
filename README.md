@@ -480,8 +480,27 @@ Switch the line selector to **ประกันรถยนต์**: the compar
 *motor* policy rather than the health one the call is about.
 
 Everything about that order is arithmetic — weights live in `config/comparison.yaml`, the
-figures come from `Product.coverages` through `CoreDataProvider`. **The model, when one is
-wired in, rewrites only the reason sentence** (`D16`, `D126`).
+figures come from `Product.coverages` through `CoreDataProvider`. **The model rewrites only
+the reason sentence** (`D16`, `D126`, `D137`).
+
+With an LLM key configured (§ [Configuration](#configuration)), a small **AI** badge appears
+beside the sentences a model wrote; without one they are generated and the badge is absent.
+The ordering is identical either way — no model ever sees a score. A real example, on the
+fixture data above:
+
+> **กรุงเทพ เฮลท์ อีลิท** — *เพิ่มค่าห้องและค่าอาหารจาก 3,000 เป็น 6,000 วงเงินผู้ป่วยในต่อปีจาก
+> 1,000,000 เป็น 10,000,000 และค่ารักษาผู้ป่วยนอกจาก 1,500 เป็น 2,500 **แต่ค่าใช้จ่ายส่วนแรกสูงขึ้น
+> จาก 0 เป็น 30,000***
+
+That plan has the better figure in three of four rows and still ranks **second** — and the
+sentence says why. Four guards stand behind it, and the first is the one that matters:
+**every number in the sentence must be one we handed the model**, so a coverage figure can
+never be written by a model (`D16`). It may not rank, price, or promise cover either; a
+refused sentence falls back to the generated one and the table is unchanged.
+
+⚠️ This is the **one** model call in the system that is awaited, bounded by
+`LLM_COMPARISON_TIMEOUT_S` (3 s), because the panel is fetched once when you open it and is
+never polled. Measured: ~2.4 s the first time, **4 ms** afterwards from a per-call cache.
 
 Then press **สร้างลิงก์ให้ลูกค้า** in the tool panel, open the link, and press
 **ส่งตารางนี้ให้ลูกค้า**. The table appears on the other screen — and note what it does

@@ -7,7 +7,7 @@ _Last updated: 2026-09-09._
 
 ## ⚠️ CONTINUE HERE — rewritten 2026-09-09 (late), after `D135`
 
-**Everything is committed and green.** **929 tests** — 917 pass + 12 skipped — ruff + ruff format + mypy clean, the
+**Everything is committed and green.** **946 tests** — 934 pass + 12 skipped — ruff + ruff format + mypy clean, the
 workstation builds, 69/69 diagrams current. There is no half-applied edit anywhere. What
 follows is what is *unfinished*, not what is broken.
 
@@ -117,7 +117,7 @@ somebody calls it.** `grep -rn "\.method_name(" src/` is thirty seconds and it h
 been the answer nine times.
 
 The second pattern, worth equal weight: **every one of these was found by the user
-pressing a button, never by the suite.** 929 tests pass and did not see any of it. When
+pressing a button, never by the suite.** 946 tests pass and did not see any of it. When
 they report something, believe the report before believing the tests.
 
 ⚠️ **And `B39`'s specific lesson, because it cost a whole round trip:** when the user
@@ -337,11 +337,10 @@ have yet.
 
 ### What is NOT built, precisely
 
-1. ~~The comparison DATA.~~ **BUILT** (`D125`, `D126`, `D127`) — catalogue behind the
-   port, ranked on config weights, on the workstation and pushable to the phone. ⚠️ What
-   is genuinely left of it: **the model writing the reason sentence**. `Candidate.reason_th`
-   is the seam, it is generated today, and filling it leaves the ranking untouched. That is
-   the cheapest remaining way to make "we use AI" concrete without letting a model rank.
+1. ~~The comparison DATA.~~ **BUILT** (`D125`, `D126`, `D127`), and ~~the model writing
+   the reason sentence~~ **BUILT TOO** (`D137`). Catalogue behind the port, ranked on config
+   weights, on the workstation, pushable to the phone, and the sentence beside each plan now
+   written by a model over an ordering it never saw a score for.
 2. ~~**Docker packaging**~~ **BUILT 2026-09-09 (`D136`)** — `Dockerfile`, `.dockerignore`
    and two compose profiles, verified by running the container rather than by building it.
    **The rehearsal and the video are still the open half of Track E**, and they are now the
@@ -485,7 +484,7 @@ moment in the recording it was said — **and if they consented, their audio is 
 storage encrypted, with the key ref and the retention date on an `audio_recordings` row.**
 If they declined, it is nowhere.
 
-Verified **2026-09-09 (late)**: **929 tests** — 917 pass + 12 skipped, with Postgres
+Verified **2026-09-09 (late)**: **946 tests** — 934 pass + 12 skipped, with Postgres
 and MinIO both up (`readycall-postgres-1`, `readycall-minio-1`, both healthy). `ruff check` + `ruff format --check` clean over 220 files,
 `mypy --strict` clean over 157, 69/69 diagrams current, prompt pack fresh, `audit_docs.py`
 clean on the live files. **And by driving `/sim` in a browser** (`D123`): *Contact us —
@@ -899,12 +898,15 @@ done on the morning of.
    bundle itself — but still matters for a venue running without Docker. `Q21` still wants
    an answer; the `demo-postgres` profile makes it one command either way.
 
-3. **The cheapest remaining feature, if there is time for exactly one:** the model writing
-   the comparison's **reason sentence**. `Candidate.reason_th` in
-   `services/comparison/service.py` is the seam; it is generated today. Filling it leaves
-   the ranking untouched, which is the whole point of `D126`'s split — and it makes "we use
-   AI" concrete without letting a model near an ordering. The LLM seam already exists
-   (`D119`), so this is a prompt file, a schema, and a fire-and-forget call.
+3. ~~**The cheapest remaining feature:** the model writing the comparison's reason
+   sentence.~~ ✅ **DONE 2026-09-09 (`D137`).** Four guards, the first of which is the
+   design: **every number in the sentence must be one we handed the model**, so a coverage
+   figure can never be model-written (`D16`). The ranking is untouched and no model sees a
+   score. Verified live at **2,375 ms** then **4 ms** cached, and an **AI** chip marks a
+   model-written sentence on screen.
+   ⚠️ It is the **one awaited model call in the system** — the panel is fetched once and
+   never polled, so a fire-and-forget would finish into a screen nothing refreshes. Bounded
+   by `LLM_COMPARISON_TIMEOUT_S`; `0` disables it.
 
 4. ~~**The AI story.**~~ **DONE 2026-09-09 (`D130`, `D131`).** `scripts/compare_llm.py`
    exists and the P4 exit criterion is met; both cost tables are corrected against live

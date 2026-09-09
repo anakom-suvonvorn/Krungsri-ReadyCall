@@ -95,6 +95,22 @@ class IntakeSummariser:
         self.refused = 0
         self.failed = 0
 
+    def with_timeout(self, timeout_s: float) -> IntakeSummariser:
+        """The same client and clock, a different deadline (`D137`).
+
+        For the startup warm-up, which is background work nobody waits for and therefore
+        wants a far more generous deadline than a preview racing the Accept button. A new
+        instance rather than a mutation, because the caller's summariser is the live one
+        every call uses — widening its deadline for a warm-up would widen it for the offer
+        card too, which is the opposite of what `LLM_PREVIEW_TIMEOUT_S` is for.
+        """
+        return IntakeSummariser(
+            llm=self._llm,
+            clock=self._clock,
+            timeout_s=timeout_s,
+            min_characters=self._min_characters,
+        )
+
     async def summarise(
         self,
         texts: Sequence[str],

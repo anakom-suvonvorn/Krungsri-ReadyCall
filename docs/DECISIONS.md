@@ -5883,3 +5883,105 @@ placed against `active_call_session_id` before believing anything about a call.*
 - **Future.** If the image is ever handed to a judge, `DEMO_LOGIN_ENABLED` is the flag to
   think about: it is `true` by default and is what lets `/sim` become any customer.
   Harmless on fixture data, wrong the moment the data is real (`D47`).
+
+## D137. The model writes the comparison's reason sentence, and four guards keep it honest
+_Taken 2026-09-09 (late). `NEXT_SESSION`'s queue item 3 — *"the cheapest remaining feature,
+if there is time for exactly one"* — and the last piece of `D126`._
+
+- **Problem.** `D126` split compare-and-best-fit deliberately: **the ranking is arithmetic
+  over config weights, and a model rewrites only the sentence beside it.** The seam,
+  `Candidate.reason_th`, has been filled by a generated sentence ever since — honest,
+  traceable, and dull. It names the single biggest better row and the single biggest worse
+  row and stops there.
+
+  It is also the cheapest way left to make *"we use AI"* concrete without letting a model
+  near an ordering, which is the gap `NEXT_SESSION` has carried as **STILL OPEN** since the
+  user's *"it feels like a hackathon without AI"*.
+
+- **Decision.** `prompts/th/comparison_reason.v1.md` +
+  `services/analysis/comparison_reason.py`. The writer is handed the ranked candidates and
+  the **same `Difference` rows the arithmetic used**, and returns one sentence per plan.
+  `ComparisonService` is untouched and never learns this module exists.
+
+### Four guards, and the first one is the whole design
+
+1. **Every digit run in the output must appear in the input** (`D16`). Not *"no figures"* —
+   the useful sentence **quotes** coverage amounts, and that is what makes it a comparison
+   rather than an adjective. So the check is **provenance**, not absence: a number the
+   model wrote that was never handed to it is a coverage figure invented by a model.
+   Bare one- and two-digit runs are exempt on purpose (*"ดูแล 24 ชั่วโมง"*), because a
+   coverage amount in this catalogue is never that small and refusing them would refuse
+   almost every correct sentence — a guard that gets switched off.
+2. **No ranking language.** *"ดีที่สุด"*, *"ควรเลือก"*, *"อันดับ 1"*. A model that can
+   announce a winner is a model that can be argued into one, which is exactly the split
+   `D126` drew.
+3. **No price.** `Product` has no premium field, so any price is invented by construction.
+4. **No promise of cover.** Underwriting is the insurer's (`D117`).
+
+A refusal keeps the generated sentence, so none of this can break the table (`D12`).
+
+### Why this one call is AWAITED, when every other model call in the system is not
+
+`D119` and `D131` are emphatic that the summary is fire-and-forget and must stay that way.
+This is the exception and the reason is mechanical: **the plan panel is fetched once when
+the broker opens it and is never polled**, so a background task would complete into a
+screen nothing refreshes. Everything that makes `D12` bind is still true — the ranked table
+is already computed when the wait starts, the wait is bounded by
+`LLM_COMPARISON_TIMEOUT_S`, a timeout renders the generated sentences, and none of it is
+anywhere near the call path. `0` disables the model entirely.
+
+Measured on a live server: **2,375 ms** for three candidates on `gpt-5.4-mini`, then **4 ms**
+from the per-call cache.
+
+### ⚠️ Two faults on the first live run, and neither was a guard
+
+**1. The startup warm-up was dodging the cost it exists to absorb.** The first run returned
+`generated` for all three plans. The log said the call failed with the provider's one-off
+*"`max_tokens` is not supported with this model"* 400 — the negotiation `_warm_llm` exists
+to pay once per process. The warm-up had **timed out** first: it ran on
+`LLM_PREVIEW_TIMEOUT_S` (4 s), and a cold process paying DNS + TLS + that rejection
+round-trip exceeds it. So the warm-up returned "did not answer", the negotiation went
+unpaid, and **the next real call failed outright.**
+
+The warm-up now takes its own 20 s deadline through `IntakeSummariser.with_timeout()` — a
+new instance, not a mutation, because the live preview summariser must keep its tight one.
+Nothing waits for a warm-up, so a short deadline on it buys nothing and costs exactly what
+it was supposed to prevent. After the fix: `llm warmed answered=True stage=preview`, and
+all three sentences came back `source: model`.
+
+**2. My own cache made a transient failure permanent.** The first version cached the empty
+result with the reasoning *"a model that refused or timed out will do it again"*. Half
+right, and the wrong half matters: **a guard refusal is deterministic, a failed call is
+not.** `write()` returns `{}` for the first and `None` for the second, and only `{}` is
+cached. Without that, one cold-start 400 would have left the panel with generated sentences
+for the rest of the call even though the very next request would have worked.
+
+### The output, which is the point
+
+On the fixture data, `กรุงเทพ เฮลท์ อีลิท` — the plan with the better figure in three of
+four rows that still ranks **second**:
+
+> *เพิ่มค่าห้องและค่าอาหารจาก 3,000 เป็น 6,000 วงเงินผู้ป่วยในต่อปีจาก 1,000,000 เป็น
+> 10,000,000 และค่ารักษาผู้ป่วยนอกจาก 1,500 เป็น 2,500 **แต่ค่าใช้จ่ายส่วนแรกสูงขึ้นจาก 0
+> เป็น 30,000***
+
+Every figure traceable, the downside named, and the ฿30,000 deductible that decides the
+ranking stated in prose. The generated sentence named one better row and one worse row; this
+names all four differences in the order the weights care about.
+
+- **On screen**: a small **AI** chip marks a model-written sentence, quieter than the
+  ok/bad chips because it is provenance rather than a verdict. It is **absent** rather than
+  reading "generated" when no model wrote it — a badge on every row stops being
+  information. `reason_source` is on the wire for the same reason the server reports
+  everything else it knows (`D68`).
+- **Alternatives.** *Let the model rank and explain in one call* — the whole of `D126`
+  argues against it. *Fire-and-forget with a polling panel* — a poll on a dialog is `B33`,
+  and adding one to make a sentence arrive is a worse trade than a bounded wait.
+  *Widen the figure guard to "no numbers at all"* — that refuses the sentences worth having.
+- **Tradeoffs.** One extra model call per call+line, ~450 tokens in. The broker waits up to
+  3 s the first time they open the panel. And the guards are regex over Thai, which will
+  miss a phrasing eventually — which is why a refusal is silent and lossless rather than an
+  error, and why the ranking never depended on any of this.
+- **Future.** `Q40`'s customer×plan fit score is still **out** and still collides with
+  `D126`. If the guards ever need to catch motive-guessing the way `D135`'s prompt does, it
+  wants its own pattern rather than a looser existing one.

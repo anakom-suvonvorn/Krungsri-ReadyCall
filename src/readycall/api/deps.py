@@ -72,7 +72,12 @@ from readycall.prompts import PromptLibrary
 from readycall.services.agents.assignment import AssignmentService, OfferPolicy
 from readycall.services.agents.dispatch import DispatchService
 from readycall.services.agents.presence import PresenceService
-from readycall.services.analysis import ContextSummariser, IntakeSummariser, SummaryResult
+from readycall.services.analysis import (
+    ComparisonReasonWriter,
+    ContextSummariser,
+    IntakeSummariser,
+    SummaryResult,
+)
 from readycall.services.assist import AssistService
 from readycall.services.brief.builder import BriefBuilder
 from readycall.services.brief.context_facts import facts_for_prompt, known_facts
@@ -301,6 +306,16 @@ class Container:
             clock=self.clock,
             timeout_s=settings.llm_preview_timeout_s,
         )
+        #: The comparison's reason sentences (`D137`), on the FAST model for the same
+        #: reason as the context panel: it is awaited by a screen somebody is looking at.
+        self.comparison_reasons = ComparisonReasonWriter(
+            llm=self.fast_llm or self.llm,
+            timeout_s=settings.llm_comparison_timeout_s,
+        )
+        #: `{(call_session_id, line): {product_code: sentence}}`. The ranking is cheap and
+        #: recomputed every time; the sentences are not, so the second open of the panel —
+        #: and every line the broker flips back to — is instant and free.
+        self.comparison_reason_cache: dict[tuple[str, str], dict[str, str]] = {}
 
         #: Every durable store, chosen by `STORAGE_BACKEND` (`D75`, `D78`). Each service
         #: below gets its own and writes through to it; nothing reads it on the hot path.

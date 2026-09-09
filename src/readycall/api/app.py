@@ -130,6 +130,12 @@ async def _warm_stt(container: Container) -> None:
         log.exception("stt warmup failed - transcription will degrade, calls will not")
 
 
+#: The warm-up's deadline. Deliberately much longer than `LLM_PREVIEW_TIMEOUT_S`: nothing
+#: waits for this, and a warm-up that times out leaves the cost it exists to absorb sitting
+#: in front of the next real caller (`D137`).
+_WARMUP_TIMEOUT_S = 20.0
+
+
 async def _warm_llm(container: Container) -> None:
     """Open the connection to the hosted model before a caller needs it (`D131`).
 
@@ -146,10 +152,20 @@ async def _warm_llm(container: Container) -> None:
     """
     if container.settings.llm_provider is LlmProviderName.RULEBASED:
         return
-    for label, summariser in (
-        ("preview", container.preview_summariser),
-        ("final", container.summariser),
-    ):
+    # ⚠️ **The warm-up gets its OWN, generous deadline, and the preview's tight one is
+    # wrong here.** `LLM_PREVIEW_TIMEOUT_S` is 4 s because a preview arriving after Accept
+    # is wasted money — but the warm-up is background work nobody waits for, and cutting it
+    # short defeats its entire purpose. Measured: on a cold process the first
+    # OpenAI-compatible call pays DNS, TLS *and* the one-off `max_tokens` /
+    # `max_completion_tokens` rejection round trip, which came to more than 4 s; the preview
+    # warm-up timed out, the negotiation went unpaid, and **the next real call failed
+    # outright with a 400** — which is exactly the cost this function exists to absorb, being
+    # dodged by the function itself. Seen on the first live run of `D137`.
+    warm = [
+        ("preview", container.preview_summariser.with_timeout(_WARMUP_TIMEOUT_S)),
+        ("final", container.summariser.with_timeout(_WARMUP_TIMEOUT_S)),
+    ]
+    for label, summariser in warm:
         try:
             result = await summariser.summarise(
                 # Long enough to clear `min_characters`, and deliberately trivial: this is

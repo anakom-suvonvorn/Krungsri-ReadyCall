@@ -269,7 +269,14 @@ class LlmClient(Protocol):
 **Both are built** (`D119`, 2026-09-07). `build_llm` in `adapters/llm/__init__.py` is the
 factory and the only place a client may be constructed — the same enforcement point
 `build_blob_storage` is, and for the same reason. Prompts are versioned files in
-`prompts/th/`, loaded by `PromptLibrary`.
+`prompts/th/`, loaded by `PromptLibrary` — **five of them** as of `D137`
+(`summarize_intake.v1`, `intent_classify.v1`, `summarize_context.v1` superseded and `.v2`
+shipped, `comparison_reason.v1`).
+
+⚠️ **Every model call is fire-and-forget except one.** `comparison_reason` is awaited,
+bounded by `LLM_COMPARISON_TIMEOUT_S`, because the plan panel is fetched once when the
+broker opens it and is never polled (`D137`). It is not on the call path and the ranked
+table is already computed when the wait starts.
 
 ⚠️ *This block said "neither exists yet" until 2026-09-07, and before that said they were
 "both implemented" when they were not. `Settings.llm_provider` accepted both names with no
@@ -350,7 +357,9 @@ itself is good competition material.
 |---|---|
 | `intent_classify` | `{intent_code, label_th, label_en, confidence, alternatives[]}` from a **closed taxonomy** |
 | `entity_extract` | `{hospital, admission_date, policy_no, claim_id, amounts[], dates[], people[]}` |
-| `summarize_intake` | 2–3 Thai sentences, factual, no invention |
+| `summarize_intake` | 2–3 Thai sentences, factual, no invention. **Built** (`D119`), and it runs **twice** since `D131` — a fast preview during the offer window, the careful pass after Accept |
+| `summarize_context` | **Built** (`D134`). 2–3 Thai sentences over what the bank already holds. `v2` since `D135`: leads with the life-event signals, states no balance band, prints no confidence decimal, and never reports that something is *missing* |
+| `comparison_reason` | **Built** (`D137`). One Thai sentence per ranked plan. ⚠️ **Every digit run in the output must appear in the input** — provenance, not absence, because the useful sentence quotes real coverage amounts (`D16`). It may not rank (`D126`), price, or promise cover |
 | `build_case_brief` | the whole structured brief |
 | `next_best_action` | one action + 3–5 ordered recommended steps, chosen from a **playbook**, not freehand |
 | `suggested_opening` | one Thai sentence, polite register, uses คุณ + name, mentions the known context |
