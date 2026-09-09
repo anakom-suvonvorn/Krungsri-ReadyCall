@@ -59,6 +59,18 @@ setter plus a dispatched `input` event, or the component never sees the text.
 only the assist polls and looks exactly like the request never being made. Read the
 element's full `innerText`, not the visible part.
 
+### 2b. ⚠️ AFTER PULLING `D137`: rebuild the workstation, or you will not see it
+
+`D137` touched `plans.tsx`, `api.ts` and `styles.css`, and `apps/**/dist/` is **gitignored**
+(`Q17`). A pull gives you the source and the old bundle, so the **AI** chip beside a
+model-written reason sentence simply will not appear and nothing will say why:
+
+```bash
+cd apps/workstation && npm run build && cd ../..
+```
+
+The Docker image is unaffected — it builds the bundle itself (`D136`).
+
 ### 3. Then: the queue below — and item 2 of it is now done too
 
 **Rehearsal and the video are the whole of what is left before the pitch.** `D136` packaged
