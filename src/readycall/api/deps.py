@@ -14,8 +14,10 @@ while the customer is still lifting the phone to their ear.
 
 from __future__ import annotations
 
+import asyncio
 import os
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import timedelta
 from typing import Annotated, Any
 
@@ -27,7 +29,7 @@ from readycall.adapters.core_data.caching import CachingCoreDataProvider
 from readycall.adapters.core_data.fixtures import FixtureFileProvider
 from readycall.adapters.core_data.null import NullCoreDataProvider
 from readycall.adapters.event_bus.memory import InMemoryEventBus
-from readycall.adapters.llm import build_llm
+from readycall.adapters.llm import build_fast_llm, build_llm
 from readycall.adapters.stt.scripted import ScriptedSttEngine, load_scripted_turns
 from readycall.adapters.telephony.simulated import SimulatedTelephonyProvider
 from readycall.adapters.vad.energy import EnergyVad
@@ -270,6 +272,16 @@ class Container:
         self.summariser = IntakeSummariser(
             llm=self.llm, clock=self.clock, timeout_s=settings.llm_timeout_s
         )
+        #: The preview pass (`D131`), which runs while the offer card is on screen. Falls
+        #: back to the same client and a tighter deadline when `LLM_FAST_MODEL` is unset,
+        #: so the two-stage behaviour does not depend on configuring a second model — only
+        #: its *speed* does.
+        self.fast_llm = build_fast_llm(settings, prompts=self.prompt_library, clock=self.clock)
+        self.preview_summariser = IntakeSummariser(
+            llm=self.fast_llm or self.llm,
+            clock=self.clock,
+            timeout_s=settings.llm_preview_timeout_s,
+        )
 
         #: Every durable store, chosen by `STORAGE_BACKEND` (`D75`, `D78`). Each service
         #: below gets its own and writes through to it; nothing reads it on the hot path.
@@ -397,6 +409,9 @@ class Container:
             # config is where every other guard lives, and `Q26` is what happens to an
             # env var nothing reads.
             max_offer_rounds=weights.max_offer_rounds,
+            # The pre-offer summary (`D131`). The hook fires wherever the offer is made,
+            # which is what stops it depending on which caller of `tick()` ran.
+            on_offer=self._start_preview_summary,
         )
         self.identity = IdentityResolver(
             core=self.core,
@@ -422,6 +437,13 @@ class Container:
         #: ordinary state: the rule-based summary is already on the screen and this only
         #: ever REPLACES it. Nothing waits for this dict to be filled.
         self.ai_summaries: dict[str, SummaryResult] = {}
+        #: How many transcript turns each cached summary was built from (`D131`). This is
+        #: the supersede key: a preview is re-run only when the caller has actually said
+        #: something since the last one, so a quiet caller costs one model call rather
+        #: than one per sweep.
+        self.ai_summary_turns: dict[str, int] = {}
+        #: In-flight preview tasks, held so the event loop cannot collect one mid-call.
+        self._preview_tasks: set[asyncio.Task[None]] = set()
         #: Saved wrap-up forms, projected from the store. Never written by anything but
         #: an agent (`D45`) — the *absence* of an entry is meaningful data.
         self.wrapups: dict[str, CallWrapup] = {}
@@ -654,35 +676,105 @@ class Container:
         summary = self.ai_summaries.get(call_session_id)
         if summary is not None:
             brief = brief.model_copy(update={"summary_th": summary.text_th})
-        return _brief_out(brief, identity).model_dump(mode="json")
+        out = _brief_out(brief, identity)
+        if summary is not None and not summary.is_final:
+            # `D131`: say which pass wrote this. Set on the DTO rather than on the domain
+            # brief because it is a fact about the rendering, not about the case — and
+            # `CaseBrief` is the object `B5` proved must not grow fields casually.
+            out = out.model_copy(update={"summary_is_preview": True})
+        return out.model_dump(mode="json")
 
-    async def summarise_call(self, call_session_id: str, agent_id: str | None = None) -> None:
+    def _start_preview_summary(self, call_session_id: str, agent_id: str) -> None:
+        """`DispatchService`'s `on_offer` hook: summarise while the card is on screen.
+
+        Synchronous and instant by contract — it starts a task and returns, because it is
+        called from inside the dispatch tick and `D12` forbids anything on a call's path
+        waiting for a model. A failure to even schedule is logged and swallowed: the worst
+        case is the screen keeping the rule-based summary, which is what it had before.
+
+        ⚠️ **The task is kept in a set.** `asyncio` holds only a weak reference to a
+        running task, so a fire-and-forget `create_task` whose result nobody keeps can be
+        collected mid-flight — intermittently, under load, which is the single worst shape
+        of bug for this project to acquire.
+        """
+        try:
+            task = asyncio.create_task(self.summarise_call(call_session_id, agent_id, preview=True))
+        except RuntimeError:
+            # No running loop: a scenario replay or a unit test driving the matcher
+            # directly. Nothing to summarise onto, and not an error.
+            return
+        self._preview_tasks.add(task)
+        task.add_done_callback(self._preview_tasks.discard)
+
+    async def summarise_call(
+        self, call_session_id: str, agent_id: str | None = None, *, preview: bool = False
+    ) -> None:
         """Ask the model for a summary, in the background, and never block on it.
 
-        Called as a task from the accept path. The agent is already connected and already
-        reading the rule-based summary by the time this runs; if it succeeds the screen
-        upgrades on the next push, and if it does not, nothing happened. That ordering is
-        `D12` stated as code rather than as a comment.
+        Runs **twice** per call (`D131`), and the two passes answer different questions:
+
+        * `preview=True` fires when the offer card appears, on the transcript so far, on
+          the fast model and a tight deadline. It is trying to land inside the seconds the
+          agent spends reading the card — so the brief is already summarised *before* they
+          press Accept, which is what the pitch has always claimed.
+        * `preview=False` fires from the accept path, on the **whole** transcript. The
+          caller keeps talking through the entire offer window (`D21` — the offer window
+          IS the intake grace period), so the preview was necessarily built from a partial
+          transcript, and the final pass is what makes the screen right.
+
+        Neither is ever awaited by a request. `D12`: the agent is connected the instant
+        `accept_offer` returns, and every one of these paths is allowed to do nothing.
+
+        **The supersede rule is turn count, not presence.** Returning early on
+        `call_session_id in self.ai_summaries` — which is what this did before there were
+        two passes — would have made the preview permanently *win*, so the final pass would
+        never run and the screen would keep a summary of the first half of the call. A
+        preview is replaced when there is genuinely more to say; a final result is never
+        replaced by anything.
         """
-        if call_session_id in self.ai_summaries:
-            return
         turns = self.transcript_delivery.turns_for(call_session_id)
         if not turns:
             return
+        held = self.ai_summaries.get(call_session_id)
+        if held is not None:
+            if held.is_final:
+                return
+            # A second preview on the same offer is only worth money if the caller
+            # has actually said something since the last one.
+            if preview and len(turns) <= self.ai_summary_turns.get(call_session_id, 0):
+                return
         session = await self.calls.get(call_session_id)
         code = getattr(session, "menu_intent_code", None)
         spec = self.pack.intents.get(code) if code else None
-        result = await self.summariser.summarise(
+        summariser = self.preview_summariser if preview else self.summariser
+        result = await summariser.summarise(
             [str(t.get("text", "")) for t in turns],
             intent_label_th=spec.label_th if spec else "ไม่ทราบเรื่องที่ติดต่อ",
             line_label_th=str(spec.line) if spec else "unknown",
         )
         if result is None:
             return
+        # Recorded on the result rather than in a second dict, so anything reading the
+        # summary can tell a partial-transcript preview from the finished article. The
+        # screen uses it to label one (`D131`).
+        result = replace(result, is_final=not preview)
+        # ⚠️ A slow preview can land AFTER the final pass has already written: the agent
+        # pressed Accept while the fast model was still thinking. Losing that race must
+        # not downgrade the screen from a whole-transcript summary to half of one.
+        current = self.ai_summaries.get(call_session_id)
+        if current is not None and current.is_final and preview:
+            log.info(
+                "preview summary discarded: the final one already landed",
+                call_session_id=call_session_id,
+            )
+            return
         self.ai_summaries[call_session_id] = result
+        self.ai_summary_turns[call_session_id] = len(turns)
         log.info(
             "ai summary ready",
             call_session_id=call_session_id,
+            stage="preview" if preview else "final",
+            turns=len(turns),
             provider=result.provider,
             model=result.model,
             prompt_version=result.prompt_version,

@@ -440,6 +440,88 @@ gets the fact and makes the call (`D128`).
 - **Needs set up:** §1 and §2.
 - **Needs running:** the API server. Nothing else.
 
+### Watch the AI summary land on the offer card, before Accept
+
+The summary runs **twice** (`D131`): a fast **preview** while the offer card is ringing, and
+the careful pass over the whole transcript once the broker accepts. That is what makes *"the
+broker has the brief before they speak"* true of the AI half of the brief, and it is what
+closes `Q35`.
+
+**Needs set up:** §1, §2, and an API key — this is the one feature here that talks to a
+hosted model and spends money. Everything works without one: with no key the provider stays
+`rulebased` and the screen keeps the rule-based summary, which is the shipped default.
+
+Put the keys in `.env` (gitignored). Either name works for OpenAI — `LLM_API_KEY` or
+`OPENAI_API_KEY`, whichever your key arrived under (`D130`):
+
+```ini
+# the careful pass, after Accept
+LLM_PROVIDER=anthropic
+ANTHROPIC_API_KEY=sk-ant-...
+LLM_MODEL=claude-sonnet-5
+
+# the preview, during the offer window. Omit all three to use LLM_MODEL for both.
+LLM_FAST_PROVIDER=openai_compatible
+LLM_FAST_BASE_URL=https://api.openai.com/v1
+OPENAI_API_KEY=sk-proj-...
+LLM_FAST_MODEL=gpt-5.4-mini
+```
+
+Then install the SDKs and start the server. ⚠️ **Name every extra you want in one command —
+`uv sync` prunes** (`B31`):
+
+```bash
+uv sync --extra web --extra llm
+uv run python -m readycall.entrypoints.api
+```
+
+Sign in at `/workstation` as **A006**, but **do not press พร้อมรับสาย yet** — the caller has
+to be talking before a desk rings, which is the real sequence. Place the call first:
+
+```bash
+curl -X POST http://127.0.0.1:8000/v1/demo/calls -H "Content-Type: application/json" \
+  -d '{"intent_code":"motor.claim.notify","caller_number":"0812345678","intake_keys":["1"],"audio":"demo_intake.wav","ignore_hours":true}'
+```
+
+Wait about ten seconds for the caller to finish recording, **then** press พร้อมรับสาย. The
+offer card appears carrying the rule-based summary, and one to two seconds later that text is
+replaced by the model's. Accept, and it is replaced again by the whole-transcript version —
+the **สรุประหว่างรอรับสาย** badge disappears at that moment.
+
+⚠️ **`intent_code` and the scripted lines have to match.** `config/demo_transcript.yaml` is a
+motor crash, so placing a `health.claim.notify` call makes the model correctly answer
+*"unclear"* and refuse to summarise — and the screen then shows **no AI summary at all**,
+which looks broken and is not (`D131`).
+
+⚠️ **`demo_intake.wav` is gitignored.** A fresh clone regenerates it:
+`uv run python scripts/make_demo_audio.py`.
+
+### Compare models before choosing one
+
+`scripts/compare_llm.py` runs the same four Thai intakes through every model you name,
+through the real summariser and the real prompt file, and prints latency, cost and the actual
+Thai each one wrote. **This is P4's "a comparison table produced by the harness, not by
+opinion"** (`D130`).
+
+```bash
+uv run python scripts/compare_llm.py --list          # presets and cases, spends nothing
+uv run python scripts/compare_llm.py --preset fast --dry-run   # count the calls first
+uv run python scripts/compare_llm.py --preset full --repeat 3 --out var/llm_compare.md
+```
+
+- **Needs set up:** §1, `uv sync --extra llm`, and whichever keys the models you name need.
+- **Needs running:** nothing. It calls the providers directly.
+
+⚠️ **It spends real money** — `--preset full --repeat 3` is 63 model calls, which is cents
+rather than dollars at these rates and is still a real invoice. `--dry-run` prints the matrix
+and calls nothing.
+
+⚠️ **The report goes to a file, not the console**, because it is full of Thai and the Windows
+console is cp1252 (`B1`). **Read the "what each model actually wrote" section at the bottom** —
+the latency and cost columns cannot see quality, and on the run that produced `D130`'s table
+the cheapest model scored a clean sheet while writing *"crashed last night"* about a caller
+who said *this morning*.
+
 ### Hand a claim to the insurer, which is what a broker actually does
 
 A broker does not adjudicate claims — the insurer does (`D117`, from Krungsri's own duty

@@ -26,7 +26,7 @@ from readycall.api.deps import Container
 from readycall.api.routers import agent, assist, demo, health, mobile
 from readycall.api.security import AuthenticationRequired
 from readycall.clock import Clock
-from readycall.config import Settings, get_settings
+from readycall.config import LlmProviderName, Settings, get_settings
 from readycall.console import enable_utf8
 from readycall.db.storage import Storage
 from readycall.logging import configure, get_logger
@@ -88,6 +88,10 @@ async def sweep_once(container: Container) -> None:
         # up because somebody wrote it, only because somebody calls it.
         container.assist.sweep()
         result = await container.dispatch.tick()
+        # ⚠️ The preview summary is NOT started from here. `tick()` has a second caller —
+        # `POST /v1/demo/calls` ticks the dispatcher itself — so a trigger written at this
+        # one would never fire on the path the demo and every test actually take (`B36`).
+        # It hangs off `DispatchService`'s `on_offer` hook instead, wired in `deps.py`.
         if expired or dropped or reoffered or recordings or stored or result.offered:
             log.info(
                 "sweep",
@@ -113,6 +117,49 @@ async def _warm_stt(container: Container) -> None:
         await container.stt.warmup()
     except Exception:
         log.exception("stt warmup failed - transcription will degrade, calls will not")
+
+
+async def _warm_llm(container: Container) -> None:
+    """Open the connection to the hosted model before a caller needs it (`D131`).
+
+    Nothing here is allowed to matter. On the shipped `rulebased` provider there is no
+    network at all and this returns immediately; with a provider configured it makes one
+    tiny structured call so DNS, TLS and the OpenAI-compatible `max_tokens` /
+    `max_completion_tokens` negotiation are all paid for by the process rather than by the
+    first caller. A failure is a log line: the summary is allowed to do nothing (`D12`),
+    and a model that will not answer at startup will not answer mid-call either — but the
+    call must still be routed, answered and briefed.
+
+    ⚠️ It costs one call's worth of tokens per process start. At the fast tier's rates that
+    is a fraction of a cent; the alternative measured over 5 s on the first real call.
+    """
+    if container.settings.llm_provider is LlmProviderName.RULEBASED:
+        return
+    for label, summariser in (
+        ("preview", container.preview_summariser),
+        ("final", container.summariser),
+    ):
+        try:
+            result = await summariser.summarise(
+                # Long enough to clear `min_characters`, and deliberately trivial: this is
+                # a connection warmer, not a self-test of the prompt.
+                ["สวัสดีครับ ทดสอบระบบครับ ขอบคุณครับ"],
+                intent_label_th="ทดสอบระบบ",
+                line_label_th="unknown",
+            )
+        except Exception:
+            log.warning("llm warmup failed - the first summary will pay for it", stage=label)
+            continue
+        # ⚠️ `summarise()` swallows its own failures and returns `None` (`D119`), so an
+        # unconditional "warmed" here would claim success for a call that timed out. The
+        # connection work still happened either way — which is the point — but the log
+        # must not say more than it knows.
+        log.info(
+            "llm warmed" if result is not None else "llm warm-up call did not answer",
+            stage=label,
+            answered=result is not None,
+            model=result.model if result is not None else None,
+        )
 
 
 async def _sweep_forever(container: Container, interval_s: float) -> None:
@@ -188,6 +235,13 @@ def create_app(
         # look like a hang, and because `D12` means an early call degrades rather than
         # waits. On the default scripted engine this returns immediately.
         warmup = asyncio.create_task(_warm_stt(container))
+        # Same argument, one layer up (`D131`): the FIRST call to a hosted model pays DNS,
+        # TLS and — on the OpenAI-compatible path — the one-off `max_tokens` rejection that
+        # teaches the adapter which field this server wants. Measured cold on 2026-09-09
+        # that came to over 5 s and blew the preview's 4 s deadline, so the first caller of
+        # a demo would have been the one caller with no preview. Warmed in the background
+        # and non-fatal, exactly like the STT engine above.
+        llm_warmup = asyncio.create_task(_warm_llm(container))
         sweeper = (
             asyncio.create_task(_sweep_forever(container, settings.agent_sweep_interval_s))
             if settings.agent_sweep_interval_s > 0
@@ -210,7 +264,7 @@ def create_app(
             restored=restored,
         )
         yield
-        for task in (sweeper, pump, warmup):
+        for task in (sweeper, pump, warmup, llm_warmup):
             if task is not None:
                 task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):

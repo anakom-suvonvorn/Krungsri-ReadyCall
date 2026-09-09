@@ -19,8 +19,8 @@ between two ticks is simply not a candidate on the second.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from dataclasses import dataclass, replace
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass, field, replace
 from datetime import timedelta
 from typing import Any, Protocol
 
@@ -75,6 +75,12 @@ class InMemoryMatchingDecisionStore:
         return list(self._rows)
 
 
+#: `(call_session_id, agent_id)` -> None, called the moment a desk starts ringing
+#: (`D131`). Synchronous and non-blocking by contract: the implementation starts a
+#: background task and returns, because nothing on a call's path may wait for a model.
+OfferHook = Callable[[str, str], None]
+
+
 class AgentNotifier(Protocol):
     """How a decision reaches a screen. Implemented by `AgentHub` in the API layer."""
 
@@ -89,6 +95,13 @@ class DispatchResult:
     decisions: list[MatchingDecision]
     #: Calls the matcher could not place, with the reason it gave (`D50`).
     unplaced: dict[str, str]
+    #: `(call_session_id, agent_id)` for every offer this tick actually made.
+    #:
+    #: `offered` above is agent ids alone, which answers "whose desk rang" and cannot
+    #: answer "about which caller". This is reporting and test surface only — ⚠️ **do not
+    #: drive side effects from it**: `tick()` has two callers and a consumer written at
+    #: one of them silently does nothing at the other. `on_offer` is the hook (`D131`).
+    offers: list[tuple[str, str]] = field(default_factory=list)
 
 
 class DispatchService:
@@ -103,6 +116,7 @@ class DispatchService:
         offer_timeout_s: float = 20.0,
         decisions: MatchingDecisionStore | None = None,
         max_offer_rounds: int = 0,
+        on_offer: OfferHook | None = None,
     ) -> None:
         self._engine = engine
         self._assignments = assignments
@@ -111,6 +125,19 @@ class DispatchService:
         self._clock = clock
         self._offer_timeout_s = offer_timeout_s
         self._decisions = decisions
+        #: Called synchronously with `(call_session_id, agent_id)` the instant an offer is
+        #: made (`D131`). A **callback, not a dependency**, for exactly the reason
+        #: `notifier` is one: this service must not import from `api/` and must never
+        #: acquire an LLM. The implementation starts the preview summary and returns.
+        #:
+        #: ⚠️ **It is a hook here rather than a field on `DispatchResult` on purpose**, and
+        #: that was a real bug caught before it shipped. `tick()` has TWO callers — the
+        #: sweep and `POST /v1/demo/calls`, which ticks the dispatcher itself — so anything
+        #: driven by reading the result has to be remembered at both, and the demo endpoint
+        #: is the path the entire demo and every test actually uses. Wiring it to the sweep
+        #: alone would have been `B36` again: correct code on a branch nothing executes.
+        #: A hook at the point the offer is made cannot be bypassed by a new caller.
+        self._on_offer = on_offer
         #: How many times a caller may go round the whole floor (`D113`). **0 is no cap**,
         #: which is the default and the shipped configuration: a caller who is cut off has
         #: to start again from the menu, while a caller still holding can hang up whenever
@@ -224,6 +251,7 @@ class DispatchService:
         decisions = await self._engine.match(calls, self._presence.snapshot())
 
         offered: list[str] = []
+        offers: list[tuple[str, str]] = []
         unplaced: dict[str, str] = {}
         for decision in decisions:
             self._last_decision[decision.call_session_id] = decision
@@ -249,6 +277,14 @@ class DispatchService:
                 timeout_s=self._offer_timeout_s,
             )
             offered.append(decision.chosen_agent_id)
+            offers.append((session.call_session_id, decision.chosen_agent_id))
+            if self._on_offer is not None:
+                # Must not raise into the tick and must not block it: a failure here is a
+                # missing summary, and the caller still has to reach a desk (`D12`).
+                try:
+                    self._on_offer(session.call_session_id, decision.chosen_agent_id)
+                except Exception:
+                    log.exception("offer hook failed", call_session_id=session.call_session_id)
             await self._notifier.send(
                 decision.chosen_agent_id,
                 "offer",
@@ -269,7 +305,9 @@ class DispatchService:
 
         if unplaced:
             log.info("dispatch left callers waiting", count=len(unplaced), reasons=unplaced)
-        return DispatchResult(offered=offered, decisions=decisions, unplaced=unplaced)
+        return DispatchResult(
+            offered=offered, decisions=decisions, unplaced=unplaced, offers=offers
+        )
 
     def _circle_back(self, call_session_id: str) -> None:
         """Every qualified agent has declined. Clear the exclusions and try again (`D113`).

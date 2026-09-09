@@ -61,6 +61,16 @@ class SummaryResult:
     tokens_in: int | None = None
     tokens_out: int | None = None
     cost_usd: float | None = None
+    #: False while this was built from a **partial** transcript — the preview that runs
+    #: during the offer window, before the caller has finished talking (`D131`). The
+    #: caller keeps speaking through the whole offer window by design (`D21`), so a
+    #: preview is a summary of the first part of a call and the screen says so.
+    #:
+    #: Set by the caller rather than in here, because this service does not know whether
+    #: the transcript it was handed is finished — only the thing driving it does. Same
+    #: reason `degraded` is passed *into* `IntakeStrategy.finalize` rather than inferred
+    #: (`D88`): a component that cannot observe a fact must not assert it.
+    is_final: bool = True
 
 
 class IntakeSummariser:

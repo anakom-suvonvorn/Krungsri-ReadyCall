@@ -23,7 +23,7 @@ somebody calls it.** `grep -rn "\.method_name(" src/` is thirty seconds and it h
 been the answer nine times.
 
 The second pattern, worth equal weight: **every one of these was found by the user
-pressing a button, never by the suite.** 903 tests pass and did not see any of it. When
+pressing a button, never by the suite.** 910 tests pass and did not see any of it. When
 they report something, believe the report before believing the tests.
 
 ⚠️ **And `B39`'s specific lesson, because it cost a whole round trip:** when the user
@@ -91,6 +91,21 @@ you just done is, in terms of how it actually works behind the scene."*
 | `D127` | the comparison is **one answer inside a plan panel** | the user's design. A compact rail panel opening a dialog: line selector, ranking, and the whole catalogue plan by plan. ⚠️ The line selector immediately found a bug — switching line kept the *call's* policy as the baseline and told a motor policyholder they had no motor cover |
 | `D128` | one tool sends **what the broker typed** | `form.free_text` pointed the other way. The one tool whose content the system cannot classify, so the composer shows the screen's tier while they type. It also made `/sim`'s unescaped `innerHTML` a real injection risk, now fixed on both customer surfaces |
 | `D129` | one-of-many is **pills, not radio rows** | native radios drew bullets that never line up beside Thai labels and gave each option a full-width row. `role="radio"` keeps the semantics the markup lost |
+
+### What landed on 2026-09-09 (afternoon): the AI is early now
+
+| | what it is | the one thing to know |
+|---|---|---|
+| `D130` | **`scripts/compare_llm.py`**, and both price tables corrected | the P4 exit criterion, finally met. The old table was wrong three ways at once and produced `D119`'s **$0.0085** — the real figure is **$0.0057**. ⚠️ The harness dumps every model's Thai *because the objective columns cannot see quality*: `gpt-4.1-nano` scored 12/12 clean and had written *"crashed last night"* about a caller who said *this morning* |
+| `D131` | the summary runs **twice** | a fast **preview** on the offer card (measured **1.8 s** after the desk rings, before Accept) and the careful pass over the whole transcript after. Closes `Q35`. ⚠️ It nearly shipped triggered from `sweep_once`, which `POST /v1/demo/calls` bypasses — `B36` again, caught before commit. It hangs off `DispatchService.on_offer` instead |
+
+⚠️ **Two landmines from that work, both cheap to hit again.** The **first** hosted-model
+call of a process is >5 s cold (DNS + TLS + the one-off `max_tokens` rejection), so
+`_warm_llm` absorbs it at startup — without it the first caller of a demo is the one with
+no preview. And a demo whose **scripted lines do not match its intent code** shows *no AI
+summary at all*: `config/demo_transcript.yaml` is a motor crash, so placing a
+`health.claim.notify` call makes the model correctly answer `is_clear: false` and refuse.
+Use `motor.claim.notify` with the shipped script.
 
 **Three things want your decision**, and all three are written up where they belong:
 
@@ -362,9 +377,9 @@ moment in the recording it was said — **and if they consented, their audio is 
 storage encrypted, with the key ref and the retention date on an `audio_recordings` row.**
 If they declined, it is nowhere.
 
-Verified **2026-09-09**: **903 tests** — 891 pass + 12 skipped, with Postgres
+Verified **2026-09-09**: **910 tests** — 898 pass + 12 skipped, with Postgres
 and MinIO both up (`readycall-postgres-1`, `readycall-minio-1`, both healthy). `ruff check` + `ruff format --check` clean over 220 files,
-`mypy --strict` clean over 155, 69/69 diagrams current, prompt pack fresh, `audit_docs.py`
+`mypy --strict` clean over 157, 69/69 diagrams current, prompt pack fresh, `audit_docs.py`
 clean on the live files. **And by driving `/sim` in a browser** (`D123`): *Contact us —
 something else* asked which kind of cover, ประกันเดินทาง returned **ซื้อประกันเดินทาง** —
 the option that had existed only on the keypad — and choosing it placed a real call that
@@ -466,7 +481,7 @@ because it is now **twenty-two** and they rhyme:
    day. `B36` was an entry path that had been **broken since P1b** and that nothing had
    ever executed.
 15. **`B32`/`B33` (2026-09-08)** — both found in ten minutes of *using* the tool rail, and
-   neither visible to 903 tests. The catalogue was fetched on mount, before sign-in, so it
+   neither visible to the 910-test suite. The catalogue was fetched on mount, before sign-in, so it
    401'd into a defensive `catch` and the rail was empty for the shift. And the dialog's
    2-second poll was rebuilt every render — the workstation re-renders every second — so
    it never fired once, which looked exactly like the server not returning the customer's
@@ -773,12 +788,13 @@ done on the morning of.
    AI" concrete without letting a model near an ordering. The LLM seam already exists
    (`D119`), so this is a prompt file, a schema, and a fire-and-forget call.
 
-4. **The AI story, if there is more time.** `scripts/compare_llm.py` does not exist and is
-   a named P4 exit criterion. ⚠️ **The cost table in `adapters/llm/anthropic.py` is WRONG**
-   — it carries Opus at $15/$75 and Sonnet at $3/$15; current published rates are **$5/$25
-   and $2/$10**, so `D119`'s "$0.0085 per call" is ~1.5x too high (really ≈ $0.0057), and
-   the Haiku key has a date suffix so the correct model id never matches it. **Do not quote
-   the $0.0085 figure in the pitch until this is fixed and re-measured.**
+4. ~~**The AI story.**~~ **DONE 2026-09-09 (`D130`, `D131`).** `scripts/compare_llm.py`
+   exists and the P4 exit criterion is met; both cost tables are corrected against live
+   pricing docs; and the summary now runs **twice** — a fast preview on the offer card and
+   the careful pass after Accept, which is what closes `Q35`.
+   **The number to quote is `$0.0057` per call on `claude-sonnet-5`, never `$0.0085`.**
+   ⚠️ The pitch-relevant table is in `D130`; `gpt-5.4-mini` at p50 **0.89 s** is what makes
+   a summary reach the card at all, against Sonnet's 4.40 s.
 
 5. **The lapse-propensity model.** Agreed scope: **one** model, trained on a **real public
    dataset** (Kaggle/UCI/OpenML) — the user was explicit that synthetic data is circular
@@ -930,7 +946,7 @@ GPU should own the demo machine. Typhoon uses 1068 MB, so P4's model is the ques
 | Q13 | Does a third-party caller need a named representative | Assume yes; `Policy` has no `representatives` field yet |
 | Q15 | Matching weights are guesses | Tune against real volumes; `--compare` exists to re-measure |
 | **Q34** ⚠️ **NEW 2026-09-07** | **What the customer submits through a pushed form is not stored anywhere** (`D120`). The broker reads it off their screen and types it into the wrap-up. That is honest for a demo and wrong for a product: the customer filled in a form and the system kept no record of it. It wants a real table and a retention rule (`D14`), not a longer-lived dict — and the moment a signature or an upload lands, it stops being optional. | In memory, dies with the call |
-| **Q35** ⚠️ **NEW 2026-09-07** | **The AI summary takes 4.5 s, against a 1 s brief budget** (`D119`, `ARCHITECTURE` §15). Survivable only because it is fire-and-forget after Accept, so nobody waits. But the pitch says "the agent has the brief before they speak", and 4.5 s is after. Options: accept it and describe it accurately, move to a smaller model, shorten the prompt, or stream. **Do not quietly restate the budget as met.** | Accepted, because nobody waits |
+| ~~Q35~~ | ~~**The AI summary takes 4.5 s, against a 1 s brief budget**~~ | **RESOLVED 2026-09-09 by `D130` + `D131`.** Both halves of the option list were taken: a **smaller model** (`gpt-5.4-mini`, measured p50 **0.89 s** against Sonnet's 4.40 s) and a **second, earlier pass**. The summary now runs during the offer window and is on the card **before Accept** — verified on a running server at 1.8 s after the desk rang. The careful model still writes the final one over the whole transcript, because `D21` means a preview is always a summary of part of a call. ⚠️ The 1 s budget in `ARCHITECTURE` §15 is still not *met* by either model; what changed is that the summary no longer lands after the broker has started speaking |
 | **Q36** ⚠️ **NEW 2026-09-08** | **Three `*.advice.quote` intents are reachable from no menu.** `motor.advice.quote`, `health.advice.quote` and `life.advice.quote` have labels, slots (`vehicle`/`usage`/`coverage_level`, `age`/`budget`/`hospital_preference`, …) and playbooks, and no option in `menus.yaml` names them — only `travel.advice.quote` is on a menu. Found while building `D123`. On every human surface those three lines answer *"I want to buy"* with **เปรียบเทียบแผนและขอราคา** (`*.advice.compare`), whose own required slots include `current_policy_no` — a field a brand-new customer does not have, so the routed brief asks the broker for something that cannot exist. Splitting them adds a **seventh** option to three phone menus, which is a real cost on a keypad and none at all in the app. Options: (a) leave it — one option covers both conversations and the label says so; (b) add the quote options to all three reason menus, accepting seven-option phone menus; (c) add them with `contexts: [general]`… which does **not** help, because the IVR ignores `contexts` by design (`D122`), so the phone menu grows either way. This is a domain call, not an engineering one. | **Not acted on.** `D123` records the reasoning |
 | **Q37** ⚠️ **NEW 2026-09-08** | **`CallState.TRANSFERRED` is entered by nothing, and `D124` decided to leave it that way.** Normally that is this project's most-repeated bug. Here it is a finding: the state is **terminal**, so a call in it can never reach `WRAP_UP` — and after-call work on a handoff is real work. Making it non-terminal instead would leave **two states both meaning "the media is over and the agent is filing"**, which is `B25`/`B26`'s shape. So a handoff ends the call the ordinary way and the RECORD is what makes it a handoff, and a test asserts `TRANSFERRED` stays unentered so nobody tidies it back. What the state actually models is a **blind** transfer — push the caller into another queue and hang up — which `D63` explicitly rejects as *"what call centres do today and the reason people hate being transferred"*. Options: delete it (15 states become 14, and `TERMINAL_STATES`, `FINISHED_STATES`, `DATA_MODEL` and two generated diagrams follow), or keep it reserved for `D63`'s blind-transfer escape hatch and say so in the enum. | **Kept, unentered, documented.** Deleting a state is not a four-days-before-the-pitch change |
 | **Q16** | **A keypad lookup confirms a policy number at L1.** The caller supplied the digits and the agent must not read them aloud below L2 — but it is a confirmation oracle. Designed this way in `D44`; worth a second look. | Allowed |

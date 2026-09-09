@@ -5215,3 +5215,220 @@ line up, and there is a lot of empty space._
 The customer's own carrier keeps its own full-width pill above the grid: it is a different
 **kind** of answer, not one more row in the same list (`D124`). The same control is reused
 for the plan dialog's line selector (`D127`), which is the same question shape.
+
+## D130. The cost table was wrong in three ways, and a comparison harness now exists
+_Taken 2026-09-09, after the user supplied an OpenAI key and asked which model should write
+the summary. Closes `PLAN.md`'s P4 exit criterion **"a comparison table produced by the
+harness, not by opinion"**, which had been open since the phase was written._
+
+- **Problem, part one — the key was in `.env` and unread.** The user put `OPENAI_API_KEY`
+  beside `ANTHROPIC_API_KEY`, which is the name OpenAI's own SDK and every tutorial use.
+  `Settings` declared `llm_api_key` and not that, and `pydantic-settings` ignores an
+  unknown name silently. **A key sitting in `.env` under a name nothing reads is
+  indistinguishable from no key at all** — and the failure is the quiet kind: everything
+  starts, the provider is simply never usable.
+
+- **Problem, part two — `NEXT_SESSION` had flagged the cost table as wrong, and it was
+  worse than flagged.** `_PRICES_PER_MTOK` in `adapters/llm/anthropic.py` carried Opus at
+  `$15/$75` and Sonnet at `$3/$15`. Verified against current pricing documentation on
+  2026-09-09: **Opus 5 is `$5/$25` and Sonnet 5 is `$2/$10`.** And the third fault was the
+  one nobody had noticed: the Haiku key was `claude-haiku-4-5-20251001`, a **date-suffixed**
+  id, so `model.startswith(prefix)` against the ordinary id `claude-haiku-4-5` matched
+  nothing and priced silently at `None`.
+
+  That table is where `D119`'s published **"$0.0085 per call"** came from. The measured
+  figure on the corrected table is **$0.00569**. The old number was ~1.5x too high, which
+  is the direction that flatters nobody and would have been quoted at a pitch.
+
+- **Decision.** Declare `openai_api_key` as a secret and read it as the fallback for
+  `llm_api_key`; correct both price tables against live documentation; and build
+  `scripts/compare_llm.py`.
+
+### The rule the price tables now carry
+
+**A price table is a claim about the world and it goes stale on the vendor's schedule
+rather than on ours.** Both tables say so in a comment and both name the date they were
+verified. This is `B17`'s lesson — *a model id is a fact, not a naming convention* — moved
+one field along: a *rate* is a fact too, and inventing one from memory is the same mistake
+as inventing `...-combined-ct2` was.
+
+Matching is **longest-prefix** now, in both tables, so `gpt-5.4-mini` cannot price as
+`gpt-5.4` and `claude-opus-4-8` cannot price as some shorter family name.
+
+⚠️ **OpenAI's rates are applied only when the base URL is actually OpenAI's.** The same
+adapter serves Typhoon-hosted, vLLM, Ollama and LM Studio; a self-hosted model has no
+per-token price, and Typhoon's is `Q8` and still unverified. For all of those the cost
+stays `None`, because a blank cell in a cost comparison is honest and a fabricated figure
+is not.
+
+### `max_tokens` is not the field every server wants any more
+
+Measured, not assumed: the `gpt-5` family **rejects `max_tokens` with a 400** and demands
+`max_completion_tokens`; `gpt-4.1` accepts either. Rather than carry a list of model
+families — which would be wrong the week a new one ships — the adapter believes the
+server: the first 400 that names the other field flips a per-instance flag and retries
+once, and only ever flips forward, so it cannot loop. A rejected parameter is refused
+before any inference, so the retry costs a round trip and no model time.
+
+### What the harness measures, and what it refuses to
+
+It drives the **real** `IntakeSummariser` through the **real** `build_llm` over the **real**
+prompt file, so what comes back is what the product would have produced. It reports
+latency, tokens, cost, and every objective guard the service already applies: schema
+validity, the model's own `is_clear`, `D16`'s figure refusal, and a per-case check that the
+summary states nothing the caller did not say.
+
+It does **not** score Thai prose quality, and that is deliberate. There is no honest
+automatic way to do it here, and a fabricated quality column is exactly the metric problem
+`Q28` warns about. It dumps every model's output in full instead, and its own docstring
+says **read the dump; do not rank on latency alone.**
+
+⚠️ **That instruction earned itself immediately.** The `clean` column gave `gpt-4.1-nano`
+12/12 — and reading the dump showed it had written *"รถชนเมื่อคืนนี้"* (crashed **last
+night**) about a caller who said *"เมื่อเช้านี้"* (**this morning**), while `gpt-4.1-mini`
+leaked the raw English line label `motor.` into Thai prose. Neither is catchable by a
+substring rule, both would reach a broker's screen, and the cheapest model is the one that
+did it.
+
+### The table, 4 Thai intakes x 3 repeats, 2026-09-09
+
+| model | p50 | worst | $/call |
+|---|---|---|---|
+| `gpt-5.4-mini` | **0.89 s** | 1.14 s | $0.00072 |
+| `gpt-4.1-nano` | 1.09 s | 1.29 s | **$0.00007** |
+| `gpt-4.1-mini` | 1.25 s | 1.38 s | $0.00031 |
+| `gpt-5.4-nano` | 1.40 s | 3.49 s | $0.00020 |
+| `gpt-5.4` | 2.01 s | 2.49 s | $0.00258 |
+| `claude-haiku-4-5` | 2.58 s | 2.89 s | $0.00248 |
+| `claude-sonnet-5` | 4.40 s | 5.07 s | $0.00569 |
+
+**`claude-sonnet-5` at 4.40 s reproduces `D119`'s single measured 4.5 s**, which is the
+check that the harness is measuring the same thing that decision did.
+
+Two findings worth keeping. **The fast tier is 3-5x faster than Sonnet and loses very
+little** on this task — summarising six plain sentences is not where a frontier model earns
+its latency. And **Anthropic spends ~1,500 input tokens where OpenAI spends ~455** for the
+identical prompt, because the schema is handed over as a forced tool definition; that is
+most of the cost gap and none of the quality gap.
+
+## D131. The AI summary runs twice: a preview during the offer, the real one after Accept
+_Taken 2026-09-09, from the user's own design. `Q35` has been open since `D119` because the
+summary takes 4.5 s against a 1 s brief budget — this is the answer to it._
+
+- **Problem.** `D119` starts `summarise_call` from `accept_offer`, so the AI summary lands
+  **after** the broker is already talking. The pitch's central claim is *"the agent has the
+  brief before they speak"*, and for the AI half of that brief it was not true. `Q35`
+  recorded the gap honestly and parked it.
+
+  The seconds are sitting right there and doing nothing: `OFFER_TIMEOUT_S` is 20 s, and
+  `D21` already establishes that the caller **goes on talking for the whole of that
+  window** — the offer window *is* the intake grace period. So there is a gap between the
+  card appearing and Accept being pressed in which a model could run, and a transcript
+  that keeps growing through it.
+
+- **Decision.** Summarise **twice**. A **preview** on the fast model when the offer card
+  appears, from the transcript so far; the **final** pass on the careful model from the
+  accept path, over the whole transcript. The second replaces the first.
+
+### The user's own framing, which is the correct one
+
+> *"the system cuts whatever has been said up to when it showed the card … and so we will
+> feed the full thing into the model again when the call is accepted? and update the
+> summary to the one that used the transcription in full?"*
+
+Yes, and the reason the second pass is not optional is `D21`: a preview is **necessarily**
+a summary of part of a call, because the caller is still speaking while the card rings.
+Shipping only the preview would put a confidently incomplete brief on the screen for the
+whole conversation.
+
+### Almost none of this needed new plumbing, and that is the point
+
+`OfferOut.summary_th` already renders whatever `render_brief` produced, and `render_brief`
+already **prefers** the AI summary over the rule-based one. So a summary that exists early
+enough appears on the offer card with **no schema change and no client change**. The seam
+had been there since `D119`; nothing had ever put a result into it in time.
+
+`D106` had also already drawn the disclosure line this needs: the **verbatim transcript** is
+flushed on Accept and never on the offer, because an agent who declines must not have read
+a caller's words for a call they never took — but `D69`'s gated *summary* preview on the
+card is a different disclosure and stays. A preview summary is on the permitted side of a
+line somebody else already argued.
+
+### ⚠️ The bug this nearly shipped with, caught before commit
+
+The trigger was first written into `sweep_once`, reading the offers off `DispatchResult`.
+**`DispatchService.tick()` has two callers**: the sweep, and `POST /v1/demo/calls`, which
+ticks the dispatcher itself — and the demo endpoint is the path the entire demo and every
+test actually take. The preview would have been correct, tested at the unit level, and
+**dead on the only path anybody uses**: `B36` exactly, and `B24`'s family again.
+
+So it hangs off an `on_offer` hook **at the point the offer is made**, which no future
+caller of `tick()` can bypass. `DispatchResult.offers` still exists as reporting and test
+surface and its docstring says in terms: *do not drive side effects from it.*
+
+The hook is a **callback, not a dependency**, for the same reason `AgentNotifier` is one: a
+service that rings a workstation must not import from `api/` and must never acquire an LLM.
+It is synchronous and returns immediately, having started a task.
+
+### Three rules the two passes obey
+
+1. **The supersede key is the turn count, not presence.** The old early-return was
+   `if call_session_id in self.ai_summaries: return` — with two passes that would make the
+   preview permanently *win*, so the final pass would never run and the screen would keep a
+   summary of the first half of the call. A preview is replaced when there is more to say;
+   a final result is never replaced.
+2. **A late preview must never overwrite a final summary.** The agent can press Accept
+   while the fast model is still thinking. Losing that race must not downgrade a
+   whole-transcript summary to half of one, so the write checks what is already there.
+   There is a test that lands them in the wrong order on purpose.
+3. **A quiet caller costs one model call, not one per tick.** Without the turn-count key a
+   caller who says nothing while being re-offered under `D113` would pay for a fresh,
+   identical summary every sweep, forever.
+
+### The screen says which pass wrote it
+
+`BriefOut.summary_is_preview` — `D68`, *if the server knows it, the server says it*. Without
+it the summary silently rewords itself a few seconds into the call and the broker has no way
+to tell an upgrade from a glitch. The workstation renders it as a **สรุประหว่างรอรับสาย**
+badge that disappears when the final pass lands.
+
+### One model or two, and why the second is optional
+
+`LLM_FAST_MODEL` unset means *use the same model for both*, so one model stays the simple
+configuration and nothing changes for anyone who does not set it. What a second model buys
+is **only speed**, and `D130`'s table is what makes that a measurement rather than a
+preference: `gpt-5.4-mini` p50 0.89 s against `claude-sonnet-5`'s 4.40 s is the difference
+between a summary that reaches the card and one that does not.
+
+The preview gets its **own, tighter deadline** (`LLM_PREVIEW_TIMEOUT_S`, 4 s). A preview
+that arrives after Accept is not a late preview, it is wasted money — the final pass is
+about to run anyway.
+
+### ⚠️ The cold-start cliff, and why the LLM is warmed at startup
+
+Measured: the **first** hosted-model call of a process pays DNS, TLS and — on the
+OpenAI-compatible path — the one-off `max_tokens` rejection that teaches the adapter which
+field the server wants. Cold, that came to over 5 s and blew the preview's deadline, so
+**the first caller of a demo would have been the one caller with no preview**. `_warm_llm`
+makes one throwaway call per stage at startup, in the background, non-fatal — the same
+shape and the same argument as `_warm_stt`. It costs a fraction of a cent per process start.
+
+Its log line reports whether the call actually **answered**, because `summarise()` swallows
+its own failures and returns `None` (`D119`), and an unconditional "warmed" would claim
+success for a call that timed out.
+
+### Verified on a running server, not from the tests
+
+`motor.claim.notify`, scripted engine, `LLM_FAST_MODEL=gpt-5.4-mini` and
+`LLM_MODEL=claude-sonnet-5`. The card carried the rule-based summary; **1.8 s after the desk
+went ready** it was replaced by *"ลูกค้าแจ้งว่าเกิดเหตุรถชนเมื่อเช้านี้ บริเวณแถวรัชดา ขณะนี้จอดรถอยู่ข้างทาง
+และไม่มีผู้ได้รับบาดเจ็บ…"* — **before Accept**. Accepting replaced it 4.0 s later with the
+Sonnet summary over all six turns, and `summary_is_preview` went to `False`.
+
+⚠️ **A finding from that run worth keeping:** the first attempt placed a
+`health.claim.notify` call while `config/demo_transcript.yaml` is a **motor** crash, and
+Sonnet correctly answered `is_clear: false` and refused to summarise. The model was right
+and `D119`'s "believe `is_clear`" rule did its job — but it means a demo whose scripted
+lines do not match its intent code will show **no AI summary at all**, and look broken.
+The two have to be chosen together, which is `D107`'s rule about the script and the audio
+being sized for each other, one field along.

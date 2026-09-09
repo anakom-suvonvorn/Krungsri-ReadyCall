@@ -771,6 +771,14 @@ class BriefOut(ApiModel):
     urgency: str
     intent: BriefIntentOut | None = None
     summary_th: str | None = None
+    #: True when `summary_th` is the **AI preview** built during the offer window, from a
+    #: transcript the caller was still adding to (`D131`, `D21`). The screen labels it, and
+    #: the label disappears when the whole-transcript pass replaces it after Accept.
+    #:
+    #: `D68`: the server knows which of the two passes wrote this, so the server says so.
+    #: Without it the summary silently changes wording a few seconds into the call and the
+    #: agent has no way to tell an upgrade from a glitch.
+    summary_is_preview: bool = False
     suggested_opening_th: str | None = None
     #: Already filtered by `requires_assurance` — a step the agent may not take yet is
     #: absent, not greyed out.

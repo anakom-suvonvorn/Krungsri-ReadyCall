@@ -65,11 +65,11 @@ the disclosure gate moves when the agent attests. **What they said while waiting
 screen** (`D106`), and if they consented, **their audio is in object storage encrypted**
 (`D110`) with a key ref and a retention date. If they declined, it is nowhere.
 
-Verified on 2026-09-08: **903 tests** — 891 pass + 12 skipped with Postgres and MinIO both
+Verified on 2026-09-09: **910 tests** — 898 pass + 12 skipped with Postgres and MinIO both
 up (the 12 are foreign-key cases the in-memory backend cannot have, and the `ml`-extra ones).
 Without those containers the count of skips rises and nothing fails.
-`ruff check` and `ruff format --check` clean over **220** files, `mypy --strict`
-clean over **155** source files, 69/69 diagrams current, the prompt pack fresh, and all three
+`ruff check` and `ruff format --check` clean over **225** files, `mypy --strict`
+clean over **157** source files, 69/69 diagrams current, the prompt pack fresh, and all three
 scenarios replay byte-identically. The database suites ran against a **live Postgres** on
 2026-09-02, and a restart was verified outside pytest with two real uvicorn processes.
 
@@ -432,6 +432,9 @@ carriers (`D125`) · ☑ **compare & best-fit ranked on arithmetic** over weight
 ☑ **the plan information panel** — rail preview, dialog, line selector, ranking, catalogue
 plan by plan, push one plan (`D127`) · ☑ **a message the broker types themselves**, labelled
 as human-written on the customer's screen (`D128`) · ☑ one-of-many as pills (`D129`) ·
+☑ **the AI summary is on the offer card BEFORE Accept** (`D131`) — a fast preview during
+the offer window, the careful pass over the whole transcript after · ☑ **`scripts/compare_llm.py`**,
+the P4 comparison table, with both cost tables corrected against live pricing (`D130`) ·
 ☐ the model writing the reason sentence — `Candidate.reason_th` is the seam ·
 ☐ gap analysis across a customer's whole portfolio rather than one policy per line
 

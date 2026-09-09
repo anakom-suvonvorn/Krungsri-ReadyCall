@@ -30,18 +30,40 @@ T = TypeVar("T", bound=BaseModel)
 #: "is this economically sane at scale" question has an answer (`INTEGRATIONS` 3). Never
 #: read for a decision, and deliberately coarse - a wrong invoice is the vendor's number,
 #: not ours.
+#:
+#: ⚠️ **Corrected 2026-09-09 (`D130`), and the previous table was wrong in three ways at
+#: once** - Opus at 15/75, Sonnet at 3/15, and a Haiku key carrying a date suffix, which
+#: meant the ordinary model id `claude-haiku-4-5` matched **nothing** and silently priced
+#: at `None`. That table produced `D119`'s published "$0.0085 per call", roughly 1.5x the
+#: real figure. A price table is a claim about the world and it goes stale on the vendor's
+#: schedule rather than on ours: **re-verify against live pricing documentation before
+#: quoting any number from it**, which is the same rule `D30` set for model ids and `B17`
+#: taught the hard way. Longest prefix wins, so a dated snapshot id cannot fall through to
+#: a shorter family name at the wrong rate.
 _PRICES_PER_MTOK: dict[str, tuple[float, float]] = {
-    "claude-opus-5": (15.0, 75.0),
-    "claude-sonnet-5": (3.0, 15.0),
-    "claude-haiku-4-5-20251001": (1.0, 5.0),
+    "claude-fable-5": (10.0, 50.0),
+    "claude-fable-5-1": (10.0, 50.0),
+    "claude-opus-5": (5.0, 25.0),
+    "claude-opus-4-8": (5.0, 25.0),
+    "claude-opus-4-7": (5.0, 25.0),
+    "claude-opus-4-6": (5.0, 25.0),
+    "claude-sonnet-5": (2.0, 10.0),
+    "claude-sonnet-4-6": (3.0, 15.0),
+    "claude-haiku-4-5": (1.0, 5.0),
 }
 
 
 def _estimate_cost(model: str, tokens_in: int, tokens_out: int) -> float | None:
-    for prefix, (rate_in, rate_out) in _PRICES_PER_MTOK.items():
-        if model.startswith(prefix):
-            return (tokens_in * rate_in + tokens_out * rate_out) / 1_000_000
-    return None
+    """Longest matching prefix, so `claude-opus-4-8` never prices as `claude-opus-4`."""
+    match = max(
+        (prefix for prefix in _PRICES_PER_MTOK if model.startswith(prefix)),
+        key=len,
+        default=None,
+    )
+    if match is None:
+        return None
+    rate_in, rate_out = _PRICES_PER_MTOK[match]
+    return (tokens_in * rate_in + tokens_out * rate_out) / 1_000_000
 
 
 class AnthropicLlm:

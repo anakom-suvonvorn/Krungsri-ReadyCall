@@ -22,6 +22,7 @@ _SENSITIVE_KEYS = frozenset(
         "api_key",
         "anthropic_api_key",
         "llm_api_key",
+        "openai_api_key",
         # Declared in `Settings` whether or not an adapter reads them yet: the point of
         # naming a secret is that it is redacted the day somebody sets it, not the day
         # something starts using it.

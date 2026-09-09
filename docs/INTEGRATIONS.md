@@ -278,10 +278,44 @@ disagrees, trust the code.*
 
 | Adapter | Status | Covers |
 |---|---|---|
-| **`AnthropicLlm`** ⭐ | ☑ **built** (`D119`) | `claude-opus-5` / `claude-sonnet-5`. Structured output through **forced tool use** — the schema is a tool definition with `tool_choice` pinned, so the model cannot answer in prose. Measured: **4.5 s, $0.0085** to summarise one intake |
+| **`AnthropicLlm`** ⭐ | ☑ **built** (`D119`) | `claude-opus-5` / `claude-sonnet-5`. Structured output through **forced tool use** — the schema is a tool definition with `tool_choice` pinned, so the model cannot answer in prose. Measured over 12 calls (`D130`): **p50 4.40 s, $0.0057** to summarise one intake. ⚠️ The **$0.0085** in `D119` came from a price table wrong three ways at once and is withdrawn |
 | **`OpenAiCompatibleLlm`** ⭐ | ☑ **built** (`D119`) | One adapter, parameterised by `base_url` + key — **Typhoon's hosted API, OpenAI, self-hosted vLLM, Ollama and LM Studio at once**. Uses JSON-schema response format where the server supports it, falls back to schema-in-the-prompt where it does not, and **records which mechanism ran** |
 | `GeminiAdapter` | ☐ defined only | Different wire format; add if wanted |
 | `RuleBasedLlm` | ☑ **built** (P0), and **wired** since `D119` | No model at all — the shipped default and the rung everything degrades to (`D12`). Needs no key, no network, no extra |
+
+### 3.0 Which model, measured rather than argued (`D130`)
+
+`scripts/compare_llm.py` runs the same four Thai intakes through every configured model,
+through the real `IntakeSummariser` and the real prompt file. **This is `PLAN.md`'s P4 exit
+criterion** and it had never existed. 4 cases x 3 repeats, 2026-09-09:
+
+| model | p50 | worst | $/call | tokens in/out |
+|---|---|---|---|---|
+| `gpt-5.4-mini` | **0.89 s** | 1.14 s | $0.00072 | 456/84 |
+| `gpt-4.1-nano` | 1.09 s | 1.29 s | **$0.00007** | 459/61 |
+| `gpt-4.1-mini` | 1.25 s | 1.38 s | $0.00031 | 459/77 |
+| `gpt-5.4-nano` | 1.40 s | 3.49 s | $0.00020 | 451/89 |
+| `gpt-5.4` | 2.01 s | 2.49 s | $0.00258 | 453/96 |
+| `claude-haiku-4-5` | 2.58 s | 2.89 s | $0.00248 | 1569/181 |
+| `claude-sonnet-5` | 4.40 s | 5.07 s | $0.00569 | 1497/269 |
+
+⚠️ **Do not rank on this table alone — read the dumped Thai.** The objective columns gave
+`gpt-4.1-nano` a clean sheet while it wrote *"crashed last night"* about a caller who said
+*this morning*, and `gpt-4.1-mini` leaked the English line label `motor.` into Thai prose.
+Neither is catchable by a substring rule and both would reach a broker's screen.
+
+**Anthropic spends ~1,500 input tokens where OpenAI spends ~455** on the identical prompt,
+because the schema goes over as a forced tool definition. That is most of the cost gap and
+none of the quality gap.
+
+⚠️ **`max_tokens` is not universal any more.** The `gpt-5` family rejects it with a 400 and
+wants `max_completion_tokens`; `gpt-4.1` takes either. The adapter believes the server's own
+error and flips once per process rather than carrying a model list (`D130`).
+
+⚠️ **The FIRST hosted call of a process is slow** — DNS, TLS and that one-off rejection came
+to over 5 s cold, which is longer than the preview summary's whole deadline. `_warm_llm`
+pays it at startup, in the background and non-fatally (`D131`).
+
 
 Both SDKs live in the **`llm` extra** (`uv sync --extra llm`); neither is installed by
 default, because the shipped provider needs neither.

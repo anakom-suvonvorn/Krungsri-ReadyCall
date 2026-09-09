@@ -164,6 +164,27 @@ class Settings(BaseSettings):
     llm_provider: LlmProviderName = LlmProviderName.RULEBASED
     llm_model: str = "claude-sonnet-5"
     llm_base_url: str | None = None
+    #: The model for the **preview** summary that runs while the offer card is on screen
+    #: (`D131`). Unset means "use `LLM_MODEL` for both", so this changes nothing until
+    #: somebody sets it, and one model remains the simple configuration.
+    #:
+    #: It exists because the two passes are answering different questions under different
+    #: deadlines. The preview has to land inside the seconds an agent looks at the card,
+    #: on a transcript that is still arriving; the final one runs after Accept, on the
+    #: whole transcript, with nobody waiting (`D12`). Measured 2026-09-09 by
+    #: `scripts/compare_llm.py`: `claude-sonnet-5` p50 **4.40 s**, `gpt-5.4-mini` **0.89 s**
+    #: — the difference between a summary that arrives before the agent speaks and one
+    #: that does not.
+    llm_fast_model: str | None = None
+    #: Provider for `llm_fast_model`, when the fast model is at a different vendor from
+    #: the careful one. Unset means the same provider as `LLM_PROVIDER`.
+    llm_fast_provider: LlmProviderName | None = None
+    #: Base URL for the fast provider, on the same rule as `LLM_BASE_URL`.
+    llm_fast_base_url: str | None = None
+    #: The preview's own deadline, and it is deliberately much tighter than
+    #: `LLM_TIMEOUT_S`. A preview that arrives after the agent has pressed Accept is not a
+    #: late preview, it is wasted money — the final pass is about to run anyway.
+    llm_preview_timeout_s: float = 4.0
     tts_engine: TtsEngineName = TtsEngineName.NULL
     core_data_provider: CoreDataProviderName = CoreDataProviderName.FIXTURES
     core_mapping_file: Path = Path("config/core_mapping.yaml")
@@ -334,6 +355,13 @@ class Settings(BaseSettings):
     #: Read today by `OpenAiCompatibleAdapter` — one adapter covers Typhoon-hosted,
     #: OpenAI, vLLM and Ollama, distinguished only by `LLM_BASE_URL` (`D29`).
     llm_api_key: str | None = None
+    #: Read today by `OpenAiCompatibleAdapter` too, as the **fallback** for `llm_api_key`
+    #: (`D130`). It exists because `OPENAI_API_KEY` is the name the OpenAI SDK, its docs
+    #: and every tutorial use, so it is the name a key arrives under — and a key sitting
+    #: in `.env` under a name nothing reads is indistinguishable from no key at all.
+    #: `LLM_API_KEY` still wins when both are set, because it is the one that names the
+    #: *adapter's* credential rather than one vendor's.
+    openai_api_key: str | None = None
     #: Not read yet. `GeminiAdapter` is defined in `D29` and not built.
     gemini_api_key: str | None = None
     #: Not read yet. For gated Hugging Face checkpoints — every model this project uses

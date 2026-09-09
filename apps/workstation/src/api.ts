@@ -136,6 +136,10 @@ export type Brief = {
   urgency: string;
   intent: { code: string; label_th: string; confidence: number; source: string } | null;
   summary_th: string | null;
+  /** True while `summary_th` is the AI preview written during the offer window, from a
+   *  transcript the caller was still adding to (`D131`). The badge disappears when the
+   *  whole-transcript pass replaces it after Accept. */
+  summary_is_preview: boolean;
   suggested_opening_th: string | null;
   actions_th: string[];
   customer: { display_name_th: string; segment: string | null; is_vulnerable: boolean } | null;

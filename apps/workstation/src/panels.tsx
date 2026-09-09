@@ -820,7 +820,17 @@ export function BriefPanel({ brief }: { brief: Brief }) {
       {brief.summary_th && (
         <div className="brief-line">
           <span className="k">สรุป</span>
-          <span>{brief.summary_th}</span>
+          <span>
+            {brief.summary_th}
+            {/* `D131`: say which of the two passes wrote this. Without it the summary
+                silently rewords itself a few seconds into the call and the agent has no
+                way to tell an upgrade from a glitch (`D68`). */}
+            {brief.summary_is_preview && (
+              <span className="badge" style={{ marginLeft: 6, verticalAlign: "middle" }}>
+                สรุประหว่างรอรับสาย
+              </span>
+            )}
+          </span>
         </div>
       )}
       {brief.last_contact_th && (

@@ -1,0 +1,352 @@
+"""The two-stage AI summary: preview during the offer, final after Accept (`D131`).
+
+`test_llm.py` proves the summariser. This proves the **wiring**, which is the half this
+project keeps getting wrong: `B7`, `B24`, `B36`, `B37` and `B38` were all correct code that
+nothing called, or that was called only on a path nothing executes.
+
+⚠️ The specific trap this file exists to hold down: **`DispatchService.tick()` has two
+callers.** The sweep drives it in a running server, and `POST /v1/demo/calls` drives it
+itself — and the demo endpoint is the path the whole demo and every test actually take. A
+preview started by reading `DispatchResult` inside `sweep_once` would have been dead on
+arrival for exactly that reason, which is `B36` restated. So the tests below drive the
+**demo endpoint**, not the sweep.
+
+Nothing here needs a key or a network: the container's summarisers are replaced with a fake
+that answers instantly and counts, which is what lets the ordering assertions be exact.
+"""
+
+from __future__ import annotations
+
+import asyncio
+from datetime import UTC, datetime
+from typing import Any
+
+import pytest
+from fastapi.testclient import TestClient
+
+from readycall.api.app import create_app, pump_once
+from readycall.clock import ManualClock
+from readycall.config import Settings
+from readycall.ports.llm import LlmResult, LlmUsage, PromptRef
+from readycall.services.analysis import IntakeSummariser
+from tests.conftest import REPO_ROOT
+
+
+class _CountingLlm:
+    """Answers instantly, records what it was asked, and can be made slow on demand."""
+
+    def __init__(self, text: str, *, delay_s: float = 0.0) -> None:
+        self._text = text
+        self._delay_s = delay_s
+        #: The transcript of every call, so a test can assert the SECOND pass saw more
+        #: than the first — which is the entire point of running it twice.
+        self.transcripts: list[str] = []
+
+    @property
+    def name(self) -> str:
+        return "counting"
+
+    @property
+    def model(self) -> str:
+        return "counting-1"
+
+    async def complete_structured(
+        self,
+        prompt: PromptRef,
+        variables: dict[str, Any],
+        schema: type[Any],
+        *,
+        timeout_s: float,
+    ) -> LlmResult[Any]:
+        self.transcripts.append(str(variables["transcript"]))
+        if self._delay_s:
+            await asyncio.sleep(self._delay_s)
+        return LlmResult(
+            output=schema.model_validate({"summary_th": self._text, "is_clear": True}),
+            usage=LlmUsage(model=self.model, provider=self.name, latency_ms=1.0),
+        )
+
+    async def stream_text(self, *a: Any, **kw: Any) -> Any:  # pragma: no cover - unused
+        raise NotImplementedError
+
+    async def health_check(self) -> bool:
+        return True
+
+
+@pytest.fixture
+def clock() -> ManualClock:
+    """A Monday morning in Bangkok. `ManualClock()`'s default is a public holiday and
+    every `business` queue is shut, which costs an hour every time somebody forgets."""
+    return ManualClock(datetime(2026, 8, 24, 3, 0, tzinfo=UTC))
+
+
+@pytest.fixture
+def settings() -> Settings:
+    return Settings(
+        config_dir=REPO_ROOT / "config",
+        core_fixtures_dir=REPO_ROOT / "mock" / "bank_core" / "fixtures",
+        prompt_dir=REPO_ROOT / "prompts" / "th",
+        demo_login_enabled=True,
+        demo_agent_login_enabled=True,
+        # Both drivers are stepped by hand: a test that waits on a background loop is slow
+        # when it passes and unreadable when it fails.
+        agent_sweep_interval_s=0,
+        bus_drain_interval_s=0,
+    )
+
+
+@pytest.fixture
+def client(settings: Settings, clock: ManualClock) -> Any:
+    with TestClient(create_app(settings, clock=clock)) as test_client:
+        yield test_client
+
+
+def container(client: Any) -> Any:
+    return client.app.state.container
+
+
+def install(client: Any, preview: _CountingLlm, final: _CountingLlm) -> None:
+    """Swap both summarisers. Two distinct fakes, so 'which model ran' is assertable."""
+    box = container(client)
+    box.preview_summariser = IntakeSummariser(llm=preview, timeout_s=4.0)
+    box.summariser = IntakeSummariser(llm=final, timeout_s=8.0)
+
+
+def sign_in(client: Any, agent_id: str = "A002") -> None:
+    """Sign in WITHOUT going ready. `D51`: signing in is not being ready."""
+    assert client.post("/v1/agent/demo-login", json={"agent_id": agent_id}).status_code == 200
+
+
+def go_ready(client: Any) -> None:
+    """Declare ready, which is what makes this agent offerable on the next tick.
+
+    ⚠️ Kept separate from `sign_in` because `POST /v1/demo/calls` ticks the dispatcher
+    itself: an agent who is already ready is offered the call *inside* that request, before
+    the caller has said a word. The real sequence is the other way round — the caller waits
+    and talks, and a desk frees up afterwards — and the preview only has anything to
+    summarise in that order.
+    """
+    assert client.post("/v1/agent/state", json={"agent_intent": "ready"}).status_code == 200
+
+
+def feed(client: Any, call_id: str, *lines: str) -> None:
+    """Put turns where the delivery service holds them, as the transcriber would.
+
+    Reaching into `transcript_delivery` rather than replaying audio is deliberate: the
+    audio path already has `test_transcript_over_http.py`, and what is under test here is
+    what happens to those turns once they exist.
+    """
+    delivery = container(client).transcript_delivery
+    held = list(delivery.turns_for(call_id))
+    for line in lines:
+        held.append(
+            {
+                "turn_id": f"t{len(held) + 1}",
+                "seq": len(held) + 1,
+                "speaker_role": "customer",
+                "text": line,
+                "t_start_ms": 0,
+                "t_end_ms": 1000,
+            }
+        )
+    # Private on purpose: this is the transcriber's own store, and the test is standing
+    # in for the transcriber.
+    delivery._turns[call_id] = held
+
+
+def place(client: Any, **kw: Any) -> dict[str, Any]:
+    body = {
+        "intent_code": "motor.service.policy",
+        "caller_number": "0812345678",
+        "intake_keys": ["1"],
+        "ignore_hours": True,
+        **kw,
+    }
+    response = client.post("/v1/demo/calls", json=body)
+    assert response.status_code == 200, response.text
+    return response.json()  # type: ignore[no-any-return]
+
+
+async def drain(client: Any, tries: int = 30) -> None:
+    """Let the fire-and-forget preview task run. Not a sleep — `asyncio.sleep(0)` yields
+    to the loop, and under `TestClient` the loop only advances while we ask it to."""
+    for _ in range(tries):
+        await asyncio.sleep(0)
+
+
+# --- the preview -------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_the_preview_runs_on_the_demo_path_not_only_on_the_sweep(client: Any) -> None:
+    """⚠️ **The test that would have caught the bug I nearly shipped.**
+
+    `POST /v1/demo/calls` ticks the dispatcher itself, so a preview triggered from
+    `sweep_once` would never have fired here — on the one path the demo actually uses.
+    """
+    preview, final = _CountingLlm("สรุปตัวอย่าง"), _CountingLlm("สรุปฉบับเต็ม")
+    install(client, preview, final)
+    sign_in(client)
+
+    placed = place(client)
+    call_id = placed["call_session_id"]
+    # Words arrive while the caller waits, then a desk frees up and the offer goes out.
+    feed(client, call_id, "สวัสดีครับ ผมโทรมาเรื่องเคลมรถ", "รถชนเมื่อเช้านี้ครับ")
+    go_ready(client)
+    await container(client).dispatch.tick()
+    await drain(client)
+
+    assert preview.transcripts, (
+        "no preview ran when a desk started ringing - the `on_offer` hook is not wired, "
+        "or it is wired somewhere this path does not reach (`B36`)"
+    )
+    assert not final.transcripts, "the final pass must wait for Accept, not for the offer"
+
+
+@pytest.mark.asyncio
+async def test_the_preview_reaches_the_offer_card(client: Any) -> None:
+    """The whole point: the summary is on the card BEFORE the agent presses Accept.
+
+    No schema change was needed for this — `OfferOut.summary_th` already renders whatever
+    `render_brief` produced, and `render_brief` already prefers the AI summary. The seam
+    existed; nothing had ever put a summary into it early enough.
+    """
+    preview = _CountingLlm("ลูกค้าแจ้งเคลมรถยนต์ ชนเมื่อเช้านี้")
+    install(client, preview, _CountingLlm("สรุปฉบับเต็ม"))
+    sign_in(client)
+
+    call_id = place(client)["call_session_id"]
+    feed(client, call_id, "สวัสดีครับ ผมโทรมาเรื่องเคลมรถ", "รถชนเมื่อเช้านี้ครับ")
+    go_ready(client)
+    await container(client).dispatch.tick()
+    await drain(client)
+
+    offer = client.get("/v1/agent/me").json()["offer"]
+    assert offer is not None
+    assert offer["summary_th"] == "ลูกค้าแจ้งเคลมรถยนต์ ชนเมื่อเช้านี้"
+
+
+@pytest.mark.asyncio
+async def test_accepting_re_summarises_the_whole_transcript(client: Any) -> None:
+    """`D21`: the caller keeps talking through the offer window, so the preview is always
+    a summary of PART of a call. The final pass is what makes the screen right."""
+    preview, final = _CountingLlm("สรุปตัวอย่าง"), _CountingLlm("สรุปฉบับเต็ม")
+    install(client, preview, final)
+    sign_in(client)
+
+    call_id = place(client)["call_session_id"]
+    feed(client, call_id, "สวัสดีครับ ผมโทรมาเรื่องเคลมรถ")
+    go_ready(client)
+    await container(client).dispatch.tick()
+    await drain(client)
+    assert len(preview.transcripts) == 1
+
+    # They go on talking while the card rings, which is the whole of `D21`.
+    feed(client, call_id, "อยู่แถวรัชดา ตอนนี้จอดข้างทางแล้ว", "ไม่มีใครบาดเจ็บครับ")
+    offer = client.get("/v1/agent/me").json()["offer"]
+    assert client.post(f"/v1/agent/offers/{offer['assignment_id']}/accept").status_code == 200
+    await drain(client)
+    await pump_once(container(client))
+
+    assert final.transcripts, "accepting must re-summarise; the preview saw half the call"
+    assert "ไม่มีใครบาดเจ็บ" in final.transcripts[0], (
+        "the final pass must see the WHOLE transcript, including what was said while the "
+        "offer card was on screen"
+    )
+    assert "ไม่มีใครบาดเจ็บ" not in preview.transcripts[0], "the preview could not have seen it"
+
+    brief = client.get("/v1/agent/me").json()["brief"]
+    assert brief["summary_th"] == "สรุปฉบับเต็ม", "the final summary must replace the preview"
+    assert brief["summary_is_preview"] is False
+
+
+@pytest.mark.asyncio
+async def test_the_screen_says_a_preview_is_a_preview(client: Any) -> None:
+    """`D68`: the server knows which pass wrote this, so the server says so. Without it
+    the summary silently rewords itself and the agent cannot tell an upgrade from a bug."""
+    install(client, _CountingLlm("สรุปตัวอย่าง"), _CountingLlm("สรุปฉบับเต็ม"))
+    sign_in(client)
+
+    call_id = place(client)["call_session_id"]
+    feed(client, call_id, "สวัสดีครับ ผมโทรมาเรื่องเคลมรถ", "รถชนเมื่อเช้านี้ครับ")
+    go_ready(client)
+    await container(client).dispatch.tick()
+    await drain(client)
+
+    rendered = await container(client).render_brief(call_id)
+    assert rendered["summary_th"] == "สรุปตัวอย่าง"
+    assert rendered["summary_is_preview"] is True
+
+
+@pytest.mark.asyncio
+async def test_a_quiet_caller_is_not_re_summarised_on_every_tick(client: Any) -> None:
+    """The supersede key is the TURN COUNT, not the passage of time.
+
+    Without it a caller who says nothing for ninety seconds while being re-offered would
+    pay for one model call per tick, forever, for an identical summary.
+    """
+    preview = _CountingLlm("สรุปตัวอย่าง")
+    install(client, preview, _CountingLlm("สรุปฉบับเต็ม"))
+    sign_in(client)
+
+    call_id = place(client)["call_session_id"]
+    feed(client, call_id, "สวัสดีครับ ผมโทรมาเรื่องเคลมรถ", "รถชนเมื่อเช้านี้ครับ")
+    for _ in range(4):
+        await container(client).summarise_call(call_id, "A002", preview=True)
+    assert len(preview.transcripts) == 1, "a silent caller must cost exactly one call"
+
+    feed(client, call_id, "ไม่มีใครบาดเจ็บครับ")
+    await container(client).summarise_call(call_id, "A002", preview=True)
+    assert len(preview.transcripts) == 2, "but a caller who said more is worth asking again"
+
+
+@pytest.mark.asyncio
+async def test_a_late_preview_never_overwrites_the_final_summary(client: Any) -> None:
+    """⚠️ The race, and it is a real one: the agent presses Accept while the fast model is
+    still thinking. Losing that race must not downgrade a whole-transcript summary to a
+    summary of the first half of the call."""
+    box = container(client)
+    install(client, _CountingLlm("สรุปตัวอย่าง"), _CountingLlm("สรุปฉบับเต็ม"))
+    sign_in(client)
+
+    call_id = place(client)["call_session_id"]
+    feed(client, call_id, "สวัสดีครับ ผมโทรมาเรื่องเคลมรถ", "รถชนเมื่อเช้านี้ครับ")
+
+    # The final pass lands first...
+    await box.summarise_call(call_id, "A002", preview=False)
+    assert box.ai_summaries[call_id].text_th == "สรุปฉบับเต็ม"
+    # ...and the slow preview arrives afterwards, as it would from a task started earlier.
+    await box.summarise_call(call_id, "A002", preview=True)
+
+    assert box.ai_summaries[call_id].text_th == "สรุปฉบับเต็ม", (
+        "a late preview overwrote the final summary - the screen just lost half the call"
+    )
+    assert box.ai_summaries[call_id].is_final is True
+
+
+@pytest.mark.asyncio
+async def test_nothing_on_the_call_path_waits_for_the_model(client: Any) -> None:
+    """`D12`, stated as a measurement rather than as a comment.
+
+    The preview model is made to take five seconds. The dispatch tick that starts it, and
+    the accept that follows, must both return immediately anyway.
+    """
+    install(client, _CountingLlm("สรุปตัวอย่าง", delay_s=5.0), _CountingLlm("สรุปฉบับเต็ม"))
+    sign_in(client)
+
+    call_id = place(client)["call_session_id"]
+    feed(client, call_id, "สวัสดีครับ ผมโทรมาเรื่องเคลมรถ", "รถชนเมื่อเช้านี้ครับ")
+    go_ready(client)
+
+    loop = asyncio.get_running_loop()
+    started = loop.time()
+    await container(client).dispatch.tick()
+    tick_s = loop.time() - started
+
+    offer = client.get("/v1/agent/me").json()["offer"]
+    started = loop.time()
+    assert client.post(f"/v1/agent/offers/{offer['assignment_id']}/accept").status_code == 200
+    accept_s = loop.time() - started
+
+    assert tick_s < 1.0, f"the dispatch tick waited {tick_s:.1f}s for a model (`D12`)"
+    assert accept_s < 1.0, f"accept waited {accept_s:.1f}s for a model (`D12`)"
