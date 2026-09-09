@@ -102,6 +102,12 @@ from readycall.voiceprompts import load_prompt_pack
 
 log = get_logger(__name__)
 
+#: How many times one call's preview summary may be recomputed while its offer card is on
+#: screen (`D131`). The refresh runs on every sweep, so without a ceiling a caller who
+#: keeps talking buys a model call a second for the whole offer window. Three is already
+#: more updates than a human reads off a card they are about to accept.
+_MAX_PREVIEWS = 3
+
 
 def _digits_of(value: str) -> str:
     """`MT-2025-004512` -> `2025004512`. A caller keys digits; we store formatted ids."""
@@ -442,6 +448,11 @@ class Container:
         #: something since the last one, so a quiet caller costs one model call rather
         #: than one per sweep.
         self.ai_summary_turns: dict[str, int] = {}
+        #: How many preview attempts each call has had (`D131`). The refresh runs every
+        #: sweep while a card is ringing, and a caller who keeps talking would otherwise
+        #: buy a fresh model call every second for the whole offer window. Three updates
+        #: is more than a 20-second card can usefully show.
+        self.ai_preview_count: dict[str, int] = {}
         #: In-flight preview tasks, held so the event loop cannot collect one mid-call.
         self._preview_tasks: set[asyncio.Task[None]] = set()
         #: Saved wrap-up forms, projected from the store. Never written by anything but
@@ -684,6 +695,33 @@ class Container:
             out = out.model_copy(update={"summary_is_preview": True})
         return out.model_dump(mode="json")
 
+    async def refresh_previews(self) -> None:
+        """Re-summarise every call whose offer card is still on a screen (`D131`, `D21`).
+
+        The offer window is the intake grace period: the caller keeps talking after the
+        desk starts ringing, so the preview taken at the instant of the offer is usually a
+        summary of the first sentence or of silence. This gives it another look each sweep.
+
+        Awaited rather than fire-and-forget **because the sweep is already off the call
+        path** — nothing is waiting for this loop, and awaiting means two sweeps cannot
+        stack up duplicate calls for the same caller. `summarise_call` is itself bounded:
+        it returns immediately unless the turn count has grown, and stops after
+        `_MAX_PREVIEWS` attempts.
+        """
+        pending = [
+            (a.call_session_id, a.agent_id)
+            for a in self.assignments.pending()
+            # A call whose FINAL summary already landed needs no preview: the agent has
+            # accepted and the whole-transcript pass has run. Cheap to check, and it stops
+            # a re-offered caller paying for a preview that would be discarded anyway.
+            if not (held := self.ai_summaries.get(a.call_session_id)) or not held.is_final
+        ]
+        for call_session_id, agent_id in pending:
+            try:
+                await self.summarise_call(call_session_id, agent_id, preview=True)
+            except Exception:
+                log.exception("preview refresh failed", call_session_id=call_session_id)
+
     def _start_preview_summary(self, call_session_id: str, agent_id: str) -> None:
         """`DispatchService`'s `on_offer` hook: summarise while the card is on screen.
 
@@ -743,6 +781,8 @@ class Container:
             # has actually said something since the last one.
             if preview and len(turns) <= self.ai_summary_turns.get(call_session_id, 0):
                 return
+        if preview and self.ai_preview_count.get(call_session_id, 0) >= _MAX_PREVIEWS:
+            return
         session = await self.calls.get(call_session_id)
         code = getattr(session, "menu_intent_code", None)
         spec = self.pack.intents.get(code) if code else None
@@ -770,6 +810,10 @@ class Container:
             return
         self.ai_summaries[call_session_id] = result
         self.ai_summary_turns[call_session_id] = len(turns)
+        if preview:
+            self.ai_preview_count[call_session_id] = (
+                self.ai_preview_count.get(call_session_id, 0) + 1
+            )
         log.info(
             "ai summary ready",
             call_session_id=call_session_id,

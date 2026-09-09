@@ -127,6 +127,55 @@ export type Queue = {
   mine: boolean;
 };
 
+/** Mirrors `GET /v1/demo/call-options` (`D132`).
+ *
+ *  Note there is no "assurance" field to *set*. The ladder is derived from evidence
+ *  (`D20`), so each caller carries the level it will produce and the dialog reports that
+ *  as a consequence. A picker that let you choose L3 would be asserting a level with
+ *  nothing behind it. */
+export type CallOptions = {
+  intents: {
+    code: string;
+    label_th: string;
+    line: string;
+    urgency: string;
+    skill: string;
+    handoff_to_insurer: boolean;
+  }[];
+  callers: {
+    key: string;
+    label_th: string;
+    caller_number: string;
+    assurance: string;
+    note_th: string;
+  }[];
+  audio: string[];
+  audio_dir: string;
+  stt: {
+    engine: string;
+    scripted: boolean;
+    /** Which intent the scripted lines are about, so the dialog can warn on a
+     *  mismatch (`D132`). Null when a real engine is in use. */
+    script_intent: string | null;
+    note_th: string;
+  };
+  llm: {
+    real: boolean;
+    provider: string;
+    model: string | null;
+    fast_model: string | null;
+    note_th: string;
+  };
+  defaults: {
+    caller_key: string;
+    waited_s: number;
+    ignore_hours: boolean;
+    record: boolean;
+    audio: string | null;
+    audio_realtime: boolean;
+  };
+};
+
 /** Mirrors `BriefOut`. Deliberately not `Record<string, unknown>`: the point of the DTO
  *  is that a policy number cannot be in the payload below L2, and a loose type here would
  *  let a component reach for one anyway and quietly render `undefined`. */
@@ -496,6 +545,9 @@ export const api = {
   /** DEMO: a caller arrives. Stands in for telephony until P5. */
   placeCall: (payload: Record<string, unknown>) =>
     call<Record<string, unknown>>("POST", "/v1/demo/calls", payload),
+  /** DEMO: what a test call can be configured with (`D132`). Read from the live domain
+   *  pack, the real fixtures and the running `Settings` — never a list typed in here. */
+  callOptions: () => call<CallOptions>("GET", "/v1/demo/call-options"),
   roster: () => call<{ agent_id: string; display_name: string; team: string }[]>(
     "GET",
     "/v1/demo/agents",

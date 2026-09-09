@@ -182,6 +182,15 @@ class AssignmentService:
     def for_agent(self, agent_id: str) -> list[Assignment]:
         return [a for a in self._assignments.values() if a.agent_id == agent_id]
 
+    def pending(self) -> list[Assignment]:
+        """Every offer currently ringing a desk (`D131`).
+
+        Read by the preview-summary refresh, which needs "whose card is on screen right
+        now" — `_open_by_call` already answers that per call, and this is the same
+        question asked of the whole floor at once.
+        """
+        return [a for a in self._assignments.values() if a.outcome is OfferOutcome.PENDING]
+
     def excluded_agents(self, call_session_id: str) -> tuple[str, ...]:
         """Agents this call must not be offered to again — feeds the matcher's filters.
 

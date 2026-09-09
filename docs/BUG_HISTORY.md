@@ -1,7 +1,7 @@
 # BUG_HISTORY
 
 _Solved bugs and the lessons they bought. **Search this file FIRST when debugging** — the answer may already be here._
-_Last updated: 2026-09-08._
+_Last updated: 2026-09-09._
 
 Format per entry:
 
@@ -1806,3 +1806,37 @@ They were right._
   replacing it.** The reading that cost this bug was treating a parenthetical as the whole
   brief. And the honest tell was there in my own test file: every hangup test set up a
   *waiting* call, and none of them accepted the offer first.
+
+## B40. A pushed comparison table stretched the customer's app and every card after it
+_Reported by the user: **"when you send over a plan comparison table it spills out of the
+simulated app sides and goes way out to the right, and after that everything afterwards
+will match the width."** Both halves of that sentence were one bug._
+
+- **Symptoms.** `/sim` renders correctly until a broker pushes a plan comparison. The table
+  then extends past the phone's right edge, the page scrolls sideways, and **every card
+  rendered afterwards adopts the new width** — so the app stays broken for the rest of the
+  call even though the later cards contain nothing wide.
+- **Root cause.** `table.cmp` sets `white-space: nowrap` on every cell, so its intrinsic
+  width is around 950 px. The chain from the table up to the grid item — `.tw` → `.card` →
+  `.stack` → `.from-agent` → `.phone` → `.appcol` — is all grid items and blocks with the
+  default `min-width: auto`, which means *never shrink below your content's intrinsic
+  width*. So `overflow-x: auto` on the wrapper had nothing to scroll inside: instead of the
+  table scrolling, the column grew.
+- **Why it only happened sometimes, and why I nearly wrote it off.** The two desktop tracks
+  are `minmax(0, 380px)` and `minmax(0, 1fr)`, whose explicit `0` minimum already prevents
+  this — so at a wide window the bug does not reproduce at all, and my first attempt to
+  prove it showed no difference with the fix disabled. The narrow-viewport rule was
+  `grid-template-columns: 1fr`, and **a bare `1fr` is `minmax(auto, 1fr)`**. Below 860 px
+  the auto minimum comes back and the column blows out.
+- **Fix.** `min-width: 0` down the chain, `max-width: 100%` on the scroll container, and
+  the media query written as `minmax(0, 1fr)`.
+- **Verified by disabling the fix**, at an 800 px viewport: phone **1026 px** and a
+  horizontally scrolling page without it, **757 px** and none with it; and the card
+  *after* the table measures the same as the card before it.
+- **Lesson.** **A bare `1fr` is not the same as `minmax(0, 1fr)`**, and the difference only
+  shows when a child is intrinsically wider than its track. More generally: `overflow-x:
+  auto` does nothing until something above it has a width to scroll inside — if a scroll
+  container is not scrolling, the bug is in its ancestors, not in it. And when a fix cannot
+  be disabled to reproduce the fault, **the repro is wrong, not the report** — the
+  viewport was the missing variable here, and believing the first negative result would
+  have shipped the bug with a comment claiming it was fixed.

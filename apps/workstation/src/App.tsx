@@ -30,6 +30,7 @@ import type { Capture, Snapshot, TranscriptTurn } from "./api";
 import { useSocket } from "./useSocket";
 import type { SocketMessage } from "./useSocket";
 import { AssistPanel } from "./assist";
+import { TestCallDialog } from "./testcall";
 import { TransferButton, TransferDialog } from "./transfer";
 import { PlansDialog, PlansPanel } from "./plans";
 import {
@@ -728,28 +729,59 @@ function DemoCallButton({
   skills: { skill_code: string }[];
 }) {
   const [pending, setPending] = useState(false);
+  const [dialog, setDialog] = useState(false);
+  const intent = intentForSkills(skills);
   return (
-    <button
-      className="ghost"
-      disabled={disabled || pending}
-      title={reason ?? "DEMO: stands in for telephony until P5"}
-      onClick={async () => {
-        setPending(true);
-        try {
-          await api.placeCall({
-            intent_code: intentForSkills(skills),
-            caller_number: "0812345678",
-            waited_s: 40,
-            // DEMO: rehearsals happen at 2 a.m., when most queues are shut (`D54`).
-            ignore_hours: true,
-          });
-          onPlaced();
-        } finally {
-          setPending(false);
-        }
-      }}
-    >
-      + สายทดสอบ
-    </button>
+    <>
+      <button
+        className="ghost"
+        disabled={disabled || pending}
+        title={reason ?? "DEMO: stands in for telephony until P5"}
+        onClick={async () => {
+          setPending(true);
+          try {
+            await api.placeCall({
+              intent_code: intent,
+              caller_number: "0812345678",
+              waited_s: 40,
+              // DEMO: rehearsals happen at 2 a.m., when most queues are shut (`D54`).
+              ignore_hours: true,
+            });
+            onPlaced();
+          } finally {
+            setPending(false);
+          }
+        }}
+      >
+        + สายทดสอบ
+      </button>
+      {/* `D132`. The plain button above stays exactly as it was, because a one-click
+          caller is what you want most of the time. This one opens on its defaults, so
+          placing without touching anything gives the same call — what it adds is the
+          ability to turn the transcript and the AI summary on where they could
+          previously only be reached from a `curl` line in the README. */}
+      {/* ⚠️ Deliberately NOT disabled when the agent is un-offerable, unlike the plain
+          button above. That guard exists because a one-click call placed while nobody can
+          take it sits unmatched and looks like a routing bug — but placing FIRST and going
+          ready afterwards is the sequence that lets you watch the transcript arrive and
+          the AI preview land on the card, which is the whole reason this dialog exists.
+          The dialog says what will happen instead of refusing (`D71`). */}
+      <button
+        className="ghost"
+        disabled={pending}
+        title="DEMO: เลือกได้ว่าจะทดสอบถอดเสียง/ให้โมเดลสรุปด้วยหรือไม่"
+        onClick={() => setDialog(true)}
+      >
+        + สายทดสอบ⚙
+      </button>
+      <TestCallDialog
+        open={dialog}
+        onClose={() => setDialog(false)}
+        onPlaced={onPlaced}
+        defaultIntent={intent}
+        skills={skills}
+        offerable={!disabled}
+      />
+    </>
   );
 }

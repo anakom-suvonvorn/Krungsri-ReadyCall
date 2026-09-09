@@ -88,10 +88,21 @@ async def sweep_once(container: Container) -> None:
         # up because somebody wrote it, only because somebody calls it.
         container.assist.sweep()
         result = await container.dispatch.tick()
-        # ⚠️ The preview summary is NOT started from here. `tick()` has a second caller —
-        # `POST /v1/demo/calls` ticks the dispatcher itself — so a trigger written at this
-        # one would never fire on the path the demo and every test actually take (`B36`).
-        # It hangs off `DispatchService`'s `on_offer` hook instead, wired in `deps.py`.
+        # ⚠️ The preview summary's FIRST attempt is not started from here. `tick()` has a
+        # second caller — `POST /v1/demo/calls` ticks the dispatcher itself — so a trigger
+        # written at this one would never fire on the path the demo and every test take
+        # (`B36`). It hangs off `DispatchService`'s `on_offer` hook, wired in `deps.py`.
+        #
+        # What DOES belong here is the re-run while the card is still ringing, and it is
+        # `D21` stated as code: the offer window IS the intake grace period, so the caller
+        # goes on talking after the desk starts ringing. The first attempt often fires with
+        # one turn transcribed or none at all — especially the way a human actually drives
+        # this, pressing ready and then placing a call — and without a second look the
+        # preview would be a summary of the first two seconds, or of nothing.
+        #
+        # `summarise_call` no-ops unless the turn count has grown, and caps itself, so a
+        # quiet caller costs nothing and a talkative one costs a bounded few (`D131`).
+        await container.refresh_previews()
         if expired or dropped or reoffered or recordings or stored or result.offered:
             log.info(
                 "sweep",

@@ -37,6 +37,7 @@ from readycall.api.schemas import (
     PlaceCallResponse,
 )
 from readycall.api.security import DemoSessionStore
+from readycall.config import LlmProviderName, SttEngineName
 from readycall.domain.enums import CallState, ProductLine, Urgency
 from readycall.errors import ConfigError
 from readycall.logging import get_logger
@@ -442,6 +443,148 @@ def _intake_out(hold: HoldReport) -> IntakeOut:
         played=hold.played,
         pressed=hold.pressed,
     )
+
+
+def _scripted_intent(settings: Any) -> str | None:
+    """Which intent `config/demo_transcript.yaml` says its lines are about (`D132`).
+
+    Read here rather than threaded through `ScriptedSttEngine`, because it is a fact about
+    the *demo script* rather than about transcription — the engine's job is to hand back
+    lines, not to know what they mean.
+    """
+    path = getattr(settings, "demo_transcript_file", None)
+    if not path or not Path(path).exists():
+        return None
+    try:
+        raw = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
+    except Exception:  # pragma: no cover - a malformed file is the loader's error to raise
+        return None
+    value = raw.get("matches_intent") if isinstance(raw, dict) else None
+    return str(value) if value else None
+
+
+@router.get("/call-options", summary="DEMO: what a test call can be configured with")
+async def call_options(container: ContainerDep) -> dict[str, Any]:
+    """Everything the workstation's test-call dialog needs to build itself (`D132`).
+
+    **It reports the machine rather than describing it.** Every list here is read from the
+    loaded domain pack, the real fixtures and the live `Settings` — so a dialog built on it
+    cannot offer an intent that does not exist, a persona with no customer behind them, or
+    an audio file that is not on disk. The alternative is a hand-written list in the client
+    that goes stale silently, which is `D48`'s argument for one menu in one file pointed at
+    the demo surface.
+
+    ⚠️ **Assurance is not a setting here, and that is deliberate.** `D20`'s ladder is
+    *derived from evidence*: a number nobody holds is L0, a number the core holds is L1, and
+    the app's correlation token is L3. A dropdown that let somebody pick "L3" would assert a
+    level with nothing behind it — exactly what `D84` removed from the IVR and what `D44`
+    refuses. So each caller option carries the level it will **produce**, and the dialog
+    shows that as a consequence rather than a choice, which also makes the ladder legible to
+    anybody driving it.
+    """
+    _require_demo(container)
+    settings = container.settings
+
+    intents = [
+        {
+            "code": spec.code,
+            "label_th": spec.label_th,
+            "line": str(spec.line),
+            "urgency": str(spec.default_urgency),
+            "skill": spec.skill,
+            "handoff_to_insurer": spec.handoff_to_insurer,
+        }
+        for spec in sorted(container.pack.intents.values(), key=lambda i: i.code)
+    ]
+
+    # Callers, and the assurance each one produces. An ANI match is *probable*, never
+    # verified (`D20`), so the best a phone number alone can ever reach here is L1.
+    callers: list[dict[str, Any]] = [
+        {
+            "key": "unknown",
+            "label_th": "เบอร์ที่ระบบไม่รู้จัก",
+            "caller_number": "0899999999",
+            "assurance": "l0_anonymous",
+            "note_th": "ไม่มีลูกค้าผูกกับเบอร์นี้ — หน้าจอจะไม่แสดงข้อมูลส่วนบุคคลเลย",
+        }
+    ]
+    for spec in load_personas(settings.config_dir):
+        customer = await container.core.get_customer(spec.customer_id)
+        if customer is None or not customer.phones:
+            continue
+        policies = await container.core.list_policies(spec.customer_id, active_only=True)
+        callers.append(
+            {
+                "key": spec.customer_id,
+                "label_th": customer.polite_name_th,
+                "caller_number": customer.phones[0],
+                "assurance": "l1_probable",
+                "note_th": (
+                    f"{len(policies)} กรมธรรม์ · เบอร์ตรงกับที่ระบบมี "
+                    "จึงได้แค่ L1 (ยังไม่ยืนยันตัวตน)"
+                ),
+            }
+        )
+
+    audio_dir = settings.demo_audio_dir
+    audio = sorted(f.name for f in audio_dir.glob("*.wav")) if audio_dir.is_dir() else []
+
+    # What the AI stages ACTUALLY are, so the dialog can say whether ticking "transcribe"
+    # and "summarise" will do anything real. A control that silently does nothing is worse
+    # than one greyed out with its reason (`D71`).
+    llm_real = settings.llm_provider is not LlmProviderName.RULEBASED
+    scripted = settings.stt_engine is SttEngineName.SCRIPTED
+    fast = settings.llm_fast_model
+    return {
+        "intents": intents,
+        "callers": callers,
+        "audio": audio,
+        "audio_dir": str(audio_dir),
+        "stt": {
+            "engine": str(settings.stt_engine),
+            "scripted": scripted,
+            # Which intent the scripted lines are ABOUT, straight out of the file that
+            # holds them (`D132`). The dialog uses it to warn about a mismatch, because a
+            # good model correctly REFUSES to summarise a motor crash filed as a health
+            # claim (`D119`'s `is_clear`) — and a refusal renders as no AI summary at all,
+            # which looks like a broken feature and is the opposite.
+            "script_intent": _scripted_intent(settings) if scripted else None,
+            "note_th": (
+                "เอนจินชุดสาธิต — บทพูดมาจาก config/demo_transcript.yaml"
+                if scripted
+                else f"ถอดเสียงจริงด้วย {settings.stt_engine}"
+            ),
+        },
+        "llm": {
+            "real": llm_real,
+            "provider": str(settings.llm_provider),
+            "model": settings.llm_model if llm_real else None,
+            "fast_model": fast if llm_real else None,
+            "note_th": (
+                (
+                    f"สรุปหลังรับสายด้วย {settings.llm_model}"
+                    + (f" · สรุประหว่างรอรับสายด้วย {fast}" if fast else "")
+                )
+                if llm_real
+                else "ยังไม่ได้ตั้งค่าโมเดล — จะใช้สรุปแบบกฎ ซึ่งไม่เรียกโมเดลใดๆ"
+            ),
+        },
+        "defaults": {
+            # ⚠️ A RECOGNISED caller by default, not the anonymous one (`D132`, `Q38`).
+            # An unrecognised number produces no context snapshot, so `render_brief`
+            # returns nothing — and the AI summary rides on the brief, so it cannot
+            # appear at all. Defaulting to the path where the feature is invisible is how
+            # somebody concludes it is broken.
+            "caller_key": next(
+                (c["key"] for c in callers if c["key"] != "unknown"), "unknown"
+            ),
+            "waited_s": 40.0,
+            "ignore_hours": True,
+            "record": False,
+            "audio": None,
+            "audio_realtime": False,
+        },
+    }
 
 
 @router.get("/agents", summary="DEMO: who you can sign in as on the workstation")

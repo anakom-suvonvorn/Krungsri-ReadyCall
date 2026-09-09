@@ -350,3 +350,82 @@ async def test_nothing_on_the_call_path_waits_for_the_model(client: Any) -> None
 
     assert tick_s < 1.0, f"the dispatch tick waited {tick_s:.1f}s for a model (`D12`)"
     assert accept_s < 1.0, f"accept waited {accept_s:.1f}s for a model (`D12`)"
+
+
+@pytest.mark.asyncio
+async def test_the_preview_catches_up_while_the_card_is_still_ringing(client: Any) -> None:
+    """⚠️ The case the natural flow actually produces, and the first design missed it.
+
+    A person presses พร้อมรับสาย and *then* places a test call, so the offer fires before a
+    single word has been transcribed — the first preview attempt has nothing to summarise.
+    `D21` says the caller keeps talking through the whole offer window, so the refresh on
+    each sweep is what turns that into a real summary before Accept.
+    """
+    preview = _CountingLlm("สรุประหว่างรอ")
+    install(client, preview, _CountingLlm("สรุปฉบับเต็ม"))
+    sign_in(client)
+    go_ready(client)  # ready FIRST: the offer will fire with an empty transcript
+
+    call_id = place(client)["call_session_id"]
+    await drain(client)
+    assert not preview.transcripts, "there was nothing said yet, so nothing to summarise"
+
+    offer = client.get("/v1/agent/me").json()["offer"]
+    assert offer is not None, "the ready agent should already be ringing"
+
+    # Now the caller starts talking, as they do for the whole offer window.
+    feed(client, call_id, "สวัสดีครับ ผมโทรมาเรื่องเคลมรถ", "รถชนเมื่อเช้านี้ครับ")
+    await container(client).refresh_previews()
+
+    assert preview.transcripts, (
+        "the preview never caught up - a caller who starts talking after the desk rings "
+        "would show no AI summary at all on the card (`D21`)"
+    )
+    assert client.get("/v1/agent/me").json()["offer"]["summary_th"] == "สรุประหว่างรอ"
+
+
+@pytest.mark.asyncio
+async def test_a_talkative_caller_cannot_buy_a_model_call_every_second(client: Any) -> None:
+    """The refresh runs on every sweep, so it needs a ceiling as well as a turn-count gate.
+
+    Without one, a caller still speaking through a 20-second offer window would pay for
+    twenty summaries of very nearly the same thing.
+    """
+    preview = _CountingLlm("สรุประหว่างรอ")
+    install(client, preview, _CountingLlm("สรุปฉบับเต็ม"))
+    sign_in(client)
+    go_ready(client)
+
+    call_id = place(client)["call_session_id"]
+    await drain(client)
+    for i in range(12):
+        feed(client, call_id, f"ประโยคที่ {i} ที่ลูกค้าพูดระหว่างรอสาย")
+        await container(client).refresh_previews()
+
+    assert len(preview.transcripts) <= 3, (
+        f"{len(preview.transcripts)} preview calls for one offer - the cap is not applied"
+    )
+    assert preview.transcripts, "but it must still have run at least once"
+
+
+@pytest.mark.asyncio
+async def test_the_refresh_leaves_an_accepted_call_alone(client: Any) -> None:
+    """Once the final summary has landed there is nothing a preview can add, and running
+    one would only risk the late-preview race the write guard exists to catch."""
+    preview, final = _CountingLlm("สรุประหว่างรอ"), _CountingLlm("สรุปฉบับเต็ม")
+    install(client, preview, final)
+    sign_in(client)
+    go_ready(client)
+
+    call_id = place(client)["call_session_id"]
+    feed(client, call_id, "สวัสดีครับ ผมโทรมาเรื่องเคลมรถ", "รถชนเมื่อเช้านี้ครับ")
+    offer = client.get("/v1/agent/me").json()["offer"]
+    client.post(f"/v1/agent/offers/{offer['assignment_id']}/accept")
+    await drain(client)
+    await pump_once(container(client))
+    before = len(preview.transcripts)
+
+    feed(client, call_id, "อีกประโยคหนึ่งหลังรับสายแล้ว")
+    await container(client).refresh_previews()
+
+    assert len(preview.transcripts) == before, "an accepted call must not be re-previewed"

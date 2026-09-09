@@ -38,17 +38,38 @@
      Leaving the phone pinned to the left of an empty half looks like something failed to
      load rather than like a deliberate view. */
   .wrap.solo { max-width: 420px; grid-template-columns: minmax(0,1fr); justify-content: center; }
-  @media (max-width: 860px) { .wrap { grid-template-columns: 1fr; } }
+  /* ⚠️ `minmax(0,1fr)`, never a bare `1fr`. A bare `1fr` is `minmax(AUTO,1fr)`, and an
+   * auto minimum means the track grows to its widest content — which is how a pushed
+   * comparison table (nowrap cells, ~950px) stretched the phone to 1026px on an 800px
+   * window and made every later card match it. Measured with the fix off: 1026px and a
+   * horizontally scrolling page; with it on: 757px and none. The two tracks above are
+   * already written this way, which is why the bug only appeared below 860px. */
+  @media (max-width: 860px) { .wrap { grid-template-columns: minmax(0, 1fr); } }
 
   h1 { font-size: 20px; margin: 0 0 2px; letter-spacing: -0.01em; }
   h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 10px; }
   p  { margin: 0 0 10px; }
   .sub { color: var(--muted); font-size: 13px; margin-bottom: 16px; }
 
+  /* ⚠️ `min-width: 0` all the way down, and it is load-bearing rather than tidy.
+   *
+   * A grid item defaults to `min-width: auto`, which means "never shrink below your
+   * content's intrinsic width". The pushed comparison table sets `white-space: nowrap`
+   * on every cell, so its intrinsic width is far wider than a phone — and with the
+   * default, `.appcol` grew to fit it, the phone grew with it, and every card AFTER the
+   * table inherited the new width. That is exactly the reported symptom: fine until a
+   * comparison arrives, permanently too wide afterwards.
+   *
+   * The `overflow-x: auto` wrapper around the table cannot help until something above it
+   * has an actual width to scroll inside, which is what these zeros give it. The paired
+   * screen never had the bug because its `main` is a plain block, not a grid item. */
+  .appcol { min-width: 0; }
   .phone {
     background: var(--panel); border: 1px solid var(--line); border-radius: 26px;
     padding: 18px; box-shadow: 0 10px 30px rgba(10,25,60,.10);
+    min-width: 0;
   }
+  .from-agent, .stack, .stack > * { min-width: 0; }
   .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }
   .card + .card { margin-top: 14px; }
 
@@ -86,6 +107,10 @@
 
   .headline { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
   .note { font-size: 12px; color: var(--muted); margin-top: 8px; }
+  /* The scroll container for anything wider than the phone (the comparison table). It
+   * needs `max-width: 100%` as well as `overflow-x`, because a table with nowrap cells
+   * will otherwise stretch its own container. */
+  .tw { overflow-x: auto; max-width: 100%; }
   table.cmp { border-collapse: collapse; width: 100%; font-size: 12px; margin-top: 8px; }
   table.cmp th, table.cmp td { border: 1px solid var(--line); padding: 5px 7px; text-align: right; white-space: nowrap; }
   table.cmp th:first-child, table.cmp td:first-child { text-align: left; }
@@ -654,7 +679,7 @@
     const cols = p.columns_th || [];
     const rows = p.rows || [];
     if (!cols.length || !rows.length) return "<div class='note'>ไม่มีข้อมูลเปรียบเทียบ</div>";
-    let html = '<div style="overflow-x:auto"><table class="cmp"><thead><tr>'
+    let html = '<div class="tw"><table class="cmp"><thead><tr>'
       + cols.map((c) => `<th>${esc(c)}</th>`).join("") + "</tr></thead><tbody>";
     for (const row of rows) {
       html += "<tr>" + (row.cells || []).map((cell, i) =>

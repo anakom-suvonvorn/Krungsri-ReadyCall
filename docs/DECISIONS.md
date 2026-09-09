@@ -5432,3 +5432,82 @@ and `D119`'s "believe `is_clear`" rule did its job — but it means a demo whose
 lines do not match its intent code will show **no AI summary at all**, and look broken.
 The two have to be chosen together, which is `D107`'s rule about the script and the audio
 being sized for each other, one field along.
+
+## D132. The test call gets options, and the dialog reports the machine rather than describing it
+_Taken 2026-09-09 from the user's own proposal: **"i basically just want a way i can test
+and see and show the llm actually working, cause rn i can't really do that easily."** They
+were right that it could not._
+
+- **Problem.** `+ สายทดสอบ` places a caller with fixed defaults and no recording, so the two
+  most interesting things this system does — a transcript arriving while somebody waits,
+  and the AI summary landing on the offer card before Accept — were reachable only from a
+  `curl` line in the README. **A feature nobody on the team can press is a feature nobody
+  can rehearse**, four days before a pitch that has to show it.
+
+  This is `D121`'s lesson arriving again, one layer along: the tool rail worked for a
+  fortnight with nothing anywhere to click, and the verification note honestly said
+  *"verified end to end in a browser"* — of a browser driven by hand through the API.
+
+- **Decision.** Keep the plain button exactly as it is, and add a second one that opens a
+  dialog. The dialog **starts on the plain button's defaults**, so placing without touching
+  anything gives the same call; what it adds is every stage turned on deliberately.
+
+  `GET /v1/demo/call-options` feeds it, and everything in that payload is read from the
+  **loaded domain pack, the real fixtures and the live `Settings`** — so the dialog cannot
+  offer an intent that does not exist, a persona with no customer, or an audio file that is
+  not on disk. A hand-written list in the client is the thing `D48` argues against, pointed
+  at the demo surface.
+
+### Two things are reported, not offered, and that is the whole design
+
+**Assurance is derived from evidence** (`D20`). A number nobody holds is L0; a number the
+core holds is L1; the app's correlation token is L3. A dropdown offering "L3" would assert
+a level with nothing behind it — precisely what `D84` deleted from the IVR and what `D44`
+refuses. So each caller carries the level it **produces**, and the dialog shows it as a
+consequence. That also makes the ladder legible to anybody driving the demo, which is the
+cheapest place this system ever gets to explain itself.
+
+**Urgency comes from the intent**, out of `config/intents.yaml` (`D28`). Pick a reason and
+the dialog shows the urgency, the line and the skill it carries. Neither is a knob, and a
+knob would teach the person driving it something false about how the system decides.
+
+### Three guards, and every one of them caught a real trap during the build
+
+1. **The script must match the intent.** `config/demo_transcript.yaml` now declares
+   `matches_intent: motor.claim.notify`, and the dialog warns on a mismatch. This is not
+   cosmetic: the summariser's prompt gets the intent label *and* the transcript, so a motor
+   crash filed as a health claim makes a good model correctly answer `is_clear: false` and
+   refuse (`D119`). The screen then shows **no AI summary at all** and looks broken while
+   working exactly as designed. It cost a verification round on 2026-09-09 before this
+   existed. The warning names the intent to pick, and says that leaving it is a fair way to
+   watch the refusal work.
+2. **The intent must be one this agent can receive.** Since `D117` an advisor and a service
+   agent on the same line hold different skills, and `claims.assist` is cross-line — so a
+   motor *advisor* placing a motor *claim* is never offered it and the caller just sits in
+   the queue as `no_qualified_agent`. `D117`'s own note says that cost about an hour to
+   recognise the first time; this dialog is the easiest possible way to walk into it, so
+   unreachable intents are marked in the list and warned about below it. **Found by doing
+   exactly that while verifying.**
+3. **The default caller must be one the system recognises** (`Q38`). At L0 there is no
+   customer, so no context snapshot, so `render_brief` returns nothing — and the AI summary
+   is rendered as part of the brief. Defaulting to the anonymous caller meant the default
+   configuration was the one path where the feature *cannot* appear. Also found by
+   verifying, and the underlying incoherence is recorded as `Q38` rather than patched.
+
+### The dialog may be used while un-ready, unlike the plain button
+
+The plain button is disabled when the agent cannot receive a call, because a one-click
+caller placed with nobody to take it sits unmatched and reads as a routing bug. **The
+dialog is deliberately not**, because placing first and going ready afterwards is exactly
+the sequence that lets somebody watch the transcript arrive and the preview land *before*
+Accept. It says what will happen instead of refusing, which is `D71`'s pattern.
+
+### Verified by driving the screen, not the API
+
+On a running server with `LLM_MODEL=claude-sonnet-5` and `LLM_FAST_MODEL=gpt-5.4-mini`:
+the dialog listed 33 intents and 4 callers with their derived levels; ticking the two
+recording boxes flipped the *"what this call will test"* panel from ⬜⬜ to ✅✅; the
+mismatch guard fired on `motor.other` against a `motor.claim.notify` script and cleared
+when the intent was corrected; and the placed call put the AI preview on the offer card
+**2.2 s after the desk went ready**, replaced after Accept by the Sonnet summary over all
+six turns.

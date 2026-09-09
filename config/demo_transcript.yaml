@@ -25,6 +25,14 @@
 # The lines below are a motor claim: the caller says why they are calling before an agent
 # has picked up, which is the product in one paragraph.
 
+# Which intent these lines are ABOUT (`D132`). Read by `GET /v1/demo/call-options` so the
+# test-call dialog can warn when somebody is about to place, say, a health claim against a
+# motor script. That mismatch is not harmless: the summariser's prompt is given the intent
+# label AND the transcript, and a good model correctly answers `is_clear: false` and
+# refuses (`D119`) — so the screen shows NO AI summary and looks broken when it is in fact
+# working exactly as designed. Cost a verification round to diagnose once already.
+matches_intent: motor.claim.notify
+
 turns:
   - text: "สวัสดีครับ ผมโทรมาเรื่องเคลมรถ"
   - text: "รถชนเมื่อเช้านี้ครับ"
