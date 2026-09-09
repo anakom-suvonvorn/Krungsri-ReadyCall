@@ -1,7 +1,95 @@
 # NEXT_SESSION
 
 _The live working state. READ THIS FIRST every session. Keep it short and current._
-_Last updated: 2026-09-09._
+_Last updated: 2026-09-09 (late)._
+
+---
+
+## ⚠️ CONTINUE HERE — written 2026-09-09 mid-task, before a compact
+
+**Everything is committed and green.** 927 tests pass, ruff + ruff format + mypy clean, the
+workstation builds, 69/69 diagrams current, `audit_docs.py` clean on the live files. There
+is no half-applied edit anywhere. What follows is what is *unfinished*, not what is broken.
+
+### 1. FIRST THING: verify `D134`'s model sentence against a live model
+
+`D134` (the *"ข้อมูลอื่นๆ ที่มีเกี่ยวกับลูกค้า"* panel) is **committed and its data half is
+verified on a running server** — 6 facts, right order, sources, Buddhist dates, confidence
+only on inferred facts. **The model-written sentence over those facts has never been seen
+working.** The one live run that reached it was refused by our own `_FIGURE` guard (a
+Buddhist year read as a coverage amount); that is fixed with unit tests and has not been
+re-run against a real model.
+
+⚠️ Port 8000 holds a stale server from an older session — use **8010**, and check
+`/health` names ReadyCall before believing anything.
+
+```bash
+# Terminal 1. A key must be in .env; LLM_FAST_MODEL=gpt-5.4-mini is already set there.
+API_PORT=8010 LLM_PROVIDER=anthropic LLM_MODEL=claude-sonnet-5 \
+  DEMO_AUDIO_DIR=tests/audio uv run python -m readycall.entrypoints.api > /tmp/rc.log 2>&1 &
+
+# Terminal 2. A003 is the RENEWAL desk; general.renewal needs `renewal.retention`, and a
+# motor advisor is simply never offered it (`D117`, and it costs an hour every time).
+curl -s -c /tmp/c -X POST localhost:8010/v1/agent/demo-login -H 'Content-Type: application/json' -d '{"agent_id":"A003"}'
+curl -s -b /tmp/c -X POST localhost:8010/v1/demo/calls -H 'Content-Type: application/json' \
+  -d '{"intent_code":"general.renewal","caller_number":"+66898887777","intake_keys":["2"],"ignore_hours":true}'
+curl -s -b /tmp/c -X POST localhost:8010/v1/agent/state -H 'Content-Type: application/json' -d '{"agent_intent":"ready"}'
+# accept the offer, then read brief.context.summary_th off GET /v1/agent/me
+grep -E "context summary|summarize_context" /tmp/rc.log
+```
+
+**What "working" looks like:** `context summary ready` in the log, and
+`brief.context.summary_th` carrying two or three Thai sentences that mention the mortgage
+and the new child, state no money figure, and **do not say what to sell** (`D116`).
+
+**If it is refused again**, the log line says which guard fired. `_RECOMMENDS` firing is
+the system working — re-read the prompt's rule 2 before loosening anything.
+
+⚠️ **Never print Thai to the Windows console** (`B1`). Write to a UTF-8 file and read it.
+
+### 2. Then: `/sim` still has no browser check of the typed-intake card
+
+`D133`'s typed intake is verified end to end (three sentences typed, AI summary on the
+offer card 2.5 s later). What was **not** re-checked after the last edit is the `/sim`
+card's own rendering — the choice sheet before dialling, the box appearing during the
+wait, and the stub note when the voice option is chosen. Drive it in a browser:
+`/sim` → persona 1 → a plan → Contact → a reason → **the new third sheet**.
+
+⚠️ The in-app browser pane could not composite clicks in this session — `computer` clicks
+silently did nothing while `read_page` and `javascript_tool` worked fine. Drive it with
+`javascript_tool` and read the DOM.
+
+### 3. Then: the queue below, which is unchanged
+
+Rehearsal and the video are still item 1 of the real queue. Nothing in the last two days
+changed that.
+
+### What the user asked for that is DONE
+
+| asked | state |
+|---|---|
+| test the OpenAI key, compare models, pick one | ✅ `D130` — `scripts/compare_llm.py`, 7 models measured |
+| summary before the offer card is answered | ✅ `D131` — verified at 1.8 s on a live server |
+| a way to SEE the LLM working | ✅ `D132` — `+ สายทดสอบ⚙` opens a dialog |
+| `/sim` comparison table overflowing | ✅ `B40` — proven by disabling the fix at 800 px |
+| "record or write" while waiting | ✅ `D133` — writing is REAL, voice is a labelled stub |
+| a back button after the call ends | ✅ `D133` |
+| a guide for the UI team + git for beginners | ✅ `docs/FOR_THE_TEAM.md` |
+| where is AI used, and ideas | answered in chat; the ideas became `D134` |
+| customer-context panel | ◐ `D134` — data verified, **model sentence not** |
+
+### The three decisions the user made this session, so nobody re-opens them
+
+- **The plan-fit score is agent-only and NOT a priority.** The user: *"the customer
+  shouldn't be able to see the fit score or whatever, just the normal table thing, exactly
+  the same as how it currently is for them"* — and *"i feel like it's not a priority doing
+  the fit score thing rn"*. ⚠️ It also collides with `D126`, which makes the ranking
+  arithmetic **on purpose** so a model cannot be argued into putting a plan first. A
+  non-ranking signal beside the table is fine; anything that reorders is a `D126` reversal
+  and needs its own entry. Recorded as `Q40`.
+- **Two test-call buttons, not one.** The plain one stays exactly as it was.
+- **Synthetic training data is out.** Unchanged from before: one model, lapse propensity,
+  a real public dataset, and verify it downloads first. Post-hackathon.
 
 ---
 
@@ -23,7 +111,7 @@ somebody calls it.** `grep -rn "\.method_name(" src/` is thirty seconds and it h
 been the answer nine times.
 
 The second pattern, worth equal weight: **every one of these was found by the user
-pressing a button, never by the suite.** 921 tests pass and did not see any of it. When
+pressing a button, never by the suite.** 927 tests pass and did not see any of it. When
 they report something, believe the report before believing the tests.
 
 ⚠️ **And `B39`'s specific lesson, because it cost a whole round trip:** when the user
@@ -381,7 +469,7 @@ moment in the recording it was said — **and if they consented, their audio is 
 storage encrypted, with the key ref and the retention date on an `audio_recordings` row.**
 If they declined, it is nowhere.
 
-Verified **2026-09-09**: **921 tests** — 909 pass + 12 skipped, with Postgres
+Verified **2026-09-09**: **927 tests** — 915 pass + 12 skipped, with Postgres
 and MinIO both up (`readycall-postgres-1`, `readycall-minio-1`, both healthy). `ruff check` + `ruff format --check` clean over 220 files,
 `mypy --strict` clean over 157, 69/69 diagrams current, prompt pack fresh, `audit_docs.py`
 clean on the live files. **And by driving `/sim` in a browser** (`D123`): *Contact us —
@@ -952,6 +1040,7 @@ GPU should own the demo machine. Typhoon uses 1068 MB, so P4's model is the ques
 | **Q34** ⚠️ **NEW 2026-09-07** | **What the customer submits through a pushed form is not stored anywhere** (`D120`). The broker reads it off their screen and types it into the wrap-up. That is honest for a demo and wrong for a product: the customer filled in a form and the system kept no record of it. It wants a real table and a retention rule (`D14`), not a longer-lived dict — and the moment a signature or an upload lands, it stops being optional. | In memory, dies with the call |
 | ~~Q35~~ | ~~**The AI summary takes 4.5 s, against a 1 s brief budget**~~ | **RESOLVED 2026-09-09 by `D130` + `D131`.** Both halves of the option list were taken: a **smaller model** (`gpt-5.4-mini`, measured p50 **0.89 s** against Sonnet's 4.40 s) and a **second, earlier pass**. The summary now runs during the offer window and is on the card **before Accept** — verified on a running server at 1.8 s after the desk rang. The careful model still writes the final one over the whole transcript, because `D21` means a preview is always a summary of part of a call. ⚠️ The 1 s budget in `ARCHITECTURE` §15 is still not *met* by either model; what changed is that the summary no longer lands after the broker has started speaking |
 | **Q36** ⚠️ **NEW 2026-09-08** | **Three `*.advice.quote` intents are reachable from no menu.** `motor.advice.quote`, `health.advice.quote` and `life.advice.quote` have labels, slots (`vehicle`/`usage`/`coverage_level`, `age`/`budget`/`hospital_preference`, …) and playbooks, and no option in `menus.yaml` names them — only `travel.advice.quote` is on a menu. Found while building `D123`. On every human surface those three lines answer *"I want to buy"* with **เปรียบเทียบแผนและขอราคา** (`*.advice.compare`), whose own required slots include `current_policy_no` — a field a brand-new customer does not have, so the routed brief asks the broker for something that cannot exist. Splitting them adds a **seventh** option to three phone menus, which is a real cost on a keypad and none at all in the app. Options: (a) leave it — one option covers both conversations and the label says so; (b) add the quote options to all three reason menus, accepting seven-option phone menus; (c) add them with `contexts: [general]`… which does **not** help, because the IVR ignores `contexts` by design (`D122`), so the phone menu grows either way. This is a domain call, not an engineering one. | **Not acted on.** `D123` records the reasoning |
+| **Q40** ⚠️ **NEW 2026-09-09** | **A customer×plan "fit score" for the broker only.** The user's idea, and their own two constraints on it: the customer must never see it (*"just the normal table thing, exactly the same as how it currently is for them"*), and it is **not a priority now**. ⚠️ It collides with `D126`, which makes the comparison ranking arithmetic **on purpose** — *"a model that ranks is a model that can be argued into putting a plan first"*. So: a signal rendered **beside** the table, agent-side, that changes no ordering is compatible; anything that reorders candidates is a reversal of `D126` and owes its own entry saying why. The customer-facing payload is already composed server-side and discards the request's own figures (`D126`), so keeping it off their screen is the default rather than something to enforce. | **Agent-only, and deferred.** Not for this week |
 | **Q39** ⚠️ **NEW 2026-09-09** | **A caller who declines the intake offer can never change their mind.** `INTAKE_ACTIVE` is reachable only from `QUEUED`, and every path moves a call to `MATCHED` the moment the offer resolves — so for the entire wait, which is the only time somebody would reconsider, there is **no legal transition that opens an intake**. Found by building `D133`'s app-side offer and watching the state machine refuse it with `IllegalTransition: matched -> intake_active`. It is not obviously wrong — the restriction is what stops an intake opening under a call that is about to be answered — but it means the re-offer at `INTAKE_REOFFER_AFTER_S` (`D88`) can only ever be *spoken*, and an app that shows the offer as a standing card cannot honour a tap. Options: (a) allow `MATCHED -> INTAKE_ACTIVE` and rely on `D21`'s accept path to close it, which is what already happens; (b) let the intake open without a state change, and accept that `INTAKE_ACTIVE` stops meaning "an intake is running"; (c) leave it, and let the app ask before dialling — which is what `D133` does, and is arguably the better product anyway. | **Left refused.** `D133` asks before dialling instead |
 | **Q38** ⚠️ **NEW 2026-09-09** | **An anonymous caller gets no AI summary, while their verbatim words are already on the screen.** `render_brief` returns `None` when there is no context snapshot, which is what an unrecognised number produces — and the AI summary is rendered *as part of the brief*, so at L0 there is no summary of any kind, rule-based or model-written. Meanwhile `TranscriptDeliveryService` sends the **raw transcript** at L0 on purpose (`D106`: *"the caller's own speech rather than anything looked up, L0 included"*). So the agent can read the sentences and cannot read a summary of those same sentences, which is strictly less disclosive. That is an inconsistency rather than a policy — but the fix restructures `render_brief` around the disclosure boundary that produced this project's one real leak (`B5`), and it was found four days before the pitch. Found while building `D132`, whose dialog now defaults to a recognised caller so the default configuration is not the one path where the feature cannot appear. Options: (a) render a brief at L0 carrying only call-derived fields and no looked-up ones; (b) move the AI summary out of `BriefOut` onto its own key, which is arguably where it belongs since it describes the CALL rather than the customer; (c) leave it and document that L0 shows a transcript and no summary. | **Recorded, not acted on.** `D132` works around it |
 | **Q37** ⚠️ **NEW 2026-09-08** | **`CallState.TRANSFERRED` is entered by nothing, and `D124` decided to leave it that way.** Normally that is this project's most-repeated bug. Here it is a finding: the state is **terminal**, so a call in it can never reach `WRAP_UP` — and after-call work on a handoff is real work. Making it non-terminal instead would leave **two states both meaning "the media is over and the agent is filing"**, which is `B25`/`B26`'s shape. So a handoff ends the call the ordinary way and the RECORD is what makes it a handoff, and a test asserts `TRANSFERRED` stays unentered so nobody tidies it back. What the state actually models is a **blind** transfer — push the caller into another queue and hang up — which `D63` explicitly rejects as *"what call centres do today and the reason people hate being transferred"*. Options: delete it (15 states become 14, and `TERMINAL_STATES`, `FINISHED_STATES`, `DATA_MODEL` and two generated diagrams follow), or keep it reserved for `D63`'s blind-transfer escape hatch and say so in the enum. | **Kept, unentered, documented.** Deleting a state is not a four-days-before-the-pitch change |

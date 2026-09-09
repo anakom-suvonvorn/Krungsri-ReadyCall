@@ -169,4 +169,142 @@ class IntakeSummariser:
         )
 
 
-__all__ = ["IntakeSummariser", "IntakeSummary", "SummaryResult"]
+class ContextSummary(BaseModel):
+    """What the model may return about what we already know (`D134`)."""
+
+    summary_th: str = Field(min_length=1, max_length=600)
+    #: The model's own view of whether there was enough to be worth a sentence. Believed,
+    #: for `D13`'s reason: a model allowed to say "not much here" invents less than one
+    #: obliged to produce three sentences about two rows.
+    is_clear: bool = True
+
+
+#: Words that turn a description into a recommendation. `D116` moves the consent gate from
+#: HOLDING data to RECOMMENDING from it, so this panel may say what we know and may not say
+#: what to sell — and the prompt forbidding it is not enough on its own, for exactly the
+#: reason `_FIGURE` exists: the guard assumes the prompt will one day fail.
+_RECOMMENDS = re.compile(
+    r"ควรซื้อ|ควรทำประกัน|น่าจะสนใจ|แนะนำให้ซื้อ|เสนอขาย|ควรเสนอ|เหมาะกับแผน|ควรพิจารณาซื้อ"
+)
+
+#: ⚠️ **A DATE IS NOT A FIGURE**, and reusing `_FIGURE` unchanged here refused a correct
+#: summary on its first live run.
+#:
+#: `_FIGURE` matches any run of four or more digits, which is right for the intake summary
+#: — a caller rarely says a bare four-digit number that is not money. A *context* summary
+#: is mostly dates, and this project renders them in the **Buddhist era**, so an ordinary
+#: sentence about a home loan taken in `30/08/2565` trips it. Measured: `gpt-5.4-mini`
+#: produced a faithful summary and the guard threw it away.
+#:
+#: So dates are removed **before** the money check runs, rather than the money check being
+#: loosened. Narrow on purpose: `2565` alone is a year, `2,565,000` is not, and the second
+#: still has to be refused.
+_DATE_LIKE = re.compile(
+    r"\d{1,2}/\d{1,2}/\d{4}"  # 30/08/2565, as `context_facts` renders them
+    r"|(?<![\d,])(?:19|20|24|25|26)\d{2}(?![\d,])"  # a bare CE or BE year
+)
+
+
+class ContextSummariser:
+    """Two or three Thai sentences over what the bank already holds (`D134`).
+
+    Same shape and same three inherited rules as `IntakeSummariser`, over different input:
+    that one summarises what the caller **said**, this one summarises what we **knew before
+    they called**. Kept as its own class rather than a mode on the other because the guards
+    differ — this one must also refuse to recommend (`D116`) — and a boolean argument that
+    switches which safety check runs is how one of them eventually stops running.
+    """
+
+    PROMPT = PromptRef(id="summarize_context", version="v1")
+
+    def __init__(
+        self,
+        *,
+        llm: LlmClient,
+        clock: Clock | None = None,
+        timeout_s: float = 8.0,
+        min_facts: int = 2,
+    ) -> None:
+        self._llm = llm
+        self._clock = clock or SystemClock()
+        self._timeout_s = timeout_s
+        #: Below this, say nothing. One holding and no history is not a paragraph, and a
+        #: model asked to write one produces something that sounds like insight.
+        self._min_facts = min_facts
+        self.attempted = 0
+        self.refused = 0
+        self.failed = 0
+
+    async def summarise(
+        self,
+        facts_text: str,
+        *,
+        fact_count: int,
+        customer_name_th: str,
+        intent_label_th: str,
+    ) -> SummaryResult | None:
+        if fact_count < self._min_facts or not facts_text.strip():
+            return None
+
+        self.attempted += 1
+        try:
+            result = await asyncio.wait_for(
+                self._llm.complete_structured(
+                    self.PROMPT,
+                    {
+                        "facts": facts_text,
+                        "customer_name_th": customer_name_th,
+                        "intent_label_th": intent_label_th,
+                    },
+                    ContextSummary,
+                    timeout_s=self._timeout_s,
+                ),
+                timeout=self._timeout_s + 1.0,
+            )
+        except (DegradedError, TimeoutError) as exc:
+            self.failed += 1
+            log.warning("context summary unavailable", error=str(exc)[:200])
+            return None
+        except Exception as exc:
+            self.failed += 1
+            log.warning("context summary raised", error=f"{type(exc).__name__}: {exc}"[:200])
+            return None
+
+        output = result.output
+        if not output.is_clear:
+            self.refused += 1
+            return None
+        text = output.summary_th.strip()
+        # `D16` still binds — a coverage amount is read from a record and never written by
+        # a model — but dates come out first, or every sentence mentioning a Buddhist year
+        # is refused as though it had quoted a premium.
+        if _FIGURE.search(_DATE_LIKE.sub(" ", text)):
+            self.refused += 1
+            log.warning("context summary refused: it stated a figure", sample=text[:120])
+            return None
+        if _RECOMMENDS.search(text):
+            # `D116`. Describing what we hold is internal processing; recommending from it
+            # needs consent this panel does not have.
+            self.refused += 1
+            log.warning("context summary refused: it recommended a product", sample=text[:120])
+            return None
+
+        return SummaryResult(
+            text_th=text,
+            provider=result.usage.provider,
+            model=result.usage.model,
+            prompt_version=self.PROMPT.version,
+            latency_ms=result.usage.latency_ms,
+            tokens_in=result.usage.tokens_in,
+            tokens_out=result.usage.tokens_out,
+            cost_usd=result.usage.cost_usd,
+        )
+
+
+__all__ = [
+    "ContextSummariser",
+    "ContextSummary",
+    "IntakeSummariser",
+    "IntakeSummary",
+    "SummaryResult",
+]

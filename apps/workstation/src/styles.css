@@ -1171,3 +1171,35 @@ button.plan-row.on {
 .tool.composer .badge {
   align-self: flex-start;
 }
+
+/* --- "what else do we know about this person" (`D134`) -----------------------
+ *
+ * A READING surface. The broker glances at it while somebody is talking, so the
+ * summary is the loud half and the raw rows are folded away — but the rows are
+ * what make the summary checkable (`D18`), which is why the toggle is a button
+ * rather than a hover.
+ */
+.known-about {
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--line);
+}
+.known-summary {
+  margin-top: 6px;
+  padding: 8px 10px;
+  border-left: 3px solid var(--info);
+  background: var(--panel-2);
+  border-radius: 0 8px 8px 0;
+}
+.known-raw {
+  margin-top: 6px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.known-row {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+.known-row:last-child {
+  border-bottom: none;
+}

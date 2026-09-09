@@ -35,12 +35,14 @@ from readycall.adapters.telephony.simulated import SimulatedTelephonyProvider
 from readycall.adapters.vad.energy import EnergyVad
 from readycall.api.realtime import AgentHub
 from readycall.api.schemas import (
+    BriefContextOut,
     BriefCoverageOut,
     BriefCustomerOut,
     BriefIntentOut,
     BriefOut,
     BriefPolicyOut,
     BriefProvenanceOut,
+    KnownFactOut,
 )
 from readycall.api.security import (
     DemoAgentSessionStore,
@@ -51,6 +53,7 @@ from readycall.api.security import (
 from readycall.clock import Clock, SystemClock
 from readycall.config import (
     CoreDataProviderName,
+    LlmProviderName,
     Settings,
     SttEngineName,
     SttWorkerMode,
@@ -69,9 +72,10 @@ from readycall.prompts import PromptLibrary
 from readycall.services.agents.assignment import AssignmentService, OfferPolicy
 from readycall.services.agents.dispatch import DispatchService
 from readycall.services.agents.presence import PresenceService
-from readycall.services.analysis import IntakeSummariser, SummaryResult
+from readycall.services.analysis import ContextSummariser, IntakeSummariser, SummaryResult
 from readycall.services.assist import AssistService
 from readycall.services.brief.builder import BriefBuilder
+from readycall.services.brief.context_facts import facts_for_prompt, known_facts
 from readycall.services.call_orchestrator.orchestrator import CallOrchestrator
 from readycall.services.capture.keypad import KeypadCaptureService
 from readycall.services.capture.matching import (
@@ -288,6 +292,15 @@ class Container:
             clock=self.clock,
             timeout_s=settings.llm_preview_timeout_s,
         )
+        #: *"What else do we know about this person"* (`D134`). On the FAST model, because
+        #: it runs alongside the preview during the offer window and is competing for the
+        #: same seconds — and because summarising records we already hold is the easier of
+        #: the two jobs.
+        self.context_summariser = ContextSummariser(
+            llm=self.fast_llm or self.llm,
+            clock=self.clock,
+            timeout_s=settings.llm_preview_timeout_s,
+        )
 
         #: Every durable store, chosen by `STORAGE_BACKEND` (`D75`, `D78`). Each service
         #: below gets its own and writes through to it; nothing reads it on the hot path.
@@ -453,6 +466,10 @@ class Container:
         #: buy a fresh model call every second for the whole offer window. Three updates
         #: is more than a 20-second card can usefully show.
         self.ai_preview_count: dict[str, int] = {}
+        #: The context summary, per call (`D134`). Computed once, in the background, from
+        #: the frozen snapshot — which cannot change during a call, so unlike the intake
+        #: summary there is nothing to supersede.
+        self.context_summaries: dict[str, SummaryResult] = {}
         #: In-flight preview tasks, held so the event loop cannot collect one mid-call.
         self._preview_tasks: set[asyncio.Task[None]] = set()
         #: Saved wrap-up forms, projected from the store. Never written by anything but
@@ -688,6 +705,24 @@ class Container:
         if summary is not None:
             brief = brief.model_copy(update={"summary_th": summary.text_th})
         out = _brief_out(brief, identity)
+        # `D134`. Attached at the wire rather than built into `CaseBrief`, for `B5`'s
+        # reason: the domain brief is the object that must not grow fields casually, and
+        # this is a fact about the rendering.
+        context_summary = self.context_summaries.get(call_session_id)
+        if out.context is not None:
+            out = out.model_copy(
+                update={
+                    "context": out.context.model_copy(
+                        update={
+                            "summary_th": context_summary.text_th if context_summary else None,
+                            # Say WHY there is no sentence, so an empty line reads as "no
+                            # model configured" rather than as a failure (`D71`).
+                            "summary_unavailable": context_summary is None
+                            and self.settings.llm_provider is LlmProviderName.RULEBASED,
+                        }
+                    )
+                }
+            )
         if summary is not None and not summary.is_final:
             # `D131`: say which pass wrote this. Set on the DTO rather than on the domain
             # brief because it is a fact about the rendering, not about the case — and
@@ -722,6 +757,54 @@ class Container:
             except Exception:
                 log.exception("preview refresh failed", call_session_id=call_session_id)
 
+    async def summarise_context(self, call_session_id: str, agent_id: str | None = None) -> None:
+        """Summarise what the bank already knows, in the background (`D134`).
+
+        Computed **once** per call: it reads the frozen `ContextSnapshot` (`D6`), which by
+        construction cannot change while the call is happening — so unlike the intake
+        summary there is nothing to supersede and no race to lose.
+
+        Every rule the intake summary obeys applies here, and one more: the prompt forbids
+        recommending a product and `_RECOMMENDS` refuses the output if it does anyway
+        (`D116`). Describing a record an affiliate lawfully shared is internal processing;
+        recommending from it needs consent this panel does not have.
+        """
+        if call_session_id in self.context_summaries:
+            return
+        snapshot_id = self.snapshot_for_call.get(call_session_id)
+        identity = self.identity_for_call.get(call_session_id)
+        # At L0 there is nobody to describe, and the panel is absent from the wire anyway.
+        if snapshot_id is None or identity is None or not identity.may_see_record:
+            return
+        snapshot = await self.snapshots.get(snapshot_id)
+        if snapshot is None:
+            return
+        facts = known_facts(snapshot.payload)
+        if not facts:
+            return
+        session = await self.calls.get(call_session_id)
+        code = getattr(session, "menu_intent_code", None)
+        spec = self.pack.intents.get(code) if code else None
+        customer = snapshot.payload.customer
+        result = await self.context_summariser.summarise(
+            facts_for_prompt(facts),
+            fact_count=len(facts),
+            customer_name_th=customer.polite_name_th if customer else "ลูกค้า",
+            intent_label_th=spec.label_th if spec else "ไม่ทราบเรื่องที่ติดต่อ",
+        )
+        if result is None:
+            return
+        self.context_summaries[call_session_id] = result
+        log.info(
+            "context summary ready",
+            call_session_id=call_session_id,
+            facts=len(facts),
+            model=result.model,
+            latency_ms=round(result.latency_ms or 0.0, 1),
+        )
+        if agent_id:
+            await self.hub.send(agent_id, "brief_updated", {"call_session_id": call_session_id})
+
     def _start_preview_summary(self, call_session_id: str, agent_id: str) -> None:
         """`DispatchService`'s `on_offer` hook: summarise while the card is on screen.
 
@@ -736,13 +819,21 @@ class Container:
         of bug for this project to acquire.
         """
         try:
-            task = asyncio.create_task(self.summarise_call(call_session_id, agent_id, preview=True))
+            started = [
+                asyncio.create_task(self.summarise_call(call_session_id, agent_id, preview=True)),
+                # `D134`, started at the same instant and for the same reason: the seconds
+                # an agent spends reading the offer card are the seconds both of these have
+                # to land in. Two independent tasks, so one failing cannot take the other
+                # with it — they summarise different things and degrade separately (`D12`).
+                asyncio.create_task(self.summarise_context(call_session_id, agent_id)),
+            ]
         except RuntimeError:
             # No running loop: a scenario replay or a unit test driving the matcher
             # directly. Nothing to summarise onto, and not an error.
             return
-        self._preview_tasks.add(task)
-        task.add_done_callback(self._preview_tasks.discard)
+        for task in started:
+            self._preview_tasks.add(task)
+            task.add_done_callback(self._preview_tasks.discard)
 
     async def summarise_call(
         self, call_session_id: str, agent_id: str | None = None, *, preview: bool = False
@@ -933,6 +1024,28 @@ def _brief_out(brief: CaseBrief, identity: IdentityResolution) -> BriefOut:
             is_vulnerable=who.is_vulnerable,
         )
 
+    # `D134`. Gated on `known` like the rest of the record: `D74` says assurance gates
+    # what the agent may SAY and DO, not what they may SEE, and at L0 there is nobody to
+    # render. The facts are worded on the server (`D68`) and state nothing they do not
+    # source.
+    context_out: BriefContextOut | None = None
+    if known and payload:
+        facts = known_facts(payload)
+        if facts:
+            context_out = BriefContextOut(
+                facts=tuple(
+                    KnownFactOut(
+                        kind=f.kind,
+                        label_th=f.label_th,
+                        detail_th=f.detail_th,
+                        at_th=f.at_th,
+                        source=f.source,
+                        confidence=f.confidence,
+                    )
+                    for f in facts
+                )
+            )
+
     policy_out: BriefPolicyOut | None = None
     if known and payload and payload.relevant_policy:
         policy = payload.relevant_policy
@@ -995,6 +1108,7 @@ def _brief_out(brief: CaseBrief, identity: IdentityResolution) -> BriefOut:
         ),
         recent_claim_count=len(payload.recent_claims) if disclose and payload else 0,
         last_contact_th=last_contact,
+        context=context_out,
         disclosure_locked=not disclose,
         handoff_to_insurer=bool(brief.intent and brief.intent.handoff_to_insurer),
         degraded=str(brief.degraded),

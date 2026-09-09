@@ -749,6 +749,62 @@ class BriefCustomerOut(ApiModel):
     is_vulnerable: bool = False
 
 
+class KnownFactOut(ApiModel):
+    """One thing the bank already knows about this customer (`D134`).
+
+    Deliberately flat and pre-worded. The panel it feeds is a *reading* surface — the
+    broker glances at it while somebody is talking — so the server does the wording and
+    the client does no interpretation at all, which is the same rule the rest of the brief
+    follows (`D68`).
+
+    `source` is not decoration. A broker who cannot say **where** a fact came from cannot
+    use it in a conversation, and `D18` makes provenance a first-class output rather than
+    a debugging aid. `at_th` is a pre-formatted Thai date for the same reason: a client
+    computing "8 เดือนที่แล้ว" from a timestamp is a second place that can disagree.
+    """
+
+    kind: str  # life_event / holding / interaction / claim
+    label_th: str
+    detail_th: str | None = None
+    at_th: str | None = None
+    source: str
+    #: 0-1 where the upstream supplied one — life-event signals are *inferred*, and a
+    #: broker must be able to tell an inference from a record. `None` where the fact is
+    #: simply a record, because a confidence of 1.0 on a stored row is noise.
+    confidence: float | None = None
+
+
+class BriefContextOut(ApiModel):
+    """*"What else do we know about this person"* — the panel (`D134`).
+
+    ⚠️ **Everything here was already assembled on every call and thrown away.**
+    `ContextAssembler` fetches holdings, life events, interactions and claims into the
+    frozen snapshot, and `BriefOut` exposed two counts and one string. This is the rest of
+    it, and the reason it is the brief's biggest leak: the brief's own promise is that the
+    broker does not have to ask for what the bank already holds.
+
+    ⚠️ **It SHOWS and it does not RECOMMEND, and that line is the whole compliance story**
+    (`D116`). Consent is required before *personalised recommendation*; displaying a record
+    an affiliate lawfully shared is internal processing (`D74`). So this panel states facts
+    and their sources, and never says what to sell. The moment something here becomes
+    "therefore offer them X", it is on the far side of `D116`'s gate and needs the consent
+    check that the comparison feature will need.
+
+    ⚠️ **Gated at `L1_PROBABLE`, the same as the rest of the record.** `D74`: assurance
+    gates what the agent may SAY and DO, not what they may SEE — they need the record to
+    verify the caller at all. At L0 there is nobody to render, so this is absent entirely.
+    """
+
+    facts: tuple[KnownFactOut, ...] = ()
+    #: Two or three Thai sentences the model wrote over `facts`, or `None` — which is the
+    #: ordinary case and every caller must be correct for it (`D12`, `D119`). It
+    #: summarises *records we hold*; it never states a figure and never recommends.
+    summary_th: str | None = None
+    #: True while `summary_th` is absent because no model is configured, so the screen can
+    #: say "raw facts only" rather than looking like it failed.
+    summary_unavailable: bool = False
+
+
 class BriefCoverageOut(ApiModel):
     label_th: str
     limit_text: str | None = None
@@ -799,6 +855,9 @@ class BriefOut(ApiModel):
     other_policy_count: int = 0
     recent_claim_count: int = 0
     last_contact_th: str | None = None
+    #: Everything else the bank already holds about this person (`D134`). Absent at
+    #: L0, where there is nobody to render.
+    context: BriefContextOut | None = None
     #: True whenever assurance is below `L2_STRONG`; the workstation says so rather than
     #: rendering an empty row that looks like missing data.
     disclosure_locked: bool = True

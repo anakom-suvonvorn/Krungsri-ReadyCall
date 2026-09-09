@@ -65,7 +65,7 @@ the disclosure gate moves when the agent attests. **What they said while waiting
 screen** (`D106`), and if they consented, **their audio is in object storage encrypted**
 (`D110`) with a key ref and a retention date. If they declined, it is nowhere.
 
-Verified on 2026-09-09: **921 tests** — 909 pass + 12 skipped with Postgres and MinIO both
+Verified on 2026-09-09: **927 tests** — 915 pass + 12 skipped with Postgres and MinIO both
 up (the 12 are foreign-key cases the in-memory backend cannot have, and the `ml`-extra ones).
 Without those containers the count of skips rises and nothing fails.
 `ruff check` and `ruff format --check` clean over **225** files, `mypy --strict`
@@ -432,6 +432,12 @@ carriers (`D125`) · ☑ **compare & best-fit ranked on arithmetic** over weight
 ☑ **the plan information panel** — rail preview, dialog, line selector, ranking, catalogue
 plan by plan, push one plan (`D127`) · ☑ **a message the broker types themselves**, labelled
 as human-written on the customer's screen (`D128`) · ☑ one-of-many as pills (`D129`) ·
+☑ **what the bank already knew, on the broker's screen** (`D134`) — holdings, life
+events and the conversation history were assembled on every call and dropped at the DTO
+boundary; the panel shows them with sources, marks inferences as inferences, and carries a
+model-written summary that is refused if it states a figure or recommends a product ·
+☑ **a configurable test call** (`D132`) · ☑ **a typed intake** (`D133`) — the whole AI
+story with no audio at all ·
 ☑ **the AI summary is on the offer card BEFORE Accept** (`D131`) — a fast preview during
 the offer window, the careful pass over the whole transcript after · ☑ **`scripts/compare_llm.py`**,
 the P4 comparison table, with both cost tables corrected against live pricing (`D130`) ·

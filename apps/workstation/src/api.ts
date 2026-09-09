@@ -176,6 +176,30 @@ export type CallOptions = {
   };
 };
 
+/** *"What else do we know about this person"* (`D134`).
+ *
+ *  Named rather than inlined on `Brief` because `Brief` is itself nullable, so
+ *  `Brief["context"]` cannot be indexed — and because the panel that renders it wants to
+ *  name its own prop type. */
+export type BriefContext = {
+  facts: {
+    kind: string;
+    label_th: string;
+    detail_th: string | null;
+    at_th: string | null;
+    source: string;
+    /** Present only for INFERRED facts (life-event signals). A record has none, and the
+     *  difference is what stops a broker stating a guess as a fact. */
+    confidence: number | null;
+  }[];
+  /** Two or three Thai sentences the model wrote over `facts`, or null — which is the
+   *  ordinary case and every caller must be correct for it (`D12`). */
+  summary_th: string | null;
+  /** True when the sentence is absent because no model is configured, so the screen can
+   *  say "raw facts only" rather than looking like it failed. */
+  summary_unavailable: boolean;
+};
+
 /** Mirrors `BriefOut`. Deliberately not `Record<string, unknown>`: the point of the DTO
  *  is that a policy number cannot be in the payload below L2, and a loose type here would
  *  let a component reach for one anyway and quietly render `undefined`. */
@@ -206,6 +230,9 @@ export type Brief = {
   other_policy_count: number;
   recent_claim_count: number;
   last_contact_th: string | null;
+  /** Everything else the bank already holds about this person (`D134`). Null at L0,
+   *  where there is nobody to render. */
+  context: BriefContext | null;
   disclosure_locked: boolean;
   /** This call ends with the insurer, not with us (`D117`). */
   handoff_to_insurer: boolean;

@@ -15,6 +15,7 @@
 import { useEffect, useRef, useState } from "react";
 import type {
   Brief,
+  BriefContext,
   Capture,
   Challenge,
   Handoff,
@@ -715,6 +716,89 @@ export function CapturePanel({
 
 // --- the brief ------------------------------------------------------------
 
+/** *"What else do we know about this person"* (`D134`).
+ *
+ * Everything here was already assembled on every call and thrown away: `ContextAssembler`
+ * reads holdings, life events and the conversation history into the frozen snapshot, and
+ * the brief exposed two counts and one sentence. This is the brief's own promise arriving
+ * — the broker does not have to ask for what the bank already holds.
+ *
+ * ⚠️ It SHOWS and it does not RECOMMEND (`D116`). Consent is required before personalised
+ * recommendation; displaying a record an affiliate lawfully shared is internal processing
+ * (`D74`). Nothing in this panel says what to sell, and the server refuses a summary that
+ * does.
+ */
+function KnownAboutPanel({ context }: { context: BriefContext }) {
+  const [open, setOpen] = useState(false);
+  const groups: [string, string][] = [
+    ["life_event", "สัญญาณจากชีวิตลูกค้า"],
+    ["holding", "ผลิตภัณฑ์ที่ถืออยู่กับธนาคาร"],
+    ["interaction", "ติดต่อล่าสุด"],
+  ];
+  return (
+    <div className="known-about">
+      <div className="faint" style={{ marginTop: 12 }}>
+        ข้อมูลอื่นๆ ที่มีเกี่ยวกับลูกค้า · {context.facts.length} รายการ
+      </div>
+
+      {context.summary_th && <div className="known-summary">{context.summary_th}</div>}
+      {context.summary_unavailable && (
+        <div className="faint" style={{ marginTop: 4 }}>
+          ยังไม่ได้ตั้งค่าโมเดล — แสดงเฉพาะข้อมูลดิบด้านล่าง
+        </div>
+      )}
+
+      {/* The raw half, folded away. `D18`: a broker who cannot say WHERE a fact came from
+          cannot use it in a conversation — so every row carries its source, and the
+          summary above is checkable against the rows rather than taken on trust. */}
+      <button
+        className="ghost"
+        style={{ marginTop: 8 }}
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+      >
+        {open ? "▾ ซ่อนข้อมูลดิบ" : "▸ ดูข้อมูลดิบทั้งหมด"}
+      </button>
+
+      {open && (
+        <div className="known-raw">
+          {groups.map(([kind, label]) => {
+            const rows = context.facts.filter((f) => f.kind === kind);
+            if (!rows.length) return null;
+            return (
+              <div key={kind} style={{ marginTop: 8 }}>
+                <div className="faint">{label}</div>
+                {rows.map((f, i) => (
+                  <div className="known-row" key={`${kind}-${i}`}>
+                    <div>
+                      <strong>{f.label_th}</strong>
+                      {f.detail_th && <span className="faint"> · {f.detail_th}</span>}
+                      {/* ⚠️ An INFERRED fact is labelled as one. `income_pattern` at 0.6
+                          is a guess and `loan_origination` at 0.95 is nearly a record,
+                          and a broker who cannot tell them apart will say the wrong one
+                          out loud. */}
+                      {f.confidence != null && (
+                        <span className="badge" style={{ marginLeft: 6 }}>
+                          {f.confidence >= 0.8 ? "ค่อนข้างแน่ใจ" : "เป็นการอนุมาน"}{" "}
+                          {Math.round(f.confidence * 100)}%
+                        </span>
+                      )}
+                    </div>
+                    <div className="faint">
+                      {f.at_th ? `${f.at_th} · ` : ""}
+                      {f.source}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function BriefPanel({ brief }: { brief: Brief }) {
   if (!brief) {
     return (
@@ -838,6 +922,10 @@ export function BriefPanel({ brief }: { brief: Brief }) {
           <span className="k">ติดต่อล่าสุด</span>
           <span>{brief.last_contact_th}</span>
         </div>
+      )}
+
+      {brief.context && brief.context.facts.length > 0 && (
+        <KnownAboutPanel context={brief.context} />
       )}
 
       {brief.actions_th.length > 0 && (

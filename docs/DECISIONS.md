@@ -5604,3 +5604,98 @@ from their own side happened to clear it; being hung up on did not. There is a
 **← กลับไปหน้าแผนของฉัน** button now, shown only once the call has ended, because offering
 it mid-call would be an app inviting somebody to walk away from a conversation they are
 having.
+
+## D134. "ข้อมูลอื่นๆ ที่มีเกี่ยวกับลูกค้า" — the panel for what the bank already knew
+_Taken 2026-09-09 from the user's own idea, and it is the single biggest thing in this
+project that was **already built and thrown away**. ⚠️ **Committed with the verification
+half-finished — read "what is NOT verified" at the bottom before trusting any of it.**_
+
+- **Problem, and it is a measurement rather than an opinion.** `ContextAssembler` fetches
+  and freezes, on **every call**: `holdings` (deposits, loans, cards, funds), `life_events`
+  (mortgage / new_child / job_change / relocation, each with a confidence and a source),
+  full `recent_claims` and full `recent_interactions`.
+
+  `BriefOut` exposed **`other_policy_count`**, **`recent_claim_count`** and one
+  **`last_contact_th`** string. `holdings` and `life_events` reached **no screen anywhere
+  in the system** — assembled every call, frozen into the snapshot, dropped at the DTO
+  boundary. Verified by grep before building anything.
+
+  That is the brief's own promise unkept. The briefing's journey step 2 leak is
+  *"re-collects data we already hold"*, and the in-scope bullet is
+  *"สรุปลูกค้าให้ broker ก่อนคุย"*.
+
+- **Decision.** `BriefOut.context` carries the rest of it: every fact, worded on the
+  server, each naming its source, with a model-written summary over the top and the raw
+  rows folded away underneath.
+
+### Why this is the strongest answer to "where is the AI"
+
+The challenge statement is **right coverage · right customer · right time · right
+channel**. Before this the system answered *right coverage* (the comparison) and half of
+*right channel*. It said nothing about **right customer** or **right time** — and those
+two are exactly what a life-event signal is.
+
+The fixtures already held the story `MARKET_FACTS` §7 calls *"the cleanest concrete example
+of right customer × right time in the whole deck"*: **C000002 has a mortgage** (2022,
+confidence 0.95, source `loan_origination`) **and a new child** (2024, 0.70), a 1m–5m loan,
+and an SME consult at a branch. Mortgage-linked life is growing at **+9.91%**. None of it
+had ever reached a broker.
+
+### It SHOWS and it does not RECOMMEND, and that line is the compliance story
+
+`D116` moved the consent gate from **holding** data to **recommending** from it. So:
+
+- describing a record an affiliate lawfully shared is internal processing (`D74`);
+- *"they took a home loan in 2022"* is a fact, *"so offer them mortgage protection"* is a
+  recommendation and belongs on the far side of a consent check this panel does not make.
+
+The prompt forbids it **and `_RECOMMENDS` refuses the output if it appears anyway** — the
+same belt-and-braces `_FIGURE` gets for `D16`, on the same reasoning: the guard assumes the
+prompt will one day fail.
+
+### Three rules the facts obey
+
+1. **Every fact names its source** (`D18`). A broker who cannot say where something came
+   from cannot use it in a conversation.
+2. **An inference is labelled as one.** A life-event signal carries its confidence;
+   a stored row carries `None`. `income_pattern` at 0.6 is a guess and `loan_origination`
+   at 0.95 is nearly a record, and a broker who cannot tell them apart will say the wrong
+   one out loud. Inventing `1.0` for a record would have destroyed exactly that distinction.
+3. **No number is invented and none is computed.** A balance band renders as the band the
+   upstream gave; nothing adds, converts or estimates (`D16`).
+
+**Order is a product decision**: life events first, because they are the only thing here
+that answers *"why now"* and the only class the broker could not have guessed from the
+policy list they are already looking at. Claims are deliberately **not** repeated —
+`recent_claim_count` and the policy panel already carry them, and two renderings of one
+fact is how two halves of a screen come to disagree.
+
+### ⚠️ Two faults found while verifying, both by looking at the output
+
+**1. `summarise_context` was called by nothing.** The patch meant to add it to
+`DispatchService`'s `on_offer` hook silently did not apply — the method was written,
+correct and typechecked, and the panel rendered its facts with no sentence, which reads
+exactly like a model that declined. This project's most repeated fault, caught only
+because the *output* was read rather than the code. There is now a test that drives **the
+hook**, not the method (`test_the_context_summary_is_started_by_the_offer_hook`).
+
+**2. A Buddhist year is not a coverage figure.** `_FIGURE` refuses any run of four or more
+digits, which is right for an intake summary and wrong here: this project renders dates in
+the Buddhist era, so a correct sentence about a loan taken `30/08/2565` was thrown away by
+our own guard. Measured — `gpt-5.4-mini` produced a faithful summary and it was refused.
+`_DATE_LIKE` strips dates **before** the money check; the money check itself is unchanged
+and a test asserts `3,500,000 บาท` is still refused.
+
+### Verified, and NOT verified
+
+**Verified on a running server** (`A003`, renewal desk, caller `+66898887777` = C000002 at
+`l1_probable`): the panel rendered **6 facts** in the right order — new child (0.70),
+mortgage (0.95), loan `1m-5m`, deposit `500k-1m`, then two interactions — every one
+carrying a `core:` source and a Buddhist date, confidence present on the two life events
+and absent on everything else.
+
+⚠️ **NOT verified: the model-written sentence, end to end, after the date fix.** The run
+that produced the facts above is the run where the summary was refused by `_FIGURE`. The
+fix has unit tests (16 pass in `test_preview_summary.py`) and has **not** been seen
+working against a live model. **That is the first thing to do next** — the commands are in
+`NEXT_SESSION.md` under "continue here".

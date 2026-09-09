@@ -28,7 +28,7 @@ from readycall.api.app import create_app, pump_once
 from readycall.clock import ManualClock
 from readycall.config import Settings
 from readycall.ports.llm import LlmResult, LlmUsage, PromptRef
-from readycall.services.analysis import IntakeSummariser
+from readycall.services.analysis import ContextSummariser, IntakeSummariser
 from tests.conftest import REPO_ROOT
 
 
@@ -58,7 +58,9 @@ class _CountingLlm:
         *,
         timeout_s: float,
     ) -> LlmResult[Any]:
-        self.transcripts.append(str(variables["transcript"]))
+        # Whichever input this prompt takes: `summarize_intake` passes a transcript,
+        # `summarize_context` passes a fact list (`D134`).
+        self.transcripts.append(str(variables.get("transcript") or variables.get("facts", "")))
         if self._delay_s:
             await asyncio.sleep(self._delay_s)
         return LlmResult(
@@ -154,7 +156,7 @@ def feed(client: Any, call_id: str, *lines: str) -> None:
     delivery._turns[call_id] = held
 
 
-def place(client: Any, **kw: Any) -> dict[str, Any]:
+def place(client: Any, **kw: Any) -> Any:
     body = {
         "intent_code": "motor.service.policy",
         "caller_number": "0812345678",
@@ -164,7 +166,7 @@ def place(client: Any, **kw: Any) -> dict[str, Any]:
     }
     response = client.post("/v1/demo/calls", json=body)
     assert response.status_code == 200, response.text
-    return response.json()  # type: ignore[no-any-return]
+    return response.json()
 
 
 async def drain(client: Any, tries: int = 30) -> None:
@@ -429,3 +431,151 @@ async def test_the_refresh_leaves_an_accepted_call_alone(client: Any) -> None:
     await container(client).refresh_previews()
 
     assert len(preview.transcripts) == before, "an accepted call must not be re-previewed"
+
+
+# --- what else we know about this person (`D134`) ----------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_the_context_summary_is_started_by_the_offer_hook(client: Any) -> None:
+    """⚠️ **The test that would have caught what I nearly shipped.**
+
+    `summarise_context` was written, correct, typechecked — and called by nothing, because
+    the patch that was supposed to add it to the `on_offer` hook silently did not apply.
+    The panel rendered its facts and simply never had a sentence, which looks like a model
+    that declined rather than a wire that was never connected.
+
+    So this asserts the **hook**, not the method: `B24`'s rule, and the reason every other
+    driver in this system has a test that drives the driver.
+    """
+    context = _CountingLlm("ลูกค้าเพิ่งมีสินเชื่อบ้านและเพิ่งมีบุตร")
+    box = container(client)
+    box.context_summariser = ContextSummariser(llm=context, timeout_s=4.0)
+    install(client, _CountingLlm("สรุประหว่างรอ"), _CountingLlm("สรุปฉบับเต็ม"))
+    sign_in(client, "A003")  # the renewal desk; `general.renewal` needs `renewal.retention`
+
+    # C000002 holds the mortgage + new-child signals, so there are facts to summarise.
+    call_id = place(client, caller_number="+66898887777", intent_code="general.renewal")[
+        "call_session_id"
+    ]
+    go_ready(client)
+    await container(client).dispatch.tick()
+    await drain(client)
+
+    assert context.transcripts, (
+        "nothing asked the model about what we already know - `summarise_context` is not "
+        "wired to the `on_offer` hook (`D134`)"
+    )
+    rendered = await box.render_brief(call_id)
+    assert rendered["context"]["summary_th"] == "ลูกค้าเพิ่งมีสินเชื่อบ้านและเพิ่งมีบุตร"
+
+
+@pytest.mark.asyncio
+async def test_the_panel_carries_its_sources_and_marks_inferences(client: Any) -> None:
+    """`D18`: a broker who cannot say where a fact came from cannot use it in a
+    conversation. And a life-event signal is an INFERENCE — `income_pattern` at 0.6 is a
+    guess — so it carries a confidence where a stored record carries none."""
+    sign_in(client, "A003")
+    call_id = place(client, caller_number="+66898887777", intent_code="general.renewal")[
+        "call_session_id"
+    ]
+    go_ready(client)
+    await container(client).dispatch.tick()
+
+    facts = (await container(client).render_brief(call_id))["context"]["facts"]
+    assert facts, "C000002 has life events, holdings and interactions in the fixtures"
+    assert all(f["source"] for f in facts), "every fact must name where it came from"
+
+    inferred = [f for f in facts if f["kind"] == "life_event"]
+    records = [f for f in facts if f["kind"] == "holding"]
+    assert inferred and all(f["confidence"] is not None for f in inferred)
+    assert records and all(f["confidence"] is None for f in records), (
+        "a stored row has no confidence, and inventing 1.0 for one would make an "
+        "inference and a record indistinguishable"
+    )
+    # Life events first: they are the only thing here that answers "why now".
+    assert facts[0]["kind"] == "life_event"
+
+
+@pytest.mark.asyncio
+async def test_a_summary_that_recommends_a_product_is_refused(client: Any) -> None:
+    """`D116` moves the consent gate from HOLDING data to RECOMMENDING from it.
+
+    The prompt forbids it and this guard assumes the prompt will one day fail — the same
+    belt-and-braces `_FIGURE` gets for `D16`.
+    """
+    box = container(client)
+    pushy = _CountingLlm("ลูกค้าเพิ่งมีสินเชื่อบ้าน ควรซื้อประกันคุ้มครองสินเชื่อ")
+    box.context_summariser = ContextSummariser(llm=pushy, timeout_s=4.0)
+    sign_in(client, "A003")
+    call_id = place(client, caller_number="+66898887777", intent_code="general.renewal")[
+        "call_session_id"
+    ]
+    go_ready(client)
+    await container(client).dispatch.tick()
+    await drain(client)
+
+    assert pushy.transcripts, "the model was asked"
+    assert box.context_summaries.get(call_id) is None, (
+        "a summary that told the broker what to sell reached the screen (`D116`)"
+    )
+    assert box.context_summariser.refused == 1
+
+
+@pytest.mark.asyncio
+async def test_there_is_no_panel_at_all_for_an_unidentified_caller(client: Any) -> None:
+    """L0 renders nothing, because at L0 there is nobody to render (`D74`)."""
+    sign_in(client, "A003")
+    call_id = place(client, caller_number="0899999999", intent_code="general.renewal")[
+        "call_session_id"
+    ]
+    go_ready(client)
+    await container(client).dispatch.tick()
+
+    rendered = await container(client).render_brief(call_id)
+    assert rendered is None or rendered.get("context") is None
+
+
+@pytest.mark.asyncio
+async def test_a_buddhist_year_is_not_mistaken_for_a_coverage_figure(client: Any) -> None:
+    """⚠️ Found on the first live run, and it threw away a correct summary.
+
+    `_FIGURE` refuses any run of four or more digits, which is right for an intake summary
+    and wrong for a context one: this project renders dates in the **Buddhist era**, so an
+    ordinary sentence about a loan taken in 30/08/2565 tripped it. Dates come out before
+    the money check now — and the money check still has to fire.
+    """
+    box = container(client)
+    dated = _CountingLlm("ลูกค้าเพิ่งมีสินเชื่อบ้านเมื่อ 30/08/2565 และเพิ่งมีบุตรเมื่อปี 2567")
+    box.context_summariser = ContextSummariser(llm=dated, timeout_s=4.0)
+    sign_in(client, "A003")
+    call_id = place(client, caller_number="+66898887777", intent_code="general.renewal")[
+        "call_session_id"
+    ]
+    go_ready(client)
+    await container(client).dispatch.tick()
+    await drain(client)
+
+    assert box.context_summaries.get(call_id) is not None, (
+        "a summary quoting a Buddhist-era date was refused as though it stated money"
+    )
+    assert box.context_summariser.refused == 0
+
+
+@pytest.mark.asyncio
+async def test_a_real_money_figure_is_still_refused(client: Any) -> None:
+    """The other half of the same guard. Loosening it for dates must not open it for
+    amounts — a coverage figure is read from a record, never written by a model (`D16`)."""
+    box = container(client)
+    money = _CountingLlm("ลูกค้ามีสินเชื่อบ้านวงเงิน 3,500,000 บาท")
+    box.context_summariser = ContextSummariser(llm=money, timeout_s=4.0)
+    sign_in(client, "A003")
+    call_id = place(client, caller_number="+66898887777", intent_code="general.renewal")[
+        "call_session_id"
+    ]
+    go_ready(client)
+    await container(client).dispatch.tick()
+    await drain(client)
+
+    assert box.context_summaries.get(call_id) is None, "a stated amount reached the screen"
+    assert box.context_summariser.refused == 1

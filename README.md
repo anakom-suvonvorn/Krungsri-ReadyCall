@@ -522,6 +522,59 @@ the latency and cost columns cannot see quality, and on the run that produced `D
 the cheapest model scored a clean sheet while writing *"crashed last night"* about a caller
 who said *this morning*.
 
+### See what the bank already knew about this customer
+
+`ContextAssembler` has always fetched holdings, life events, claims and the conversation
+history into the frozen snapshot — and the brief exposed two counts. Since `D134` the rest
+of it is on the broker's screen, under **ข้อมูลอื่นๆ ที่มีเกี่ยวกับลูกค้า** in the brief panel.
+
+⚠️ It **shows** and it does not **recommend** (`D116`). Every row names its source, an
+inferred life-event signal carries its confidence and a stored record carries none, and a
+model-written summary is refused outright if it states a figure or tells the broker what to
+sell.
+
+- **Needs set up:** §1 and §2. The facts need no key at all; only the summary sentence does.
+- **Needs running:** the API server.
+
+The persona to use is **C000002**, who holds the story the orientation deck describes — a
+mortgage (2022, confidence 0.95, from `loan_origination`) and a new child (2024, 0.70):
+
+```bash
+uv run python -m readycall.entrypoints.api
+```
+
+Sign in at `/workstation` as **A003** — the renewal desk. ⚠️ `general.renewal` needs the
+`renewal.retention` skill, and since `D117` a motor advisor is simply never offered it
+(`D132`'s dialog marks intents you cannot receive, for exactly this reason). Press
+**พร้อมรับสาย**, then:
+
+```bash
+curl -X POST http://127.0.0.1:8000/v1/demo/calls -H "Content-Type: application/json" \
+  -d '{"intent_code":"general.renewal","caller_number":"+66898887777","intake_keys":["2"],"ignore_hours":true}'
+```
+
+Accept, and read the panel under the brief. **Press ดูข้อมูลดิบทั้งหมด** — the folded half is
+the point: the summary above it is only trustworthy because every row underneath says where
+it came from (`D18`).
+
+### Let the customer type instead of speaking
+
+`D133`. The pre-call intake needs a microphone, a media path from the browser and an ASR
+engine — and **typing needs none of them**, because the intake seam takes turns rather than
+frames (`D88`). So the whole AI story runs on a laptop with nothing plugged in.
+
+- **Needs set up:** §1. A key only if you want the AI summary rather than the rule-based one.
+- **Needs running:** the API server.
+
+At `/sim`: sign in, tap a plan, **Contact us about this plan**, pick a reason — and the new
+third sheet asks *"ก่อนต่อสาย — อยากเล่าเรื่องไว้ก่อนไหม?"*. Choose **พิมพ์เล่าให้ฟัง**, and a text box
+appears on the call screen while you wait. Type a sentence, press send, repeat.
+
+⚠️ **The question is asked before dialling, not during the wait**, and that is forced as
+well as better: `INTAKE_ACTIVE` is reachable only from `QUEUED`, and a call becomes
+`MATCHED` the instant the offer resolves — so there is no legal window mid-wait to open an
+intake in (`Q39`). The voice option is a **labelled stub**; the typed one is real.
+
 ### Hand a claim to the insurer, which is what a broker actually does
 
 A broker does not adjudicate claims — the insurer does (`D117`, from Krungsri's own duty
