@@ -1058,6 +1058,7 @@ the same reason.
 
 | File | Contains |
 |---|---|
+| [**`docs/FOR_THE_TEAM.md`**](docs/FOR_THE_TEAM.md) | **Start here if you are new.** Git and GitHub from zero, and how to change how the screens look without breaking how they work |
 | [`docs/NEXT_SESSION.md`](docs/NEXT_SESSION.md) | Live state, next steps, open questions, landmines |
 | [`docs/PLAN.md`](docs/PLAN.md) | Build phases P0–P8, exit criteria, risks, team tracks |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Components, call lifecycle, data flows, latency budget, degradation |
