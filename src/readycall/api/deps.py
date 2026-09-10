@@ -431,6 +431,10 @@ class Container:
             store=self.storage.assignments,
         )
         weights = MatchingWeights.load(settings.config_dir / "matching_weights.yaml")
+        #: Kept on the container as well as inside the engine, so a read-only caller can
+        #: run the SAME `hard_filter` and `score_fit` the matcher runs without reaching
+        #: into its privates (`D141`). Two copies of the weights would be two answers.
+        self.matching_weights = weights
         self.matching = MatchingEngine(
             directory=self.agents,
             weights=weights,
@@ -736,6 +740,20 @@ class Container:
         """
         if session.state not in {CallState.QUEUED, CallState.MATCHED, CallState.OFFERED}:
             return None
+        return self.call_view(session)
+
+    def call_view(self, session: CallSession) -> WaitingCall | None:
+        """The matcher's view of a call, **whatever state it is in** (`D141`).
+
+        Split out of `_waiting_call_for` rather than copied, because two constructions of
+        this object would eventually disagree about what skill a call needs — and the copy
+        is always the one that is wrong (`D78`'s argument for deriving the pool at all).
+
+        The **state guard stays on the pool projection**, where it belongs: a call that has
+        been answered is genuinely not waiting, and the matcher must never be handed one.
+        This is for read-only questions asked *about* a live call — "who else could take
+        this?" — which is `D141`'s internal-transfer roster.
+        """
         if session.queue_id is None:
             return None
         spec = self.pack.queues.get(session.queue_id)

@@ -52,7 +52,13 @@ from readycall.api.schemas import (
 )
 from readycall.api.security import AgentPrincipal, AuthenticationRequired
 from readycall.domain import events as ev
-from readycall.domain.enums import AgentIntent, CallState, OfferOutcome, ProductLine
+from readycall.domain.enums import (
+    AgentIntent,
+    AgentSystemState,
+    CallState,
+    OfferOutcome,
+    ProductLine,
+)
 from readycall.domain.models import Assignment, CallWrapup
 from readycall.errors import PermanentError
 from readycall.logging import get_logger
@@ -60,6 +66,7 @@ from readycall.services.agents.dispatch import sole_candidate
 from readycall.services.capture.keypad import Capture
 from readycall.services.comparison import to_push_payload
 from readycall.services.identity.attestation import AttestationOutcome
+from readycall.services.matching.scoring import hard_filter, score_fit
 
 log = get_logger(__name__)
 
@@ -141,6 +148,38 @@ async def logout(request: Request, response: Response, container: ContainerDep) 
 
 
 # --- presence -----------------------------------------------------------------------------
+
+
+@router.post("/resume", response_model=WorkstationSnapshot)
+async def resume(who: AgentDep, container: ContainerDep) -> WorkstationSnapshot:
+    """Come back after the platform dropped this desk for not heartbeating (`D139`, `B42`).
+
+    ⚠️ **The session and the presence are two different things, and only one of them
+    expired.** `presence.sweep` moves a silent desk to `OFFLINE` and clears its
+    `session_id`, but the agent's **cookie is still valid** — so `/me` keeps answering
+    `200` with an offline presence, a reload fetches the same dead state, and the only way
+    back was to sign out and in again. That is the "weird state" `B42` describes.
+
+    This is the missing transition: re-open the workstation for an agent who is already
+    authenticated. It is deliberately **not** a new session — `demo-login` issues one of
+    those, and re-issuing here would rotate the cookie and reset the push sequence (`B27`)
+    for somebody who never left.
+
+    `sign_in` is the right call rather than a bare state write, because it already carries
+    `D78`'s rule about which standing intents survive a reconnection: *lunch* rides along,
+    `READY` and `LAST_CALL` do not, because those two invite a call and the platform has no
+    idea whether the person is back at the desk. They press **พร้อมรับสาย** themselves,
+    which is `D51`.
+    """
+    presence = container.presence.get(who.agent_id)
+    if presence is not None and presence.system_state is not AgentSystemState.OFFLINE:
+        # Already live. Not an error: two tabs, or a click after the socket already
+        # recovered. Returning the snapshot is the honest answer to "put me back".
+        return await _snapshot(container, who.agent_id)
+
+    await container.presence.sign_in(who.agent_id, session_id="resumed")
+    log.info("agent resumed after being dropped", agent_id=who.agent_id)
+    return await _snapshot(container, who.agent_id)
 
 
 @router.get("/me", response_model=WorkstationSnapshot)
@@ -563,6 +602,101 @@ async def _policy_insurer_for(container: Any, call_session_id: str) -> str | Non
         return None
     policy = snapshot.payload.relevant_policy
     return policy.insurer if policy is not None else None
+
+
+@router.get("/calls/{call_session_id}/transfer/internal/options")
+async def internal_transfer_options(
+    call_session_id: str, who: AgentDep, container: ContainerDep
+) -> dict[str, Any]:
+    """Who on this floor could take this call, and why (`D141`, `D63`).
+
+    ⚠️ **This endpoint is READ-ONLY, and that is the whole reason it exists three days
+    before the pitch.** `D63`'s consulted transfer is a genuinely hard piece of work — it
+    needs a transfer offer distinct from a queue offer, and a rework of *"which call is
+    mine"* inside `services/agents/`, which is where `B7`, `B25` and `B28` all lived. What
+    is *not* hard is answering **"who could take this, and who would the system pick"**,
+    because the matcher already answers exactly that on every tick.
+
+    So this reuses the real thing rather than mocking it: the same `hard_filter` the
+    matcher runs, and the same `score_fit`. The list a broker sees here is the list the
+    system would actually choose from, with the real reason beside every name that is
+    ruled out. The one thing missing is the button that changes state, and it says so.
+
+    Nothing here mutates anything. It cannot leave a call in a half-transferred state
+    because it never touches one.
+    """
+    await _require_active_call(container, call_session_id, who)
+    session = await container.calls.get(call_session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="unknown call")
+
+    # ⚠️ `call_view`, not `_waiting_call_for`: this call has been ANSWERED, so it is not
+    # in the waiting pool and that helper correctly returns `None` for it. Building the
+    # roster from a `None` produced an endpoint that returned 200, an empty list and
+    # `required_skill: null` — a screen that looked like 'nobody can take this call'
+    # rather than like a bug. Found by opening the tab, not by a test.
+    waiting = container.call_view(session)
+    weights = container.matching_weights
+    now = container.clock.now()
+
+    rows: list[dict[str, Any]] = []
+    for agent in await container.agents.list_agents():
+        if agent.agent_id == who.agent_id:
+            # You cannot transfer a call to yourself, and offering it reads as a bug.
+            continue
+        presence = container.presence.get(agent.agent_id)
+        view = container.presence.view(agent.agent_id) if presence is not None else None
+        blocked: str | None = "offline" if presence is None else None
+        fit: float | None = None
+        if presence is not None and waiting is not None:
+            blocked = hard_filter(waiting, agent, presence, weights)
+            if blocked is None:
+                fit = round(score_fit(waiting, agent, presence, weights, now=now).total, 3)
+        rows.append(
+            {
+                "agent_id": agent.agent_id,
+                "display_name": agent.display_name,
+                "skills": [
+                    {"skill_code": s.skill_code, "proficiency": s.proficiency} for s in agent.skills
+                ],
+                "languages": [
+                    {"code": str(lang.language), "level": str(lang.level)}
+                    for lang in agent.languages
+                ],
+                "system_state": str(presence.system_state) if presence is not None else "offline",
+                "agent_intent": str(presence.agent_intent) if presence is not None else "",
+                "current_load": presence.current_load if presence is not None else 0,
+                "max_concurrent": agent.max_concurrent,
+                # `D50`'s discipline: say WHICH filter failed, never a bare false. A
+                # supervisor asks "why can't they take it", and "skill" and "busy" are
+                # different conversations.
+                "blocked_by": blocked,
+                "eligible": blocked is None,
+                "fit": fit,
+                "offerable": bool(view.offerable) if view is not None else False,
+            }
+        )
+
+    # Same ordering the solver would use for this one call: best fit first, then everyone
+    # who cannot take it, so the reasons stay visible rather than being filtered away.
+    rows.sort(key=lambda r: (r["fit"] is None, -(r["fit"] or 0.0), r["agent_id"]))
+    best = next((r["agent_id"] for r in rows if r["eligible"]), None)
+
+    return {
+        "required_skill": waiting.required_skill if waiting is not None else None,
+        "queue_id": session.queue_id,
+        "agents": rows,
+        "eligible_count": sum(1 for r in rows if r["eligible"]),
+        # `D63`'s "let the system choose", answered by the real scorer.
+        "system_choice": best,
+        # ⚠️ The server states the stub, so the client cannot decide to enable a button
+        # whose endpoint does not exist (`D121`, `B5`: the gate is never the client's).
+        "can_execute": False,
+        "not_implemented_th": (
+            "การโอนสายภายในยังไม่เปิดใช้งาน — รายชื่อและการคัดกรองด้านบนเป็นของจริง "
+            "(ใช้ตัวกรองและคะแนนชุดเดียวกับที่ระบบใช้จัดสาย) แต่ปุ่มโอนยังไม่ทำงาน"
+        ),
+    }
 
 
 @router.get("/calls/{call_session_id}/handoff/options")

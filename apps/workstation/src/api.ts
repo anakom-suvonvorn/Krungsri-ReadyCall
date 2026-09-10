@@ -501,11 +501,41 @@ export type LlmSettings = {
   }[];
 };
 
+/** Who could take this call, and why not (`D141`). Read-only: the transfer itself is
+ *  not built, and `can_execute` is the SERVER saying so. */
+export type InternalTransferOptions = {
+  required_skill: string | null;
+  queue_id: string | null;
+  agents: {
+    agent_id: string;
+    display_name: string;
+    skills: { skill_code: string; proficiency: number }[];
+    languages: { code: string; level: string }[];
+    system_state: string;
+    agent_intent: string;
+    current_load: number;
+    max_concurrent: number;
+    /** Which hard filter failed, or null when they qualify. `D50`: never a bare false. */
+    blocked_by: string | null;
+    eligible: boolean;
+    fit: number | null;
+    offerable: boolean;
+  }[];
+  eligible_count: number;
+  /** Who the real scorer would pick - `D63`'s "let the system choose". */
+  system_choice: string | null;
+  can_execute: boolean;
+  not_implemented_th: string;
+};
+
 export const api = {
   signIn: (agentId: string) =>
     call<Presence>("POST", "/v1/agent/demo-login", { agent_id: agentId }),
   signOut: () => call<void>("POST", "/v1/agent/logout"),
   me: () => call<Snapshot>("GET", "/v1/agent/me"),
+  /** Come back after the platform dropped this desk for not heartbeating (`D139`, `B42`).
+   *  NOT a new session - the cookie never expired, only the presence did. */
+  resume: () => call<Snapshot>("POST", "/v1/agent/resume"),
 
   /** `D138`. Demo-only: 404 on an instance with `DEMO_AGENT_LOGIN_ENABLED` off. */
   settings: () => call<{ llm: LlmSettings }>("GET", "/v1/agent/settings"),
@@ -568,6 +598,11 @@ export const api = {
   /** Where the call goes when it is not staying with us (`D124`). The options are SERVED
    *  for `assistTools`' reason, and because two of them — the carrier on this customer's
    *  policy, and whether we hold a policy at all — are facts the client cannot work out. */
+  internalTransferOptions: (callId: string) =>
+    call<InternalTransferOptions>(
+      "GET",
+      `/v1/agent/calls/${callId}/transfer/internal/options`,
+    ),
   handoffOptions: (callId: string) =>
     call<HandoffOptions>("GET", `/v1/agent/calls/${callId}/handoff/options`),
   /** Records the handoff and ends the call, in that order. The client names WHICH insurer

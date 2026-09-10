@@ -287,6 +287,13 @@ export default function App() {
   const latestCapture = openCapture ?? snapshot.captures[snapshot.captures.length - 1] ?? null;
   const onCall = presence.system_state === "on_call";
   const wrapping = presence.system_state === "after_call_work";
+  // ⚠️ `B42`. The session cookie and the PRESENCE expire independently: `presence.sweep`
+  // drops a desk that stopped heartbeating (a hidden tab, a closed laptop, a long pause)
+  // while the cookie stays valid — so `/me` keeps answering 200 with an offline presence
+  // and a reload fetches the same dead state. The 401 path above cannot see this at all.
+  // Say so, and give them the one button that fixes it (`D139`, `B11`'s rule: a state you
+  // cannot act on is not feedback).
+  const droppedByPlatform = presence.system_state === "offline";
 
   // Drawn from server timestamps AND corrected for a browser clock that disagrees.
   // `skew` is measured ONCE per snapshot (see the effect above) and held. Recomputing it
@@ -302,6 +309,34 @@ export default function App() {
 
   return (
     <div className="shell">
+      {droppedByPlatform && (
+        <div className="scrim">
+          <div className="transfer-dialog" style={{ maxWidth: 520 }}>
+            <div className="queue-head">
+              <h2>ระบบพักการเชื่อมต่อของคุณไว้</h2>
+            </div>
+            <div className="rationale" style={{ borderLeftColor: "var(--warn)" }}>
+              หน้าจอนี้เงียบไปนานเกินกำหนด ระบบจึงถอดคุณออกจากคิวชั่วคราว
+              เพื่อไม่ให้สายถูกส่งมาที่เครื่องที่ไม่มีคนอยู่
+              <div className="faint" style={{ marginTop: 6 }}>
+                สายที่กำลังคุยอยู่จะไม่ถูกตัดด้วยเหตุนี้ (`B34`) — และงานสรุปที่ยังไม่ได้บันทึก
+                ยังอยู่ในรายการค้างของคุณ
+              </div>
+            </div>
+            <button
+              className="primary"
+              disabled={busy}
+              onClick={() => void run(() => api.resume()).then((s) => s && setSnapshot(s))}
+            >
+              กลับเข้าใช้งาน
+            </button>
+            <p className="faint" style={{ marginTop: 10 }}>
+              กดแล้วจะกลับมาที่สถานะ <b>ยังไม่รับสาย</b> — ต้องกด “พร้อมรับสาย” เองอีกครั้ง
+              เพราะระบบไม่มีทางรู้ว่าคุณกลับมาที่โต๊ะแล้วหรือยัง (`D51`)
+            </p>
+          </div>
+        </div>
+      )}
       <header className="topbar">
         <div className="brand">
           Krungsri <span>ReadyCall</span>
@@ -605,6 +640,7 @@ export default function App() {
         open={transferOpen && Boolean(callId)}
         options={handoffOptions}
         busy={busy}
+        callId={callId}
         onClose={() => setTransferOpen(false)}
         onHandOff={(body) => {
           if (!callId) return;

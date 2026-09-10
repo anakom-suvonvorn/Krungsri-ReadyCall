@@ -1216,3 +1216,60 @@ button.plan-row.on {
 .known-row:last-child {
   border-bottom: none;
 }
+
+/* --- the internal-transfer roster (`D141`) ------------------------------------------
+   Real data, real filtering, and a final button that does not work and says so. The rows
+   are buttons rather than list items because one of them gets selected. */
+.filter-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin: 10px 0 12px;
+}
+.filter-row input[type="search"] {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--sunk, #1b1e23);
+  color: inherit;
+  font: inherit;
+}
+
+.roster {
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 0;
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.roster li + li { border-top: 1px solid var(--line); }
+
+.roster-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 1.4fr) auto auto auto minmax(0, 1.2fr);
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  padding: 9px 12px;
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.roster-row:hover:not(:disabled) { background: rgba(255, 255, 255, 0.04); }
+.roster-row.on { background: rgba(96, 165, 250, 0.14); }
+/* ⚠️ Ineligible rows stay READABLE. They are the answer to "why can't they take it",
+   which is `D50`'s whole point - fading them out of legibility would delete the reason. */
+.roster-row:disabled { cursor: not-allowed; opacity: 0.72; }
+.roster-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.roster-skills { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+@media (max-width: 720px) {
+  .roster-row { grid-template-columns: 1fr auto; row-gap: 4px; }
+  .roster-skills { grid-column: 1 / -1; }
+}

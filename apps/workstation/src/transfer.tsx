@@ -24,15 +24,22 @@
  *    policy renders disabled with its reason attached, and the server refuses it
  *    independently.
  *
- * ⚠️ The second tab is **not built** and says so. `D63` designed the internal consulted
- * transfer at P2b — one filtered roster, live presence per candidate, the caller moving
- * last on a deliberate press by whoever is talking to them — and it needs a transfer
- * offer distinct from a queue offer, which is where the work is. A labelled stub is the
- * rule for exactly this (`D115`): it shows the design without claiming it runs.
+ * ⚠️ The second tab is **half built, on purpose** (`D141`). Everything up to the button is
+ * real — the roster, the live presence, the filtering, the ranking — because all of that
+ * is a READ, and the matcher already answers it on every tick. What is missing is the one
+ * thing that changes state: `D63`'s consulted transfer needs a transfer offer distinct
+ * from a queue offer plus a rework of "which call is mine" inside `services/agents/`,
+ * which is where `B7`, `B25` and `B28` all lived.
+ *
+ * So the final button is disabled and says why, which is `D115`'s labelled-stub rule
+ * applied to the *action* rather than to the whole feature. The screen shows the design
+ * working on real data; it just cannot commit it.
  */
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
+import { api } from "./api";
+import type { InternalTransferOptions } from "./api";
 import type { HandoffOptions } from "./api";
 
 /**
@@ -91,16 +98,211 @@ export function TransferButton({
   );
 }
 
+/** How a candidate's state reads at a glance. Colour is never the only signal — the word
+ *  is there too, because a dot alone is unreadable to anyone who cannot separate them. */
+const STATE_TH: Record<string, { label: string; cls: string }> = {
+  available: { label: "ว่าง", cls: "ok" },
+  on_call: { label: "กำลังคุยสาย", cls: "warn" },
+  after_call_work: { label: "สรุปงานหลังสาย", cls: "warn" },
+  offering: { label: "กำลังมีสายเรียก", cls: "warn" },
+  offline: { label: "ออฟไลน์", cls: "bad" },
+};
+
+/** Why the matcher ruled somebody out, in the broker's words (`D50`). Never a bare
+ *  "unavailable": "they lack the skill" and "they are on another call" are different
+ *  conversations, and the second one is worth waiting for. */
+const BLOCKED_TH: Record<string, string> = {
+  skill: "ไม่มีทักษะที่สายนี้ต้องการ",
+  language: "ระดับภาษาไม่ถึงเกณฑ์ของสายนี้",
+  offline: "ออฟไลน์",
+  not_ready: "ยังไม่กดพร้อมรับสาย",
+  busy: "ติดสายอื่นอยู่",
+  at_capacity: "รับสายเต็มจำนวนแล้ว",
+  already_offered: "เคยถูกเสนอสายนี้แล้ว",
+};
+
+/**
+ * `D141`. The roster, the filtering and the ranking are REAL — same `hard_filter` and
+ * `score_fit` the matcher runs — and the transfer button is not.
+ */
+function InternalTransferTab({
+  open,
+  callId,
+  busy,
+}: {
+  open: boolean;
+  callId: string | null;
+  busy: boolean;
+}) {
+  const [data, setData] = useState<InternalTransferOptions | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [picked, setPicked] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  /* ⚠️ Defaults to showing EVERYONE, reasons included. The first build defaulted this on
+     and rendered "nobody matches" on a floor where thirteen people were simply not signed
+     in — which is `D50`'s exact complaint: a bare "unavailable" hides the answer to the
+     question the broker is actually asking. Seen by opening the tab. */
+  const [eligibleOnly, setEligibleOnly] = useState(false);
+
+  /* `B32`: keyed to the precondition, not to mount. This tab is inside a dialog that
+     exists before it is shown, and fetching on mount would run before there is a call. */
+  const load = useCallback(async () => {
+    if (!callId) return;
+    try {
+      setData(await api.internalTransferOptions(callId));
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "โหลดรายชื่อไม่สำเร็จ");
+    }
+  }, [callId]);
+
+  useEffect(() => {
+    if (open && callId) void load();
+  }, [open, callId, load]);
+
+  if (!callId) return <div className="faint">ไม่มีสายที่กำลังคุยอยู่</div>;
+  if (error) {
+    return (
+      <div className="rationale" style={{ borderLeftColor: "var(--bad)" }}>
+        {error}
+      </div>
+    );
+  }
+  if (!data) return <div className="faint">กำลังโหลดรายชื่อ…</div>;
+
+  const term = query.trim().toLowerCase();
+  const rows = data.agents.filter((a) => {
+    if (eligibleOnly && !a.eligible) return false;
+    if (!term) return true;
+    return (
+      a.display_name.toLowerCase().includes(term) ||
+      a.agent_id.toLowerCase().includes(term) ||
+      a.skills.some((s) => s.skill_code.toLowerCase().includes(term))
+    );
+  });
+
+  return (
+    <>
+      {/* ⚠️ Said FIRST, before the list. A screen that looks operable and refuses at the
+          end wastes the reader's time; `D71`'s rule is that a control says why before it
+          is pressed, not after. */}
+      <div className="rationale" style={{ borderLeftColor: "var(--warn)" }}>
+        <b>ยังโอนสายจริงไม่ได้</b> — {data.not_implemented_th}
+      </div>
+
+      <h3>
+        เจ้าหน้าที่ที่รับสายนี้ได้
+        <span className="faint">
+          {" "}
+          · ต้องมีทักษะ <code>{data.required_skill ?? "—"}</code> · ผ่านเกณฑ์{" "}
+          {data.eligible_count} คน
+        </span>
+      </h3>
+
+      <div className="filter-row">
+        <input
+          type="search"
+          placeholder="ค้นหาชื่อ รหัส หรือทักษะ"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+        <label className="faint">
+          <input
+            type="checkbox"
+            checked={eligibleOnly}
+            onChange={(e) => setEligibleOnly(e.target.checked)}
+          />{" "}
+          เฉพาะคนที่รับได้
+        </label>
+      </div>
+
+      {/* `D63`'s "let the system choose", answered by the real scorer rather than by a
+          shrug. It is the top of the list because that is what the solver would pick. */}
+      {data.system_choice && (
+        <button
+          type="button"
+          role="radio"
+          aria-checked={picked === data.system_choice}
+          className={`pill-opt wide ${picked === data.system_choice ? "on" : ""}`}
+          onClick={() => setPicked(data.system_choice)}
+        >
+          <b>ให้ระบบเลือกให้</b>
+          <span className="pill-sub">
+            ตอนนี้คือ {data.agents.find((a) => a.agent_id === data.system_choice)?.display_name} —
+            คะแนนความเหมาะสมสูงสุดจากตัวให้คะแนนชุดเดียวกับที่ใช้จัดสาย
+          </span>
+        </button>
+      )}
+
+      <ul className="roster">
+        {rows.map((a) => {
+          const state = STATE_TH[a.system_state] ?? { label: a.system_state, cls: "" };
+          return (
+            <li key={a.agent_id}>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={picked === a.agent_id}
+                /* Greying is the courtesy; the SERVER is the gate (`D121`, `B5`). */
+                disabled={busy || !a.eligible}
+                className={`roster-row ${picked === a.agent_id ? "on" : ""}`}
+                onClick={() => setPicked(a.agent_id)}
+              >
+                <span className="roster-name">
+                  <b>{a.display_name}</b>
+                  <span className="faint mono"> {a.agent_id}</span>
+                </span>
+                <span className={`chip ${state.cls}`}>{state.label}</span>
+                <span className="faint">
+                  {a.current_load}/{a.max_concurrent} สาย
+                </span>
+                {a.eligible ? (
+                  <span className="chip ok">เหมาะสม {a.fit?.toFixed(2)}</span>
+                ) : (
+                  <span className="chip bad">
+                    {BLOCKED_TH[a.blocked_by ?? ""] ?? a.blocked_by}
+                  </span>
+                )}
+                <span className="faint roster-skills">
+                  {a.skills.map((s) => s.skill_code).join(" · ")}
+                </span>
+              </button>
+            </li>
+          );
+        })}
+        {rows.length === 0 && (
+          <li className="faint">ไม่มีใครตรงเงื่อนไข — ลองเอาตัวกรอง “เฉพาะคนที่รับได้” ออก</li>
+        )}
+      </ul>
+
+      {/* ⚠️ `can_execute` comes from the SERVER, so the client cannot decide to enable a
+          button whose endpoint does not exist. When `D63` lands, the server flips it and
+          this button starts working without a second decision being made here. */}
+      <button className="primary" disabled={!data.can_execute || !picked} title={data.not_implemented_th}>
+        โอนสายให้เจ้าหน้าที่คนนี้ {data.can_execute ? "" : "(ยังไม่เปิดใช้งาน)"}
+      </button>
+      <p className="faint" style={{ marginTop: 8 }}>
+        เมื่อเปิดใช้งานแล้ว ลูกค้าจะยัง<b>คุยกับคุณอยู่</b>จนกว่าอีกฝ่ายจะกดรับและคุณกดปล่อยสายเอง
+        ไม่ใช่ตอนที่อีกฝ่ายกดรับ (<code>D63</code>) — เป็นการโอนแบบ “ปรึกษาก่อนโอน”
+        ไม่ใช่โยนสายทิ้งไว้
+      </p>
+    </>
+  );
+}
+
 export function TransferDialog({
   open,
   options,
   busy,
+  callId,
   onClose,
   onHandOff,
 }: {
   open: boolean;
   options: HandoffOptions | null;
   busy: boolean;
+  /** `D141`. The internal tab fetches its own roster, so it needs the call it is about. */
+  callId: string | null;
   onClose: () => void;
   onHandOff: (body: {
     reason_code: string;
@@ -256,20 +458,7 @@ export function TransferDialog({
             </div>
           </>
         ) : (
-          // A labelled stub, which is the rule for anything that looks real and is not
-          // (`D115`). The design is `D63`'s and is written down; what is missing is a
-          // transfer offer distinct from a queue offer, because the caller must keep
-          // talking to the first broker while the second one decides.
-          <div className="stub-panel">
-            <p>
-              <b>ยังไม่เปิดใช้งาน</b> — โอนสายให้เจ้าหน้าที่คนอื่นในทีม
-            </p>
-            <p className="faint">
-              ออกแบบไว้แล้ว (<code>D63</code>): เลือกจากรายชื่อที่กรองด้วยทักษะและภาษา
-              พร้อมสถานะจริงของแต่ละคน หรือให้ระบบเลือกให้ตามความเหมาะสม —
-              ลูกค้าจะยังคุยกับคุณอยู่จนกว่าคุณจะกดโอนเอง ไม่ใช่ตอนที่อีกฝ่ายกดรับ
-            </p>
-          </div>
+          <InternalTransferTab open={open} callId={callId} busy={busy} />
         )}
       </div>
     </div>
