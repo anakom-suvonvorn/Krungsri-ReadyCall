@@ -179,7 +179,7 @@ def test_the_last_call_spends_the_instruction_when_it_ends(client: TestClient) -
 
 
 def test_a_desk_on_last_call_is_not_handed_a_SECOND_caller(client: TestClient) -> None:
-    """"Last" has to mean last. Once the call is in flight the desk is no longer
+    """ "Last" has to mean last. Once the call is in flight the desk is no longer
     `AVAILABLE`, which is where that half of the old rule actually lives."""
     client.post("/v1/agent/state", json={"agent_intent": "last_call"})
     _place(client)

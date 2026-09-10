@@ -262,8 +262,8 @@ byte-identical files.
 
 ### 5b. The whole thing in one container — *optional, and it needs nothing else installed*
 
-If you do not want to install anything — no `uv`, no Node, no Python — this is the one command
-that gets you a running ReadyCall:
+If you do not want to install anything — no `uv`, no Node, no Python — this is the one
+command that gets you a running ReadyCall:
 
 ```bash
 docker build -t readycall .
@@ -273,27 +273,89 @@ docker build -t readycall .
 docker run --rm -p 8000:8000 readycall
 ```
 
-Then <http://127.0.0.1:8000/sim> and <http://127.0.0.1:8000/workstation>, exactly as above. The
-image builds the React workstation itself, so `/workstation` works with no `npm` step and no
-internet at run time.
+Then <http://127.0.0.1:8000/sim> and <http://127.0.0.1:8000/workstation>.
 
-Or through compose, which is behind a **profile** so it does not disturb the Postgres/MinIO
-commands in §3 and §4:
+**The only thing the host needs is Docker.** `docker build` runs `npm ci && npm run build`
+*inside* the image, in a throwaway Node stage — so the React workstation is baked in and
+the machine you run this on never sees npm, Node or a `node_modules`. That is also why
+committing `apps/workstation/dist/` is not needed for the Docker path (`Q17`).
+
+Or through compose, behind a **profile** so it does not disturb the Postgres/MinIO commands
+in §3 and §4:
 
 ```bash
 docker compose -f infra/docker-compose.yml --profile demo up --build
 ```
 
-**What is real in the container and what is not.** Everything except the speech engine: the IVR,
-the identity ladder, the matcher, the brief, the workstation, the paired customer screen, the plan
-comparison, the handoff — all real, on fixture data, with no services and no keys.
+---
 
-⚠️ **The image ships on `STT_ENGINE=scripted`, on purpose.** A plain container cannot reach the
-GPU without host setup that varies by machine, which is exactly what fails at a venue. The real
-Typhoon engine (§7) runs on a host with a GPU; this image is the one that starts anywhere.
+#### What the image runs on, and what it costs
 
-⚠️ **It also defaults to `LLM_PROVIDER=rulebased`**, a real adapter that needs no key (`D119`), so
-the container runs with nothing configured. Pass keys to turn the models on:
+| | default | why |
+|---|---|---|
+| speech | `scripted` | a plain container **cannot reach a GPU** without host setup that varies by machine — the thing that fails at a venue |
+| LLM | `rulebased` | a real adapter needing no key (`D119`), so the image starts with nothing configured |
+| storage | `memory` | no database container required |
+| user | non-root `uid 10001` | nothing writes outside `/app` |
+
+Everything except the speech engine is real in that image: the IVR, the identity ladder,
+the matcher, the brief, the workstation, the paired customer screen, the plan comparison,
+the handoff.
+
+---
+
+#### Every build flag there is
+
+These are `--build-arg`s. They change **what gets installed** or **what the image defaults
+to**; the last three are also settable with `-e` at run time.
+
+| flag | default | what it does |
+|---|---|---|
+| `EXTRAS` | `"web llm"` | space-separated optional dependency groups. **The only flag that genuinely changes the artefact** — an engine whose wheels were never installed cannot be selected however you ask for it later |
+| `STT_ENGINE` | `scripted` | `scripted` · `thonburian_hf` · `thonburian_ct2` · `typhoon` |
+| `STT_DEVICE` | `auto` | `auto` · `cuda` · `cpu`. `auto` resolves to cuda only when one is genuinely usable |
+| `LLM_PROVIDER` | `rulebased` | `rulebased` · `anthropic` · `openai_compatible` |
+
+The `EXTRAS` values, and what each buys:
+
+| extra | size | needed for |
+|---|---|---|
+| `web` | small | **required.** FastAPI/uvicorn — nothing serves without it |
+| `llm` | small | the Anthropic and OpenAI SDKs. Needed only if you will pass a key |
+| `s3` | small | `boto3`, for MinIO or real S3 recordings |
+| `ml` | **~3 GB** | torch + transformers + faster-whisper + silero-vad. Needed for **any** real speech engine |
+| `asr` | large | `nemo_toolkit[asr]`, on top of `ml`. Needed only for `typhoon` |
+
+⚠️ **`uv sync` prunes**, so `$EXTRAS` is expanded into a **single** `uv sync` inside the
+Dockerfile. Never add a second sync naming one extra — it silently removes the others
+(`B31`).
+
+---
+
+#### Recipes, by what you have
+
+⚠️ **Which of these have actually been run**, because a setup guide that is wrong costs more
+than one that is missing:
+
+| recipe | status |
+|---|---|
+| 1 · default demo image | ✅ **built and driven** — every surface serves, a full call runs |
+| 2 · with keys | ✅ **built and driven** — typed intake → preview before Accept → Sonnet after |
+| 3 · CPU transcription | ◐ **flags verified, the ~3 GB build not run to completion here.** The `EXTRAS` mechanism itself is proven (recipe 6 built and `boto3` imported from that image's venv); the model download and a CPU decode are **not** |
+| 4 · GPU | ☐ **not built.** Needs a host with the NVIDIA container toolkit, which this laptop does not have configured for Docker |
+| 5 · Postgres profile | ◐ compose profile written; its `READYCALL_DATABASE_URL` was corrected after being found pointing at nothing (`D136`) |
+| 6 · S3/MinIO extra | ✅ **built** — `boto3 1.43.89` present in that image, absent from the default |
+
+**1. A laptop with nothing installed, or a judge's machine.** The default.
+
+```bash
+docker build -t readycall .
+docker run --rm -p 8000:8000 readycall
+```
+*Scripted speech, no model calls, no keys.* Everything else real. **This is the one to
+demo with.**
+
+**2. The same, with the AI on.** Keys at run time, never baked into the image.
 
 ```bash
 docker run --rm -p 8000:8000 \
@@ -302,30 +364,107 @@ docker run --rm -p 8000:8000 \
   -e LLM_FAST_BASE_URL=https://api.openai.com/v1 -e OPENAI_API_KEY=sk-proj-... \
   readycall
 ```
+The **whole AI story runs here with no audio at all**, because a typed intake is a real
+turn (`D133`). You can also switch models from the ⚙ panel without restarting (`D138`).
 
-**With keys, the full AI story runs in the container with no microphone and no GPU**, because a
-typed intake is a real turn rather than a stand-in (`D133`). Verified end to end in the image: three
-sentences typed on `/sim` reached the broker's transcript panel, a `gpt-5.4-mini` preview of them
-was on the offer card **before Accept**, `claude-sonnet-5` replaced it after, and the
-*"ข้อมูลอื่นๆ ที่มีเกี่ยวกับลูกค้า"* panel carried its own model-written sentence (`D131`, `D134`,
-`D135`). There is no audio in the image at all — every `*.wav` is excluded by `.dockerignore`.
-
-The container runs as a non-root user and answers `/health`, which is also its `HEALTHCHECK`:
+**3. Real Thai transcription on CPU** — a box with no GPU but a good processor.
 
 ```bash
-curl -s http://127.0.0.1:8000/health
-# {"status":"ok", ... "intents_loaded":33}
+docker build --build-arg EXTRAS="web llm ml" \
+             --build-arg STT_ENGINE=thonburian_hf \
+             --build-arg STT_DEVICE=cpu -t readycall-cpu .
+
+docker run --rm -p 8000:8000 \
+  -e STT_MODEL=biodatlab/whisper-th-medium-combined \
+  -e STT_COMPUTE_TYPE=float32 \
+  -v hf-cache:/home/readycall/.cache/huggingface \
+  readycall-cpu
 ```
 
-⚠️ **`intents_loaded` is the field that matters.** A container that started but loaded no domain
-pack still returns `status: ok` on some failures; the count is what proves the config directory
-came along.
+⚠️ **Three things to know before you do this.**
+- **The image is ~3 GB larger**, and it stays that size even for CPU use: `torch` is pinned
+  to the CUDA package index (`D95`), because the PyPI wheel is CPU-only and installing it
+  silently gives a GPU box a ten-times-too-slow Whisper. A CUDA-built torch runs perfectly
+  well on CPU — it just carries the CUDA libraries with it.
+- **The model downloads on first use** (~1.6 GB). The `-v hf-cache:...` volume is what stops
+  it downloading again on every `docker run`.
+- **It will not meet the 1.5 s budget.** On this project's own GPU, Thonburian medium fp16
+  managed 0 of 12 calls inside it (`D104`). On CPU expect several seconds per utterance —
+  fine for showing the path works, not for a live conversation.
 
-**If you want the durable backend instead** (`Q21` is the open question of which the demo should
-use), there is a second profile that brings Postgres up with it:
+**4. Real transcription on a GPU box.** The fast engine (`D104`).
+
+```bash
+docker build --build-arg EXTRAS="web llm ml asr" \
+             --build-arg STT_ENGINE=typhoon \
+             --build-arg STT_DEVICE=cuda -t readycall-gpu .
+
+docker run --rm --gpus all -p 8000:8000 \
+  -v hf-cache:/home/readycall/.cache/huggingface \
+  readycall-gpu
+```
+
+⚠️ **`--gpus all` is not optional, and installing the CUDA wheels does not make a device
+appear.** The host also needs the NVIDIA container toolkit. That is host setup which varies
+by machine — which is exactly why `scripted` is the default and why the pitch runs the real
+engine on our own box rather than in a container (`D136`).
+
+**5. With a database, so a shift survives a restart.**
 
 ```bash
 docker compose -f infra/docker-compose.yml --profile demo-postgres up --build
+```
+Brings Postgres up alongside and points the app at it.
+
+**6. With encrypted recordings in object storage.**
+
+```bash
+docker build --build-arg EXTRAS="web llm s3" -t readycall-s3 .
+
+docker run --rm -p 8000:8000 \
+  -e BLOB_STORAGE=minio -e BLOB_ENDPOINT_URL=http://host.docker.internal:19000 \
+  -e RECORDING_MASTER_KEY=$(openssl rand -base64 32) \
+  readycall-s3
+```
+⚠️ **Without `RECORDING_MASTER_KEY` the container refuses to start against a durable blob
+store**, on purpose: an ephemeral key writes ciphertext nobody can ever read again (`D110`).
+
+---
+
+#### Every run-time environment variable worth knowing
+
+All of these are `-e` on `docker run`. The full list with commentary is `.env.example`.
+
+| variable | example | what it does |
+|---|---|---|
+| `STT_ENGINE` | `thonburian_hf` | which speech engine. Needs the `ml` extra for anything but `scripted` |
+| `STT_DEVICE` | `cpu` | `auto` · `cuda` · `cpu` |
+| `STT_MODEL` | `biodatlab/whisper-th-medium-combined` | ⚠️ deliberately **blank** by default: the two Thonburian engines want different things from this field (`B23`) |
+| `STT_COMPUTE_TYPE` | `float32` | `int8_float16` is a GPU setting; use `float32` or `int8` on CPU |
+| `LLM_PROVIDER` | `anthropic` | the careful summary after Accept |
+| `LLM_FAST_MODEL` | `gpt-5.4-mini` | ⚠️ **setting this alone turns three of the four AI features into real model calls**, whatever `LLM_PROVIDER` says (`B41`) |
+| `STORAGE_BACKEND` | `postgres` | needs `READYCALL_DATABASE_URL` too |
+| `BLOB_STORAGE` | `minio` | needs `RECORDING_MASTER_KEY` |
+| `DEMO_AGENT_LOGIN_ENABLED` | `false` | turns off sign-in-as-anyone **and** the ⚙ runtime settings panel (`D138`) |
+| `API_PORT` | `8000` | the port inside the container |
+
+---
+
+#### Checking it worked
+
+```bash
+curl -s http://127.0.0.1:8000/health
+```
+
+⚠️ **`intents_loaded` is the field that matters**, not `status`. A container that started
+but loaded no domain pack can still answer `ok`; the count is what proves the config came
+along. It is also the container's `HEALTHCHECK`, so `docker ps` shows `(healthy)`.
+
+To see what a running image was actually built with, read its first log lines — `api ready`
+names the engine, the provider and the storage backend:
+
+```bash
+docker logs <container> 2>&1 | head -20
 ```
 
 ### 6. Diagram rendering — *only if you edit the docs*
