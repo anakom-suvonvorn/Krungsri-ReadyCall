@@ -123,3 +123,69 @@ def test_resume_requires_a_session(client: TestClient, clock: ManualClock) -> No
     client.cookies.clear()
 
     assert client.post("/v1/agent/resume").status_code == 401
+
+
+# --- D144: สายสุดท้าย actually gets a last call -------------------------------------------
+
+
+def _place(client: TestClient, intent: str = "general.renewal") -> str:
+    body = client.post(
+        "/v1/demo/calls",
+        json={
+            "intent_code": intent,
+            "caller_number": "+66898887777",
+            "intake_keys": ["2"],
+            "ignore_hours": True,
+        },
+    ).json()
+    return str(body["call_session_id"])
+
+
+def test_last_call_is_offered_the_waiting_caller(client: TestClient) -> None:
+    """`D144`, and it is the user's report as an assertion: *"if there's someone in the
+    queue it won't do anything"*. It does now — a desk declaring สายสุดท้าย while idle is
+    asking for **one more call**, and the caller already waiting is that call."""
+    client.post("/v1/agent/state", json={"agent_intent": "last_call"})
+    _place(client)
+
+    offer = client.get("/v1/agent/me").json()["offer"]
+
+    assert offer is not None, "a waiting caller never reached a desk on สายสุดท้าย"
+
+
+def test_draining_is_NOT_offered_the_waiting_caller(client: TestClient) -> None:
+    """The other half. If both options behaved the same the reversal would have moved the
+    duplication rather than removed it."""
+    client.post("/v1/agent/state", json={"agent_intent": "draining"})
+    _place(client)
+
+    assert client.get("/v1/agent/me").json()["offer"] is None
+
+
+def test_the_last_call_spends_the_instruction_when_it_ends(client: TestClient) -> None:
+    """The end condition that could never fire before, because the call that spends it was
+    never offered. Take the last call, end it, and the desk stops asking for work."""
+    client.post("/v1/agent/state", json={"agent_intent": "last_call"})
+    call_id = _place(client)
+    offer = client.get("/v1/agent/me").json()["offer"]
+    assert offer is not None
+    client.post(f"/v1/agent/offers/{offer['assignment_id']}/accept")
+
+    client.post(f"/v1/agent/calls/{call_id}/end", json={"reason": "caller_hung_up"})
+
+    presence = client.get("/v1/agent/me").json()["presence"]
+    assert presence["agent_intent"] == "not_ready"
+    assert presence["intent_reason"] == "last_call_fulfilled"
+
+
+def test_a_desk_on_last_call_is_not_handed_a_SECOND_caller(client: TestClient) -> None:
+    """"Last" has to mean last. Once the call is in flight the desk is no longer
+    `AVAILABLE`, which is where that half of the old rule actually lives."""
+    client.post("/v1/agent/state", json={"agent_intent": "last_call"})
+    _place(client)
+    offer = client.get("/v1/agent/me").json()["offer"]
+    client.post(f"/v1/agent/offers/{offer['assignment_id']}/accept")
+
+    _place(client)
+
+    assert client.get("/v1/agent/me").json()["offer"] is None, "a second caller was offered"

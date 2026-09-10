@@ -104,9 +104,12 @@ def make_call(**kw: Any) -> WaitingCall:
         ({"agent_intent": AgentIntent.NOT_READY}, "not_ready"),
         ({"agent_intent": AgentIntent.BREAK}, "not_ready"),
         ({"agent_intent": AgentIntent.LUNCH}, "not_ready"),
-        # `LAST_CALL` and `DRAINING` mean "finish what I have, give me nothing new"
-        # (`D33`, `D59`) — they are logged in and must not be offered a new caller.
-        ({"agent_intent": AgentIntent.LAST_CALL}, "not_ready"),
+        # `DRAINING` means "give me nothing new" and is logged in (`D33`, `D59`).
+        # ⚠️ `LAST_CALL` is NOT here since `D144`: an IDLE desk declaring "this is my
+        # last" is asking for one more caller, and the old rule made it identical to
+        # `DRAINING`. Once a call is in flight, `system_state` stops being `AVAILABLE`
+        # and the `busy` row below refuses a second one — which is where that half of
+        # the rule actually lives.
         ({"agent_intent": AgentIntent.DRAINING}, "not_ready"),
         ({"system_state": AgentSystemState.ON_CALL}, "busy"),
         ({"system_state": AgentSystemState.AFTER_CALL_WORK}, "busy"),

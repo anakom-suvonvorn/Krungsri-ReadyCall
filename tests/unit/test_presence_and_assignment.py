@@ -92,13 +92,44 @@ async def test_declaring_ready_is_what_makes_you_offerable(presence: PresenceSer
     assert presence.view("A001").offerable  # type: ignore[union-attr]
 
 
-async def test_last_call_stays_logged_in_but_takes_nobody_new(presence: PresenceService) -> None:
-    """`D45`'s prose says (ready, last_call) — the prose is wrong, the code is right."""
+async def test_last_call_takes_ONE_more_caller_when_the_desk_is_idle(
+    presence: PresenceService,
+) -> None:
+    """`D144`, reversing `D45`'s amendment. An idle desk declaring "this is my last" is
+    asking for **one more call**, not for none — and the old reading made `LAST_CALL` and
+    `DRAINING` behave identically, which is two menu options doing one thing."""
     await presence.sign_in("A001", session_id="s1")
     await presence.declare("A001", AgentIntent.LAST_CALL)
     view = presence.view("A001")
     assert view is not None
     assert view.presence.system_state is AgentSystemState.AVAILABLE
+    assert view.offerable, "an idle desk on LAST_CALL was never offered its last call"
+
+
+async def test_last_call_takes_nobody_new_once_a_call_is_in_flight(
+    presence: PresenceService,
+) -> None:
+    """The half of the old rule that was always right: the call they are HOLDING is the
+    last one, so no second caller joins it."""
+    await presence.sign_in("A001", session_id="s1")
+    await presence.declare("A001", AgentIntent.READY)
+    await presence.begin_offer("A001", call_session_id="c1")
+    await presence.begin_call("A001", call_session_id="c1")
+    await presence.declare("A001", AgentIntent.LAST_CALL)
+
+    view = presence.view("A001")
+    assert view is not None
+    assert not view.offerable
+
+
+async def test_draining_still_takes_nobody_new(presence: PresenceService) -> None:
+    """The other side of `D144`: the two options must now mean different things, or the
+    reversal has simply moved the duplication rather than removed it."""
+    await presence.sign_in("A001", session_id="s1")
+    await presence.declare("A001", AgentIntent.DRAINING)
+
+    view = presence.view("A001")
+    assert view is not None
     assert not view.offerable
 
 

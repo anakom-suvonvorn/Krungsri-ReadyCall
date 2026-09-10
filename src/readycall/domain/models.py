@@ -600,9 +600,12 @@ class AgentPresence(DomainModel):
     heartbeat_at: datetime | None = None
 
     def is_available(self, agent: Agent, *, within_schedule: bool = True) -> bool:
+        # `accepts_new_callers` rather than `is READY`, so this cannot drift from the
+        # rule the matcher actually applies (`D144`). Two places answering one question is
+        # how `B25` happened.
         return (
             self.system_state is AgentSystemState.AVAILABLE
-            and self.agent_intent is AgentIntent.READY
+            and self.accepts_new_callers
             and self.current_load < agent.max_concurrent
             and agent.is_active
             and within_schedule
@@ -610,13 +613,29 @@ class AgentPresence(DomainModel):
 
     @property
     def accepts_new_callers(self) -> bool:
-        """LAST_CALL and DRAINING stay logged in but take nobody new (`D33`).
+        """`READY` always; `LAST_CALL` only while there is no call in flight (`D144`).
 
-        Note `D45`'s supporting text says "intent in (ready, last_call)" — that is a slip
-        in the prose, not the rule. `LAST_CALL` means *finish the one I am on*, so it must
-        not be offered a new caller; amended in `DECISIONS.md` under `D45`.
+        ⚠️ **This reverses `D45`'s amendment, which read "LAST_CALL must not be offered a
+        new caller".** That reading is right for an agent who is ON a call — the one they
+        are holding *is* the last one — and wrong for an idle one, where it made
+        `LAST_CALL` and `DRAINING` **exactly the same thing**: two options on the status
+        menu with identical behaviour, and a standing instruction whose built-in end
+        condition could never fire because the call that would spend it was never offered.
+
+        So the condition is the call in flight, not the intent alone. Idle and
+        `LAST_CALL` → one more caller. On that call → `system_state` is no longer
+        `AVAILABLE`, so `hard_filter` refuses a second one anyway. When it ends,
+        `_on_media_disconnect` sees the instruction is spent and moves them to
+        `NOT_READY`, which is the machinery that already existed and had nothing to run on.
+
+        `DRAINING` still takes nobody new, and now genuinely means something different.
         """
-        return self.agent_intent is AgentIntent.READY
+        if self.agent_intent is AgentIntent.READY:
+            return True
+        return (
+            self.agent_intent is AgentIntent.LAST_CALL
+            and self.system_state is AgentSystemState.AVAILABLE
+        )
 
     @property
     def in_after_call_work(self) -> bool:

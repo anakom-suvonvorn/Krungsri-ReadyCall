@@ -1283,3 +1283,18 @@ button.plan-row.on {
 .stage-name { min-width: 0; font-size: 13px; }
 .pill-opt.tiny { font-size: 11px; padding: 3px 9px; }
 @media (max-width: 720px) { .stage-row { grid-template-columns: 1fr; gap: 6px; } }
+
+/* --- the assist link (`D147`) --------------------------------------------------------
+   A tokenised URL is ~55 characters and used to run off the right edge of the rail.
+   `min-width: 0` on the code element is the load-bearing part: a grid/flex child will not
+   shrink below its content without it, so `overflow-wrap` alone does nothing (`B40`'s
+   lesson in a smaller place). */
+.link-row { display: flex; gap: 8px; align-items: flex-start; min-width: 0; }
+.link-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+  line-height: 1.45;
+}
+.link-row button { flex: 0 0 auto; white-space: nowrap; }

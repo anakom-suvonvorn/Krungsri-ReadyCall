@@ -513,7 +513,13 @@ export type LlmSettings = {
 /** Who could take this call, and why not (`D141`). Read-only: the transfer itself is
  *  not built, and `can_execute` is the SERVER saying so. */
 export type InternalTransferOptions = {
+  /** The skill the roster is currently filtered on - the call's own unless the broker
+   *  picked another (`D146`). */
   required_skill: string | null;
+  /** What the CALL routed on, so the picker can show which one is the default. */
+  call_skill: string | null;
+  /** Every skill on the floor, served rather than invented by the client (`D72`). */
+  skills: { skill_code: string; label_th: string }[];
   queue_id: string | null;
   agents: {
     agent_id: string;
@@ -608,10 +614,13 @@ export const api = {
   /** Where the call goes when it is not staying with us (`D124`). The options are SERVED
    *  for `assistTools`' reason, and because two of them — the carrier on this customer's
    *  policy, and whether we hold a policy at all — are facts the client cannot work out. */
-  internalTransferOptions: (callId: string) =>
+  /** `skill` overrides the call's own, because a transfer often happens precisely
+   *  because the call needs a DIFFERENT skill from the one it routed on (`D146`). */
+  internalTransferOptions: (callId: string, skill?: string) =>
     call<InternalTransferOptions>(
       "GET",
-      `/v1/agent/calls/${callId}/transfer/internal/options`,
+      `/v1/agent/calls/${callId}/transfer/internal/options` +
+        (skill ? `?skill=${encodeURIComponent(skill)}` : ""),
     ),
   handoffOptions: (callId: string) =>
     call<HandoffOptions>("GET", `/v1/agent/calls/${callId}/handoff/options`),

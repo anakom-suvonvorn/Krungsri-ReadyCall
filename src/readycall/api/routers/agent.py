@@ -18,6 +18,7 @@ naming are the ones the *shape* enforces rather than the code:
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, WebSocket
@@ -606,7 +607,10 @@ async def _policy_insurer_for(container: Any, call_session_id: str) -> str | Non
 
 @router.get("/calls/{call_session_id}/transfer/internal/options")
 async def internal_transfer_options(
-    call_session_id: str, who: AgentDep, container: ContainerDep
+    call_session_id: str,
+    who: AgentDep,
+    container: ContainerDep,
+    skill: str | None = None,
 ) -> dict[str, Any]:
     """Who on this floor could take this call, and why (`D141`, `D63`).
 
@@ -636,8 +640,21 @@ async def internal_transfer_options(
     # `required_skill: null` — a screen that looked like 'nobody can take this call'
     # rather than like a bug. Found by opening the tab, not by a test.
     waiting = container.call_view(session)
+    # ⚠️ **The broker may transfer on a DIFFERENT skill from the one that routed the call**
+    # (`D146`). The call's own skill is the default and it is not a ceiling: a caller
+    # mis-keyed the menu, or the conversation turned out to be about something else, and
+    # those are two of the commonest reasons a transfer happens at all. Locking the roster
+    # to the routed skill makes the feature useless in exactly the cases it exists for.
+    #
+    # It is still a HARD filter — just one the person chooses, which is `D44`'s shape:
+    # the system supplies evidence, the human decides.
+    if waiting is not None and skill:
+        waiting = replace(waiting, required_skill=skill)
     weights = container.matching_weights
     now = container.clock.now()
+
+    call_skill = container.call_view(session)
+    call_skill_code = call_skill.required_skill if call_skill is not None else None
 
     rows: list[dict[str, Any]] = []
     for agent in await container.agents.list_agents():
@@ -684,6 +701,13 @@ async def internal_transfer_options(
 
     return {
         "required_skill": waiting.required_skill if waiting is not None else None,
+        "call_skill": call_skill_code,
+        # Every skill on the floor, so the picker is the roster's own vocabulary rather
+        # than a list the client invented (`D72`).
+        "skills": [
+            {"skill_code": code, "label_th": spec.label_th}
+            for code, spec in sorted(container.pack.skills.items())
+        ],
         "queue_id": session.queue_id,
         "agents": rows,
         "eligible_count": sum(1 for r in rows if r["eligible"]),

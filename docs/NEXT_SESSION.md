@@ -7,7 +7,7 @@ _Last updated: 2026-09-10._
 
 ## ⚠️ CONTINUE HERE — rewritten 2026-09-09 (late), after `D135`
 
-**Everything is committed and green.** **969 tests** — 957 pass + 12 skipped — ruff + ruff format + mypy clean, the
+**Everything is committed and green.** **974 tests** — 962 pass + 12 skipped — ruff + ruff format + mypy clean, the
 workstation builds, 69/69 diagrams current. There is no half-applied edit anywhere. What
 follows is what is *unfinished*, not what is broken.
 
@@ -153,7 +153,7 @@ somebody calls it.** `grep -rn "\.method_name(" src/` is thirty seconds and it h
 been the answer nine times.
 
 The second pattern, worth equal weight: **every one of these was found by the user
-pressing a button, never by the suite.** 969 tests pass and did not see any of it. When
+pressing a button, never by the suite.** 974 tests pass and did not see any of it. When
 they report something, believe the report before believing the tests.
 
 ⚠️ **And `B39`'s specific lesson, because it cost a whole round trip:** when the user
@@ -520,7 +520,7 @@ moment in the recording it was said — **and if they consented, their audio is 
 storage encrypted, with the key ref and the retention date on an `audio_recordings` row.**
 If they declined, it is nowhere.
 
-Verified **2026-09-09 (late)**: **969 tests** — 957 pass + 12 skipped, with Postgres
+Verified **2026-09-09 (late)**: **974 tests** — 962 pass + 12 skipped, with Postgres
 and MinIO both up (`readycall-postgres-1`, `readycall-minio-1`, both healthy). `ruff check` + `ruff format --check` clean over 220 files,
 `mypy --strict` clean over 157, 69/69 diagrams current, prompt pack fresh, `audit_docs.py`
 clean on the live files. **And by driving `/sim` in a browser** (`D123`): *Contact us —

@@ -36,7 +36,7 @@
  * working on real data; it just cannot commit it.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { api } from "./api";
 import type { InternalTransferOptions } from "./api";
@@ -138,6 +138,9 @@ function InternalTransferTab({
   const [error, setError] = useState<string | null>(null);
   const [picked, setPicked] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  /** `null` means "the call's own skill" — resolved by the server, so the client never
+   *  has to know what the call routed on before the first response (`D146`). */
+  const [skill, setSkill] = useState<string | null>(null);
   /* ⚠️ Defaults to showing EVERYONE, reasons included. The first build defaulted this on
      and rendered "nobody matches" on a floor where thirteen people were simply not signed
      in — which is `D50`'s exact complaint: a bare "unavailable" hides the answer to the
@@ -149,16 +152,31 @@ function InternalTransferTab({
   const load = useCallback(async () => {
     if (!callId) return;
     try {
-      setData(await api.internalTransferOptions(callId));
+      setData(await api.internalTransferOptions(callId, skill ?? undefined));
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "โหลดรายชื่อไม่สำเร็จ");
     }
-  }, [callId]);
+  }, [callId, skill]);
+
+  /* ⚠️ **The roster is LIVE while the dialog is open** (`D146`). Presence changes from
+   * under this screen constantly — somebody signs in, finishes a call, goes on break —
+   * and a list fetched once tells the broker to transfer to a desk that went offline
+   * thirty seconds ago. It used to update only when the dialog was closed and reopened.
+   *
+   * ⚠️ The interval holds `load` in a REF and depends on nothing that changes per render.
+   * The workstation re-renders **once a second** to drive its timers, so an effect
+   * depending on a callback identity is torn down and rebuilt before a 4-second interval
+   * can ever fire — which is `B33` exactly, and it looked like the server not answering. */
+  const loadRef = useRef(load);
+  loadRef.current = load;
 
   useEffect(() => {
-    if (open && callId) void load();
-  }, [open, callId, load]);
+    if (!open || !callId) return;
+    void loadRef.current();
+    const id = window.setInterval(() => void loadRef.current(), 4000);
+    return () => window.clearInterval(id);
+  }, [open, callId, skill]);
 
   if (!callId) return <div className="faint">ไม่มีสายที่กำลังคุยอยู่</div>;
   if (error) {
@@ -198,6 +216,33 @@ function InternalTransferTab({
           {data.eligible_count} คน
         </span>
       </h3>
+
+      {/* `D146`. Defaults to the call's own skill and is NOT a ceiling: a caller mis-keyed
+          the menu, or the conversation turned out to be about something else, and those
+          are two of the commonest reasons a transfer happens at all. */}
+      <div className="filter-row">
+        <label className="faint" style={{ flex: "0 0 auto" }}>
+          ทักษะที่ต้องการ{" "}
+          <select
+            value={skill ?? ""}
+            disabled={busy}
+            onChange={(e) => {
+              setSkill(e.target.value || null);
+              setPicked(null);
+            }}
+          >
+            <option value="">
+              ตามสายนี้
+              {data.call_skill ? ` (${data.call_skill})` : ""}
+            </option>
+            {data.skills.map((s) => (
+              <option key={s.skill_code} value={s.skill_code}>
+                {s.label_th}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
 
       <div className="filter-row">
         <input

@@ -6284,3 +6284,146 @@ by machine — which is `D136`'s whole argument for the default being `scripted`
 - **Future.** If the GPU image is ever actually used, it wants its own compose profile with
   the `deploy.resources.reservations.devices` block, rather than a README line telling
   somebody to remember `--gpus all`.
+
+## D144. สายสุดท้าย means ONE more call, not none
+_Taken 2026-09-10 from the user's report — **"the สายสุดท้าย and ไม่รับสายใหม่ … currently
+doesn't work as how it should. If there's someone in the queue it won't do anything … it
+basically just acts like all the other on break / busy stuff"**. Reverses `D45`'s amendment._
+
+- **Problem.** `accepts_new_callers` returned `True` for `READY` and nothing else. So a desk
+  that declared **สายสุดท้าย** while idle was never offered anything — which means:
+
+  1. **`LAST_CALL` and `DRAINING` were the same thing** whenever the agent was not on a
+     call. Two options on the status menu, one behaviour. A menu that offers a distinction
+     it does not honour is lying to the person using it.
+  2. **The instruction's built-in end condition could never fire from idle.**
+     `_on_media_disconnect` has always had the code to spend `LAST_CALL` and move the desk
+     to `NOT_READY` — it just had nothing to run on, because the call that would spend it
+     was never offered.
+  3. The **`+ สายทดสอบ`** button greys on `offerable`, so it went dead too — which is what
+     made the whole thing look broken rather than merely conservative.
+
+- **Decision.** `LAST_CALL` accepts a new caller **only while there is no call in flight**.
+
+```python
+if self.agent_intent is AgentIntent.READY:
+    return True
+return (
+    self.agent_intent is AgentIntent.LAST_CALL
+    and self.system_state is AgentSystemState.AVAILABLE
+)
+```
+
+### Why the condition is the call in flight rather than the intent
+
+Both readings of *"this is my last call"* are correct, for different moments:
+
+- **On a call** — the one they are holding **is** the last one. `system_state` is not
+  `AVAILABLE`, so `hard_filter`'s `busy` rung refuses a second caller. That half of the old
+  rule was always right and it still holds; it simply lives in the state rather than in the
+  intent.
+- **Idle** — the *next* one is the last one, and refusing to offer it makes the declaration
+  meaningless.
+
+`is_available()` now reads `accepts_new_callers` rather than repeating `is READY`, because
+two places answering one question is exactly how `B25` happened.
+
+- **What `D45`'s amendment got right, and where it went wrong.** It read *"LAST_CALL means
+  finish the one I am on"* and concluded *"so it must not be offered a new caller"*. The
+  premise is about an agent **on a call**; the conclusion was applied to every state. Worth
+  keeping as a pattern: a rule derived from one situation and applied unconditionally.
+- **Alternatives.** *Delete `DRAINING`* — it is the honest one of the two and matches what
+  a supervisor means by "stop feeding this desk". *Count the calls since the declaration* —
+  a counter for something the state machine already knows.
+- **Tradeoffs.** With `max_concurrent > 1` a `LAST_CALL` desk now takes one call rather than
+  filling its remaining slots. That is the reading of "last" the words support.
+- **Verified on a running server**, which is where it matters: declaring สายสุดท้าย while
+  idle made `offerable` true and un-greyed the test-call button; a placed caller was
+  **offered** (`agent_intent=last_call reason=offered`), accepted, and on hang-up the log
+  read `agent_intent=not_ready reason=last_call_fulfilled`. Four HTTP tests hold each step,
+  including one asserting `DRAINING` still takes nobody — because if both behaved the same
+  the reversal would have moved the duplication rather than removed it.
+
+## D145. The raw panel shows EVERY fact the model was given, whatever kind
+_Taken 2026-09-10 from the user — **"the ข้อมูลดิบ stuff doesn't appear to have the other
+policies … always make sure that the ข้อมูลดิบ info contains all info that are given to the
+ai, even if more stuff is fed/added in the future"**._
+
+- **Problem, and they found it the day it appeared.** `ข้อมูลดิบ` rendered from a
+  **hardcoded array of three kinds** and `filter(f => f.kind === kind)`. `D140` added
+  `policy` facts on the server that same day; they went into the model's prompt and
+  **never appeared on the panel at all**.
+
+  That is worse than a missing feature. This panel exists so a broker can check the
+  model's sentence against the rows it was written from (`D18`) — a checking surface that
+  silently omits data reads as *"that is everything"*, and the one thing it must never do
+  is understate what the model saw.
+
+- **Decision.** The groups are **derived from the facts**. `KIND_LABEL_TH` names the ones
+  worded so far and `KIND_ORDER` puts them in `known_facts()`'s own order; anything in
+  neither still renders, under its raw kind code.
+
+- **Ugly on purpose.** An unworded kind should look unfinished, not disappear. The failure
+  mode of the old design was invisible; the failure mode of this one is a Thai panel with
+  `some_new_kind` in it, which somebody fixes in a minute.
+
+- **The server half was already right**, and that is worth stating because it is what makes
+  this a one-line client fix rather than a redesign: `summarise_context` calls
+  `known_facts()` once and hands the *same list* to `facts_for_prompt` and to the DTO. The
+  panel and the prompt cannot diverge upstream — only the rendering could drop rows, and
+  now it cannot.
+
+  ⚠️ The one deliberate asymmetry stays and is the opposite direction: `detail_prompt_th`
+  lets the **panel show more than the prompt** (`D140`'s sum insured). More on screen than
+  the model saw is fine; less is the bug.
+
+## D146. The transfer roster filters on a skill the broker picks, and refreshes itself
+_Taken 2026-09-10 from the user — **"it should not really use ไม่มีทักษะที่สายนี้ต้องการ as a
+hard filter … the customer miss-clicked, while doing x it also involved y … we can just have
+a drop down filter that the agent can pick the skill needed themself"**, and **"the internal
+transfer doesn't live update when i login in another window"**._
+
+- **Problem 1: the routed skill was a ceiling.** `D141` filtered the roster on the call's
+  own `required_skill`, which is right as a **default** and wrong as a limit — because the
+  commonest reasons a transfer happens at all are that the routing was wrong:
+
+  * the caller mis-keyed the menu;
+  * the conversation started as X and turned out to need Y;
+  * the broker can handle the stated reason and not the one that actually came up.
+
+  Locking the list to the routed skill makes the feature useless in exactly the cases it
+  exists for.
+
+- **Decision.** A `skill` query parameter, a dropdown defaulting to the call's own, and
+  every skill on the floor served from the domain pack rather than invented by the client
+  (`D72`). It is **still a hard filter** — the user's own second thought, and the right one:
+  a filter the *person* chose is `D44`'s shape, where the system supplies evidence and the
+  human decides. A soft warning would put an unqualified desk in a list sorted by fit,
+  which is how somebody transfers a claim to a motor advisor by accident.
+
+- **Problem 2: the roster was fetched once.** Presence changes under this screen constantly
+  — somebody signs in, finishes a call, goes on break — and a list fetched on open tells the
+  broker to transfer to a desk that went offline thirty seconds ago. It only updated if the
+  dialog was closed and reopened.
+
+- **Decision.** A 4-second poll while the dialog is open. ⚠️ **The interval holds `load` in
+  a ref and depends on nothing that changes per render.** The workstation re-renders **once
+  a second** to drive its timers, so an effect depending on a callback identity is torn down
+  and rebuilt before a 4-second interval can ever fire — `B33` exactly, and its symptom is
+  the data being correct, present, and never on screen.
+
+## D147. The assist link wraps, and there is a copy button
+_Taken 2026-09-10 from the user — **"when you generate the helping link it goes out of the
+card and goes off out to the right … make it wrap? or make a copy link button?"**. Both._
+
+- **Problem.** A tokenised assist URL is ~55 characters inside a rail card about 320 px
+  wide, in a `<code>` element. It overflowed to the right.
+- **Decision.** The row wraps **and** gains a copy button, because the thing a broker
+  actually does with this link is send it, and selecting wrapped text by hand mid-call is
+  not that.
+- ⚠️ **`min-width: 0` is the load-bearing line**, not `overflow-wrap`. A flex child will not
+  shrink below its content width without it, so the wrap rule alone does nothing — `B40`'s
+  lesson in a smaller place.
+- ⚠️ **`navigator.clipboard` is undefined on plain HTTP from anything but localhost**, which
+  is exactly how this gets demoed on a phone over venue wifi. The hidden-textarea fallback
+  is not belt-and-braces; it is the path that will actually run there.

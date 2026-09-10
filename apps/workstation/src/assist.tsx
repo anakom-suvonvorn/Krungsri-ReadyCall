@@ -108,6 +108,7 @@ export function AssistPanel({
   const verified = tier === "verified";
   const paired = state?.paired ?? false;
   const link = state?.link;
+  const [copied, setCopied] = useState(false);
 
   return (
     <div className="panel">
@@ -160,7 +161,46 @@ export function AssistPanel({
               อ่านลิงก์ให้ลูกค้าฟังได้เลย
             </p>
           )}
-          <code className="mono">{window.location.origin + link}</code>
+          {/* `D147`. A token makes this ~55 characters, which overflowed the rail's card
+              and ran off the right edge. It WRAPS now — and the copy button is the real
+              fix, because the thing a broker does with this link is send it, and
+              selecting wrapped text by hand mid-call is not that. */}
+          <div className="link-row">
+            <code className="mono link-text">{window.location.origin + link}</code>
+            <button
+              className="ghost"
+              title="คัดลอกลิงก์"
+              onClick={() => {
+                const full = window.location.origin + link;
+                /* ⚠️ `navigator.clipboard` is undefined on a page served over plain HTTP
+                   from anything but localhost — which is exactly how this is demoed on a
+                   phone over the venue wifi. The textarea fallback is not belt-and-braces,
+                   it is the path that will actually run there. */
+                const done = () => {
+                  setCopied(true);
+                  window.setTimeout(() => setCopied(false), 1500);
+                };
+                if (navigator.clipboard?.writeText) {
+                  void navigator.clipboard.writeText(full).then(done, () => undefined);
+                  return;
+                }
+                const box = document.createElement("textarea");
+                box.value = full;
+                box.style.position = "fixed";
+                box.style.opacity = "0";
+                document.body.appendChild(box);
+                box.select();
+                try {
+                  document.execCommand("copy");
+                  done();
+                } finally {
+                  document.body.removeChild(box);
+                }
+              }}
+            >
+              {copied ? "คัดลอกแล้ว ✓" : "คัดลอก"}
+            </button>
+          </div>
         </div>
       )}
 

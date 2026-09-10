@@ -728,13 +728,39 @@ export function CapturePanel({
  * (`D74`). Nothing in this panel says what to sell, and the server refuses a summary that
  * does.
  */
+/** How each fact kind reads on the raw panel. A kind missing from here still renders —
+ *  under its raw code — because `D145`'s whole point is that nothing is dropped. */
+const KIND_LABEL_TH: Record<string, string> = {
+  life_event: "สัญญาณจากชีวิตลูกค้า",
+  policy: "กรมธรรม์อื่นที่ลูกค้าถืออยู่",
+  holding: "ผลิตภัณฑ์ที่ถืออยู่กับธนาคาร",
+  interaction: "ติดต่อล่าสุด",
+};
+
+/** The order `known_facts()` builds them in, which is the product decision (`D134`,
+ *  `D140`): why-now first, then what they hold, then history. */
+const KIND_ORDER: string[] = ["life_event", "policy", "holding", "interaction"];
+
 function KnownAboutPanel({ context }: { context: BriefContext }) {
   const [open, setOpen] = useState(false);
+  /* ⚠️ **DERIVED from the facts, never a fixed list** (`D145`).
+   *
+   * This was a hardcoded array of three kinds, and `filter(f => f.kind === kind)` then
+   * silently dropped every fact of any other kind. `D140` added `policy` facts on the
+   * server; they went into the model's prompt and **never appeared in ข้อมูลดิบ at all** —
+   * so the panel the broker opens to check the summary against was missing rows the
+   * summary was written from. A checking surface that omits data is worse than no
+   * checking surface, because it reads as "that is everything".
+   *
+   * `KIND_LABEL_TH` names the ones we have worded, `KIND_ORDER` puts them in the order
+   * `known_facts()` builds them — and anything NOT in either still renders, under its raw
+   * kind. Ugly on purpose: an unworded kind should prompt somebody to word it, never
+   * disappear. */
+  const kinds = Array.from(new Set(context.facts.map((f) => f.kind)));
   const groups: [string, string][] = [
-    ["life_event", "สัญญาณจากชีวิตลูกค้า"],
-    ["holding", "ผลิตภัณฑ์ที่ถืออยู่กับธนาคาร"],
-    ["interaction", "ติดต่อล่าสุด"],
-  ];
+    ...KIND_ORDER.filter((k) => kinds.includes(k)),
+    ...kinds.filter((k) => !KIND_ORDER.includes(k)),
+  ].map((k) => [k, KIND_LABEL_TH[k] ?? k]);
   return (
     <div className="known-about">
       <div className="faint" style={{ marginTop: 12 }}>
