@@ -1,7 +1,7 @@
 # INTEGRATIONS
 
 _Every external thing the system touches: the port that hides it, the adapters behind it, and the config that selects one._
-_Status: **the persistence stack, the whole audio path, the transcript's route to the agent's screen, the encrypted recording and BOTH LLM adapters are real. Telephony is the last big fake.** Last updated: 2026-09-09._
+_Status: **the persistence stack, the whole audio path, the transcript's route to the agent's screen, the encrypted recording and BOTH LLM adapters are real. Telephony is the last big fake.** Last updated: 2026-09-10._
 
 > **Real as of P2c (complete):** SQLAlchemy 2.0 (async) + Alembic + `asyncpg`, against
 > Postgres 16 in `infra/docker-compose.yml`, verified on a live container — **eleven tables**,
@@ -510,6 +510,16 @@ Prometheus + Grafana + Loki, GitHub Actions, `ruff`, `mypy`, `pytest` + `pytest-
 surface, and **the call itself happens in the tab**. That raises the bar past what server-rendered
 templates comfortably handle: ten live panels, a WebSocket feed, a live-updating transcript, an
 animating brief, *and* a WebRTC session with call controls, all in one page.
+
+**Build-time lint — ESLint 9 with `eslint-plugin-react-hooks` only** (`B43`, 2026-09-10).
+Dev dependencies, never shipped. `npm run build` is `eslint src && tsc -b && vite build`, so
+`react-hooks/rules-of-hooks` (an error) fails the build — and the Docker build, whose node
+stage runs exactly that. It exists because a hook placed after an early return blanked the
+whole workstation on every Accept, and TypeScript and Vite both passed it. Deliberately no
+other rules: a style ruleset switched on days before a pitch would bury the one rule that has
+caught a crash. `exhaustive-deps` is a warning, because several effects deliberately hold a
+callback in a ref to survive the once-a-second re-render (`B33`). Config:
+`apps/workstation/eslint.config.js`.
 
 **The in-page softphone stack:**
 

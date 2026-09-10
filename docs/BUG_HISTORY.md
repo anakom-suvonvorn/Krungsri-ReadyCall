@@ -2001,3 +2001,31 @@ will match the width."** Both halves of that sentence were one bug._
 
   And specifically for this codebase: **every hook in a component goes above its first
   early return.** Now enforced rather than remembered.
+
+## B44. With Docker half-dead, the suite took 49 minutes, then seemed to hang for good
+- **Symptoms:** on 2026-09-10 a full `pytest` run that normally takes ~3 minutes took **49
+  minutes**, and the next one sat on the same test for many minutes with no output, ~50 tests
+  in. It looked like a deadlock, or like concurrent runs fighting (which was also happening,
+  and was blamed first).
+- **Root cause:** Docker Desktop had wedged after the disk filled, but its **port proxy was
+  still listening** on 5432 (Postgres) and 19000 (MinIO). A connection to a dead backend
+  behind a live proxy is not *refused* — it is **accepted and never answered**. Four contract
+  files each carried their own copy of `_postgres_reachable()`: a bare `engine.connect()`
+  with **no deadline**, run **once per test**. So each Postgres-param test waited out the
+  driver's own connect timeout (~60 s) before skipping, times ~50 tests.
+- **Investigation:** the stuck run showed `..s..s..s` and then nothing — a skip pattern, so
+  the Postgres section. `netstat` showed PID 12192 (Docker's backend) still holding 5432 and
+  19000 with Docker itself unresponsive. A raw socket probe to 5432 with a 3 s limit **timed
+  out** instead of being refused. The probe code had no deadline anywhere.
+- **Fix:** one shared `postgres_reachable(url)` in `tests/conftest.py`, with a **3 s
+  `asyncio.wait_for`** and the answer **cached per test session**; the four copies now call
+  it. A cached `True` is safe — if Postgres dies mid-run those tests fail loudly rather than
+  skip quietly.
+- **Verification:** the four affected files against the same hung port: **84 passed, 50
+  skipped in 15 s**. ⚠️ Not yet re-verified with a *live* Postgres (Docker was still wedged);
+  the success path is the old code plus a 3 s deadline, which a local Postgres answers in
+  milliseconds.
+- **Lesson:** **"is the service there?" has three answers, not two** — yes, refused, and
+  *hung*. Every availability probe gets a deadline, because the hung case is exactly what a
+  half-dead dependency produces, and it turns "skip quickly" into "wait a minute, every
+  time". And a probe copied into four files is four places to forget the timeout.

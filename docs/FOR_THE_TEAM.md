@@ -2,7 +2,7 @@
 
 _Two guides in one file. **Part 1** is git and GitHub from zero, for somebody who has never
 used them. **Part 2** is how to change how ReadyCall looks without breaking how it works._
-_Last updated: 2026-09-09._
+_Last updated: 2026-09-10._
 
 > If you read nothing else, read these three lines.
 >
@@ -364,6 +364,28 @@ for a new field rather than deriving one.
 
 These are real bugs from `docs/BUG_HISTORY.md`. Every one looked like a server problem and
 was not.
+
+### ⚠️ Every `useState` / `useEffect` goes ABOVE the component's first `return`
+
+This one blanked the **entire** workstation — a white page, needing a reload — every time
+someone pressed Accept or saved a wrap-up (`B43`):
+
+```jsx
+function AssistPanel({ callId }) {
+  const [open, setOpen] = useState(false);
+  if (!callId) return <p>ใช้ได้เมื่อรับสายแล้ว</p>;   // early return
+  const [copied, setCopied] = useState(false);       // BROKEN: only runs when there IS a call
+  ...
+}
+```
+
+React requires the same hooks in the same order on every render. Here there is one hook with
+no call and two with one, so the moment a call starts (Accept) or ends (Save) React throws
+and unmounts everything. **TypeScript compiles this happily**, which is why it shipped.
+
+It cannot ship again: `npm run build` now runs `eslint src` first and **fails** with
+`react-hooks/rules-of-hooks` if you do this. The fix is always the same — move the hook up
+above the `if (...) return`. Run `npm run lint` to check without building.
 
 ### ⚠️ The workstation re-renders every single second
 

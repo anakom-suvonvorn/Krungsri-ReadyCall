@@ -21,7 +21,7 @@ flowchart TB
         I_LAST_CALL["last_call"]
         I_DRAINING["draining"]
     end
-    sys -.-> ELIGIBLE{"offerable = AVAILABLE and intent in (ready, last_call)"}:::gate
+    sys -.-> ELIGIBLE{"offerable = AVAILABLE and (intent = ready, or last_call while idle — D144)"}:::gate
     person -.-> ELIGIBLE
     NOTE["Why two axes? Because 'the platform has no work for you'
 and 'I am ready for another caller' are different facts.

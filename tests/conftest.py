@@ -7,6 +7,7 @@ a GPU, or a database.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -85,3 +86,42 @@ def orchestrator(
 @pytest.fixture
 def core_fixtures() -> FixtureFileProvider:
     return FixtureFileProvider(FIXTURES_DIR)
+
+
+#: How long the suite waits to learn whether Postgres is there (`B44`).
+POSTGRES_PROBE_TIMEOUT_S = 3.0
+#: The answer, per URL, decided ONCE per test session (`B44`).
+_POSTGRES_REACHABLE: dict[str, bool] = {}
+
+
+async def postgres_reachable(url: str) -> bool:
+    """Whether a Postgres answers at `url` — asked once per session, and never for long.
+
+    ⚠️ `B44`. Four contract files each had their own copy of this probe, as a bare
+    `engine.connect()` with **no deadline**, run **once per test**. With Docker Desktop
+    wedged, its port proxy still *accepts* on 5432 and then never answers — so a connect
+    does not fail, it hangs until the driver gives up (~60 s). Times every Postgres-param
+    test, that was a ~3-minute suite taking **49 minutes**, and a second run that looked
+    permanently stuck. Refused-connection is the case everyone tests; hung-connection is the
+    one a half-dead Docker produces.
+
+    Cached per session because the answer does not change mid-run, and a cached `True` is
+    safe: if Postgres dies partway, those tests fail loudly rather than skip quietly.
+    """
+    if url not in _POSTGRES_REACHABLE:
+        from readycall.db.session import create_engine
+
+        async def _probe() -> None:
+            engine = create_engine(url)
+            try:
+                async with engine.connect():
+                    pass
+            finally:
+                await engine.dispose()
+
+        try:
+            await asyncio.wait_for(_probe(), timeout=POSTGRES_PROBE_TIMEOUT_S)
+            _POSTGRES_REACHABLE[url] = True
+        except Exception:
+            _POSTGRES_REACHABLE[url] = False
+    return _POSTGRES_REACHABLE[url]

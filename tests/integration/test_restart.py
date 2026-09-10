@@ -46,6 +46,7 @@ from readycall.db.stores import (
     PostgresTranscriptStore,
     PostgresWrapupStore,
 )
+from tests.conftest import postgres_reachable
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 #: A **separate database** from the one the app uses, and that separation is load-bearing.
@@ -62,14 +63,8 @@ T0 = datetime(2026, 8, 24, 3, 0, tzinfo=UTC)
 
 
 async def _postgres_reachable() -> bool:
-    try:
-        engine = create_engine(POSTGRES_URL)
-        async with engine.connect():
-            pass
-        await engine.dispose()
-    except Exception:
-        return False
-    return True
+    # One probe per session, with a deadline: see `postgres_reachable` (`B44`).
+    return await postgres_reachable(POSTGRES_URL)
 
 
 def _storage(backend: str, factory: Any) -> Storage:

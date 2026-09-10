@@ -65,7 +65,7 @@ the disclosure gate moves when the agent attests. **What they said while waiting
 screen** (`D106`), and if they consented, **their audio is in object storage encrypted**
 (`D110`) with a key ref and a retention date. If they declined, it is nowhere.
 
-Verified on 2026-09-09: **974 tests** — 962 pass + 12 skipped with Postgres and MinIO both
+Verified on 2026-09-10: **982 tests** — 923 pass + 59 skipped with Docker down (86 s); on 2026-09-09 it was 962 pass + 12 skipped with Postgres and MinIO both
 up (the 12 are foreign-key cases the in-memory backend cannot have, and the `ml`-extra ones).
 Without those containers the count of skips rises and nothing fails.
 `ruff check` and `ruff format --check` clean over **225** files, `mypy --strict`
@@ -322,7 +322,7 @@ P0 and the P1 core are built; everything from P1b onward is not. Legend: ☐ pla
 ☑ contract test suites (core data, event bus) · ☑ scenario runner + 3 scenarios · ☑ CI ·
 ☑ domain-pack config (`intents.yaml`, `skills.yaml`, `dids.yaml`) · ☑ core fixtures (3 personas,
 4 policies across 4 lines) · ☐ Postgres schema + Alembic · ☐ mock-core *generator* (~2,000 customers;
-hand-authored fixtures exist) · ☑ docker-compose · ☑ **a Dockerfile and two demo profiles** (`D136`)
+hand-authored fixtures exist) · ☑ docker-compose · ☑ **a Dockerfile and two demo profiles** (`D136`), with build args for the machines we might run on (`D143`; every flag and six recipes in README §5b)
 
 **P1 — context-aware calling** (core done; the HTTP layer is P1b)
 ☑ identity resolver + assurance ladder L0–L3 · ☑ `dids.yaml` + `menus.yaml` wired in ·
@@ -360,6 +360,16 @@ expiry finally have a driver (`B7`) · ☑ tiered keypad lookups reporting which
 both eras (`D66`, `D67`) · ☑ gated brief preview on the offer card (`D69`) · ☑ queue strip
 split into mine/all (`D70`) · ☐ **Postgres/SQLAlchemy/Alembic** (`D39`) — deferred again;
 see `NEXT_SESSION`
+
+_Added 2026-09-10, all from the user using the screens:_ ☑ **dropped for silence has a way
+back** — `POST /v1/agent/resume` and a dialog, because the cookie and the presence expire
+independently (`B42`, `D139`) · ☑ **the internal transfer roster**, real up to the button:
+same `hard_filter`, same `score_fit`, a skill dropdown the broker controls and a 4 s refresh
+(`D141`, `D146`); executing the transfer is ☐ · ☑ **สายสุดท้าย gives exactly one more call**,
+including from idle (`D144`) · ☑ the assist link wraps and has a copy button that works on
+plain HTTP (`D147`) · ☑ the test-call dialog picks the product line first (`D149`) ·
+☑ **`npm run build` lints for React hook order** and fails on a hook after an early return —
+the mistake that blanked the workstation on every Accept (`B43`)
 
 **P2c — persistence** (done)
 ☑ SQLAlchemy 2.0 async + Alembic, URL from `Settings` (`D75`) · ☑ **10 tables**:
@@ -454,7 +464,10 @@ story with no audio at all ·
 ☑ **the AI summary is on the offer card BEFORE Accept** (`D131`) — a fast preview during
 the offer window, the careful pass over the whole transcript after · ☑ **`scripts/compare_llm.py`**,
 the P4 comparison table, with both cost tables corrected against live pricing (`D130`) ·
-☑ **the model writing the reason sentence** (`D137`) — four guards, the first being that every number in it must be one we handed the model (`D16`); the ranking is untouched ·
+☑ **the model writing the reason sentence** (`D137`) — four guards, the first being that every number in it must be one we handed the model (`D16`); the ranking is untouched. **Not awaited since `D148`**: the plan tabs answer in ~6 ms and the model's text fills in by polling, with a two-attempt cap ·
+☑ **switch the model from the workstation header, per stage, without a restart** (`D138`, `D142`) — preview, context, comparison and final each pick their own; the header reads `mixed` when they differ (`B41`) ·
+☑ **the customer's other policies on the context panel** (`D140`) — the sum insured on screen, deliberately never in the prompt ·
+☑ **the raw panel shows every fact kind the model was given** (`D145`), derived from the data so a new kind cannot silently vanish ·
 ☐ gap analysis across a customer's whole portfolio rather than one policy per line
 
 **P5 — real telephony** ☐ Asterisk + ARI adapter · ☐ TLS/WSS certs · ☐ **in-browser softphone

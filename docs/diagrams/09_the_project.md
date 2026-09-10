@@ -34,7 +34,7 @@ risk in the project lives.
 
 ![test layers](test_layers.svg)
 
-974 tests, about three minutes, no services, no keys, no GPU, no network.
+982 tests, about a minute and a half, no services, no keys, no GPU, no network.
 
 **Contract suites are the unusual layer** and the most valuable one. Every adapter for a port
 must pass the *same* test suite. When the hackathon hands us real data and we write a new

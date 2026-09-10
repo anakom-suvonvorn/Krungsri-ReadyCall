@@ -175,7 +175,7 @@
 <header class="top">
   <div class="eyebrow">
     <span>ReadyCall · HACK VIDVA</span><span>9–10 September 2026</span>
-    <span>D135 · D136 · D137 · D138 · B41</span>
+    <span>D135 · D136 · D137 · D138 · B41</span><span>+ that evening: D139–D149 · B42 · B43</span>
   </div>
   <h1>What landed on 9–10 September</h1>
   <p class="standfirst">
@@ -195,6 +195,7 @@
     <li><a href="#b41">B41 — the screen that lied about the AI</a></li>
     <li><a href="#d138">D138 — the ⚙ panel you asked for</a></li>
     <li><a href="#try">See all of it yourself, in ten minutes</a></li>
+    <li><a href="#later">Later the same day: what your notes turned into</a></li>
     <li><a href="#left">What is actually left</a></li>
   </ol>
 </nav>
@@ -663,6 +664,98 @@ uv run python -m readycall.entrypoints.api</code></pre>
   </div>
 </section>
 
+<section id="later">
+  <p class="kicker">Added the evening of 10 September</p>
+  <h2>Later the same day: what your notes turned into</h2>
+
+  <div class="col">
+    <p>
+      Everything above was written in the afternoon. You then used the screens and sent two
+      rounds of notes. This is what each one became — every item is a fix or a small feature
+      you asked for, and each has its own entry in <code>docs/DECISIONS.md</code> or
+      <code>docs/BUG_HISTORY.md</code>.
+    </p>
+
+    <h3>The one that would have hurt on stage</h3>
+    <p>
+      <strong>Pressing Accept, or saving the wrap-up, blanked the whole screen</strong>
+      (<code>B43</code>). The copy button added to the assist panel that afternoon put one
+      piece of React state <em>below</em> a line that returns early when there is no call.
+      React needs the same pieces in the same order on every draw, and Accept and Save are
+      exactly the two buttons that flip “no call” to “a call” and back — so both crashed the
+      page. It is fixed, and more importantly <strong>the build now checks for it</strong>:
+      <code>npm run build</code> refuses to finish if anyone does this again. A first attempt
+      at that check was a text search, and when the bug was deliberately put back, the search
+      still said “all clear”. Only the real checker caught it. That is why every new check
+      now gets tested by breaking the thing it guards.
+    </p>
+
+    <h3>The plan tabs no longer wait for the AI</h3>
+    <p>
+      You worked out exactly what was happening: switching to a new insurance type sent a
+      request to the model and <em>waited</em> for the reply before showing anything, and a
+      tab you had already opened was quick only because the reply was saved
+      (<code>D148</code>). That wait was the one place the system let a model stand between a
+      person and a screen. Now the tab opens straight away — about <strong>6 ms instead of
+      2.4 s</strong> — with the plainer generated sentences, and the model's better ones
+      replace them a second or two later, the same way the summary on the offer card already
+      worked. It stops after two failed tries, so a slow AI provider cannot be asked over and
+      over while the panel sits open.
+    </p>
+
+    <h3>Smaller things from the same notes</h3>
+    <ul>
+      <li>
+        <strong>Dropped for going quiet, and stuck</strong> — a screen that looked signed in
+        but could never get a call, and a reload did not help. It now says what happened and
+        offers a button to come back (<code>B42</code>, <code>D139</code>).
+      </li>
+      <li>
+        <strong>The customer's other policies</strong> appear on the context panel, with the
+        amount on screen but never sent to the AI (<code>D140</code>).
+      </li>
+      <li>
+        <strong>The internal transfer list is real now</strong> — your idea. It shows which
+        colleagues could take this call, filtered by a skill you choose (starting at the
+        call's own), and refreshes itself while open (<code>D141</code>, <code>D146</code>).
+        The final “transfer” button is still the one piece not wired.
+      </li>
+      <li>
+        <strong>Each AI stage picks its own model</strong> from the ⚙ panel — preview,
+        context, comparison and final (<code>D142</code>).
+      </li>
+      <li>
+        <strong><span class="th">สายสุดท้าย</span> gives you one more call.</strong> It used to
+        give you none if you chose it while idle, which made it the same as
+        <span class="th">ไม่รับสายใหม่</span> (<code>D144</code>).
+      </li>
+      <li>
+        <strong><span class="th">ข้อมูลดิบ</span> shows everything the AI was shown</strong> —
+        it had been quietly leaving out the policy details (<code>D145</code>).
+      </li>
+      <li>
+        <strong>The assist link wraps and has a copy button</strong>, which also works on a
+        phone over venue wifi (<code>D147</code>).
+      </li>
+      <li>
+        <strong>The test-call dialog groups its reasons</strong>: pick
+        <span class="th">สุขภาพ</span>, <span class="th">รถยนต์</span> and so on first, then the
+        reason inside it (<code>D149</code>).
+      </li>
+      <li>
+        <strong>Docker, every option written down</strong> — README §5b, with a table saying
+        which setups have actually been run. One has not: building the version that
+        transcribes speech on an ordinary CPU filled this laptop's disk, so it is marked
+        unverified rather than claimed.
+      </li>
+    </ul>
+
+    <p>⚠️ After pulling, rebuild the screens once more — the build now installs its checker:</p>
+  </div>
+
+  <pre><code>cd apps/workstation &amp;&amp; npm install &amp;&amp; npm run build &amp;&amp; cd ../..</code></pre>
+</section>
+
 <section id="left">
   <p class="kicker">The answer to your third question</p>
   <h2>What is actually left</h2>
@@ -692,6 +785,8 @@ uv run python -m readycall.entrypoints.api</code></pre>
     <h3>Deliberately not built, and each is written up</h3>
     <ul>
       <li>
+        <em>(Changed later on 10 September: the list of who could take the call is now
+        real — see above. What follows still holds for the final transfer step.)</em><br>
         <strong>The internal transfer</strong> — <span class="th">โอนสายภายใน</span>. The
         external half (handing the call to another <em>insurer</em>) is built and working.
         The internal tab is a labelled stub. It needs a transfer-offer flow distinct from a
@@ -714,8 +809,8 @@ uv run python -m readycall.entrypoints.api</code></pre>
 </section>
 
 <footer>
-  Written 10 September 2026 · decisions <code>D135</code>–<code>D138</code> and bug
-  <code>B41</code> in <code>docs/DECISIONS.md</code> and <code>docs/BUG_HISTORY.md</code> ·
+  Written 10 September 2026, with a section added that evening · decisions
+  <code>D135</code>–<code>D149</code> and bugs <code>B41</code>–<code>B43</code> in <code>docs/DECISIONS.md</code> and <code>docs/BUG_HISTORY.md</code> ·
   live state in <code>docs/NEXT_SESSION.md</code>
 </footer>
 

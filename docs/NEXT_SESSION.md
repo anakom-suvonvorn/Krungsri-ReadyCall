@@ -5,133 +5,125 @@ _Last updated: 2026-09-10._
 
 ---
 
-## ⚠️ CONTINUE HERE — rewritten 2026-09-09 (late), after `D135`
+## ⚠️ CONTINUE HERE — rewritten 2026-09-10 (night), after `D149`
 
-**Everything is committed and green.** **974 tests** — 962 pass + 12 skipped — ruff + ruff format + mypy clean, the
-workstation builds, 69/69 diagrams current. There is no half-applied edit anywhere. What
-follows is what is *unfinished*, not what is broken.
+**Everything is committed and green.** **982 tests** (923 pass + 59 skipped with Docker down, 86 s) — ruff + ruff format + mypy clean, the
+workstation builds **with its new lint step**, 69/69 diagrams current, `audit_docs.py` shows
+no live-doc mismatches. There is no half-applied edit anywhere. The pitch is **13 September**;
+what is left is rehearsal and the recording, not code.
 
-### 1. ~~Verify `D134`'s model sentence against a live model~~ ✅ **DONE — `D135`**
+### 0. ⚠️ AFTER ANY PULL: rebuild the workstation — and it now lints first
 
-Verified, and verifying it is what showed the **prompt** was wrong. `_FIGURE` and
-`_DATE_LIKE` were fine — 0 refusals in 16 clean runs with Buddhist dates in every
-sentence, so `D134`'s fix is correct as written. The *sentence* was not: over six live
-runs `v1` led with the conversation history **every time and with a life event never**, one
-run dropped the mortgage, and one asserted that a renewal record was *not found* — a claim
-about data the prompt is never handed.
+```bash
+cd apps/workstation && npm install && npm run build && cd ../..
+```
 
-`prompts/th/summarize_context.v2.md` ships now. Verified end to end on a running server:
-**1.8 s**, `facts=6`, leading with the new child and the mortgage, both dated, no balance
-band, no recommendation. `v1` stays on disk (`D18`).
+`apps/**/dist/` is **gitignored** (`Q17`), so a pull gives you new source and the *old*
+bundle, and none of the screen changes appear with nothing saying why. `npm install` is
+needed once after `B43` because it added ESLint as a dev dependency.
 
-⚠️ **The lesson worth carrying, because it nearly shipped a leak.** `v2`'s first draft was
-green on every counter *and* recited the customer's balance bands (`1m-5m`, `500k-1m`) in
-6 of 6 runs. `_FIGURE` cannot see those — there is no run of four digits in `1m-5m`. Only
-reading the prose caught it. **A green counter is not a read output.**
+`npm run build` is now `eslint src && tsc -b && vite build` and **fails** on a React hook
+called after an early return. That is on purpose — see `B43` below. The Docker image is
+unaffected; it builds the bundle itself (`D136`).
 
-⚠️ **`_RECOMMENDS` was deliberately NOT widened.** A draft produced *"อาจเกี่ยวข้องกับ
-การทบทวนความคุ้มครอง"* — motive-guessing the guard cannot catch. It is forbidden by the
-prompt instead; stretching the regex would start eating truthful sentences. If it recurs it
-wants its **own** pattern, not a looser one.
+### 1. What landed on 2026-09-10, in one table
 
-### 2. ~~`/sim` has no browser check of the typed-intake card~~ ✅ **DONE 2026-09-09 (late)**
-
-All three things checked in a browser on a running server, persona 1 →
-กรุงศรี เฮลท์ แพลน เอ → *Contact us about this plan* → แจ้งเคลมหรือเข้ารักษา:
-
-- **the choice sheet before dialling** renders — *"ก่อนต่อสาย — อยากเล่าเรื่องไว้ก่อนไหม?"*, three
-  options, and the footnote saying the broker sees it the moment they answer and that
-  *"ไม่"* is a recorded answer rather than silence (`D88`);
-- **the box during the wait** renders with its example placeholder and
-  *"ส่งกี่ครั้งก็ได้จนกว่าเจ้าหน้าที่จะรับสาย"*. A 42-character note sent: `POST /v1/app/intake/note 200`
-  in the app's own call list and `customer typed an intake note … seq=1` in the log;
-- **the voice option is a labelled stub, and still offers typing** —
-  *"ส่วนอัดเสียงเป็นการสาธิต ยังไม่ได้เชื่อมต่อระบบเสียงจริง — พิมพ์เล่าด้านบนได้เลย"*, which is `D115`'s rule.
-
-⚠️ **The browser pane still cannot composite clicks** — `computer` clicks do nothing while
-`read_page`, `javascript_tool` and screenshots all work. Drive `/sim` with
-`javascript_tool` and read the DOM. Two notes that cost time: the accessibility tree
-returns almost nothing for this page (three bare `button` nodes), so find controls by
-**text content**, not by ref; and setting a React `<textarea>` needs the native value
-setter plus a dispatched `input` event, or the component never sees the text.
-
-⚠️ **The app's "API CALLS MADE" panel scrolls**, so reading the first screen of it shows
-only the assist polls and looks exactly like the request never being made. Read the
-element's full `innerText`, not the visible part.
-
-### 0. What landed 2026-09-10, from the user's notes
+All of it came from the user's notes after using the screens. Nothing here is speculative.
 
 | | what | the one thing to know |
 |---|---|---|
-| `B42`/`D139` | **being dropped for silence has a way out** | the cookie and the presence expire **independently** — `/me` answered 200 with an offline presence, so reload could never fix it and the 401 path could not see it. `POST /v1/agent/resume` + a dialog |
-| `D140` | **the other policies on the context panel** | the brief said *"อีก 2 ฉบับ"* — a count. ⚠️ the sum insured goes on the SCREEN and **not into the prompt**: rule 3 forbids stating amounts, so sending one can only produce a copy that trips `_FIGURE` |
-| `D141` | **the internal transfer, half built** | the user's own idea. Everything up to the button is REAL because all of it is a read — same `hard_filter`, same `score_fit`. `can_execute` comes from the server |
-| `D142` | **each AI stage picks its own model** | four stages, four switches. Overall reads `mixed` when they disagree, which is `B41`'s lesson as a rule |
-| `D143` | **Docker build args** | `EXTRAS` is the only one that changes the artefact; the rest are defaults. ⚠️ expanded into ONE `uv sync` or it prunes (`B31`) |
+| `B42`/`D139` | dropped for silence has a way out | the cookie and the presence expire **independently** — `/me` answered 200 with an offline presence, so reload could never fix it. `POST /v1/agent/resume` + a dialog |
+| `D140` | the other policies on the context panel | the sum insured goes on the SCREEN and **not into the prompt** — the prompt forbids amounts, so sending one only produces a copy `_FIGURE` refuses |
+| `D141` | the internal transfer, half built | everything up to the button is REAL because it is all a read. `can_execute` comes from the server |
+| `D142` | each of the four AI stages picks its own model | overall reads `mixed` when they disagree — `B41`'s lesson as a rule |
+| `D143` | Docker build args | `EXTRAS` is the only one that changes the artefact; expanded into ONE `uv sync` or it prunes (`B31`) |
+| `D144` | **สายสุดท้าย means ONE more call** | it was READY-only, so an idle desk declaring it got nothing — identical to ไม่รับสายใหม่, and its own end condition could never fire |
+| `D145` | the raw panel shows every fact kind | it rendered from a hardcoded list of three, so the policy facts went into the prompt and **nowhere on screen**. Groups are derived now; an unworded kind shows under its raw code |
+| `D146` | the transfer roster filters on a skill the broker picks | a dropdown defaulting to the call's skill, not locked to it; 4 s poll while open (`B33`-safe, via a ref) |
+| `D147` | the assist link wraps, plus a copy button | `min-width: 0` is the load-bearing line; the clipboard fallback matters because `navigator.clipboard` is undefined on plain HTTP off localhost — i.e. a phone on venue wifi |
+| `B43` | **Accept / Save blanked the whole workstation** | a `useState` below `AssistPanel`'s early return (added by `D147`). Fixed, and **the build now lints for it** |
+| `D148` | **the plan tabs are instant** — reverses `D137` | the reason sentence is no longer awaited: ~2,400 ms → **6 ms**, model text fills in by polling. In-flight dedupe + a **two-attempt cap** so polling cannot hammer a failing provider |
+| `B44` | **a ~3-minute suite took 49 minutes** | a wedged Docker's proxy *accepts* on 5432 and never answers, and four copied Postgres probes had no deadline, per test. One probe per session, 3 s deadline: those files now run in 15 s |
+| `D149` | the test-call dialog picks the line first | pills derived from the intents' own `line`; the cross-line ones are `line: "unknown"` and are worded *ทั่วไป (ทุกประเภท)* |
 
-### 1b. ⚠️ `B41`: `LLM_PROVIDER=rulebased` DOES NOT MEAN "no model is called"
+README §5b also got the full Docker surface that day: every build arg, every `EXTRAS`, six
+recipes, and a table of **which recipes have actually been run**. Recipe 3 (CPU transcription)
+is marked ◐ **not run to completion** — see the landmine below.
 
-The single most useful thing in this file right now. `build_fast_llm` builds a **real**
-client whenever `LLM_FAST_MODEL` is set, whatever `LLM_PROVIDER` says, and **three of the
-four AI features run on `fast_llm or llm`** — the preview summary (`D131`), the
-customer-context panel (`D134`/`D135`) and the comparison's reason sentence (`D137`).
+### 2. ⚠️ The two lessons of 2026-09-10, because both will recur
 
-The dev `.env` said `LLM_PROVIDER=rulebased` with `LLM_FAST_MODEL=gpt-5.4-mini`, so the
-machine was calling OpenAI three times per call **while the test-call dialog said
-“ไม่เรียกโมเดลใดๆ”**. Found because the user asked why a checkbox could not be ticked.
+**A check you have not seen fail is not a check (`B43`).** A regex scan written to find
+"a hook after an early return" printed *clean* **with the bug put back in** — a regex cannot
+see a `return` inside an `if (...) {` block. It looked like a guard and would have let the
+bug ship again. Only the revert test exposed it; the real ESLint rule then passed the same
+test. **Every new guard gets reverted once to watch it fail.** It took thirty seconds each
+time today and caught two things (the useless regex, and — for `D148` — proved the retry cap
+is load-bearing).
 
-**Press ⚙ in the workstation header** (`D138`) to see the truth and to switch without a
-restart. To have no model anywhere, unset `LLM_FAST_MODEL` too.
+**Changing WHO triggers a retry changes what the retry costs (`D148` point 4).** "Don't cache
+a timeout, try again next time" was right while a retry needed a human to switch tabs, and
+wrong the moment a 1.5 s timer started driving the fetches. The rule's own code did not
+change at all. When a fetch goes from human-driven to timer-driven, re-read every "on failure,
+try again" underneath it.
 
-### 2b. ⚠️ AFTER PULLING `D137`: rebuild the workstation, or you will not see it
+### 3. ⚠️ `B41`: `LLM_PROVIDER=rulebased` DOES NOT MEAN "no model is called"
 
-`D137` touched `plans.tsx`, `api.ts` and `styles.css`, and `apps/**/dist/` is **gitignored**
-(`Q17`). A pull gives you the source and the old bundle, so the **AI** chip beside a
-model-written reason sentence simply will not appear and nothing will say why:
+`build_fast_llm` builds a **real** client whenever `LLM_FAST_MODEL` is set, whatever
+`LLM_PROVIDER` says, and three of the four AI stages run on `fast_llm or llm`. The dev `.env`
+had `LLM_PROVIDER=rulebased` with `LLM_FAST_MODEL=gpt-5.4-mini` and was calling OpenAI three
+times per call while a dialog said *"ไม่เรียกโมเดลใดๆ"*. **Press ⚙ in the workstation header**
+(`D138`/`D142`) to see the truth per stage and switch without a restart.
+
+### 4. ⚠️ The machine: the disk nearly filled on 2026-09-10
+
+Building the CPU-transcription image (README recipe 3) pulls ~3 GB of CUDA wheels, because
+torch is pinned to the CUDA index. On this laptop that took `C:` to **0 bytes free**, Docker
+Desktop stopped answering, and the test suite took 49 minutes instead of ~3. Docker released
+the failed layers on its own and the disk came back to ~18 GB free. The images left behind
+are `readycall:cpu-stt` and `readycall:s3`:
 
 ```bash
-cd apps/workstation && npm run build && cd ../..
+docker rmi readycall:cpu-stt readycall:s3 && docker builder prune -af
 ```
 
-The Docker image is unaffected — it builds the bundle itself (`D136`).
+**Do not build recipe 3 on this machine again without ~10 GB free first.** And never run
+two full `pytest` runs at once here — they fight over the test ports and each other's CPU,
+and neither finishes.
 
-### 3. Then: the queue below — and item 2 of it is now done too
+### 5. What is left, in order
 
-**Rehearsal and the video are the whole of what is left before the pitch.** `D136` packaged
-the system (queue item 2), so the only things between here and 13 September are the ones
-that need the team rather than the code: a rehearsed five minutes, a recording that
-survives a venue's wifi, and the feature freeze itself.
+1. **Rehearsal and the video.** Five minutes plus five of Q&A (`MARKET_FACTS`). The system is
+   packaged (`D136`); the remaining work needs the team, not the code.
+2. ⚠️ `Q23` bites during rehearsal: personalised menus **renumber**, and a human reading a
+   script off paper presses what the script says. Rehearse with the persona that will be
+   used, or set `personalisation.enabled: false` for the day.
+3. **Feature freeze — end of 11 September at the latest**, because rehearsal needs a whole
+   evening and cannot happen on the morning of the 13th (file due 11:00–12:00). Anything
+   after the freeze should be a fix the user found by using it.
 
-⚠️ `Q23` bites during rehearsal: personalised menus **renumber**, and a human reading a
-script off paper presses what the script says. Either rehearse with the persona that will
-actually be used, or set `personalisation.enabled: false` for the day.
+### The decisions the user made, so nobody re-opens them
 
-### What the user asked for that is DONE
+- **The plan-fit score is agent-only and NOT a priority** (`Q40`). Anything that *reorders*
+  the table collides with `D126` (ranking is arithmetic so a model cannot argue a plan first)
+  and needs its own entry.
+- **Two test-call buttons, not one.** The plain one stays as it was.
+- **Synthetic training data is out.** Post-hackathon: one model, lapse propensity, a real
+  public dataset, verified to download first.
+- **The transfer skill filter is a dropdown the broker controls, defaulting to the call's
+  skill** (`D146`) — the user's second instinct, and the hard filter stays because a filter
+  *the person chose* cannot put an unqualified desk in a list sorted by fit by accident.
 
-| asked | state |
-|---|---|
-| test the OpenAI key, compare models, pick one | ✅ `D130` — `scripts/compare_llm.py`, 7 models measured |
-| summary before the offer card is answered | ✅ `D131` — verified at 1.8 s on a live server |
-| a way to SEE the LLM working | ✅ `D132` — `+ สายทดสอบ⚙` opens a dialog |
-| `/sim` comparison table overflowing | ✅ `B40` — proven by disabling the fix at 800 px |
-| "record or write" while waiting | ✅ `D133` — writing is REAL, voice is a labelled stub |
-| a back button after the call ends | ✅ `D133` |
-| a guide for the UI team + git for beginners | ✅ `docs/FOR_THE_TEAM.md` |
-| where is AI used, and ideas | answered in chat; the ideas became `D134` |
-| customer-context panel | ✅ `D134` + `D135` — data verified, model sentence verified, and the prompt replaced because verifying it showed `v1` never led with the life events |
+### Earlier "continue here" items, closed
 
-### The three decisions the user made this session, so nobody re-opens them
+`D134`'s model sentence was verified live and the prompt replaced (`D135`, `v2` ships — the
+first draft recited balance bands `_FIGURE` cannot see: *a green counter is not a read
+output*). `/sim`'s typed-intake card was checked in a browser. The table of what the user
+asked for on 9 September is all ✅ (`D130`–`D135`, `B40`, `FOR_THE_TEAM.md`).
 
-- **The plan-fit score is agent-only and NOT a priority.** The user: *"the customer
-  shouldn't be able to see the fit score or whatever, just the normal table thing, exactly
-  the same as how it currently is for them"* — and *"i feel like it's not a priority doing
-  the fit score thing rn"*. ⚠️ It also collides with `D126`, which makes the ranking
-  arithmetic **on purpose** so a model cannot be argued into putting a plan first. A
-  non-ranking signal beside the table is fine; anything that reorders is a `D126` reversal
-  and needs its own entry. Recorded as `Q40`.
-- **Two test-call buttons, not one.** The plain one stays exactly as it was.
-- **Synthetic training data is out.** Unchanged from before: one model, lapse propensity,
-  a real public dataset, and verify it downloads first. Post-hackathon.
+⚠️ **The browser pane still cannot composite clicks** on some pages — `computer` clicks can do
+nothing while `read_page`, `javascript_tool` and screenshots work. Drive the screens with
+`javascript_tool`, find controls by **text content**, and set a React `<textarea>`/`<select>`
+with the native value setter plus a dispatched `input`/`change` event.
 
 ---
 
@@ -153,7 +145,7 @@ somebody calls it.** `grep -rn "\.method_name(" src/` is thirty seconds and it h
 been the answer nine times.
 
 The second pattern, worth equal weight: **every one of these was found by the user
-pressing a button, never by the suite.** 974 tests pass and did not see any of it. When
+pressing a button, never by the suite.** 982 tests pass and did not see any of it — `B43` is the latest. When
 they report something, believe the report before believing the tests.
 
 ⚠️ **And `B39`'s specific lesson, because it cost a whole round trip:** when the user
@@ -520,7 +512,7 @@ moment in the recording it was said — **and if they consented, their audio is 
 storage encrypted, with the key ref and the retention date on an `audio_recordings` row.**
 If they declined, it is nowhere.
 
-Verified **2026-09-09 (late)**: **974 tests** — 962 pass + 12 skipped, with Postgres
+Verified **2026-09-10 (night)**: **982 tests** — 923 pass + 59 skipped in 86 s with Docker down. On 2026-09-09: 962 pass + 12 skipped, with Postgres
 and MinIO both up (`readycall-postgres-1`, `readycall-minio-1`, both healthy). `ruff check` + `ruff format --check` clean over 220 files,
 `mypy --strict` clean over 157, 69/69 diagrams current, prompt pack fresh, `audit_docs.py`
 clean on the live files. **And by driving `/sim` in a browser** (`D123`): *Contact us —
@@ -1132,11 +1124,34 @@ this"* · **`Q29` the latency and `Q30` the test set** (both `D104`, and `Q30` i
 + Typhoon compared · React workstation with the softphone in it · web customer simulator ·
 menu-first flow (`D37`).
 
-## The machine, as left on 2026-09-09
+## The machine, as left on 2026-09-10
 
 Facts about *this laptop* rather than the repo, so a fresh session does not rediscover them.
 
-**⚠️ Read these four first — they cost time on 2026-09-08/09 and they will again.**
+**⚠️ New on 2026-09-10, and the most expensive of all of these:**
+
+- **THE DISK IS THE CONSTRAINT.** `C:` is 475 GB and was at **0 bytes free** after one
+  CPU-transcription image build (~3 GB of CUDA wheels, because torch comes from the CUDA
+  index). Docker Desktop stopped answering entirely. It recovered to ~26 GB free on its own
+  when Docker dropped the failed layers.
+  **Check `df -h /c` before any `docker build`**, and remove leftovers with
+  `docker rmi readycall:cpu-stt readycall:s3 && docker builder prune -af`.
+- **ONE `pytest` RUN AT A TIME.** Three concurrent full runs (started while waiting on each
+  other) fought over CPU and test ports and none of them finished. If a run seems stuck, it
+  is almost always another one still going — `TaskStop` the old ones rather than starting
+  another.
+- **`| tail` BUFFERS A BACKGROUND RUN'S OUTPUT UNTIL THE END**, so a running suite looks like
+  an empty file. Redirect to a file (`> suite.txt 2>&1`) and read that to see progress.
+- **A HALF-DEAD DOCKER HANGS CONNECTIONS INSTEAD OF REFUSING THEM** (`B44`). Its port proxy
+  keeps listening on 5432/19000 with nothing behind it, so a connect is accepted and never
+  answered. That — not only the concurrent runs — is why a ~3-minute suite took **49
+  minutes**: each Postgres test's probe waited ~60 s. Fixed: one probe per session with a
+  3 s deadline (`tests/conftest.py::postgres_reachable`). If a run ever stalls on a row of
+  `s`, suspect a dependency that hangs, and check it with a socket and a timeout.
+- **With Docker down, the suite reports ~59 skips instead of 12** — the Postgres and MinIO
+  contract tests skip rather than fail. That is expected, not a regression.
+
+**⚠️ Read these four next — they cost time on 2026-09-08/09 and they will again.**
 
 - **PORT 8000 STILL HOLDS A STALE SERVER FROM AN EARLIER SESSION.** Verification on
   2026-09-08/09 ran on **8010** instead (`API_PORT=8010 uv run python -m
@@ -1153,8 +1168,9 @@ Facts about *this laptop* rather than the repo, so a fresh session does not redi
 - **`uv run python - <<'PY'` HEREDOCS BREAK ON APOSTROPHES** — twice on 2026-09-09. Write the
   script into the scratchpad with the Write tool and run it by path.
 
-**Both containers are up and healthy** as of 2026-09-09: `readycall-postgres-1` and
-`readycall-minio-1`. The 903-test run above was with both.
+**Both containers were up and healthy** on 2026-09-09: `readycall-postgres-1` and
+`readycall-minio-1`. ⚠️ **On 2026-09-10 Docker Desktop stopped answering** after the disk
+filled (above) — restart it and check `docker ps` before assuming either is up.
 
 - **Docker works** (v29.2.0) and **Docker Desktop has to be started by hand** — it was not
   running on 2026-09-06 and `docker compose` failed with a named-pipe error rather than
@@ -1221,6 +1237,22 @@ Facts about *this laptop* rather than the repo, so a fresh session does not redi
 
 ## Things to be careful about (live landmines)
 
+- **EVERY REACT HOOK GOES ABOVE THE COMPONENT'S FIRST `return`** (`B43`). One `useState`
+  below `AssistPanel`'s `if (!callId) return` blanked the entire workstation on every Accept
+  and every wrap-up save. `npm run build` now fails on it (`react-hooks/rules-of-hooks`), so
+  if the build stops there, **move the hook up — do not disable the rule.**
+- **THE COMPARISON'S REASON SENTENCE MUST NOT BE AWAITED AGAIN** (`D148`). Awaiting it froze
+  the plan tabs for ~2.4 s per switch. The endpoint returns at once with `reasons_pending`;
+  the client polls. ⚠️ Keep the **two-attempt cap** in `_comparison_reasons`: without it, a
+  provider that keeps timing out gets a model call on every 1.5 s poll for as long as the
+  panel is open. `test_comparison_not_awaited.py` fails if either is undone.
+- **DERIVE UI GROUPS FROM THE DATA, NEVER FROM A FIXED LIST** (`D145`, `D149`). The raw panel
+  rendered from a hardcoded list of three fact kinds and silently hid the policy facts the
+  model was reading. The intent pills are derived the same way and immediately surfaced
+  eight intents served as `line: "unknown"`. An unworded group should look ugly, not vanish.
+- **A GUARD YOU HAVE NOT SEEN FAIL IS NOT A GUARD** (`B43`). Revert the fix, run the check,
+  watch it go red, restore. A regex "hooks scan" printed *clean* on the buggy code; ESLint
+  did not. Thirty seconds, every time.
 - **A COVERAGE FIGURE ON THE CUSTOMER'S SCREEN IS COMPOSED BY THE SERVER, ALWAYS**
   (`D126`, `D127`, `D16`). `compare.plans` and `info.plan_detail` **discard the request's
   payload** and build their own; the client sends a `tool_id`, a `line` or a
@@ -2099,7 +2131,7 @@ URL from another conversation creates a duplicate instead.
 
 | Page | URL |
 |---|---|
-| `reading/what_landed_9_10_september.html` — **`D135`–`D138` and `B41`, in plain language.** Written because the user said *"i have no idea on all the stuff you just did"*. Each change as what / where / why / how, the measurement tables, and §`left` answers *"what do we have left to do"* — including why the internal transfer is a scope call rather than an oversight | https://claude.ai/code/artifact/c486b010-b060-46a6-b6e9-1957ed925334 |
+| `reading/what_landed_9_10_september.html` — **`D135`–`D138` and `B41`, in plain language, plus §`later` (added and republished the evening of 2026-09-10) covering `D139`–`D149`, `B42` and `B43`.** Written because the user said *"i have no idea on all the stuff you just did"*. Each change as what / where / why / how, the measurement tables, and §`left` answers *"what do we have left to do"* — including why the internal transfer is a scope call rather than an oversight | https://claude.ai/code/artifact/c486b010-b060-46a6-b6e9-1957ed925334 |
 | `reading/the_line.html` — the keypad | https://claude.ai/code/artifact/5953f7a7-d0c4-4829-8cc7-fec2b6f5b856 |
 | `reading/2026-09-03_what_happened.md` — **markdown, not a page.** The 3 September session from zero, with a glossary and the two open decisions. Written for the user after three summaries failed to land | _(a file, no URL)_ |
 | `reading/2026-09-05_the_words_on_the_screen.md` — **markdown, not a page.** How the transcript reached the agent's screen, and the two services that turned out to be running nowhere (`B24`). Ends in three commands that put six Thai sentences on a real screen | _(a file, no URL)_ |

@@ -356,7 +356,7 @@ def agent_state() -> None:
     for intent in AgentIntent:
         lines.append(f"        I_{intent.name}[{q(str(intent))}]")
     lines.append("    end")
-    eligible = q("offerable = AVAILABLE and intent in (ready, last_call)")
+    eligible = q("offerable = AVAILABLE and (intent = ready, or last_call while idle — D144)")
     lines.append(f"    sys -.-> ELIGIBLE{{{eligible}}}:::gate")
     lines.append("    person -.-> ELIGIBLE")
     why = lbl(

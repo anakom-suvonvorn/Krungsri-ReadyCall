@@ -6,7 +6,7 @@ the STT engine chosen on measurements (`D104`), the live transcript on the agent
 (`D106`) and the encrypted recording in object storage (`D110`). The analysis passes and
 the telephony integration are still design.
 Each section says what is real where it matters. See `PLAN.md` for the build order._
-_Last updated: 2026-09-09._
+_Last updated: 2026-09-10._
 
 ---
 
@@ -722,7 +722,8 @@ machines on the LAN need real certs (`mkcert` in dev). This is a P5 landmine, fl
 `ON_CALL` · `AFTER_CALL_WORK`.
 
 **Agent intent** (manual, set by the person): `NOT_READY` · `READY` · `BREAK` · `LUNCH` ·
-`TRAINING` · `ADMIN` · **`LAST_CALL`** (finish the current call, then stop taking new ones) ·
+`TRAINING` · `ADMIN` · **`LAST_CALL`** (**one more call** — if idle, accept exactly one; once a
+call is in flight, none — then the platform sets `NOT_READY`, reason `last_call_fulfilled`) ·
 **`DRAINING`** (take no new callers, but stay logged in for anything already committed to me).
 
 > **`D51` (P2b):** `NOT_READY` is the one value an agent may **not** declare for themselves —
@@ -736,14 +737,32 @@ machines on the LAN need real certs (`mkcert` in dev). This is a P5 landmine, fl
 
 ```
 effective_availability = system_state == AVAILABLE
-                         and agent_intent == READY
+                         and (agent_intent == READY
+                              or (agent_intent == LAST_CALL and current_load == 0))
                          and current_load < max_concurrent
                          and within_schedule(agent, now)
 ```
 
+> **`D144` (2026-09-10) — the `LAST_CALL` clause.** This formula used to read
+> `agent_intent == READY` alone, so a desk that declared สายสุดท้าย **while idle** was never
+> offered anything. That made it identical to ไม่รับสายใหม่, meant its own end condition could
+> never fire, and greyed out the test-call button. "Last call" means *one more*: idle desks get
+> exactly one, and a desk already on a call gets none.
+
 Each agent is a separate authenticated browser session holding a WebSocket that publishes a heartbeat.
 Presence lives in Redis with a TTL, so a closed laptop drops out automatically; the DB keeps the
 durable record in `agent_state_log`.
+
+> **`D139` (2026-09-10) — a drop is a state with a way out.** The heartbeat sweep sets
+> `system_state = OFFLINE` when a desk goes silent, but the **session cookie lives on
+> independently**. So `/me` keeps answering 200 with an offline presence: reloading cannot
+> fix it and the 401 handler never sees it. The workstation now detects "signed in but
+> dropped by the platform" and offers **`POST /v1/agent/resume`**. That re-runs
+> `presence.sign_in`, so it inherits `D78`'s carry-forward rule: a standing *lunch* survives,
+> but `READY` and `LAST_CALL` do not, because those invite a call and the platform cannot know
+> the person is back at the desk — they press พร้อมรับสาย themselves (`D51`). It is deliberately
+> **not** a new session: re-issuing one would rotate the cookie and reset the push sequence
+> (`B27`) for someone who never left.
 
 > **P2c:** implemented, with one correction to the sentence above. **There is no
 > `agent_presence` table** — current presence is the newest `agent_state_log` row per agent,

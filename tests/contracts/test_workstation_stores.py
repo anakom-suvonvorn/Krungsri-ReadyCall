@@ -77,6 +77,7 @@ from readycall.services.identity.attestation import (
 from readycall.services.recording.store import InMemoryRecordingStore
 from readycall.services.transcription.store import InMemoryTranscriptStore
 from readycall.services.wrapup.store import InMemoryWrapupStore
+from tests.conftest import postgres_reachable
 
 #: A **separate database** from the one the app uses, and that separation is load-bearing.
 #: These suites create their tables with `create_all` and drop them on teardown; pointed at
@@ -104,14 +105,8 @@ BUILDERS: dict[str, tuple[Any, Any]] = {
 
 
 async def _postgres_reachable() -> bool:
-    try:
-        engine = create_engine(POSTGRES_URL)
-        async with engine.connect():
-            pass
-        await engine.dispose()
-    except Exception:
-        return False
-    return True
+    # One probe per session, with a deadline: see `postgres_reachable` (`B44`).
+    return await postgres_reachable(POSTGRES_URL)
 
 
 async def _prepare(engine: AsyncEngine) -> None:
