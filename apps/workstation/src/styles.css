@@ -1273,3 +1273,13 @@ button.plan-row.on {
   .roster-row { grid-template-columns: 1fr auto; row-gap: 4px; }
   .roster-skills { grid-column: 1 / -1; }
 }
+
+/* --- per-stage model rows (`D142`) --------------------------------------------------- */
+.stage-grid { display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.stage-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center;
+  background: var(--panel, #1b1e23); padding: 9px 12px;
+}
+.stage-name { min-width: 0; font-size: 13px; }
+.pill-opt.tiny { font-size: 11px; padding: 3px 9px; }
+@media (max-width: 720px) { .stage-row { grid-template-columns: 1fr; gap: 6px; } }

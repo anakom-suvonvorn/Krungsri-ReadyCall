@@ -72,11 +72,11 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
 
   if (!open) return null;
 
-  const choose = async (provider: string) => {
+  const choose = async (provider: string, stage?: string) => {
     setBusy(true);
     setError(null);
     try {
-      setLlm((await api.setLlm(provider)).llm);
+      setLlm((await api.setLlm(provider, stage)).llm);
     } catch (e) {
       setError(e instanceof Error ? e.message : "สลับโมเดลไม่สำเร็จ");
       /* The server may have refused for a reason the panel could not see, so re-read
@@ -106,7 +106,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
           </div>
         )}
 
-        <h3>โมเดล AI</h3>
+        <h3>โมเดล AI (ตั้งทั้งหมดพร้อมกัน)</h3>
         <p className="faint">
           เปลี่ยนได้ทันทีโดยไม่ต้องรีสตาร์ต — ใช้สำหรับสาธิตว่า “มี AI” กับ “ไม่มี AI”
           ต่างกันอย่างไรบนสายเดียวกัน <b>ไม่ถูกบันทึกไว้</b> รีสตาร์ตแล้วจะกลับไปตามไฟล์{" "}
@@ -129,26 +129,47 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
               ))}
             </div>
 
-            {/* ⚠️ The two stages are named APART, which is `B41`'s fix on screen. They can
-                genuinely differ — a fast model configured while the main one is rule-based
-                means three of the four AI features call a hosted model — and one combined
-                sentence is exactly what hid that. */}
-            <div className="rationale" style={{ marginTop: 10 }}>
-              <div>
-                {llm.model ? "✅" : "⬜"} สรุปฉบับเต็ม (หลังกดรับสาย) —{" "}
-                {llm.model ?? "ใช้สรุปแบบกฎ ไม่เรียกโมเดล"}
-              </div>
-              <div style={{ marginTop: 4 }}>
-                {llm.fast_model ? "✅" : "⬜"} สรุประหว่างรอรับสาย · แผงข้อมูลลูกค้า ·
-                เหตุผลเปรียบเทียบแผน — {llm.fast_model ?? "ใช้สรุปแบบกฎ ไม่เรียกโมเดล"}
-              </div>
-              {llm.fast_model && !llm.model && (
-                <div className="faint" style={{ marginTop: 6 }}>
-                  ⚠️ ตั้งค่าเฉพาะโมเดลเร็วไว้ — สามในสี่จุดที่ใช้ AI จะเรียกโมเดลจริง
-                  แม้ <code>LLM_PROVIDER</code> จะเป็น <code>rulebased</code> (`B41`)
+            {/* ⚠️ **Four stages, four answers** (`D142`), which is `B41`'s fix
+                generalised: they are different jobs under different deadlines and one
+                number for all of them was wrong about three. Each row sets its own. */}
+            <h3 style={{ marginTop: 18 }}>ตั้งทีละจุดก็ได้</h3>
+            <p className="faint">
+              แต่ละจุดมีเวลาที่ต่างกัน — จุดที่ต้องขึ้นก่อนกดรับสายควรใช้โมเดลเร็ว
+              ส่วนสรุปฉบับเต็มไม่มีใครรออยู่ จึงใช้โมเดลที่ดีกว่าได้
+            </p>
+            <div className="stage-grid">
+              {llm.stages.map((st) => (
+                <div key={st.stage} className="stage-row">
+                  <div className="stage-name">
+                    {st.model ? "✅" : "⬜"} {st.label_th}
+                    <div className="faint">{st.model ?? "ใช้สรุปแบบกฎ ไม่เรียกโมเดล"}</div>
+                  </div>
+                  <div className="pill-grid" role="radiogroup" aria-label={st.label_th}>
+                    {llm.options.map((o) => (
+                      <button
+                        key={o.provider}
+                        type="button"
+                        role="radio"
+                        aria-checked={st.provider === o.provider}
+                        disabled={busy || !o.available}
+                        title={o.why_th}
+                        className={`pill-opt tiny ${st.provider === o.provider ? "on" : ""}`}
+                        onClick={() => void choose(o.provider, st.stage)}
+                      >
+                        {o.provider === "rulebased" ? "ปิด" : (o.model ?? o.label_th)}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              )}
+              ))}
             </div>
+
+            {llm.fast_model && !llm.model && (
+              <div className="rationale" style={{ borderLeftColor: "var(--warn)", marginTop: 10 }}>
+                ⚠️ ตั้งค่าเฉพาะโมเดลเร็วไว้ — สามในสี่จุดที่ใช้ AI จะเรียกโมเดลจริง แม้{" "}
+                <code>LLM_PROVIDER</code> จะเป็น <code>rulebased</code> (`B41`)
+              </div>
+            )}
 
             <p className="faint" style={{ marginTop: 10 }}>
               ตัวเลือกที่กดไม่ได้คือยังไม่มีคีย์ในไฟล์ <code>.env</code> ของเครื่องนี้ —

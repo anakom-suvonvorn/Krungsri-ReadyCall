@@ -7,7 +7,7 @@ _Last updated: 2026-09-10._
 
 ## ⚠️ CONTINUE HERE — rewritten 2026-09-09 (late), after `D135`
 
-**Everything is committed and green.** **957 tests** — 945 pass + 12 skipped — ruff + ruff format + mypy clean, the
+**Everything is committed and green.** **969 tests** — 957 pass + 12 skipped — ruff + ruff format + mypy clean, the
 workstation builds, 69/69 diagrams current. There is no half-applied edit anywhere. What
 follows is what is *unfinished*, not what is broken.
 
@@ -58,6 +58,16 @@ setter plus a dispatched `input` event, or the component never sees the text.
 ⚠️ **The app's "API CALLS MADE" panel scrolls**, so reading the first screen of it shows
 only the assist polls and looks exactly like the request never being made. Read the
 element's full `innerText`, not the visible part.
+
+### 0. What landed 2026-09-10, from the user's notes
+
+| | what | the one thing to know |
+|---|---|---|
+| `B42`/`D139` | **being dropped for silence has a way out** | the cookie and the presence expire **independently** — `/me` answered 200 with an offline presence, so reload could never fix it and the 401 path could not see it. `POST /v1/agent/resume` + a dialog |
+| `D140` | **the other policies on the context panel** | the brief said *"อีก 2 ฉบับ"* — a count. ⚠️ the sum insured goes on the SCREEN and **not into the prompt**: rule 3 forbids stating amounts, so sending one can only produce a copy that trips `_FIGURE` |
+| `D141` | **the internal transfer, half built** | the user's own idea. Everything up to the button is REAL because all of it is a read — same `hard_filter`, same `score_fit`. `can_execute` comes from the server |
+| `D142` | **each AI stage picks its own model** | four stages, four switches. Overall reads `mixed` when they disagree, which is `B41`'s lesson as a rule |
+| `D143` | **Docker build args** | `EXTRAS` is the only one that changes the artefact; the rest are defaults. ⚠️ expanded into ONE `uv sync` or it prunes (`B31`) |
 
 ### 1b. ⚠️ `B41`: `LLM_PROVIDER=rulebased` DOES NOT MEAN "no model is called"
 
@@ -143,7 +153,7 @@ somebody calls it.** `grep -rn "\.method_name(" src/` is thirty seconds and it h
 been the answer nine times.
 
 The second pattern, worth equal weight: **every one of these was found by the user
-pressing a button, never by the suite.** 957 tests pass and did not see any of it. When
+pressing a button, never by the suite.** 969 tests pass and did not see any of it. When
 they report something, believe the report before believing the tests.
 
 ⚠️ **And `B39`'s specific lesson, because it cost a whole round trip:** when the user
@@ -510,7 +520,7 @@ moment in the recording it was said — **and if they consented, their audio is 
 storage encrypted, with the key ref and the retention date on an `audio_recordings` row.**
 If they declined, it is nowhere.
 
-Verified **2026-09-09 (late)**: **957 tests** — 945 pass + 12 skipped, with Postgres
+Verified **2026-09-09 (late)**: **969 tests** — 957 pass + 12 skipped, with Postgres
 and MinIO both up (`readycall-postgres-1`, `readycall-minio-1`, both healthy). `ruff check` + `ruff format --check` clean over 220 files,
 `mypy --strict` clean over 157, 69/69 diagrams current, prompt pack fresh, `audit_docs.py`
 clean on the live files. **And by driving `/sim` in a browser** (`D123`): *Contact us —

@@ -202,3 +202,69 @@ def test_switching_clears_text_the_other_model_wrote(fast_only: TestClient) -> N
 
     assert box.comparison_reason_cache == {}
     assert box.context_summaries == {}
+
+
+# --- D142: each stage set independently ---------------------------------------------------
+
+
+def test_the_four_stages_are_reported_separately(fast_only: TestClient) -> None:
+    """`D142`, and it is `B41`'s fix generalised: four jobs, four answers. A panel that
+    reported one number for all of them was wrong about three."""
+    stages = fast_only.get("/v1/agent/settings").json()["llm"]["stages"]
+
+    assert [s["stage"] for s in stages] == ["preview", "context", "comparison", "final"]
+    # This fixture is `B41`'s shape: a fast model configured, the main one rule-based.
+    by_stage = {s["stage"]: s for s in stages}
+    assert by_stage["final"]["model"] is None
+    assert by_stage["preview"]["model"] == "gpt-5.4-mini"
+    assert by_stage["context"]["model"] == "gpt-5.4-mini"
+    assert by_stage["comparison"]["model"] == "gpt-5.4-mini"
+
+
+def test_one_stage_can_be_changed_without_touching_the_others(fast_only: TestClient) -> None:
+    """The point of `D142`. Turning the comparison's model off must not silently take the
+    offer-card preview with it."""
+    body = fast_only.post(
+        "/v1/agent/settings/llm", json={"provider": "rulebased", "stage": "comparison"}
+    ).json()
+
+    by_stage = {s["stage"]: s for s in body["llm"]["stages"]}
+    assert by_stage["comparison"]["model"] is None
+    assert by_stage["preview"]["model"] == "gpt-5.4-mini", "an unrelated stage was changed"
+    assert by_stage["context"]["model"] == "gpt-5.4-mini"
+
+
+def test_the_overall_provider_reads_mixed_rather_than_picking_one(fast_only: TestClient) -> None:
+    """⚠️ `B41`'s lesson as a rule: when the four disagree, say so. Reporting one of them
+    is a true statement about that stage and a false one about the rest."""
+    fast_only.post("/v1/agent/settings/llm", json={"provider": "rulebased", "stage": "context"})
+
+    assert fast_only.get("/v1/agent/settings").json()["llm"]["provider"] == "mixed"
+
+
+def test_setting_every_stage_at_once_still_works(fast_only: TestClient) -> None:
+    """The no-stage form is what the panel opens with and what a pitch uses."""
+    body = fast_only.post("/v1/agent/settings/llm", json={"provider": "rulebased"}).json()["llm"]
+
+    assert body["provider"] == "rulebased"
+    assert all(s["model"] is None for s in body["stages"])
+    assert body["enabled"] is False
+
+
+def test_an_unknown_stage_is_refused(fast_only: TestClient) -> None:
+    response = fast_only.post(
+        "/v1/agent/settings/llm", json={"provider": "rulebased", "stage": "nope"}
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "unknown stage"
+
+
+def test_a_stage_still_cannot_reach_an_unavailable_provider(fast_only: TestClient) -> None:
+    """The key check is per-request, not per-stage: naming a stage must not become a way
+    round the gate (`D121`, `B5`)."""
+    response = fast_only.post(
+        "/v1/agent/settings/llm", json={"provider": "anthropic", "stage": "final"}
+    )
+
+    assert response.status_code == 400

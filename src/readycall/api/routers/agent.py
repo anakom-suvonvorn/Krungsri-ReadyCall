@@ -1053,8 +1053,11 @@ async def set_llm(body: SetLlmRequest, who: AgentDep, container: ContainerDep) -
         # summary failing with a key error nobody could see from the workstation.
         raise HTTPException(status_code=400, detail=str(chosen["why_th"]))
 
+    if body.stage is not None and body.stage not in {s for s, _ in container.LLM_STAGES}:
+        raise HTTPException(status_code=400, detail="unknown stage")
+
     try:
-        container.apply_llm_choice(body.provider)
+        container.apply_llm_choice(body.provider, stage=body.stage)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"{type(exc).__name__}: {exc}"[:200]) from exc
 
@@ -1062,7 +1065,12 @@ async def set_llm(body: SetLlmRequest, who: AgentDep, container: ContainerDep) -
     _BACKGROUND.add(task)
     task.add_done_callback(_BACKGROUND.discard)
 
-    log.info("llm provider switched at runtime", provider=body.provider, by=who.agent_id)
+    log.info(
+        "llm provider switched at runtime",
+        provider=body.provider,
+        stage=body.stage or "all",
+        by=who.agent_id,
+    )
     return {"llm": container.llm_state()}
 
 

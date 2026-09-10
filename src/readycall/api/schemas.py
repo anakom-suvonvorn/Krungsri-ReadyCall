@@ -371,6 +371,9 @@ class SetLlmRequest(ApiModel):
     """
 
     provider: str = Field(min_length=1, max_length=32)
+    #: Which of the four AI stages to change, or `None` for all of them (`D142`).
+    #: Validated against the container's own list, never used to build anything.
+    stage: str | None = Field(default=None, max_length=32)
 
 
 class AssistPushRequest(ApiModel):

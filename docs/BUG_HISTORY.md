@@ -1922,3 +1922,39 @@ will match the width."** Both halves of that sentence were one bug._
   ⚠️ And the cost was not only confusion. It was **spending money on API calls while
   displaying that it was not making any** — the kind of error that is invisible until an
   invoice arrives.
+
+## B42. Dropped for silence, and no way back except signing out
+- **Symptoms:** the user — *"when you get kicked/timed out/inactive for a long time it stays
+  in a weird state and you can't go back to normal even if you press reload on the page.
+  Only pressing ออกจากระบบ and signing back in again fixes it."* Exactly right.
+- **Root cause:** **the session and the presence expire independently, and only one of them
+  expired.** `PresenceService.sweep` moves a desk whose heartbeat lapsed to `OFFLINE` and
+  clears its `session_id` — but the agent's **cookie is untouched and still valid**. So
+  `GET /v1/agent/me` answers `200` with an offline presence, a browser reload fetches
+  exactly the same dead state, and the client's existing recovery path could not fire
+  because that path keys on a **401** and there is no 401.
+- **Investigation:** started from the report rather than the code — the give-away is
+  *"reload does not fix it"*, which rules out client state and points at the server
+  returning the broken thing on purpose. Confirmed by advancing a `ManualClock` past
+  `agent_presence_ttl_s`, running the sweep, and asserting `/me` returns **200** with
+  `system_state: offline`. That assertion is now the first test in the file, because the
+  stuck state has to keep existing for the fix to be the right fix.
+- **Fix:** `POST /v1/agent/resume` (`D139`) re-opens the workstation for an agent who is
+  already authenticated, and the client renders a blocking dialog whenever
+  `system_state === "offline"` explaining what happened. Deliberately **not** a re-login:
+  re-issuing the cookie would rotate the session and reset the per-agent push sequence
+  (`B27`) for somebody who never left. It returns `NOT_READY`, because the platform has no
+  idea whether they are back at the desk (`D51`).
+- **Verification:** six tests in `tests/unit/test_resume_after_drop.py`, including one
+  asserting the cookie is unchanged across a resume and one asserting the endpoint 401s
+  with no session — it is a way back for somebody authenticated, never a way in.
+- **Lesson:** **two lifetimes over one login is two ways to be logged out, and the client
+  only knew about one of them.** The 401 path was written for "the session went away" and
+  was correct; nobody asked what the *other* expiry looked like from the browser. When a
+  system has two independent timeouts, the recovery UI needs a branch per timeout — and the
+  one with no error code is the one that will be missed, because it is the one that returns
+  `200`.
+
+  It also belongs with `B34`: both are the heartbeat being treated as a claim about the
+  **person** when it is a claim about the **browser tab**. `B34` stopped it dropping an
+  agent mid-call; this one stops it stranding an agent who simply looked away.

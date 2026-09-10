@@ -491,6 +491,15 @@ export type LlmSettings = {
    *  of the four AI features call a hosted model while the main provider is rule-based. */
   fast_model: string | null;
   configured_provider: string;
+  /** The four AI stages, each independently settable (`D142`). Reported separately
+   *  because they are different jobs under different deadlines - and because one number
+   *  for all four was `B41`. */
+  stages: {
+    stage: "preview" | "context" | "comparison" | "final";
+    label_th: string;
+    provider: string;
+    model: string | null;
+  }[];
   options: {
     provider: string;
     label_th: string;
@@ -540,8 +549,9 @@ export const api = {
   /** `D138`. Demo-only: 404 on an instance with `DEMO_AGENT_LOGIN_ENABLED` off. */
   settings: () => call<{ llm: LlmSettings }>("GET", "/v1/agent/settings"),
   /** ⚠️ A provider name and nothing else - never a key and never a base URL (`D138`). */
-  setLlm: (provider: string) =>
-    call<{ llm: LlmSettings }>("POST", "/v1/agent/settings/llm", { provider }),
+  /** Omit `stage` to set all four at once - what the panel opens with (`D138`, `D142`). */
+  setLlm: (provider: string, stage?: string) =>
+    call<{ llm: LlmSettings }>("POST", "/v1/agent/settings/llm", { provider, stage }),
   declare: (intent: string) =>
     call<Presence>("POST", "/v1/agent/state", { agent_intent: intent }),
 

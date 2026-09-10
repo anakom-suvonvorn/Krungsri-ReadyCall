@@ -34,7 +34,31 @@ RUN npm run build
 
 
 # --- stage 2: the runtime --------------------------------------------------------------
+#
+# ⚠️ **BUILD ARGS, so one Dockerfile covers the machines we might actually run on**
+# (`D143`). The extras have to be decided at BUILD time; the rest are defaults baked in so
+# `docker run readycall` needs no flags, and every one is overridable with `-e` at run time.
+#
+#   docker build -t readycall .                                    # the demo image
+#   docker build --build-arg EXTRAS="web llm s3" -t readycall .    # + MinIO/S3 recordings
+#   docker build --build-arg EXTRAS="web llm ml asr" --build-arg STT_ENGINE=typhoon \
+#                --build-arg STT_DEVICE=cuda -t readycall-gpu .
+#
+# ⚠️ The GPU line installs ~3 GB of CUDA wheels and **still will not reach a GPU** unless
+# the container is run with `--gpus all` on a host with the NVIDIA container toolkit. That
+# is host setup which varies by machine, which is exactly what fails at a venue — so it is
+# available and it is not the default (`D136`).
 FROM python:3.11-slim AS runtime
+
+#: Which optional dependency groups to install, space-separated. ⚠️ `uv sync` PRUNES, so
+#: these are expanded into ONE command below (`B31`).
+ARG EXTRAS="web llm"
+#: The speech engine the image starts on. `scripted` needs no model, no GPU and no audio.
+ARG STT_ENGINE=scripted
+#: `rulebased` is a real adapter needing no key (`D119`), so the image starts configured.
+ARG LLM_PROVIDER=rulebased
+#: `auto` resolves to cuda only when one is genuinely usable, and cpu otherwise (`D96`).
+ARG STT_DEVICE=auto
 
 # uv is pinned: the lockfile is resolved by a specific version and `--frozen` is only a
 # real check if the resolver agrees with the one that wrote it.
@@ -64,7 +88,9 @@ ENV PYTHONUNBUFFERED=1 \
 # and `llm` is what lets a key switch the models on at run time. `ml`/`asr` are
 # deliberately absent: ~3 GB of CUDA wheels for an engine this image does not run.
 COPY --chown=readycall:readycall pyproject.toml uv.lock README.md ./
-RUN uv sync --frozen --no-dev --extra web --extra llm --no-install-project
+# `$EXTRAS` becomes repeated `--extra` flags in a SINGLE `uv sync`, because a second sync
+# naming one extra silently prunes the others (`B31`).
+RUN set -eu; flags=""; for e in $EXTRAS; do flags="$flags --extra $e"; done;     uv sync --frozen --no-dev $flags --no-install-project
 
 # `WORKSTATION_DIST` resolves to `<parent of src>/apps/workstation/dist` (`api/app.py`),
 # and `config_dir` / `prompt_dir` are read relative to the working directory — so the
@@ -83,15 +109,16 @@ COPY --from=workstation --chown=readycall:readycall /build/dist ./apps/workstati
 COPY --chown=readycall:readycall apps/customer_sim/ ./apps/customer_sim/
 COPY --chown=readycall:readycall apps/customer_assist/ ./apps/customer_assist/
 
-RUN uv sync --frozen --no-dev --extra web --extra llm
+RUN set -eu; flags=""; for e in $EXTRAS; do flags="$flags --extra $e"; done;     uv sync --frozen --no-dev $flags
 
 # The defaults that make this image start with nothing configured. Each is overridable
 # with `-e`; none of them is a behaviour knob nobody reads (`Q26`) — every one is read by
 # `Settings` and changes what the container does.
 ENV API_HOST=0.0.0.0 \
     API_PORT=8000 \
-    STT_ENGINE=scripted \
-    LLM_PROVIDER=rulebased \
+    STT_ENGINE=${STT_ENGINE} \
+    STT_DEVICE=${STT_DEVICE} \
+    LLM_PROVIDER=${LLM_PROVIDER} \
     STORAGE_BACKEND=memory \
     BLOB_STORAGE=memory \
     LOG_FORMAT=json \

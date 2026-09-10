@@ -67,6 +67,7 @@ from readycall.domain.models import CallSession, CallWrapup, CaseBrief, Identity
 from readycall.domainpack import DomainPack
 from readycall.logging import get_logger
 from readycall.ports.core_data import CoreDataProvider
+from readycall.ports.llm import LlmClient
 from readycall.ports.stt import SttEngine, SttHint
 from readycall.ports.vad import VoiceActivityDetector
 from readycall.prompts import PromptLibrary
@@ -321,6 +322,18 @@ class Container:
         #: `Settings` is frozen and read once at startup, so "which model is on" cannot be
         #: answered from it after somebody has flipped the switch.
         self.llm_choice: str = str(settings.llm_provider)
+        #: Which provider each of the four stages runs on (`D142`). Seeded from what was
+        #: **actually built** above, not from `Settings` — which is `B41`'s whole lesson:
+        #: `build_fast_llm` produces a real client whenever `LLM_FAST_MODEL` is set,
+        #: whatever `LLM_PROVIDER` says, so reading the config would report three of these
+        #: four stages wrongly on exactly the configuration this laptop runs.
+        _fast_name = self.fast_llm.name if self.fast_llm is not None else self.llm.name
+        self.llm_stage_choice: dict[str, str] = {
+            "final": self.llm.name,
+            "preview": _fast_name,
+            "context": _fast_name,
+            "comparison": _fast_name,
+        }
 
         #: Every durable store, chosen by `STORAGE_BACKEND` (`D75`, `D78`). Each service
         #: below gets its own and writes through to it; nothing reads it on the hot path.
@@ -595,21 +608,28 @@ class Container:
         ]
         return options
 
-    def apply_llm_choice(self, provider: str) -> None:
-        """Rebuild every model-using service against a different provider (`D138`).
+    #: The four places a model runs, and what each one is FOR (`D142`).
+    #:
+    #: They are separately settable because they are genuinely different jobs under
+    #: different deadlines, and the right model is not the same for all four. The panel
+    #: names them in the order a call meets them.
+    LLM_STAGES: tuple[tuple[str, str], ...] = (
+        ("preview", "สรุประหว่างรอรับสาย (ขึ้นบนการ์ดก่อนกดรับ)"),
+        ("context", "แผงข้อมูลอื่นๆ ที่มีเกี่ยวกับลูกค้า"),
+        ("comparison", "เหตุผลเปรียบเทียบแผน"),
+        ("final", "สรุปฉบับเต็ม (หลังกดรับสาย)"),
+    )
 
-        ⚠️ **Through `build_llm`, always.** That factory is the only place a client may be
-        constructed — the same rule `build_blob_storage` enforces (`D110`) — and a second
-        construction path here is how the runtime switch would eventually disagree with
-        startup about what `anthropic` means.
+    def _build_llm_for(self, provider: str) -> tuple[LlmClient, str | None]:
+        """One client for one provider name, through `build_llm` and nothing else.
+
+        ⚠️ `build_llm` is the only place a client may be constructed — the rule
+        `build_blob_storage` enforces (`D110`). A second construction path here is how the
+        runtime switch would eventually disagree with startup about what `anthropic` means.
 
         ⚠️ **`Settings` is frozen and stays frozen.** This copies it with an override and
-        keeps the copy for the clients only; `self.settings` is untouched, so nothing else
+        keeps the copy for the client only; `self.settings` is untouched, so nothing else
         in the process starts reading a different configuration than it booted with.
-
-        Runtime only, deliberately: a restart returns to whatever `.env` says. A switch
-        thrown for a demo that then silently outlives the demo is a configuration nobody
-        can find later.
         """
         from readycall.config import LlmProviderName
 
@@ -619,55 +639,114 @@ class Container:
             # `_check_coherent` refuses this provider with no base URL, and the copy is
             # validated like any other `Settings`. Defaulting to OpenAI's own URL is what
             # makes the choice one click rather than one click and a text field.
-            overrides["llm_base_url"] = self.settings.llm_base_url or OPENAI_BASE_URL
+            overrides["llm_base_url"] = (
+                self.settings.llm_fast_base_url or self.settings.llm_base_url or OPENAI_BASE_URL
+            )
             overrides["llm_model"] = self.settings.llm_fast_model or "gpt-5.4-mini"
+        elif chosen is LlmProviderName.ANTHROPIC:
+            overrides["llm_model"] = self.settings.llm_model or "claude-sonnet-5"
         effective = self.settings.model_copy(update=overrides)
+        client = build_llm(effective, prompts=self.prompt_library, clock=self.clock)
+        model = None if chosen is LlmProviderName.RULEBASED else client.model
+        return client, model
 
-        self.llm = build_llm(effective, prompts=self.prompt_library, clock=self.clock)
-        self.fast_llm = build_fast_llm(effective, prompts=self.prompt_library, clock=self.clock)
-        if chosen is LlmProviderName.RULEBASED:
-            # Turning the model off must turn the FAST one off too, or the offer card keeps
-            # calling a hosted model while the panel says the AI is disabled.
-            self.fast_llm = None
+    def apply_llm_choice(self, provider: str, *, stage: str | None = None) -> None:
+        """Point one stage — or all four — at a different provider (`D138`, `D142`).
 
-        self.summariser = IntakeSummariser(
-            llm=self.llm, clock=self.clock, timeout_s=effective.llm_timeout_s
-        )
-        self.preview_summariser = IntakeSummariser(
-            llm=self.fast_llm or self.llm,
-            clock=self.clock,
-            timeout_s=effective.llm_preview_timeout_s,
-        )
-        self.context_summariser = ContextSummariser(
-            llm=self.fast_llm or self.llm,
-            clock=self.clock,
-            timeout_s=effective.llm_preview_timeout_s,
-        )
-        self.comparison_reasons = ComparisonReasonWriter(
-            llm=self.fast_llm or self.llm,
-            timeout_s=effective.llm_comparison_timeout_s,
-        )
+        `stage=None` sets everything, which is the "turn the AI on / off" case the ⚙ panel
+        opens with and the one a pitch uses. Naming a stage sets only that one, because the
+        four jobs are different: the preview races the Accept button and wants the fastest
+        model available, while the final pass has nobody waiting for it and can afford the
+        better one (`D131`). Making that per-stage is what lets somebody *measure* the
+        difference rather than argue about it.
+
+        Runtime only, deliberately: a restart returns to whatever `.env` says. A switch
+        thrown for a demo that then silently outlives the demo is a configuration nobody
+        can find later.
+        """
+        targets = [stage] if stage is not None else [name for name, _ in self.LLM_STAGES]
+        for target in targets:
+            client, _model = self._build_llm_for(provider)
+            if target == "final":
+                self.llm = client
+                self.summariser = IntakeSummariser(
+                    llm=client, clock=self.clock, timeout_s=self.settings.llm_timeout_s
+                )
+            elif target == "preview":
+                self.preview_summariser = IntakeSummariser(
+                    llm=client,
+                    clock=self.clock,
+                    timeout_s=self.settings.llm_preview_timeout_s,
+                )
+                # `fast_llm` is what `_warm_llm` and the `B41` reporting read, so it has to
+                # follow the stage that actually races a deadline.
+                self.fast_llm = None if provider == "rulebased" else client
+            elif target == "context":
+                self.context_summariser = ContextSummariser(
+                    llm=client,
+                    clock=self.clock,
+                    timeout_s=self.settings.llm_preview_timeout_s,
+                )
+            elif target == "comparison":
+                self.comparison_reasons = ComparisonReasonWriter(
+                    llm=client, timeout_s=self.settings.llm_comparison_timeout_s
+                )
+            else:  # pragma: no cover - the router validates the name first
+                raise ValueError(f"unknown llm stage: {target}")
+            self.llm_stage_choice[target] = provider
+
         # ⚠️ Both caches hold text a DIFFERENT model wrote. Keeping them would show the
-        # broker Sonnet's sentences on a screen reporting that the model is off, which is
-        # the panel lying about the thing it exists to report.
+        # broker one model's sentences on a screen reporting the other, which is the panel
+        # lying about the thing it exists to report.
         self.comparison_reason_cache.clear()
         self.context_summaries.clear()
-        self.llm_choice = str(chosen)
+        if stage is None:
+            self.llm_choice = provider
 
     def llm_state(self) -> dict[str, object]:
         """What the panel renders. Never a key, and never `Settings` itself."""
-        real = self.llm_choice != "rulebased"
+        stages = [
+            {
+                "stage": name,
+                "label_th": label,
+                "provider": self.llm_stage_choice.get(name, "rulebased"),
+                "model": self._stage_model(name),
+            }
+            for name, label in self.LLM_STAGES
+        ]
+        # `provider` stays the ALL-STAGES answer, and is `mixed` when the four disagree —
+        # rather than reporting one of them and being quietly wrong about three (`B41`).
+        distinct = {str(row["provider"]) for row in stages}
+        overall = distinct.pop() if len(distinct) == 1 else "mixed"
         return {
-            "provider": self.llm_choice,
-            "enabled": real,
+            "provider": overall,
+            "enabled": any(row["model"] is not None for row in stages),
             # `.model`, not `.name` — `name` is the PROVIDER ("anthropic"), and a panel
             # that reported the provider under a heading saying "model" would be wrong in
             # the one place somebody checks before quoting a number in a pitch.
-            "model": self.llm.model if real else None,
-            "fast_model": (self.fast_llm.model if self.fast_llm is not None else None),
+            "model": self._stage_model("final"),
+            "fast_model": self._stage_model("preview"),
             "configured_provider": str(self.settings.llm_provider),
+            "stages": stages,
             "options": self.llm_options(),
         }
+
+    def _stage_model(self, stage: str) -> str | None:
+        """The model id actually behind one stage, or `None` when it is rule-based."""
+        client: LlmClient | None
+        if stage == "final":
+            client = self.llm
+        elif stage == "preview":
+            client = self.fast_llm or self.llm
+        elif stage == "context":
+            client = self.context_summariser._llm
+        elif stage == "comparison":
+            client = self.comparison_reasons._llm
+        else:  # pragma: no cover
+            return None
+        if client is None or client.name == "rulebased":
+            return None
+        return client.model
 
     async def restore(self) -> dict[str, int]:
         """Rebuild the working set from the durable stores. Returns what was reloaded.

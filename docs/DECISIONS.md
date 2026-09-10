@@ -6080,3 +6080,207 @@ On a machine with only a fast model configured it says so out loud, with the war
   and it is **not** here on purpose: switching a speech engine at runtime means loading a
   model into VRAM on a request thread, which is a different kind of operation from
   re-pointing an HTTP client.
+
+## D139. Being dropped for silence is a state with a way out, not a dead screen
+_Taken 2026-09-10 from the user's report — **"when you get kicked/timed out … it stays in a
+weird state and you can't go back to normal even if you press reload"**. The bug is `B42`._
+
+- **Problem.** `presence.sweep` moves a desk that stopped heartbeating to `OFFLINE` and
+  clears its `session_id`. The agent's **cookie is untouched** — so `/me` keeps answering
+  `200` with an offline presence, a reload fetches the same dead state, and the client's
+  existing 401 path cannot see it because there is no 401. The only way back was to sign
+  out and sign in again, which nobody would guess.
+
+- **Decision.** Say what happened, and give them the one button that fixes it.
+  `POST /v1/agent/resume` re-opens the workstation for an agent who is **already
+  authenticated**, and the client renders a blocking dialog whenever
+  `system_state === "offline"`.
+
+- **Why it is not a re-login.** `demo-login` issues a new session; re-issuing here would
+  rotate the cookie and reset the per-agent push sequence (`B27`) for somebody who never
+  actually left. The session did not expire — only the presence did, and only the presence
+  is restored.
+
+- **Why it comes back NOT READY.** `sign_in` already carries `D78`'s rule about which
+  standing intents survive a reconnection: *lunch* rides along, `READY` and `LAST_CALL` do
+  not, because those two invite a call and the platform has no idea whether the person is
+  back at the desk. They press พร้อมรับสาย themselves, which is `D51`.
+
+- **Why the session is not expired instead.** That was the other obvious fix and it is
+  worse: it would sign somebody out mid-shift for looking at another window, which is
+  exactly the browser-throttling problem `B34` was about. The desk is dropped from the
+  *queue* on silence; the person is not logged out.
+
+- **Tradeoffs.** A dialog that blocks the screen is heavy, and it is the right weight here:
+  every control behind it is inert until they resume, and `B11`'s rule is that a state you
+  cannot act on is not feedback.
+
+## D140. The customer's other policies belong on the context panel
+_Taken 2026-09-10 from the user — **"for the ข้อมูลอื่นๆ stuff, also show like the other plans
+that the customer has too?"**. Yes, and the reason is sharper than it looks._
+
+- **Problem.** The brief renders the **relevant** policy in full — carrier, status, sum
+  insured — and then says `· อีก 2 ฉบับ`. A count. For a broker that is the wrong half:
+  `D117`'s whole point is that one customer holds cover across several carriers, and
+  *"which company underwrote what"* is the thing they cannot guess and cannot ask without
+  admitting they do not know.
+
+- **Decision.** Every other active policy becomes a `KnownFact`: line, carrier, sum
+  insured, and the **renewal** date rather than the start date — *"when does this lapse"*
+  is the question a broker acts on, and it is what makes this a timing fact rather than a
+  list.
+
+- **The relevant policy is excluded**, on exactly the rule that excludes claims (`D134`):
+  it is already on the screen in full, and two renderings of one fact is how two halves of
+  a screen come to disagree.
+
+### ⚠️ The sum insured goes on the SCREEN and not into the prompt
+
+The context prompt's own rule 3 forbids stating any amount. So handing it one is input it
+is **instructed never to use**, and the only thing that can come of it is a copy that trips
+`_FIGURE` and throws the whole summary away. `detail_prompt_th` exists for that: the panel
+may show more than the prompt does, never the reverse.
+
+Measured on a live call before the change: the model was handed the figures, correctly
+omitted them, and produced a better sentence naming both carriers — *one* sample of a
+probabilistic system, which is `D135`'s lesson about exactly this. The figures came out of
+the prompt anyway, because the risk is unbounded and the loss is zero.
+
+## D141. The internal transfer is half built, and the half that is built is real
+_Taken 2026-09-10 from the user's own proposal — **"we do something like a bit of a half way
+thing … implement the filtering n stuff window … but the final transfer button is grayed
+out/stubbed … so that we can see the vision of how the filtering/choosing works"**._
+
+- **Problem.** `D63`'s consulted transfer has been a labelled stub since P2b, and `D124`
+  said building it three days out was the risk rather than the reward. That is still true —
+  it needs a transfer offer distinct from a queue offer plus a rework of *"which call is
+  mine"* inside `services/agents/`, which is where `B7`, `B25` and `B28` all lived.
+
+- **Decision, and it is the user's.** Build everything up to the button.
+
+  **The line that makes it safe: everything up to the button is a READ.** The roster, the
+  live presence, the filtering and the ranking are all questions the matcher already
+  answers on every tick. Only the last step changes state, and that is precisely the part
+  that is hard. So the screen shows the design working on real data and cannot commit it.
+
+- **It reuses the real thing rather than mocking it.** The same `hard_filter` the matcher
+  runs and the same `score_fit` — so the list is what the system would actually choose
+  from, `D63`'s *"let the system choose"* is answered by the real scorer, and every name
+  ruled out carries the real reason (`D50`: never a bare "unavailable"; *"they lack the
+  skill"* and *"they are on another call"* are different conversations).
+
+- **`can_execute` comes from the SERVER.** The client cannot decide to enable a button
+  whose endpoint does not exist (`D121`, `B5`). When `D63` lands, the server flips that
+  flag and the button starts working without a second decision being made in the client.
+
+### Two faults found by opening the tab, neither visible to a test
+
+1. **The roster was built from `_waiting_call_for`**, which correctly returns `None` for a
+   call that has been **answered** — so the endpoint returned `200`, an empty list and a
+   null skill, which reads as *"nobody can take this call"* rather than as a bug.
+   `call_view` is split out of it now, with the state guard left where it belongs on the
+   pool projection: a call in progress is genuinely not waiting, and the matcher must never
+   be handed one.
+2. **The "eligible only" filter defaulted on**, rendering *"nobody matches"* on a floor
+   where thirteen people were simply not signed in. It defaults **off**: this screen exists
+   to show *why*, and hiding the reasons deletes the feature.
+
+- **Tradeoffs.** A screen that looks operable and refuses at the end is a real cost, paid
+  down by saying so **first**, above the list, rather than at the button (`D71`).
+
+## D142. Each of the four AI stages picks its own model
+_Taken 2026-09-10 from the user's question — **"can you explain why customer-context and
+comparison's reason uses the normal one? … or actually, in the setting make it so we can
+set the individual stuff to whatever model is available"**._
+
+- **First, the correction the question deserves.** They do **not** use the careful model.
+  All three of the preview, the context panel and the comparison reason run on
+  `fast_llm or llm` — the *fast* one. That was never written down anywhere a reader would
+  find it, which is `B41`'s family: the behaviour was right and nothing said so.
+
+- **Problem.** `D138` gave the panel one switch for all four stages. That is the right
+  control for *"AI on / AI off"*, which is what a pitch needs, and the wrong one for
+  every other question — because the four are genuinely different jobs.
+
+### The argument on both sides, per stage
+
+| stage | deadline | what a FAST model buys | what a CAREFUL model buys |
+|---|---|---|---|
+| **preview** (offer card) | **hard**: it must land before Accept, measured at ~0.9 s vs 4.4 s (`D130`) | the feature existing at all | nothing — it arrives after the broker has started talking, which is `Q35` |
+| **context panel** | soft: it runs during the offer window alongside the preview | it is competing for the same seconds, and this is the **easier** job — summarising records we already hold, not interpreting speech | better Thai on a paragraph the broker reads rather than skims. A real option |
+| **comparison reason** | **bounded and awaited**, 3 s (`D137`) | fits inside the wait with room; measured 2.4 s for three plans | the sentence names four differences and an exclusion — the one place richer prose is worth something. ⚠️ But a slower model here **blocks a panel somebody opened** |
+| **final summary** | **none**: fire-and-forget after Accept, nobody waits (`D119`) | nothing worth having | the whole point. This is the summary that goes in the record |
+
+The honest reading: **preview is fast on evidence, final is careful on evidence, and the
+middle two are a judgement call nobody has measured.** So the answer is not to pick for
+them — it is to make the choice one click and let the difference be *seen*.
+
+- **Decision.** `LLM_STAGES` names the four, `apply_llm_choice(provider, stage=...)` sets
+  one or all, and the ⚙ panel renders a row per stage. `stage=None` keeps `D138`'s
+  all-at-once behaviour, which is what the panel opens with and what a pitch uses.
+
+### Two rules that came out of building it
+
+**The overall provider reads `mixed` when the four disagree**, rather than reporting one of
+them. That is `B41`'s lesson as a rule: a single number over four different things is a
+true statement about one and a false statement about three.
+
+**The stage map is seeded from what was BUILT, never from `Settings`.** Reading
+`LLM_PROVIDER` would report three of the four stages wrongly on exactly the configuration
+this laptop runs — which is how `B41` happened in the first place.
+
+- **Alternatives.** *Pick the best model per stage ourselves and hardcode it* — two of the
+  four have no measurement behind them, so that is an opinion in a config file. *Expose a
+  model id per stage rather than a provider* — a model name is a thing that belongs beside
+  the key that pays for it, in `.env` (`D138`'s rule 1).
+- **Tradeoffs.** Four independent switches is more surface than one, and `mixed` is a state
+  somebody can leave the demo in by accident. Both are bounded by the same thing that makes
+  the whole panel safe: it is runtime-only, and a restart returns to `.env`.
+- **Future.** The obvious next thing is a **latency column** in the panel — each stage
+  reporting what its last call actually cost. That would turn the middle-two judgement call
+  into a measurement, which is what `D130` did for the preview.
+
+## D143. One Dockerfile, build args for the machines we might actually run on
+_Taken 2026-09-10 from the user's question — **"do flags or whatever to package in multiple
+ways … so that i can build to run on whatever thing i have depending on their hardware"**._
+
+- **Problem.** `D136` shipped one image with one configuration baked in: scripted speech,
+  rule-based LLM, in-memory storage. That is the right *default* and it is not the only
+  machine this might run on.
+
+- **Decision.** Four build args — `EXTRAS`, `STT_ENGINE`, `LLM_PROVIDER`, `STT_DEVICE` —
+  and every one of them still overridable with `-e` at run time.
+
+  ```
+  docker build -t readycall .                                    # the demo image
+  docker build --build-arg EXTRAS="web llm s3" -t readycall .    # + MinIO/S3
+  docker build --build-arg EXTRAS="web llm ml asr" \
+               --build-arg STT_ENGINE=typhoon --build-arg STT_DEVICE=cuda -t readycall-gpu .
+  ```
+
+### Why the extras are a BUILD arg and the rest are only defaults
+
+**What is installed can only be decided at build time; what is selected cannot be decided
+at build time at all.** `STT_ENGINE` in the image is a default, and `-e STT_ENGINE=...`
+beats it — but an engine whose wheels were never installed cannot be selected however you
+ask. So `EXTRAS` is the one that genuinely changes the artefact, and the other three exist
+so `docker run readycall` needs no flags.
+
+⚠️ **`$EXTRAS` is expanded into ONE `uv sync`.** A loop that synced once per extra would
+prune the previous one every time (`B31`) — the fault that removed this laptop's whole GPU
+stack. Verified by building two images and importing `boto3` from the venv in each: present
+under `EXTRAS="web llm s3"`, absent under the default.
+
+⚠️ **A GPU build still needs `--gpus all` and the NVIDIA container toolkit on the host.**
+Installing the CUDA wheels does not make a device appear. That is host setup which varies
+by machine — which is `D136`'s whole argument for the default being `scripted`.
+
+- **Alternatives.** *Separate Dockerfiles per target* — they would drift, and the demo one
+  is the only one anybody runs regularly. *A GPU image as the default* — 3 GB of wheels for
+  a device most machines running this will not have.
+- **Tradeoffs.** Build args are invisible once an image exists: `docker run` cannot tell you
+  what it was built with. Mitigated by the image printing `stt_engine` and `llm_provider` in
+  its `api ready` log line, and by `/health`.
+- **Future.** If the GPU image is ever actually used, it wants its own compose profile with
+  the `deploy.resources.reservations.devices` block, rather than a README line telling
+  somebody to remember `--gpus all`.
