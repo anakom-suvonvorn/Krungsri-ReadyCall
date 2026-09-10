@@ -96,6 +96,23 @@ function Check({
   );
 }
 
+/** How each product line reads on a pill (`D149`). A line missing here still renders,
+ *  under its raw code — never dropped (`D145`'s rule). */
+const LINE_TH: Record<string, string> = {
+  motor: "รถยนต์",
+  health: "สุขภาพ",
+  life: "ชีวิต",
+  travel: "เดินทาง",
+  home: "บ้าน",
+  accident: "อุบัติเหตุ",
+  general: "ทั่วไป",
+  // The cross-line intents - renewal, billing, complaint, update details - are served with
+  // `line: "unknown"` because they are not ABOUT one product line. That is correct data and
+  // needed a word; it surfaced as a raw "unknown" pill the first time, which is `D145`'s
+  // derive-don't-drop rule doing its job.
+  unknown: "ทั่วไป (ทุกประเภท)",
+};
+
 export function TestCallDialog({
   open,
   onClose,
@@ -121,6 +138,9 @@ export function TestCallDialog({
   const [options, setOptions] = useState<CallOptions | null>(null);
   const [callerKey, setCallerKey] = useState("unknown");
   const [intent, setIntent] = useState(defaultIntent);
+  /** `D149`. Which product line the intent list is narrowed to, or `null` for the line of
+   *  whatever intent is selected. Derived, so opening the dialog lands on the right group. */
+  const [lineFilter, setLineFilter] = useState<string | null>(null);
   const [waited, setWaited] = useState(40);
   const [ignoreHours, setIgnoreHours] = useState(true);
   const [record, setRecord] = useState(false);
@@ -148,6 +168,8 @@ export function TestCallDialog({
         setAudio(o.defaults.audio);
         setRealtime(o.defaults.audio_realtime);
         setIntent(defaultIntent);
+        // Back to the line of the default intent, not whichever line was open last time.
+        setLineFilter(null);
       })
       .catch((e) => live && setError(String(e)));
     return () => {
@@ -166,6 +188,10 @@ export function TestCallDialog({
 
   const caller = options?.callers.find((c) => c.key === callerKey) ?? null;
   const chosen = options?.intents.find((i) => i.code === intent) ?? null;
+  // `D149`. Lines in the order they first appear in the served list, which is the pack's
+  // own order — so the pills follow the same grouping the dropdown always had.
+  const intentLines = Array.from(new Set((options?.intents ?? []).map((i) => i.line)));
+  const activeLine = lineFilter ?? chosen?.line ?? intentLines[0] ?? null;
   const hasAudio = (options?.audio.length ?? 0) > 0;
 
   // Recording without audio is legitimate — the caller consents and simply says nothing,
@@ -274,17 +300,44 @@ export function TestCallDialog({
             )}
 
             <h3>โทรมาเรื่องอะไร</h3>
+            {/* `D149`. Pick the line FIRST, then the reason inside it. Thirty-odd intents in
+                one flat list were hard to find anything in, even though they were already
+                sorted by line. The pills are DERIVED from the intents' own `line` field — the
+                same rule as `D145`: a line nobody has worded yet still appears, under its
+                raw code, rather than its intents silently vanishing from the dialog. */}
+            <div className="pill-grid" role="radiogroup" aria-label="ประเภทประกัน">
+              {intentLines.map((ln) => (
+                <Pill
+                  key={ln}
+                  selected={activeLine === ln}
+                  onSelect={() => {
+                    setLineFilter(ln);
+                    // Keep the selection inside the line being shown, or the dropdown would
+                    // display one intent while a different, now-hidden one gets placed.
+                    const first = options.intents.find((i) => i.line === ln);
+                    if (first && chosen?.line !== ln) setIntent(first.code);
+                  }}
+                >
+                  {LINE_TH[ln] ?? ln}
+                  <span className="pill-sub">
+                    {options.intents.filter((i) => i.line === ln).length} เรื่อง
+                  </span>
+                </Pill>
+              ))}
+            </div>
             <select
               value={intent}
               onChange={(e) => setIntent(e.target.value)}
-              style={{ width: "100%" }}
+              style={{ width: "100%", marginTop: 8 }}
             >
-              {options.intents.map((i) => (
-                <option key={i.code} value={i.code}>
-                  {held.has(i.skill) ? "" : "⚠ "}
-                  {i.label_th} — {i.code}
-                </option>
-              ))}
+              {options.intents
+                .filter((i) => i.line === activeLine)
+                .map((i) => (
+                  <option key={i.code} value={i.code}>
+                    {held.has(i.skill) ? "" : "⚠ "}
+                    {i.label_th} — {i.code}
+                  </option>
+                ))}
             </select>
             {unreachable && chosen && (
               <div className="rationale" style={{ borderLeftColor: "var(--warn)", marginTop: 8 }}>

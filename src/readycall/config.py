@@ -185,13 +185,11 @@ class Settings(BaseSettings):
     #: `LLM_TIMEOUT_S`. A preview that arrives after the agent has pressed Accept is not a
     #: late preview, it is wasted money — the final pass is about to run anyway.
     llm_preview_timeout_s: float = 4.0
-    #: How long the plan panel waits for the model to write its reason sentences (`D137`).
-    #: This one **is** awaited, unlike every other model call in the system, because the
-    #: panel is fetched once when the broker opens it and never polled — a fire-and-forget
-    #: would finish into a screen nothing refreshes. It is a bounded wait on a screen the
-    #: broker deliberately opened, never on the call path (`D12`): the ranked table is
-    #: already computed when the wait starts, and the generated sentences render on
-    #: timeout. Set to 0 to skip the model entirely and always use them.
+    #: The deadline on the model call that writes the comparison's reason sentences (`D137`).
+    #: ⚠️ The deadline on a BACKGROUND call since `D148` — not a wait. `D137` awaited it
+    #: and the line selector froze for the whole model round-trip; the panel now answers
+    #: at once with the generated sentences and re-fetches while `reasons_pending` is true.
+    #: Set to 0 to skip the model for this panel entirely.
     llm_comparison_timeout_s: float = 3.0
     #: Pay the first hosted call's cost at startup rather than making the first caller pay
     #: it (`D131`, `D137`). ⚠️ It is a REAL provider call, so tests and any offline run

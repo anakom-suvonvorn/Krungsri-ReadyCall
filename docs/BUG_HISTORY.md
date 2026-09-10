@@ -1958,3 +1958,46 @@ will match the width."** Both halves of that sentence were one bug._
   It also belongs with `B34`: both are the heartbeat being treated as a claim about the
   **person** when it is a claim about the **browser tab**. `B34` stopped it dropping an
   agent mid-call; this one stops it stranding an agent who simply looked away.
+
+## B43. Accepting a call, or saving a wrap-up, blanked the whole workstation
+- **Symptoms:** the user — *"when you press accept on a call button or the save/save and
+  ready for the record summary after call button, the screen will become blank/empty and
+  you need to reload the page to bring it back to normal."* Introduced by me the day
+  before, with `D147`'s copy button.
+- **Root cause:** a **Rules-of-Hooks violation**. `AssistPanel` has an early return —
+  `if (!callId) return <…ใช้ได้เมื่อรับสายแล้ว…/>` — and `D147` added
+  `const [copied, setCopied] = useState(false)` **below** it. So the component called one
+  more hook with a call than without one. Accept flips "no call" to "a call", and saving a
+  wrap-up flips it back — so both changed the hook count mid-life. React threw *"Rendered
+  more hooks than during the previous render"* and unmounted the entire tree: a blank page.
+  A reload "fixed" it because the component then mounted fresh in whichever state it was
+  in, with a consistent count.
+- **Investigation:** read from the symptom, not the code. The two triggers had nothing in
+  common as *features* and one thing in common as *state*: both change whether there is
+  an active call. A blank screen (rather than an error banner) means an uncaught render
+  error, and the React error that depends on a state flip is a hook-count mismatch. That
+  pointed at the one hook added that day, which sat below an early return.
+- **Fix:** the `useState` moved above the return, with a comment saying it must stay there.
+- **The part that matters more than the fix — nothing could catch it, and a first attempt
+  to catch it did not either.**
+  * TypeScript compiles it. `vite build` ships it. There was **no lint on the workstation
+    at all**.
+  * A regex scan for "a hook after an early return" was written and **reported clean even
+    with the bug put back** — verified by stashing the fix and re-running it. A regex over
+    JSX cannot see a `return` inside an `if (...) {` block. It was thrown away.
+  * **`eslint-plugin-react-hooks`** was then added with only the hooks rules, and the same
+    revert test run: it reported `111:31 error React Hook "useState" is called
+    conditionally … Did you accidentally call a React Hook after an early return?` on the
+    buggy version and nothing on the fixed one.
+  * `npm run build` is now `eslint src && tsc -b && vite build`, so a hooks violation fails
+    the build — **including the Docker build**, whose node stage runs exactly that.
+- **Verification:** in a browser on a running server — Accept on a live call left the
+  workstation rendered (50 buttons, วางสาย present), and ending the call and pressing
+  บันทึก left it rendered too. Both were blank before.
+- **Lesson:** **a check you have not seen fail is not a check.** The regex scan looked like a
+  guard, was run, printed "clean", and would have shipped this bug again — exactly the
+  shape of `B7` and `B24`, where code that looked finished was doing nothing. The revert
+  test is what separated the real guard from the fake one, and it took thirty seconds.
+
+  And specifically for this codebase: **every hook in a component goes above its first
+  early return.** Now enforced rather than remembered.

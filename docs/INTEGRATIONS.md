@@ -273,10 +273,11 @@ factory and the only place a client may be constructed — the same enforcement 
 (`summarize_intake.v1`, `intent_classify.v1`, `summarize_context.v1` superseded and `.v2`
 shipped, `comparison_reason.v1`).
 
-⚠️ **Every model call is fire-and-forget except one.** `comparison_reason` is awaited,
-bounded by `LLM_COMPARISON_TIMEOUT_S`, because the plan panel is fetched once when the
-broker opens it and is never polled (`D137`). It is not on the call path and the ranked
-table is already computed when the wait starts.
+⚠️ **Every model call is fire-and-forget — no exceptions since `D148`.** `D137` made
+`comparison_reason` the one awaited call, because the plan panel was fetched once and never
+polled. That froze the line selector for the whole model round-trip, so it now runs in the
+background and the panel re-fetches while `reasons_pending` is true, exactly as the
+offer-card preview does (`D131`).
 
 ⚠️ *This block said "neither exists yet" until 2026-09-07, and before that said they were
 "both implemented" when they were not. `Settings.llm_provider` accepted both names with no

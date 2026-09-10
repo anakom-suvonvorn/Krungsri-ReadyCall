@@ -6427,3 +6427,90 @@ card and goes off out to the right … make it wrap? or make a copy link button?
 - ⚠️ **`navigator.clipboard` is undefined on plain HTTP from anything but localhost**, which
   is exactly how this gets demoed on a phone over venue wifi. The hidden-textarea fallback
   is not belt-and-braces; it is the path that will actually run there.
+
+## D148. The comparison's reason sentence is no longer awaited
+_Taken 2026-09-10. **Reverses `D137`'s one exception** — "the one awaited model call in
+the system". From the user: **"switching between the tabs of the plan types are really
+laggy … if so we should just be able to go look at that tab immediately without having to
+wait, and the text will just update when the llm response comes through just like all the
+other ai stuff already is right?"** Right, on every count._
+
+- **Problem.** `D137` awaited the model because the plan panel was fetched once and never
+  polled, so a background task would have finished into a screen nothing refreshed. The
+  reasoning was sound and the cost was not: **every switch of the line selector froze the
+  panel for the whole model round-trip** (~2.4 s measured), and only lines already visited
+  were instant. The user diagnosed the mechanism exactly — including that the cache was why
+  a second visit was fast.
+
+  That is a model sitting between a person and a screen they asked for. `D12` says the
+  *call* is never blocked on AI; the same principle applies to a panel, and `D137` had
+  argued its way round it.
+
+- **Decision.** Answer **immediately**. The endpoint returns the cached model sentences if
+  there are any; otherwise it returns the generated sentences at once, starts the model in
+  the background, and says `reasons_pending: true`. The client re-fetches every 1.5 s until
+  `pending` goes false — which is exactly how the offer-card preview already behaves
+  (`D131`).
+
+- **Measured, before and after**, on a line the model had not written yet: **~2,400 ms →
+  6 ms** for the first response, with all three sentences `generated`; two polls later all
+  three were `model`.
+
+### Four things that make the background version correct
+
+1. **An in-flight set** (`comparison_reason_inflight`), so a broker flipping the selector
+   back and forth never starts a second model call for a line whose first one has not
+   answered.
+2. **The in-flight flag is cleared in a `finally`**, so a failed call cannot leave a line
+   "pending" forever with the client polling it for the rest of the call.
+3. **`D137`'s cache rule survives unchanged**: `None` (the call never completed — a timeout,
+   or the provider's one-off `max_tokens` rejection) is not cached, because it is
+   transient; `{}` (the model answered and every sentence was refused) is, because it is
+   deterministic. The runtime model switch (`D138`) clears the in-flight set too, or a
+   pending line would wait on a client that no longer exists.
+4. **A cap of two attempts per (call, line)** — found while writing the tests, not in the
+   first version. Not caching `None` was safe when a retry needed a person to switch lines.
+   With the client **polling every 1.5 s**, "not cached" alone would give a provider that
+   keeps timing out a fresh model call every few seconds for as long as the panel is open.
+   Two tries covers the cold-start retry `D137` wanted; after that the generated sentences
+   stand and `pending` goes false, which also stops the polling. Revert-tested: with the cap
+   raised to 99, `test_a_provider_that_keeps_failing_is_not_asked_on_every_poll` fails.
+
+   **Lesson:** changing *who triggers* a retry changes what "retry on failure" costs. The
+   rule was right for a human-driven fetch and wrong for a timer-driven one, and nothing
+   about the rule's own code changed.
+
+### ⚠️ The poll is `B33`-safe, which is the part most likely to be undone
+
+The re-fetch is keyed to `reasons_pending` and to the comparison object, and it calls the
+fetch **through a ref**. The workstation re-renders once a second to drive its timers, so a
+timer inside an effect keyed on a callback identity is torn down and rebuilt before it can
+fire — `B33` exactly, and its symptom is the data being correct, present, and never on
+screen.
+
+- **Alternatives.** *Keep awaiting, but shorter* — any wait is still a model between a
+  person and a screen. *Pre-compute every line when the call is accepted* — a model call per
+  line per call, most of which nobody opens. *A socket push when the sentences land* — the
+  right shape eventually, and more machinery than a 1.5 s poll on a dialog that is open for
+  seconds.
+- **Tradeoffs.** The broker sees the duller generated sentence first, then it changes under
+  them. That is the same trade the offer card already makes, and the **AI** chip (`D137`)
+  marks which kind they are reading at any moment.
+
+## D149. The test-call dialog picks the line first, then the reason
+_Taken 2026-09-10 from the user — **"the drop down list for โทรมาเรื่องอะไร is very long and
+i often have trouble finding stuff easily … first do a separate dropdown/pill/tabs to pick
+between general health life etc. first before picking the sub options"**._
+
+- **Problem.** Thirty-three intents in one `<select>`, sorted by line but with nothing to
+  navigate by.
+- **Decision.** Line **pills** above the dropdown (`D129`: one-of-many is pills), each with
+  its count, and the dropdown filtered to the chosen line. Picking a line moves the
+  selection into it, or the dropdown would show one intent while a different, now-hidden one
+  got placed. The filter resets on open, so the dialog lands on the default intent's line.
+- **The pills are DERIVED from the intents' own `line` field**, never a fixed list — the
+  rule `D145` wrote for the raw panel. It proved itself immediately: the cross-line intents
+  (renewal, billing, complaint, update details) are served with `line: "unknown"`, and they
+  appeared as a raw **`unknown`** pill rather than vanishing from the dialog. They are
+  worded now as *ทั่วไป (ทุกประเภท)*. With a fixed list, eight intents would simply have
+  stopped being placeable and nothing would have said so.

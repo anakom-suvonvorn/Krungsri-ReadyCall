@@ -379,6 +379,9 @@ export type ComparisonView = {
     worse_on: string[];
   }[];
   table: ComparisonTable;
+  /** `D148`. True while the model is still writing this line's reason sentences. The
+   *  generated ones render meanwhile, so the panel never waits on a model. */
+  reasons_pending?: boolean;
 };
 
 export type HandoffOptions = {

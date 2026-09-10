@@ -147,6 +147,12 @@ Needed only to open `/workstation`. **Node is needed once, to build — never at
 cd apps/workstation && npm install && npm run build && cd ../..
 ```
 
+⚠️ **`npm run build` lints first** — `eslint src && tsc -b && vite build` — and it will
+**fail** on a React hook called after an early return (`B43`). That is on purpose: that
+exact mistake blanked the whole workstation on every Accept, TypeScript compiled it happily,
+and nothing else could see it. If the build stops with `react-hooks/rules-of-hooks`, move
+the hook above the component's first `return`. `npm run lint` runs the check on its own.
+
 That produces `apps/workstation/dist/`, which the API mounts automatically at `/workstation`. The
 API checks whether that folder exists and simply omits the route if it does not, so **skipping this
 step breaks nothing else**.
@@ -637,9 +643,12 @@ sentence says why. Four guards stand behind it, and the first is the one that ma
 never be written by a model (`D16`). It may not rank, price, or promise cover either; a
 refused sentence falls back to the generated one and the table is unchanged.
 
-⚠️ This is the **one** model call in the system that is awaited, bounded by
-`LLM_COMPARISON_TIMEOUT_S` (3 s), because the panel is fetched once when you open it and is
-never polled. Measured: ~2.4 s the first time, **4 ms** afterwards from a per-call cache.
+**Switching line is instant** (`D148`). The panel answers at once with the generated
+sentences and says `reasons_pending`; the model writes its sentences in the background and
+the panel re-fetches until they land — the same way the offer-card preview works. Measured
+on a line the model had not written yet: **6 ms** for the first response (it used to block
+for ~2.4 s), and the model's text two polls later. `LLM_COMPARISON_TIMEOUT_S` (3 s) bounds
+the background call; `0` turns the model off for this panel.
 
 Then press **สร้างลิงก์ให้ลูกค้า** in the tool panel, open the link, and press
 **ส่งตารางนี้ให้ลูกค้า**. The table appears on the other screen — and note what it does

@@ -17,7 +17,7 @@
  *    which is the "flickering" that looked like a React problem and was not.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, api } from "./api";
 import type {
   AssistCatalogue,
@@ -190,6 +190,23 @@ export default function App() {
   useEffect(() => {
     void refreshComparison();
   }, [refreshComparison]);
+
+  /* ⚠️ `D148`. The comparison answers IMMEDIATELY with generated sentences and says
+   * `reasons_pending` while the model writes the better ones in the background — so the
+   * line selector never waits on a model. This re-fetches until they land, which is how
+   * the offer-card preview already behaves (`D131`).
+   *
+   * ⚠️ Keyed to `reasons_pending` and the line, NOT to `refreshComparison`'s identity, and
+   * the fetch goes through a ref. The workstation re-renders once a second, so a timer in
+   * an effect keyed on a callback is torn down before it can fire — `B33` exactly. */
+  const comparisonRef = useRef(refreshComparison);
+  comparisonRef.current = refreshComparison;
+  const reasonsPending = Boolean(comparison?.reasons_pending);
+  useEffect(() => {
+    if (!reasonsPending) return;
+    const id = window.setTimeout(() => void comparisonRef.current(), 1500);
+    return () => window.clearTimeout(id);
+  }, [reasonsPending, comparison]);
 
   // A new call is a different customer, so the line the LAST call was about must not
   // carry over — a motor catalogue on a health call is a table about nobody.

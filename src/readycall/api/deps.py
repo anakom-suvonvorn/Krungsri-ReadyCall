@@ -309,7 +309,8 @@ class Container:
             timeout_s=settings.llm_preview_timeout_s,
         )
         #: The comparison's reason sentences (`D137`), on the FAST model for the same
-        #: reason as the context panel: it is awaited by a screen somebody is looking at.
+        #: reason as the context panel: a screen somebody is looking at is waiting on it,
+        #: even though since `D148` it waits by polling rather than by blocking.
         self.comparison_reasons = ComparisonReasonWriter(
             llm=self.fast_llm or self.llm,
             timeout_s=settings.llm_comparison_timeout_s,
@@ -318,6 +319,12 @@ class Container:
         #: recomputed every time; the sentences are not, so the second open of the panel —
         #: and every line the broker flips back to — is instant and free.
         self.comparison_reason_cache: dict[tuple[str, str], dict[str, str]] = {}
+        #: Lines whose sentences are being written right now (`D148`), so flipping the line
+        #: selector back and forth never starts a second model call for the same line.
+        self.comparison_reason_inflight: set[tuple[str, str]] = set()
+        #: How many times each line has asked (`D148`), so a provider that keeps timing out
+        #: is not asked again on every poll of an open panel.
+        self.comparison_reason_attempts: dict[tuple[str, str], int] = {}
         #: What `LLM_PROVIDER` says, kept so the runtime switch can put it back (`D138`).
         #: `Settings` is frozen and read once at startup, so "which model is on" cannot be
         #: answered from it after somebody has flipped the switch.
@@ -699,6 +706,9 @@ class Container:
         # broker one model's sentences on a screen reporting the other, which is the panel
         # lying about the thing it exists to report.
         self.comparison_reason_cache.clear()
+        self.comparison_reason_inflight.clear()
+        # A new model deserves its own tries, not the old model's leftovers.
+        self.comparison_reason_attempts.clear()
         self.context_summaries.clear()
         if stage is None:
             self.llm_choice = provider

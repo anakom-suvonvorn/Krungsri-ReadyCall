@@ -940,9 +940,9 @@ done on the morning of.
    figure can never be model-written (`D16`). The ranking is untouched and no model sees a
    score. Verified live at **2,375 ms** then **4 ms** cached, and an **AI** chip marks a
    model-written sentence on screen.
-   ⚠️ It is the **one awaited model call in the system** — the panel is fetched once and
-   never polled, so a fire-and-forget would finish into a screen nothing refreshes. Bounded
-   by `LLM_COMPARISON_TIMEOUT_S`; `0` disables it.
+   ⚠️ **No longer awaited** (`D148`, 2026-09-10). `D137` awaited it and every line switch
+   froze for ~2.4 s; it now answers in **6 ms** with generated sentences and fills the
+   model's in as they land. Bounded by `LLM_COMPARISON_TIMEOUT_S`; `0` disables it.
 
 4. ~~**The AI story.**~~ **DONE 2026-09-09 (`D130`, `D131`).** `scripts/compare_llm.py`
    exists and the P4 exit criterion is met; both cost tables are corrected against live

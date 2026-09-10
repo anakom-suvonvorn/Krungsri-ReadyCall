@@ -500,36 +500,73 @@ async def plans(
     }
 
 
-async def _comparison_reasons(container: Any, call_session_id: str, result: Any) -> dict[str, str]:
-    """The model's sentences for this table, cached per (call, line) (`D137`).
+#: How many times one (call, line) may ask the model for its reason sentences (`D148`).
+#: Two, so the provider's one-off cold-start rejection gets its retry and nothing more.
+_COMPARISON_REASON_MAX_ATTEMPTS = 2
 
-    ⚠️ **This is the one model call in the system that is awaited**, and the reason is that
-    the plan panel is fetched once when the broker opens it and is never polled — so a
-    fire-and-forget would complete into a screen that nothing refreshes. Everything that
-    makes that safe is already true when the wait starts: the ranked table is computed, the
-    wait is bounded by `LLM_COMPARISON_TIMEOUT_S`, a timeout returns `{}` and the generated
-    sentences render, and none of it is anywhere near the call path (`D12`).
 
-    The cache is what stops a broker flipping between lines paying for the same sentences
-    twice. It is keyed by line as well as call, because switching the line selector rebases
-    the whole table onto a different policy (`D127`).
+def _comparison_reasons(
+    container: Any, call_session_id: str, result: Any
+) -> tuple[dict[str, str], bool]:
+    """The model's sentences for this table if we have them, and whether more are coming.
+
+    ⚠️ **NOT awaited any more** (`D148`, reversing `D137`'s one exception). `D137` waited
+    for the model because the panel was fetched once and never polled, so a background task
+    would have finished into a screen nothing refreshed. The user then found the cost: every
+    line selector switch **froze the panel for the whole model round-trip**, and only lines
+    already visited were instant. That is the model sitting between a person and a screen
+    they asked for — `D12`'s rule, broken on a panel rather than on the call.
+
+    So this now answers **immediately** from the cache, starts the model in the background
+    if nothing is cached or in flight, and returns `pending=True`. The client shows the
+    generated sentences at once and re-fetches until `pending` goes false — which is exactly
+    how the offer-card preview already behaves (`D131`).
+
+    The cache is keyed by line as well as call, because switching the line selector rebases
+    the whole table onto a different policy (`D127`). The in-flight set is what stops a
+    broker flipping back and forth from starting a second model call for a line whose first
+    one has not answered yet.
     """
     if container.settings.llm_comparison_timeout_s <= 0:
-        return {}
+        return {}, False
     key = (call_session_id, result.line)
     cached: dict[str, str] | None = container.comparison_reason_cache.get(key)
     if cached is not None:
-        return cached
-    written: dict[str, str] | None = await container.comparison_reasons.write(result)
-    if written is None:
-        # ⚠️ The call never completed - a timeout, or the provider's one-off `max_tokens`
-        # rejection landing here because the startup warm-up did not absorb it. NOT cached:
-        # that is transient, and storing it would make one cold-start failure permanent for
-        # the rest of this call. An empty dict IS cached, because "the model answered and
-        # every sentence was refused" is deterministic and asking again buys nothing.
-        return {}
-    container.comparison_reason_cache[key] = written
-    return written
+        return cached, False
+    if key not in container.comparison_reason_inflight:
+        # ⚠️ A cap, because the client now POLLS (`D148`). `None` is deliberately not
+        # cached — a cold-start failure must get a second chance (`D137`) — but with a poll
+        # every 1.5 s, "not cached" alone would mean a provider that keeps timing out gets a
+        # fresh model call every few seconds for as long as the panel is open. Two tries,
+        # then the generated sentences stand and `pending` goes false so the polling stops.
+        tries: int = container.comparison_reason_attempts.get(key, 0)
+        if tries >= _COMPARISON_REASON_MAX_ATTEMPTS:
+            return {}, False
+        container.comparison_reason_attempts[key] = tries + 1
+        container.comparison_reason_inflight.add(key)
+        task = asyncio.create_task(_write_comparison_reasons(container, key, result))
+        _BACKGROUND.add(task)
+        task.add_done_callback(_BACKGROUND.discard)
+    return {}, True
+
+
+async def _write_comparison_reasons(container: Any, key: tuple[str, str], result: Any) -> None:
+    """Ask the model, cache what survives the guards, and always clear the in-flight flag."""
+    try:
+        written: dict[str, str] | None = await container.comparison_reasons.write(result)
+        if written is not None:
+            # ⚠️ `None` is NOT cached — the call never completed (a timeout, or the
+            # provider's one-off `max_tokens` rejection), which is transient, and storing it
+            # would make one cold-start failure permanent for this call (`D137`). An empty
+            # dict IS cached: "the model answered and every sentence was refused" is
+            # deterministic, and asking again buys nothing.
+            container.comparison_reason_cache[key] = written
+    except Exception:
+        log.exception("comparison reasons failed in the background", key=str(key))
+    finally:
+        # Without this a failed call would leave the line "pending" forever, and the client
+        # would poll it for the rest of the call waiting for text that is never coming.
+        container.comparison_reason_inflight.discard(key)
 
 
 @router.get("/calls/{call_session_id}/comparison")
@@ -551,7 +588,7 @@ async def comparison(
     if result is None:
         return {"available": False, "line": line, "candidates": []}
 
-    written = await _comparison_reasons(container, call_session_id, result)
+    written, reasons_pending = _comparison_reasons(container, call_session_id, result)
 
     return {
         "available": True,
@@ -581,6 +618,9 @@ async def comparison(
         # The same table the customer would be shown, so the broker is looking at what
         # they are about to send rather than at a summary of it.
         "table": to_push_payload(result),
+        # `D148`. True while the model is still writing this line's sentences. The client
+        # re-fetches until it goes false, and renders the generated sentences meanwhile.
+        "reasons_pending": reasons_pending,
     }
 
 

@@ -64,6 +64,13 @@ export function AssistPanel({
   const [open, setOpen] = useState(false);
   const [channel, setChannel] = useState<string>("sms");
   const [sent, setSent] = useState(false);
+  /* ⚠️ **ABOVE the `if (!callId)` return, and it must stay there** (`B43`). It was added
+     below it for the copy button (`D147`), so the component called one hook with no call
+     and two with one — and accepting a call, or saving a wrap-up, flips exactly that. React
+     threw "rendered more hooks than during the previous render" and unmounted the whole
+     workstation: a blank screen that a reload "fixed". Every hook in a component goes
+     above its first early return. */
+  const [copied, setCopied] = useState(false);
 
   // The callback is held in a ref and the interval reads the ref, so the effect depends
   // on `open` and `callId` ALONE.
@@ -108,7 +115,6 @@ export function AssistPanel({
   const verified = tier === "verified";
   const paired = state?.paired ?? false;
   const link = state?.link;
-  const [copied, setCopied] = useState(false);
 
   return (
     <div className="panel">

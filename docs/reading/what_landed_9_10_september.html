@@ -465,6 +465,7 @@ docker run --rm -p 8000:8000 readycall</code></pre>
 
   <div class="note">
     <p>
+      <p style="border-left:3px solid var(--hand);padding-left:12px;margin-bottom:10px"><strong>⚠️ Changed on 10 September (<code>D148</code>).</strong> What follows is no longer true: waiting for the model froze the line selector for ~2.4 s on every switch. The panel now answers in about 6 ms with the generated sentences and fills the model's in when they land.</p>
       <strong>This is the one model call in the system that is waited for</strong>, and the
       reason is mechanical: the plan panel is fetched once when you open it and never polled,
       so a background task would finish into a screen nothing refreshes. It is bounded at 3
